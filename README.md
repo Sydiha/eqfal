@@ -1,2 +1,23 @@
-# -Eqfal
-    EQFAL — Financial Close &amp; Operations
+# إقفال | EQFAL
+
+**EQFAL — Financial Close & Operations**
+
+منصة داخلية متعددة الشركات للإدارة والإقفال المالي، تُبنى كنواة صغيرة وآمنة واقتصادية وقابلة للنقل والتوسع.
+
+## الحالة الحالية
+- المرحلة: تأسيس النواة والربط.
+- المرجع الدائم للكود: `GitHub/main`.
+- بيئة التنفيذ الأولية: Replit مع الحفاظ على قابلية النقل.
+- لا Production منشور حاليًا.
+- لا خدمات مدفوعة جديدة دون موافقة صريحة.
+
+## مراجع المشروع
+- `PROJECT_BRIEF.md`
+- `ARCHITECTURE.md`
+- `DECISIONS.md`
+- `DEVELOPMENT_WORKFLOW.md`
+- `SECURITY_AND_TENANCY_CHECKLIST.md`
+- `RECAP_SESSION.md`
+- `docs/ENVIRONMENTS.md`
+
+> هذه المستندات تختصر القرارات التشغيلية اللازمة للعمل اليومي، بينما تبقى الوثيقة التشغيلية الشاملة المعتمدة المرجع الأعلى للنطاق والاتجاه.
