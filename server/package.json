@@ -10,6 +10,7 @@
     "test": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "pg": "^8.11.5",
@@ -17,6 +18,7 @@
     "pino-pretty": "^11.2.1"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.9",
     "@types/pg": "^8.11.6",
