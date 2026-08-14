@@ -69,16 +69,19 @@ export class MembershipService {
    *     superset of the role's capabilities. This prevents privilege escalation
    *     and covers self-escalation (granter = target) as a special case.
    *
+   * The company context used for the ceiling check is derived from
+   * membership.company_id (fetched from DB) — never from a caller-supplied
+   * parameter. This prevents a granter from substituting a different company
+   * where they hold higher capabilities to bypass the ceiling.
+   *
    * @param membershipId  Membership to receive the role.
    * @param roleId        Role to assign.
    * @param granterUserId User performing the assignment.
-   * @param granterCompanyId Company context for the granter's capabilities.
    */
   async assignRole(
     membershipId: string,
     roleId: string,
     granterUserId: string,
-    granterCompanyId: string,
   ): Promise<Membership> {
     const [membership, role] = await Promise.all([
       this.repo.findMembershipById(membershipId),
@@ -97,8 +100,10 @@ export class MembershipService {
     }
 
     // ── Check 2: capability ceiling ────────────────────────────────────────
+    // Company context is derived from membership.company_id (DB-sourced),
+    // not from any caller-supplied value, to prevent cross-company ceiling bypass.
     const [granterCaps, roleCaps] = await Promise.all([
-      this.repo.getActiveCapabilities(granterUserId, granterCompanyId),
+      this.repo.getActiveCapabilities(granterUserId, membership.company_id),
       this.repo.getRoleCapabilities(roleId),
     ]);
 

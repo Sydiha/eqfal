@@ -161,7 +161,7 @@ describe('MembershipService — cross-company role assignment rejected', () => {
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole({ company_id: COMPANY_B }));
 
     await expect(
-      service.assignRole(MEM_1, ROLE_B, USER_2, COMPANY_A),
+      service.assignRole(MEM_1, ROLE_B, USER_2),
     ).rejects.toThrow(/cross-company/i);
   });
 
@@ -170,7 +170,7 @@ describe('MembershipService — cross-company role assignment rejected', () => {
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole({ company_id: COMPANY_B }));
     const writeSpy = vi.spyOn(repo, 'assignRoleToMembership');
 
-    await expect(service.assignRole(MEM_1, ROLE_B, USER_2, COMPANY_A)).rejects.toThrow();
+    await expect(service.assignRole(MEM_1, ROLE_B, USER_2)).rejects.toThrow();
 
     expect(writeSpy).not.toHaveBeenCalled();
   });
@@ -196,7 +196,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
 
     await expect(
-      service.assignRole(MEM_1, ROLE_A, USER_2, COMPANY_A),
+      service.assignRole(MEM_1, ROLE_A, USER_2),
     ).rejects.toThrow(/ceiling violation/i);
   });
 
@@ -207,7 +207,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
 
     await expect(
-      service.assignRole(MEM_1, ROLE_A, USER_2, COMPANY_A),
+      service.assignRole(MEM_1, ROLE_A, USER_2),
     ).rejects.toThrow("invoice.create");
   });
 
@@ -218,7 +218,27 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
     const writeSpy = vi.spyOn(repo, 'assignRoleToMembership');
 
-    await expect(service.assignRole(MEM_1, ROLE_A, USER_2, COMPANY_A)).rejects.toThrow();
+    await expect(service.assignRole(MEM_1, ROLE_A, USER_2)).rejects.toThrow();
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  it('ceiling check uses membership.company_id (not a caller-supplied company) — bypass blocked', async () => {
+    // Granter is admin in COMPANY_B (has all caps there) but has NO caps in COMPANY_A.
+    // Membership being assigned is in COMPANY_A.
+    // Before the fix, a caller could pass granterCompanyId=COMPANY_B to bypass the ceiling.
+    // After the fix, the service always uses membership.company_id = COMPANY_A.
+    vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership({ company_id: COMPANY_A }));
+    vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole({ company_id: COMPANY_A }));
+
+    const capsSpy = vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]); // no caps in A
+    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
+    const writeSpy = vi.spyOn(repo, 'assignRoleToMembership');
+
+    // Granter only supplies their userId — the service determines the company itself.
+    await expect(service.assignRole(MEM_1, ROLE_A, USER_2)).rejects.toThrow(/ceiling violation/i);
+
+    // Verify the company used for the caps lookup is COMPANY_A (membership's company), not COMPANY_B.
+    expect(capsSpy).toHaveBeenCalledWith(USER_2, COMPANY_A);
     expect(writeSpy).not.toHaveBeenCalled();
   });
 
@@ -226,12 +246,11 @@ describe('MembershipService — capability ceiling', () => {
     const updated = makeMembership({ role_id: ROLE_A });
     vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership());
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole());
-    // Granter has all caps the role requires
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
     vi.spyOn(repo, 'assignRoleToMembership').mockResolvedValue(updated);
 
-    const result = await service.assignRole(MEM_1, ROLE_A, USER_2, COMPANY_A);
+    const result = await service.assignRole(MEM_1, ROLE_A, USER_2);
     expect(result.role_id).toBe(ROLE_A);
   });
 });
@@ -258,7 +277,7 @@ describe('MembershipService — self-escalation prevention', () => {
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
 
     await expect(
-      service.assignRole(MEM_1, ROLE_A, USER_1, COMPANY_A),
+      service.assignRole(MEM_1, ROLE_A, USER_1),
     ).rejects.toThrow(/ceiling violation/i);
   });
 });
