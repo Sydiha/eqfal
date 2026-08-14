@@ -63,9 +63,11 @@ async function applyMigration(pool: Pool, file: string, sql: string): Promise<vo
 export async function runMigrations(pool: Pool): Promise<void> {
   // Acquire a session-level advisory lock so that two instances starting
   // simultaneously cannot apply the same migration in parallel.
-  // pg_advisory_lock blocks (does not error) until the lock is free,
-  // then the winning instance runs all pending migrations, and the lock
-  // is released automatically when this client is returned to the pool.
+  // pg_advisory_lock blocks (does not error) until the lock is free;
+  // only one instance proceeds. The lock is session-level: it is NOT
+  // released automatically when the client is returned to the pool —
+  // the connection stays alive in the pool and the lock follows it.
+  // We explicitly release it with pg_advisory_unlock in the finally block.
   const lockClient = await pool.connect();
   try {
     await lockClient.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
