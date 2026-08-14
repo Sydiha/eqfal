@@ -4,6 +4,14 @@ import { Pool } from 'pg';
 import logger from '../shared/logger';
 
 /**
+ * Stable numeric key for pg_advisory_lock.
+ * Any two instances competing to run migrations will block on this lock,
+ * so only one proceeds at a time. The value is arbitrary but must be
+ * consistent across all deployments of this codebase.
+ */
+const MIGRATION_LOCK_KEY = 7_432_091; // "eqfal migrations" — do not change
+
+/**
  * Ensures the _schema_migrations tracking table exists.
  * Runs inside its own transaction so the create is atomic.
  */
@@ -53,36 +61,53 @@ async function applyMigration(pool: Pool, file: string, sql: string): Promise<vo
 }
 
 export async function runMigrations(pool: Pool): Promise<void> {
-  await ensureTrackingTable(pool);
+  // Acquire a session-level advisory lock so that two instances starting
+  // simultaneously cannot apply the same migration in parallel.
+  // pg_advisory_lock blocks (does not error) until the lock is free,
+  // then the winning instance runs all pending migrations, and the lock
+  // is released automatically when this client is returned to the pool.
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+    logger.info({ key: MIGRATION_LOCK_KEY }, 'Migration lock acquired');
 
-  const migrationsDir = path.resolve(__dirname, '../../migrations');
+    await ensureTrackingTable(pool);
 
-  if (!fs.existsSync(migrationsDir)) {
-    logger.warn('migrations/ directory not found, skipping');
-    return;
-  }
+    const migrationsDir = path.resolve(__dirname, '../../migrations');
 
-  const files = fs
-    .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  for (const file of files) {
-    const { rows } = await pool.query(
-      'SELECT id FROM _schema_migrations WHERE filename = $1',
-      [file],
-    );
-
-    if (rows.length > 0) {
-      logger.debug({ file }, 'Migration already applied, skipping');
-      continue;
+    if (!fs.existsSync(migrationsDir)) {
+      logger.warn('migrations/ directory not found, skipping');
+      return;
     }
 
-    const sql = fs.readFileSync(
-      path.join(migrationsDir, file),
-      'utf8',
-    );
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
 
-    await applyMigration(pool, file, sql);
+    for (const file of files) {
+      const { rows } = await pool.query(
+        'SELECT id FROM _schema_migrations WHERE filename = $1',
+        [file],
+      );
+
+      if (rows.length > 0) {
+        logger.debug({ file }, 'Migration already applied, skipping');
+        continue;
+      }
+
+      const sql = fs.readFileSync(
+        path.join(migrationsDir, file),
+        'utf8',
+      );
+
+      await applyMigration(pool, file, sql);
+    }
+  } finally {
+    // Always release the lock and return the client — even if a migration fails.
+    // The throw from applyMigration propagates after this finally block.
+    await lockClient.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]);
+    logger.info({ key: MIGRATION_LOCK_KEY }, 'Migration lock released');
+    lockClient.release();
   }
 }
