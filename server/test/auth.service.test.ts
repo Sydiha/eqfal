@@ -193,11 +193,25 @@ describe('AuthService — authenticate', () => {
     expect(await service.authenticate('alice@example.com', 'wrong-password')).toBeNull();
   });
 
-  it('returns null for unknown email', async () => {
+  it('returns null for unknown email and still calls bcrypt.compare with a valid hash', async () => {
     const pool = makeMockPool({ queryResult: { rows: [], rowCount: 0 } });
     const service = new AuthService(pool);
 
-    expect(await service.authenticate('ghost@example.com', PLAINTEXT)).toBeNull();
+    const compareSpy = vi.spyOn(bcrypt, 'compare');
+
+    const result = await service.authenticate('ghost@example.com', PLAINTEXT);
+
+    expect(result).toBeNull();
+
+    // Must have called bcrypt.compare exactly once with the dummy hash.
+    // The dummy must be a real bcrypt hash ($2b$12$…) so bcrypt performs
+    // full work — an invalid string would be rejected immediately and
+    // the timing protection would be defeated.
+    expect(compareSpy).toHaveBeenCalledOnce();
+    const [, dummyHashArg] = compareSpy.mock.calls[0] as [string, string];
+    expect(dummyHashArg).toMatch(/^\$2b\$12\$/);
+
+    compareSpy.mockRestore();
   });
 
   it('returns null for disabled user even with correct password', async () => {

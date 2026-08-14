@@ -7,6 +7,19 @@ import logger from '../../shared/logger';
 const BCRYPT_ROUNDS = 12;
 
 /**
+ * A pre-computed valid bcrypt hash (cost 12) of a fixed internal string.
+ * Used as the target for dummy bcrypt.compare when a login email is not found,
+ * so the branch takes approximately the same time as a real comparison and
+ * does not leak user existence via timing.
+ *
+ * Must be a genuine bcrypt hash — an invalid/malformed string causes bcrypt to
+ * reject it immediately without doing full work, defeating the protection.
+ * Regenerate with: bcrypt.hash('__eqfal_dummy__', 12)
+ */
+const DUMMY_HASH =
+  '$2b$12$ALje4sFzRE6RMsjnfdrdv.4Hgp0PaH.sllncbFv3SLSLozeehjm2S';
+
+/**
  * Strips password_hash before returning user data to callers.
  */
 function toSafeUser(row: { id: string; email: string; password_hash: string; is_active: boolean; created_at: Date; updated_at: Date }): SafeUser {
@@ -54,9 +67,10 @@ export class AuthService {
     const user = await this.repo.findByEmail(email);
 
     if (!user) {
-      // Run a dummy compare to avoid leaking whether the email exists
-      // via timing difference (bcrypt takes fixed time regardless).
-      await bcrypt.compare(password, '$2b$12$invalidhashpadding000000000000000000000000000000000000');
+      // Constant-time guard: compare against a real bcrypt hash so the branch
+      // takes the same time as a known-email path. An invalid/malformed dummy
+      // would be rejected immediately by bcrypt, leaking existence via timing.
+      await bcrypt.compare(password, DUMMY_HASH);
       return null;
     }
 
