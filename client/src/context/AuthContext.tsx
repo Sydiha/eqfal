@@ -94,6 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ companyId }),
     });
+
+    if (response.status === 401) {
+      setSession(null);
+      return false;
+    }
+
     const next = await parseSession(response);
     if (!next) return false;
     setSession(next);
