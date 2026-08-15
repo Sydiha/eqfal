@@ -1,0 +1,25 @@
+:root { color: #172033; background: #f4f6f9; font-family: system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { padding: .55rem .85rem; border: 1px solid #bcc5d3; border-radius: 6px; background: white; cursor: pointer; }
+button:disabled { cursor: wait; opacity: .65; }
+.app { min-height: 100dvh; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; color: white; background: #183153; }
+.brand { margin: 0; font-size: 1.25rem; }
+.top-actions { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; }
+.top-actions label { display: grid; gap: .2rem; font-size: .75rem; }
+.top-actions button, .top-actions select { color: #172033; background: white; }
+.content { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+.login { min-height: 100dvh; display: grid; place-content: center; justify-items: center; padding: 1rem; }
+.login-form, .form-grid { display: grid; gap: .8rem; width: min(100%, 380px); }
+.login-form label, .form-grid label { display: grid; gap: .35rem; }
+input, select, textarea { padding: .65rem; border: 1px solid #bcc5d3; border-radius: 6px; background: white; }
+.panel { background: white; border: 1px solid #dfe4eb; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 8px #1720330d; }
+.section-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.section-heading h2 { margin: 0; }.section-heading p { color: #596579; margin: .4rem 0 1.5rem; }
+.table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; } th, td { padding: .8rem; text-align: start; border-bottom: 1px solid #e7eaf0; }
+.badge { display: inline-block; border-radius: 999px; padding: .2rem .55rem; background: #e9eef6; }.badge.open { color: #12603c; background: #dff6e9; }.badge.closed { color: #5d6572; }
+.actions { display: flex; gap: .4rem; }.danger { color: #a32323; border-color: #d9aaaa; }.empty, .message { padding: 1.25rem; text-align: center; background: #f7f9fb; border-radius: 6px; }.error { color: #8b1e1e; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 1rem; background: #10182899; }.modal { width: min(100%, 460px); padding: 1.25rem; border-radius: 10px; background: white; }.modal h3 { margin-top: 0; }.modal textarea { min-height: 90px; resize: vertical; }.modal-actions { display: flex; justify-content: end; gap: .6rem; margin-top: .5rem; }
+@media (max-width: 650px) { .topbar, .section-heading { align-items: stretch; flex-direction: column; }.top-actions { align-items: stretch; }.actions { flex-direction: column; } }

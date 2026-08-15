@@ -31,6 +31,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchCompany: (companyId: string) => Promise<boolean>;
+  handleUnauthorized: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +44,7 @@ async function parseSession(response: Response): Promise<AuthSession | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const handleUnauthorized = useCallback(() => setSession(null), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ loading, session, login, logout, switchCompany }}>
+    <AuthContext.Provider value={{ loading, session, login, logout, switchCompany, handleUnauthorized }}>
       {children}
     </AuthContext.Provider>
   );
