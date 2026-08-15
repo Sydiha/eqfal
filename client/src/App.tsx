@@ -6,6 +6,7 @@ import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
 import { CompanySwitcher } from './components/CompanySwitcher';
 import { FiscalYears } from './components/FiscalYears';
+import { Documents } from './components/Documents';
 
 function LanguageButton() {
   const { t, i18n } = useTranslation();
@@ -35,7 +36,20 @@ function CompanyContent() {
     return <section className="panel"><p role="status">{t('company.switching')}</p></section>;
   }
   const capabilities = session?.capabilities ?? [];
-  return <FiscalYears key={companyKey} canView={capabilities.includes('fiscal_year.view')} canManage={capabilities.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>;
+  return (
+    <div key={companyKey}>
+      <FiscalYears
+        canView={capabilities.includes('fiscal_year.view')}
+        canManage={capabilities.includes('fiscal_year.manage')}
+        onUnauthorized={handleUnauthorized}
+      />
+      <Documents
+        canView={capabilities.includes('document.view')}
+        canUpload={capabilities.includes('document.upload')}
+        onUnauthorized={handleUnauthorized}
+      />
+    </div>
+  );
 }
 
 function AuthenticatedShell() {
