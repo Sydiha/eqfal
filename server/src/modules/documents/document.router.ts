@@ -12,12 +12,15 @@ import {
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
 import { DocumentRepository } from './document.repository';
-import { DocumentService } from './document.service';
+import { DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
+import { DocumentReviewDecision } from './document.types';
 
 export const documentRouter = Router();
 
 const VIEW_CAPABILITY = 'document.view';
 const UPLOAD_CAPABILITY = 'document.upload';
+const REVIEW_CAPABILITY = 'document.review';
+const APPROVE_CAPABILITY = 'document.approve';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const MIME_EXTENSIONS: Record<string, Set<string>> = {
@@ -152,6 +155,92 @@ documentRouter.post(
       data,
     });
     res.status(201).json({ document });
+  }),
+);
+
+documentRouter.post(
+  '/documents/:id/submit-review',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(UPLOAD_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const document = await service.submitReview({
+        documentId: req.params.id,
+        companyId: context.activeCompanyId,
+        actorUserId: context.user.id,
+      });
+      res.status(200).json({ document });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      if (err instanceof DocumentReviewConflictError) {
+        res.status(409).json({ error: 'Document review conflict' });
+        return;
+      }
+      throw err;
+    }
+  }),
+);
+
+documentRouter.post(
+  '/documents/:id/review',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+
+    const decision = req.body?.decision;
+    const noteValue = req.body?.note;
+    const allowedDecisions: DocumentReviewDecision[] = ['approved', 'incomplete', 'rejected'];
+    if (!allowedDecisions.includes(decision) || (noteValue !== undefined && typeof noteValue !== 'string')) {
+      res.status(400).json({ error: 'Invalid document review' });
+      return;
+    }
+
+    const note = typeof noteValue === 'string' ? noteValue.trim() : '';
+    if (note.length > 500 || (decision !== 'approved' && !note)) {
+      res.status(400).json({ error: 'Invalid document review' });
+      return;
+    }
+
+    const requiredCapability = decision === 'approved' ? APPROVE_CAPABILITY : REVIEW_CAPABILITY;
+    if (!context.capabilities.includes(requiredCapability)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const document = await service.review({
+        documentId: req.params.id,
+        companyId: context.activeCompanyId,
+        actorUserId: context.user.id,
+        decision,
+        note: note || null,
+      });
+      res.status(200).json({ document });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      if (err instanceof DocumentReviewConflictError) {
+        res.status(409).json({ error: 'Document review conflict' });
+        return;
+      }
+      throw err;
+    }
   }),
 );
 

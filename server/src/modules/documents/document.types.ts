@@ -10,9 +10,14 @@ export interface DocumentRecord {
   size_bytes: number;
   storage_key: string;
   sha256: string;
+  reviewed_by_user_id: string | null;
+  reviewed_at: Date | null;
+  review_note: string | null;
   created_at: Date;
   updated_at: Date;
 }
+
+export type DocumentReviewDecision = Extract<DocumentStatus, 'approved' | 'incomplete' | 'rejected'>;
 
 export interface CreateDocumentInput {
   company_id: string;

@@ -46,6 +46,8 @@ function CompanyContent() {
       <Documents
         canView={capabilities.includes('document.view')}
         canUpload={capabilities.includes('document.upload')}
+        canReview={capabilities.includes('document.review')}
+        canApprove={capabilities.includes('document.approve')}
         onUnauthorized={handleUnauthorized}
       />
     </div>

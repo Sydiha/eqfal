@@ -46,6 +46,12 @@ const ar = {
     size: 'الحجم',
     actions: 'الإجراءات',
     open: 'فتح',
+    reviewError: 'تعذر تحديث مراجعة المستند.',
+    reviewConflict: 'تمت مراجعة هذا المستند بالفعل. حدّث الصفحة وحاول مجددًا.',
+    reviewReason: 'أدخل السبب:',
+    reviewNote: 'ملاحظة المراجعة',
+    reviewedAt: 'وقت المراجعة',
+    reviewActions: { submit: 'إرسال للمراجعة', approved: 'اعتماد', incomplete: 'تحديد كناقص', rejected: 'رفض' },
     statuses: {
       uploaded: 'مرفوع',
       needs_review: 'يحتاج مراجعة',

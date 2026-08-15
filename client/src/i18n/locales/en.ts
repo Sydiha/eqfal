@@ -46,6 +46,12 @@ const en = {
     size: 'Size',
     actions: 'Actions',
     open: 'Open',
+    reviewError: 'Unable to update the document review.',
+    reviewConflict: 'This document has already been reviewed. Refresh and try again.',
+    reviewReason: 'Enter the reason:',
+    reviewNote: 'Review note',
+    reviewedAt: 'Reviewed at',
+    reviewActions: { submit: 'Submit for review', approved: 'Approve', incomplete: 'Mark incomplete', rejected: 'Reject' },
     statuses: {
       uploaded: 'Uploaded',
       needs_review: 'Needs review',
