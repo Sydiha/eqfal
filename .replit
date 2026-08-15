@@ -1,2 +1,6 @@
 modules = ["nodejs-24", "python-base-3.13"]
 run = "npm run dev"
+
+[[ports]]
+localPort = 5173
+externalPort = 80
