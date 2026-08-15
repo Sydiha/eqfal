@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pool, PoolClient } from 'pg';
-import { DocumentService } from '../src/modules/documents/document.service';
+import { DocumentReviewConflictError, DocumentService } from '../src/modules/documents/document.service';
 import { DocumentRepository } from '../src/modules/documents/document.repository';
 import { AuditLogRepository } from '../src/modules/audit-log/audit-log.repository';
 import type { StorageAdapter } from '../src/storage/storage.adapter';
@@ -30,6 +30,9 @@ const record = {
   size_bytes: 8,
   storage_key: 'co-a/key',
   sha256: 'a'.repeat(64),
+  reviewed_by_user_id: null,
+  reviewed_at: null,
+  review_note: null,
   created_at: new Date(),
   updated_at: new Date(),
 };
@@ -81,5 +84,64 @@ describe('DocumentService upload consistency', () => {
     expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN');
     expect(client.query).toHaveBeenLastCalledWith('COMMIT');
     expect(storage.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocumentService review workflow', () => {
+  it('submits an uploaded document with the dedicated audit action without review metadata', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
+    const submitForReview = vi.spyOn(DocumentRepository.prototype, 'submitForReview').mockResolvedValue({ ...record, status: 'needs_review' });
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+
+    const result = await new DocumentService(pool, storage).submitReview({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2',
+    });
+
+    expect(result.status).toBe('needs_review');
+    expect(DocumentRepository.prototype.findByIdForUpdate).toHaveBeenCalledWith('doc-1', 'co-a', client);
+    expect(submitForReview).toHaveBeenCalledWith('doc-1', 'co-a', client);
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'document.submit_review',
+      before_data: { status: 'uploaded' },
+      after_data: { status: 'needs_review' },
+    }), client);
+    expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN');
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
+  });
+
+  it.each([
+    ['approved', 'document.approve', null],
+    ['incomplete', 'document.mark_incomplete', 'Missing page'],
+    ['rejected', 'document.reject', 'Duplicate'],
+  ] as const)('audits %s with the correct action', async (decision, action, note) => {
+    const needsReview = { ...record, status: 'needs_review' as const };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
+    vi.spyOn(DocumentRepository.prototype, 'updateReview').mockResolvedValue({ ...needsReview, status: decision, review_note: note });
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+
+    await new DocumentService(pool, storage).review({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision, note });
+
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action,
+      company_id: 'co-a',
+      actor_user_id: 'u2',
+      entity_id: 'doc-1',
+      before_data: { status: 'needs_review' },
+      after_data: { status: decision, ...(note ? { review_note: note } : {}) },
+    }), client);
+  });
+
+  it('rolls back and writes nothing when the current review state is invalid', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
+    const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview');
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent');
+
+    await expect(new DocumentService(pool, storage).review({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
+    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(updateReview).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
   });
 });
