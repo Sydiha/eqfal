@@ -203,3 +203,69 @@
 **الحد:** هذا ليس الحل النهائي للـlockfile ولا يغير الملف المدمج نفسه.
 
 **المتابعة:** تنظيف Portable Dependency Lockfile يتم كمهمة تشغيلية مستقلة، مع الحفاظ على dependency graph قدر الإمكان ونجاح CI بعده.
+
+---
+
+## 2026-08-15 — Secure Document Storage Foundation
+**القرار:** تخزن PostgreSQL metadata فقط للمستندات، بينما binary files تمر عبر replaceable Storage Adapter؛ لا BLOBs داخل PostgreSQL ولا permanent public URLs ضمن التدفق الحالي.
+
+**الضوابط:**
+- file retrieval company-scoped ومصادق عليه.
+- storage key ليس client authority.
+- file validation قبل القبول: type/extension/signature/size.
+- SHA-256 يحسب Server-side.
+
+## 2026-08-15 — فصل Document Review عن Document Approval
+**القرار:** `document.review` و`document.approve` صلاحيتان مستقلتان ولا يجوز دمجهما.
+
+**النتيجة:**
+- `document.review` يسمح فقط بـ`incomplete` و`rejected` من `needs_review`.
+- `document.approve` يسمح فقط بـ`approved` من `needs_review`.
+- UI يعكس الفصل للـUX، لكن Backend هو المرجع الأمني النهائي.
+
+## 2026-08-15 — Document Review state machine
+**القرار:** التدفق الحالي المغلق هو:
+- `uploaded -> needs_review` عبر `document.upload`.
+- `needs_review -> incomplete/rejected` عبر `document.review`.
+- `needs_review -> approved` عبر `document.approve`.
+
+**الضوابط:**
+- mutations تستخدم Same-Origin + Auth + trusted Active Company.
+- lookup مقيد بـ`document id + company id` مع `FOR UPDATE` داخل transaction.
+- cross-company/not-found = safe 404.
+- stale/invalid transition = 409.
+- `review_note` max 500؛ required لرفض/نقص، optional للاعتماد.
+- submit-review لا يضع reviewer metadata؛ final review decision فقط يضع reviewer/time/note.
+- كل transition حساس له Audit action مستقل.
+
+## 2026-08-15 — Design Check عقد تنفيذ ملزم
+**القرار:** أي Design Check أو implementation specification معتمدة هي contract ملزم حرفيًا، وأي خروج عن النطاق المعتمد defect وليس improvement.
+
+**الضوابط:**
+- لا تغيير architecture/security/capabilities/API/state transitions/validation/limits/schema/UX دون موافقة.
+- إذا ظهر تعارض أو استحالة تقنية، يتوقف التنفيذ قبل الانحراف ويتم التصعيد للمستخدم.
+- نجاح TypeScript/Tests/Build لا يعوض عدم مطابقة التصميم.
+
+## 2026-08-15 — One-Shot Rule
+**القرار:** بعد اعتماد Design Check، يرسل إلى Codex أمر تنفيذ واحد فقط، شامل ومغلق.
+
+**يجب أن يتضمن:** scope، out-of-scope، API، capabilities، schema، transitions، validation، error semantics، tests، Definition of Done.
+
+**الممنوع:** drip-feeding للمتطلبات أو إعادة تصميم المهمة أثناء التنفيذ.
+
+## 2026-08-15 — Zero-Loop Rule
+**القرار:** بعد التنفيذ الأول يسمح corrective implementation pass واحد فقط إذا وجد blocker حقيقي.
+
+**الحكم:** إذا احتاجت المهمة corrective pass ثانيًا، تتوقف المهمة فورًا بدل الدخول في fix/review loop إضافية.
+
+**كذلك:** النقل اليدوي المتكرر للـterminal/logs/patches/SHAs عبر المستخدم ليس workflow مقبولًا؛ يفضل GitHub PR + CI + direct inspection.
+
+## 2026-08-15 — معيار القبول
+**القرار:** لا يعتمد أي implementation من ملخص Codex أو أي agent summary وحده.
+
+**Definition of acceptance:**
+1. مراجعة diff الحقيقي.
+2. مطابقة Design Check بندًا بندًا.
+3. نجاح الاختبارات/TypeScript/Build المطلوبة.
+4. نجاح GitHub CI على نفس الـPR/commit المراد دمجه.
+5. لا Merge إذا بقي blocker غير محسوم.
