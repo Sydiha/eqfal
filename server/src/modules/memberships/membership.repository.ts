@@ -3,6 +3,14 @@ import { Membership, Role, CreateMembershipInput, CreateRoleInput } from './memb
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
+export interface ActiveCompanyMembership {
+  membership_id: string;
+  company_id: string;
+  company_name: string;
+  company_name_ar: string | null;
+  role_id: string | null;
+}
+
 /**
  * MembershipRepository
  *
@@ -53,6 +61,30 @@ export class MembershipRepository {
   }
 
   /**
+   * Authoritative list of tenant memberships available to an authenticated user.
+   * Both the membership and company must be active. Ordering is deterministic so
+   * first-login company selection does not depend on query planner behaviour.
+   */
+  async listActiveCompaniesForUser(userId: string): Promise<ActiveCompanyMembership[]> {
+    const { rows } = await this.pool.query<ActiveCompanyMembership>(
+      `SELECT
+         m.id      AS membership_id,
+         m.company_id,
+         c.name    AS company_name,
+         c.name_ar AS company_name_ar,
+         m.role_id
+       FROM memberships m
+       JOIN companies c ON c.id = m.company_id
+       WHERE m.user_id = $1
+         AND m.is_active = TRUE
+         AND c.is_active = TRUE
+       ORDER BY m.created_at ASC, m.company_id ASC`,
+      [userId],
+    );
+    return rows;
+  }
+
+  /**
    * Assign a role to an existing membership.
    * The caller (MembershipService) must validate that role.company_id
    * matches membership.company_id before calling this.
@@ -95,8 +127,6 @@ export class MembershipRepository {
     return rows[0] ?? null;
   }
 
-  // ── Capabilities ───────────────────────────────────────────────────────────
-
   async addCapabilityToRole(
     roleId: string,
     capabilityId: string,
@@ -111,9 +141,6 @@ export class MembershipRepository {
     );
   }
 
-  /**
-   * Returns the list of capability IDs attached to a role.
-   */
   async getRoleCapabilities(roleId: string): Promise<string[]> {
     const { rows } = await this.pool.query<{ capability_id: string }>(
       'SELECT capability_id FROM role_capabilities WHERE role_id = $1',
@@ -124,13 +151,7 @@ export class MembershipRepository {
 
   /**
    * Returns the active capabilities for a user in a company.
-   * Returns [] when:
-   *   – no membership exists
-   *   – membership is_active = false
-   *   – membership has no role
-   *   – role has no capabilities
-   *
-   * This is the authoritative source for the authorization layer.
+   * Returns [] when no active membership/role/capability exists.
    */
   async getActiveCapabilities(userId: string, companyId: string): Promise<string[]> {
     const { rows } = await this.pool.query<{ capability_id: string }>(
