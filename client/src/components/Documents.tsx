@@ -1,209 +1,34 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Dialog } from './Dialog';
 
-type DocumentItem = {
-  id: string;
-  original_filename: string;
-  mime_type: string;
-  size_bytes: number;
-  status: string;
-  review_note: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  document_type: 'purchase' | 'expense' | 'sale' | 'other' | null;
-  counterparty_name: string | null;
-  document_date: string | null;
-  reference_number: string | null;
-  total_amount: string | null;
-  intake_note: string | null;
-};
+type DocumentItem = { id:string; original_filename:string; mime_type:string; size_bytes:number; status:string; review_note:string|null; reviewed_at:string|null; created_at:string; document_type:'purchase'|'expense'|'sale'|'other'|null; counterparty_name:string|null; document_date:string|null; reference_number:string|null; total_amount:string|null; intake_note:string|null };
+const intakeFields = ['document_type','counterparty_name','document_date','reference_number','total_amount','intake_note'] as const;
+const size = (bytes:number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-const intakeFields = ['document_type', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
-
-function IntakeEditor({ document, onSaved, onUnauthorized }: { document: DocumentItem; onSaved: () => Promise<void>; onUnauthorized: () => void }) {
-  const { t } = useTranslation();
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(false);
-  const save = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setSaving(true); setError(false);
-    const data = new FormData(event.currentTarget);
-    const body = Object.fromEntries(intakeFields.map((field) => {
-      const value = String(data.get(field) ?? '');
-      return [field, value === '' ? null : field === 'total_amount' ? Number(value) : value];
-    }));
-    try {
-      const response = await fetch(`/api/documents/${document.id}/intake`, { method: 'PATCH', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      if (response.status === 401) { onUnauthorized(); return; }
-      if (!response.ok) { setError(true); return; }
-      await onSaved();
-    } catch { setError(true); } finally { setSaving(false); }
-  };
-  return <form className="document-intake" onSubmit={save}>
-    <label>{t('documents.intake.documentType')}<select name="document_type" defaultValue={document.document_type ?? ''}>
-      <option value="">{t('documents.intake.none')}</option>{(['purchase', 'expense', 'sale', 'other'] as const).map(type => <option key={type} value={type}>{t(`documents.intake.types.${type}`)}</option>)}
-    </select></label>
-    <label>{t('documents.intake.counterparty')}<input name="counterparty_name" maxLength={200} defaultValue={document.counterparty_name ?? ''}/></label>
-    <label>{t('documents.intake.documentDate')}<input name="document_date" type="date" defaultValue={document.document_date?.slice(0, 10) ?? ''}/></label>
-    <label>{t('documents.intake.reference')}<input name="reference_number" maxLength={100} defaultValue={document.reference_number ?? ''}/></label>
-    <label>{t('documents.intake.totalAmount')}<input name="total_amount" type="number" min="0.01" step="0.01" defaultValue={document.total_amount ?? ''}/></label>
-    <label>{t('documents.intake.note')}<textarea name="intake_note" maxLength={500} defaultValue={document.intake_note ?? ''}/></label>
-    {error && <span role="alert">{t('documents.intake.error')}</span>}
-    <button disabled={saving}>{saving ? t('documents.intake.saving') : t('documents.intake.save')}</button>
-  </form>;
+function IntakeEditor({ document, onSaved, onUnauthorized }:{ document:DocumentItem; onSaved:()=>Promise<void>; onUnauthorized:()=>void }) {
+  const { t } = useTranslation(); const [saving,setSaving]=useState(false); const [error,setError]=useState(false);
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(false);const data=new FormData(event.currentTarget);const body=Object.fromEntries(intakeFields.map(field=>{const value=String(data.get(field)??'');return [field,value===''?null:field==='total_amount'?Number(value):value]}));try{const response=await fetch(`/api/documents/${document.id}/intake`,{method:'PATCH',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body)});if(response.status===401){onUnauthorized();return}if(!response.ok){setError(true);return}await onSaved()}catch{setError(true)}finally{setSaving(false)}};
+  return <form className="document-intake" onSubmit={save}><label>{t('documents.intake.documentType')}<select name="document_type" defaultValue={document.document_type??''}><option value="">{t('documents.intake.none')}</option>{(['purchase','expense','sale','other'] as const).map(type=><option key={type} value={type}>{t(`documents.intake.types.${type}`)}</option>)}</select></label><label>{t('documents.intake.counterparty')}<input name="counterparty_name" maxLength={200} defaultValue={document.counterparty_name??''}/></label><label>{t('documents.intake.documentDate')}<input name="document_date" type="date" defaultValue={document.document_date?.slice(0,10)??''}/></label><label>{t('documents.intake.reference')}<input name="reference_number" maxLength={100} defaultValue={document.reference_number??''}/></label><label>{t('documents.intake.totalAmount')}<input name="total_amount" type="number" min="0.01" step="0.01" defaultValue={document.total_amount??''}/></label><label>{t('documents.intake.note')}<textarea name="intake_note" maxLength={500} defaultValue={document.intake_note??''}/></label>{error&&<span role="alert">{t('documents.intake.error')}</span>}<button className="primary" disabled={saving}>{saving?t('documents.intake.saving'):t('documents.intake.save')}</button></form>;
 }
 
-interface DocumentsProps {
-  canView: boolean;
-  canUpload: boolean;
-  canReview: boolean;
-  canApprove: boolean;
-  onUnauthorized: () => void;
-}
-
-export function Documents({ canView, canUpload, canReview, canApprove, onUnauthorized }: DocumentsProps) {
-  const { t } = useTranslation();
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
-  const [loading, setLoading] = useState(canView);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/documents', { credentials: 'same-origin' });
-      if (response.status === 401) {
-        onUnauthorized();
-        return;
-      }
-      if (!response.ok) throw new Error('load');
-      const body = await response.json() as { documents: DocumentItem[] };
-      setDocuments(body.documents);
-    } catch {
-      setError(t('documents.error'));
-    } finally {
-      setLoading(false);
-    }
-  }, [canView, onUnauthorized, t]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const upload = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const input = form.elements.namedItem('document') as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/documents', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': file.type || 'application/octet-stream',
-          'x-file-name': encodeURIComponent(file.name),
-        },
-        body: file,
-      });
-      if (response.status === 401) {
-        onUnauthorized();
-        return;
-      }
-      if (!response.ok) {
-        setError(response.status === 413 ? t('documents.tooLarge') : t('documents.invalid'));
-        return;
-      }
-      form.reset();
-      if (canView) await load();
-    } catch {
-      setError(t('documents.error'));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const mutateReview = async (documentId: string, path: 'submit-review' | 'review', body?: object) => {
-    setReviewingId(documentId); setError(null);
-    try {
-      const response = await fetch(`/api/documents/${documentId}/${path}`, {
-        method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
-      });
-      if (response.status === 401) { onUnauthorized(); return; }
-      if (!response.ok) { setError(response.status === 409 ? t('documents.reviewConflict') : t('documents.reviewError')); return; }
-      await load();
-    } catch { setError(t('documents.reviewError')); }
-    finally { setReviewingId(null); }
-  };
-
-  const decide = (documentId: string, decision: 'approved' | 'incomplete' | 'rejected') => {
-    let note: string | undefined;
-    if (decision !== 'approved') {
-      note = window.prompt(t('documents.reviewReason'))?.trim();
-      if (!note) return;
-    }
-    void mutateReview(documentId, 'review', { decision, ...(note ? { note } : {}) });
-  };
-
-  if (!canView && !canUpload && !canReview && !canApprove) return null;
-
-  return (
-    <section className="panel">
-      <h2>{t('documents.title')}</h2>
-      <p>{t('documents.description')}</p>
-
-      {canUpload && (
-        <form onSubmit={upload} style={{ display: 'grid', gap: '0.75rem', marginBlock: '1rem' }}>
-          <input
-            name="document"
-            type="file"
-            aria-label={t('documents.chooseFile')}
-            accept="application/pdf,image/jpeg,image/png,image/webp"
-            required
-          />
-          <button disabled={uploading}>{uploading ? t('documents.uploading') : t('documents.upload')}</button>
-        </form>
-      )}
-
-      {error && <p role="alert">{error}</p>}
-      {canView && loading && <p role="status">{t('documents.loading')}</p>}
-      {canView && !loading && documents.length === 0 && <p>{t('documents.empty')}</p>}
-      {canView && documents.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table>
-            <thead><tr><th>{t('documents.file')}</th><th>{t('documents.status')}</th><th>{t('documents.size')}</th><th>{t('documents.actions')}</th></tr></thead>
-            <tbody>
-              {documents.map(document => (
-                <tr key={document.id}>
-                  <td>{document.original_filename}</td>
-                  <td>
-                    <div>{t(`documents.statuses.${document.status}`)}</div>
-                    {document.review_note && <div>{t('documents.reviewNote')}: {document.review_note}</div>}
-                    {document.reviewed_at && <div>{t('documents.reviewedAt')}: {new Date(document.reviewed_at).toLocaleString()}</div>}
-                    {intakeFields.map(field => document[field] != null && <div key={field}>{t(`documents.intake.${field}`)}: {field === 'document_type' ? t(`documents.intake.types.${document[field]}`) : document[field]}</div>)}
-                    {canUpload && document.status === 'uploaded' && <IntakeEditor key={document.id} document={document} onSaved={load} onUnauthorized={onUnauthorized}/>}
-                  </td>
-                  <td>{Math.max(1, Math.round(document.size_bytes / 1024))} KB</td>
-                  <td>
-                    <a href={`/api/documents/${document.id}/file`} target="_blank" rel="noreferrer">{t('documents.open')}</a>
-                    {((canUpload && document.status === 'uploaded') || ((canReview || canApprove) && document.status === 'needs_review')) && <span className="document-review-actions">
-                      {canUpload && document.status === 'uploaded' && <button disabled={reviewingId === document.id} onClick={() => void mutateReview(document.id, 'submit-review')}>{t('documents.reviewActions.submit')}</button>}
-                      {canReview && document.status === 'needs_review' && <>
-                        <button disabled={reviewingId === document.id} onClick={() => decide(document.id, 'incomplete')}>{t('documents.reviewActions.incomplete')}</button>
-                        <button disabled={reviewingId === document.id} onClick={() => decide(document.id, 'rejected')}>{t('documents.reviewActions.rejected')}</button>
-                      </>}
-                      {canApprove && document.status === 'needs_review' && <button disabled={reviewingId === document.id} onClick={() => decide(document.id, 'approved')}>{t('documents.reviewActions.approved')}</button>}
-                    </span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
+interface DocumentsProps { canView:boolean; canUpload:boolean; canReview:boolean; canApprove:boolean; onUnauthorized:()=>void }
+type Decision='approved'|'incomplete'|'rejected';
+export function Documents({canView,canUpload,canReview,canApprove,onUnauthorized}:DocumentsProps){
+ const {t}=useTranslation(); const [documents,setDocuments]=useState<DocumentItem[]>([]); const [loading,setLoading]=useState(canView); const [uploading,setUploading]=useState(false); const [error,setError]=useState<string|null>(null); const [selectedId,setSelectedId]=useState<string|null>(null); const [uploadOpen,setUploadOpen]=useState(false); const [file,setFile]=useState<File|null>(null); const [reviewingId,setReviewingId]=useState<string|null>(null); const [decision,setDecision]=useState<Decision|null>(null); const [reasonError,setReasonError]=useState(false);
+ const load=useCallback(async()=>{if(!canView)return;setLoading(true);setError(null);try{const response=await fetch('/api/documents',{credentials:'same-origin'});if(response.status===401){onUnauthorized();return}if(!response.ok)throw new Error();const body=await response.json() as {documents:DocumentItem[]};setDocuments(body.documents);setSelectedId(current=>body.documents.some(d=>d.id===current)?current:(body.documents[0]?.id??null))}catch{setError(t('documents.error'))}finally{setLoading(false)}},[canView,onUnauthorized,t]);
+ useEffect(()=>{void load()},[load]); const selected=documents.find(d=>d.id===selectedId)??null;
+ const upload=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!file)return;setUploading(true);setError(null);try{const response=await fetch('/api/documents',{method:'POST',credentials:'same-origin',headers:{'content-type':file.type||'application/octet-stream','x-file-name':encodeURIComponent(file.name)},body:file});if(response.status===401){onUnauthorized();return}if(!response.ok){setError(response.status===413?t('documents.tooLarge'):t('documents.invalid'));return}setFile(null);setUploadOpen(false);if(canView)await load()}catch{setError(t('documents.error'))}finally{setUploading(false)}};
+ const mutateReview=async(documentId:string,path:'submit-review'|'review',body?:object)=>{setReviewingId(documentId);setError(null);try{const response=await fetch(`/api/documents/${documentId}/${path}`,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body??{})});if(response.status===401){onUnauthorized();return}if(!response.ok){setError(response.status===409?t('documents.reviewConflict'):t('documents.reviewError'));return}setDecision(null);await load()}catch{setError(t('documents.reviewError'))}finally{setReviewingId(null)}};
+ const confirmDecision=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected||!decision)return;const note=String(new FormData(event.currentTarget).get('reason')??'').trim();if(decision!=='approved'&&!note){setReasonError(true);return}void mutateReview(selected.id,'review',{decision,...(note?{note}:{})})};
+ if(!canView&&!canUpload&&!canReview&&!canApprove)return null;
+ return <section className="panel documents-page" aria-labelledby="documents-title"><div className="page-heading"><div><p className="eyebrow">{t('documents.workspace')}</p><h2 id="documents-title">{t('documents.title')}</h2><p>{t('documents.description')}</p></div>{canUpload&&<button className="primary" onClick={()=>setUploadOpen(true)}>{t('documents.upload')}</button>}</div>
+ {error&&<div role="alert" className="message error">{error} {canView&&<button onClick={()=>void load()}>{t('common.retry')}</button>}</div>}
+ {canView&&loading&&<p role="status" className="state-card">{t('documents.loading')}</p>}{canView&&!loading&&documents.length===0&&<p className="state-card">{t('documents.empty')}</p>}
+ {canView&&!loading&&documents.length>0&&<div className="documents-workspace"><div className="document-list" aria-label={t('documents.list')}>{documents.map(doc=><button key={doc.id} className={`document-row ${doc.id===selectedId?'selected':''}`} onClick={()=>setSelectedId(doc.id)}><span className="document-row-main"><strong>{doc.original_filename}</strong><span>{doc.document_type?t(`documents.intake.types.${doc.document_type}`):t('documents.intake.none')} · {doc.counterparty_name??'—'}</span><span>{doc.document_date??'—'} {doc.total_amount?` · ${doc.total_amount}`:''}</span></span><span><span className={`badge ${doc.status}`}>{t(`documents.statuses.${doc.status}`)}</span><small>{size(doc.size_bytes)}</small></span></button>)}</div>
+ {selected&&<article className="document-detail"><div className="detail-header"><div><h3>{selected.original_filename}</h3><span className={`badge ${selected.status}`}>{t(`documents.statuses.${selected.status}`)}</span></div><a className="button-link" href={`/api/documents/${selected.id}/file`} target="_blank" rel="noreferrer">{t('documents.open')}</a></div><dl className="metadata"><div><dt>{t('documents.size')}</dt><dd>{size(selected.size_bytes)}</dd></div>{intakeFields.map(field=><div key={field}><dt>{t(`documents.intake.${field}`)}</dt><dd>{selected[field]!=null?(field==='document_type'?t(`documents.intake.types.${selected[field]}`):selected[field]):'—'}</dd></div>)}{selected.review_note&&<div><dt>{t('documents.reviewNote')}</dt><dd>{selected.review_note}</dd></div>}{selected.reviewed_at&&<div><dt>{t('documents.reviewedAt')}</dt><dd>{new Date(selected.reviewed_at).toLocaleString()}</dd></div>}</dl>
+ <section className="detail-section"><h4>{t('documents.intake.title')}</h4>{canUpload&&selected.status==='uploaded'?<IntakeEditor key={selected.id} document={selected} onSaved={load} onUnauthorized={onUnauthorized}/>:<p className="muted">{t('documents.intake.readOnly')}</p>}</section>
+ {((canUpload&&selected.status==='uploaded')||((canReview||canApprove)&&selected.status==='needs_review'))&&<section className="detail-section"><h4>{t('documents.workflow')}</h4><div className="document-review-actions">{canUpload&&selected.status==='uploaded'&&<button className="primary" disabled={reviewingId===selected.id} onClick={()=>void mutateReview(selected.id,'submit-review')}>{t('documents.reviewActions.submit')}</button>}{canReview&&selected.status==='needs_review'&&<><button disabled={reviewingId===selected.id} onClick={()=>{setReasonError(false);setDecision('incomplete')}}>{t('documents.reviewActions.incomplete')}</button><button className="danger" disabled={reviewingId===selected.id} onClick={()=>{setReasonError(false);setDecision('rejected')}}>{t('documents.reviewActions.rejected')}</button></>}{canApprove&&selected.status==='needs_review'&&<button className="primary" disabled={reviewingId===selected.id} onClick={()=>setDecision('approved')}>{t('documents.reviewActions.approved')}</button>}</div></section>}</article>}</div>}
+ {uploadOpen&&<Dialog title={t('documents.uploadTitle')} busy={uploading} onClose={()=>{setUploadOpen(false);setFile(null)}}><form onSubmit={upload} className="upload-form"><label className="file-drop">{t('documents.chooseFile')}<input name="document" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required onChange={e=>setFile(e.target.files?.[0]??null)}/><span>{t('documents.accepted')}</span></label>{file&&<div className="selected-file"><strong>{file.name}</strong><span>{size(file.size)}</span></div>}{error&&<p role="alert">{error}</p>}<div className="modal-actions"><button type="button" disabled={uploading} onClick={()=>{setUploadOpen(false);setFile(null)}}>{t('common.cancel')}</button><button className="primary" disabled={uploading||!file}>{uploading?t('documents.uploading'):t('documents.upload')}</button></div></form></Dialog>}
+ {decision&&selected&&<Dialog title={t(`documents.dialogs.${decision}Title`)} busy={reviewingId===selected.id} onClose={()=>setDecision(null)}><form className="form-grid" onSubmit={confirmDecision}><p>{t(`documents.dialogs.${decision}Confirmation`)}</p><label>{decision==='approved'?t('documents.approvalNote'):t('documents.reviewReason')}<textarea name="reason" required={decision!=='approved'} aria-describedby={reasonError?'reason-error':undefined}/></label>{reasonError&&<p id="reason-error" role="alert">{t('documents.reasonRequired')}</p>}<div className="modal-actions"><button type="button" onClick={()=>setDecision(null)}>{t('common.cancel')}</button><button className={decision==='rejected'?'danger':'primary'} disabled={reviewingId===selected.id}>{t('common.confirm')}</button></div></form></Dialog>}</section>
 }

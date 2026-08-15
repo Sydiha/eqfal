@@ -1,9 +1,12 @@
 const en = {
   app: {
     title: 'Eqfal — Financial Close & Operations',
+    shortTitle: 'EQFAL',
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },
+  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', documents: 'Documents', openMenu: 'Open navigation menu' },
+  home: { workspace: 'Company workspace', welcome: 'Welcome back', context: 'Access the financial operations available for your active company.', currentUser: 'Current user', quickActions: 'Quick actions' },
   auth: {
     email: 'Email',
     password: 'Password',
@@ -17,7 +20,7 @@ const en = {
     switchAriaLabel: 'Switch active company',
     switching: 'Switching company…',
   },
-  common: { cancel: 'Cancel', save: 'Save' },
+  common: { cancel: 'Cancel', close: 'Close', save: 'Save', confirm: 'Confirm', retry: 'Try again' },
   fiscalYears: {
     title: 'Fiscal Years', description: 'Manage the fiscal years for the active company.',
     loading: 'Loading fiscal years…', empty: 'No fiscal years have been created yet.',
@@ -32,6 +35,7 @@ const en = {
   },
   documents: {
     title: 'Documents',
+    workspace: 'Document workspace', list: 'Document list', workflow: 'Workflow actions', uploadTitle: 'Upload document', accepted: 'PDF, JPEG, PNG, or WebP · Maximum 10 MB', reasonRequired: 'A reason is required.', approvalNote: 'Note (optional)',
     description: 'Upload and access documents for the active company.',
     chooseFile: 'Choose document',
     upload: 'Upload document',
@@ -48,16 +52,17 @@ const en = {
     open: 'Open',
     reviewError: 'Unable to update the document review.',
     reviewConflict: 'This document has already been reviewed. Refresh and try again.',
-    reviewReason: 'Enter the reason:',
+    reviewReason: 'Reason',
     reviewNote: 'Review note',
     reviewedAt: 'Reviewed at',
     intake: {
-      documentType: 'Document Type', document_type: 'Document Type', counterparty: 'Counterparty / Supplier / Entity name', counterparty_name: 'Counterparty / Supplier / Entity name',
+      title: 'Intake information', readOnly: 'Intake information is read-only for this document.', documentType: 'Document Type', document_type: 'Document Type', counterparty: 'Counterparty / Supplier / Entity name', counterparty_name: 'Counterparty / Supplier / Entity name',
       documentDate: 'Document Date', document_date: 'Document Date', reference: 'Invoice / Reference Number', reference_number: 'Invoice / Reference Number',
       totalAmount: 'Total Amount', total_amount: 'Total Amount', note: 'Optional Note', intake_note: 'Optional Note', none: 'Not specified',
       save: 'Save Intake', saving: 'Saving…', error: 'Unable to save Intake.', types: { purchase: 'Purchase', expense: 'Expense', sale: 'Sale', other: 'Other' },
     },
     reviewActions: { submit: 'Submit for review', approved: 'Approve', incomplete: 'Mark incomplete', rejected: 'Reject' },
+    dialogs: { approvedTitle: 'Approve document', approvedConfirmation: 'Confirm that this document is ready to approve.', incompleteTitle: 'Mark document incomplete', incompleteConfirmation: 'Explain what is missing before returning this document.', rejectedTitle: 'Reject document', rejectedConfirmation: 'Explain why this document must be rejected.' },
     statuses: {
       uploaded: 'Uploaded',
       needs_review: 'Needs review',

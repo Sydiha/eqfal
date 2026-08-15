@@ -21,9 +21,10 @@ describe('Documents', () => {
     }), { status: 200 })));
 
     render(<Documents canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
-    expect(await screen.findByText('invoice.pdf')).toBeInTheDocument();
-    expect(screen.getByText('Review note: Looks good')).toBeInTheDocument();
-    expect(screen.getByText(/Reviewed at:/)).toBeInTheDocument();
+    expect(await screen.findAllByText('invoice.pdf')).toHaveLength(2);
+    expect(screen.getByText('Looks good')).toBeInTheDocument();
+    expect(screen.getByText('Review note')).toBeInTheDocument();
+    expect(screen.getByText('Reviewed at')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/api/documents/doc-1/file');
   });
 
@@ -36,11 +37,12 @@ describe('Documents', () => {
 
     render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     await screen.findByText('No documents uploaded yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Upload document' }));
 
     const file = new File([new Uint8Array([0x25,0x50,0x44,0x46,0x2d])], 'invoice.pdf', { type: 'application/pdf' });
-    fireEvent.change(screen.getByLabelText('Choose document'), { target: { files: [file] } });
-    const form = screen.getByRole('button', { name: 'Upload document' }).closest('form');
-    expect(form).not.toBeNull();
+    fireEvent.change(screen.getByLabelText(/Choose document/), { target: { files: [file] } });
+    const form = screen.getAllByRole('button', { name: 'Upload document' }).find(button => button.closest('form'))?.closest('form');
+    expect(form).toBeTruthy();
     fireEvent.submit(form!);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
@@ -70,15 +72,45 @@ describe('Documents', () => {
     expect(await screen.findByRole('button', { name: 'Submit for review' })).toBeInTheDocument();
   });
 
+  it.each([
+    ['', { decision: 'approved' }],
+    ['  Ready to post  ', { decision: 'approved', note: 'Ready to post' }],
+  ])('approves with the supported optional note value %j', async (note, expectedBody) => {
+    const reviewDocument = { ...intakeDocument, status: 'needs_review' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [reviewDocument] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ document: reviewDocument }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [reviewDocument] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<Documents canView canUpload={false} canReview={false} canApprove onUnauthorized={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual(expectedBody);
+  });
+
+  it.each([['Mark incomplete'], ['Reject']])('requires a reason before submitting %s', async (action) => {
+    const reviewDocument = { ...intakeDocument, status: 'needs_review' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [reviewDocument] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: action }));
+    fireEvent.submit(screen.getByRole('button', { name: 'Confirm' }).closest('form')!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('A reason is required.');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('shows stored intake and editable controls only to uploaders while uploaded', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [intakeDocument] }), { status: 200 })));
-    const { rerender } = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    const onUnauthorized = vi.fn();
+    const { rerender } = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(await screen.findByRole('button', { name: 'Save Intake' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('Supplier A')).toBeInTheDocument();
-    expect(screen.getByText('Invoice / Reference Number: INV-7')).toBeInTheDocument();
-    rerender(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(screen.getByText('INV-7')).toBeInTheDocument();
+    rerender(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
-    expect(screen.getByText('Counterparty / Supplier / Entity name: Supplier A')).toBeInTheDocument();
+    expect(screen.getByText('Supplier A')).toBeInTheDocument();
   });
 
   it.each(['needs_review', 'approved', 'incomplete', 'rejected'])('hides editable Intake controls from uploaders when status is %s', async (status) => {
@@ -88,7 +120,7 @@ describe('Documents', () => {
 
     render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
 
-    expect(await screen.findByText('invoice.pdf')).toBeInTheDocument();
+    expect(await screen.findAllByText('invoice.pdf')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Document Type')).not.toBeInTheDocument();
   });

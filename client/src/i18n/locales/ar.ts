@@ -1,9 +1,12 @@
 const ar = {
   app: {
     title: 'إقفال — المالية والعمليات',
+    shortTitle: 'إقفال',
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', openMenu: 'فتح قائمة التنقل' },
+  home: { workspace: 'مساحة عمل الشركة', welcome: 'مرحبًا بعودتك', context: 'الوصول إلى العمليات المالية المتاحة للشركة النشطة.', currentUser: 'المستخدم الحالي', quickActions: 'إجراءات سريعة' },
   auth: {
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
@@ -17,7 +20,7 @@ const ar = {
     switchAriaLabel: 'تبديل الشركة النشطة',
     switching: 'جارٍ تبديل الشركة…',
   },
-  common: { cancel: 'إلغاء', save: 'حفظ' },
+  common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة' },
   fiscalYears: {
     title: 'السنوات المالية', description: 'إدارة السنوات المالية للشركة النشطة.',
     loading: 'جارٍ تحميل السنوات المالية…', empty: 'لم يتم إنشاء أي سنة مالية بعد.',
@@ -32,6 +35,7 @@ const ar = {
   },
   documents: {
     title: 'المستندات',
+    workspace: 'مساحة عمل المستندات', list: 'قائمة المستندات', workflow: 'إجراءات سير العمل', uploadTitle: 'رفع مستند', accepted: 'PDF أو JPEG أو PNG أو WebP · الحد الأقصى 10 ميجابايت', reasonRequired: 'السبب مطلوب.', approvalNote: 'ملاحظة (اختيارية)',
     description: 'رفع مستندات الشركة النشطة والوصول إليها بأمان.',
     chooseFile: 'اختيار مستند',
     upload: 'رفع مستند',
@@ -48,16 +52,17 @@ const ar = {
     open: 'فتح',
     reviewError: 'تعذر تحديث مراجعة المستند.',
     reviewConflict: 'تمت مراجعة هذا المستند بالفعل. حدّث الصفحة وحاول مجددًا.',
-    reviewReason: 'أدخل السبب:',
+    reviewReason: 'السبب',
     reviewNote: 'ملاحظة المراجعة',
     reviewedAt: 'وقت المراجعة',
     intake: {
-      documentType: 'نوع المستند', document_type: 'نوع المستند', counterparty: 'اسم الطرف المقابل / المورد / الجهة', counterparty_name: 'اسم الطرف المقابل / المورد / الجهة',
+      title: 'بيانات الإدخال', readOnly: 'بيانات الإدخال للقراءة فقط لهذا المستند.', documentType: 'نوع المستند', document_type: 'نوع المستند', counterparty: 'اسم الطرف المقابل / المورد / الجهة', counterparty_name: 'اسم الطرف المقابل / المورد / الجهة',
       documentDate: 'تاريخ المستند', document_date: 'تاريخ المستند', reference: 'رقم الفاتورة / المرجع', reference_number: 'رقم الفاتورة / المرجع',
       totalAmount: 'المبلغ الإجمالي', total_amount: 'المبلغ الإجمالي', note: 'ملاحظة اختيارية', intake_note: 'ملاحظة اختيارية', none: 'غير محدد',
       save: 'حفظ بيانات الإدخال', saving: 'جارٍ الحفظ…', error: 'تعذر حفظ بيانات الإدخال.', types: { purchase: 'شراء', expense: 'مصروف', sale: 'بيع', other: 'أخرى' },
     },
     reviewActions: { submit: 'إرسال للمراجعة', approved: 'اعتماد', incomplete: 'تحديد كناقص', rejected: 'رفض' },
+    dialogs: { approvedTitle: 'اعتماد المستند', approvedConfirmation: 'أكد أن المستند جاهز للاعتماد.', incompleteTitle: 'تحديد المستند كناقص', incompleteConfirmation: 'وضح البيانات الناقصة قبل إعادة المستند.', rejectedTitle: 'رفض المستند', rejectedConfirmation: 'وضح سبب رفض هذا المستند.' },
     statuses: {
       uploaded: 'مرفوع',
       needs_review: 'يحتاج مراجعة',
