@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import pool from '../../db/pool';
 import config from '../../config';
 import { SessionService } from './session.service';
@@ -7,6 +7,14 @@ const SESSION_COOKIE = 'eqfal_session';
 const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 export const authRouter = Router();
+
+function asyncRoute(
+  handler: (req: Request, res: Response, next: NextFunction) => Promise<void>,
+): RequestHandler {
+  return (req, res, next) => {
+    void handler(req, res, next).catch(next);
+  };
+}
 
 function serviceOr503(res: Response): SessionService | null {
   if (!pool) {
@@ -75,7 +83,7 @@ function requireSameOrigin(req: Request, res: Response, next: NextFunction): voi
   res.status(403).json({ error: 'Invalid request origin' });
 }
 
-authRouter.post('/auth/login', requireSameOrigin, async (req: Request, res: Response) => {
+authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
@@ -96,9 +104,9 @@ authRouter.post('/auth/login', requireSameOrigin, async (req: Request, res: Resp
   const { token, ...context } = result;
   setSessionCookie(res, token);
   res.status(200).json(context);
-});
+}));
 
-authRouter.get('/auth/session', async (req: Request, res: Response) => {
+authRouter.get('/auth/session', asyncRoute(async (req, res) => {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) {
     res.status(401).json({ error: 'Unauthenticated' });
@@ -116,9 +124,9 @@ authRouter.get('/auth/session', async (req: Request, res: Response) => {
   }
 
   res.status(200).json(context);
-});
+}));
 
-authRouter.post('/auth/switch-company', requireSameOrigin, async (req: Request, res: Response) => {
+authRouter.post('/auth/switch-company', requireSameOrigin, asyncRoute(async (req, res) => {
   const token = readCookie(req, SESSION_COOKIE);
   const companyId = typeof req.body?.companyId === 'string' ? req.body.companyId : '';
 
@@ -146,16 +154,17 @@ authRouter.post('/auth/switch-company', requireSameOrigin, async (req: Request, 
   }
 
   res.status(200).json(context);
-});
+}));
 
-authRouter.post('/auth/logout', requireSameOrigin, async (req: Request, res: Response) => {
+authRouter.post('/auth/logout', requireSameOrigin, asyncRoute(async (req, res) => {
   const token = readCookie(req, SESSION_COOKIE);
+  clearSessionCookie(res);
+
   const service = serviceOr503(res);
   if (!service) return;
 
   if (token) await service.logout(token);
-  clearSessionCookie(res);
   res.status(204).end();
-});
+}));
 
 export { readCookie, SESSION_COOKIE };
