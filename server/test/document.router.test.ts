@@ -122,6 +122,21 @@ describe('Document API security boundary', () => {
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
+  it('rejects files larger than 10 MB before writing', async () => {
+    setContext(['document.upload']);
+    const oversized = Buffer.alloc(10 * 1024 * 1024 + 1, 0x20);
+    oversized.write('%PDF-', 0, 'ascii');
+
+    const res = await request(app)
+      .post('/api/documents')
+      .set('Content-Type', 'application/pdf')
+      .set('X-File-Name', encodeURIComponent('large.pdf'))
+      .send(oversized);
+
+    expect(res.status).toBe(413);
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
   it('uploads only into active company with authenticated actor', async () => {
     setContext(['document.upload']);
     mocks.upload.mockResolvedValue(document);
