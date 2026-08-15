@@ -30,17 +30,8 @@ export function CompanySwitcher({ onSwitch }: CompanySwitcherProps) {
   }
 
   return (
-    <div style={{ marginTop: '1.5rem', textAlign: 'start' }}>
-      <label
-        htmlFor="company-switcher"
-        style={{
-          display: 'block',
-          marginBottom: '0.4rem',
-          fontSize: '0.8rem',
-          color: '#555',
-          fontWeight: 500,
-        }}
-      >
+    <div className="company-switcher">
+      <label htmlFor="company-switcher">
         {t('company.label')}
       </label>
       <select
@@ -63,15 +54,6 @@ export function CompanySwitcher({ onSwitch }: CompanySwitcherProps) {
               if (accepted) setActiveCompany(nextId);
             })
             .finally(() => setSwitching(false));
-        }}
-        style={{
-          padding: '0.45rem 0.75rem',
-          fontSize: '0.9rem',
-          borderRadius: '6px',
-          border: '1px solid #ccc',
-          cursor: switching ? 'wait' : 'pointer',
-          minWidth: '220px',
-          background: '#fff',
         }}
       >
         {allowedCompanies.map(c => (

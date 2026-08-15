@@ -18,6 +18,7 @@ describe('Fiscal year shell integration', () => {
       .mockImplementationOnce(() => new Promise(resolve => { resolveBeta = resolve; }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AuthProvider><App/></AuthProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Fiscal Years' }));
     expect(await screen.findByText('Alpha FY')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Switch active company'), { target: { value: 'co-b' } });
     await waitFor(() => expect(screen.queryByText('Alpha FY')).not.toBeInTheDocument());
@@ -32,6 +33,7 @@ describe('Fiscal year shell integration', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify(session('co-a')), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 401 })));
     render(<AuthProvider><App/></AuthProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Fiscal Years' }));
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 });

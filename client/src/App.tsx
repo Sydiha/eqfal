@@ -4,9 +4,10 @@ import './i18n';
 import './App.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
-import { CompanySwitcher } from './components/CompanySwitcher';
 import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
+import { AppShell, Page } from './components/AppShell';
+import { Home } from './components/Home';
 
 function LanguageButton() {
   const { t, i18n } = useTranslation();
@@ -27,37 +28,18 @@ function LoginForm() {
   return <div className="login"><h1>{t('app.title')}</h1><LanguageButton/><form className="login-form" onSubmit={submit}><label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required/></label><label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required/></label>{invalid && <p role="alert">{t('auth.invalid')}</p>}<button disabled={submitting}>{t('auth.login')}</button></form></div>;
 }
 
-function CompanyContent() {
-  const { t } = useTranslation();
-  const { companyKey, activeCompanyId } = useCompany();
-  const { session, handleUnauthorized } = useAuth();
-  if (!activeCompanyId) return <section className="panel"><p role="status">{t('company.none')}</p></section>;
-  if (activeCompanyId !== session?.activeCompanyId) {
-    return <section className="panel"><p role="status">{t('company.switching')}</p></section>;
-  }
-  const capabilities = session?.capabilities ?? [];
-  return (
-    <div key={companyKey}>
-      <FiscalYears
-        canView={capabilities.includes('fiscal_year.view')}
-        canManage={capabilities.includes('fiscal_year.manage')}
-        onUnauthorized={handleUnauthorized}
-      />
-      <Documents
-        canView={capabilities.includes('document.view')}
-        canUpload={capabilities.includes('document.upload')}
-        canReview={capabilities.includes('document.review')}
-        canApprove={capabilities.includes('document.approve')}
-        onUnauthorized={handleUnauthorized}
-      />
-    </div>
-  );
+function AuthenticatedShell() {
+  const { logout, switchCompany, session } = useAuth();
+  const [page, setPage] = useState<Page>('home');
+  return <AppShell page={page} setPage={setPage} email={session!.user.email} onSwitch={switchCompany} onLogout={logout}><CompanyContentForPage page={page} setPage={setPage}/></AppShell>;
 }
 
-function AuthenticatedShell() {
-  const { t } = useTranslation();
-  const { logout, switchCompany } = useAuth();
-  return <div className="app"><header className="topbar"><h1 className="brand">{t('app.title')}</h1><div className="top-actions"><CompanySwitcher onSwitch={switchCompany}/><LanguageButton/><button onClick={() => void logout()}>{t('auth.logout')}</button></div></header><main className="content"><CompanyContent/></main></div>;
+function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: Page) => void }) {
+  const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized } = useAuth();
+  if (!activeCompanyId) return <section className="panel"><p role="status">{t('company.none')}</p></section>;
+  if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status">{t('company.switching')}</p></section>;
+  const c = session.capabilities;
+  return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>}</div>;
 }
 
 export default function App() {

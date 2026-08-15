@@ -36,6 +36,7 @@ describe('Documents', () => {
 
     render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     await screen.findByText('No documents uploaded yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Upload document' }));
 
     const file = new File([new Uint8Array([0x25,0x50,0x44,0x46,0x2d])], 'invoice.pdf', { type: 'application/pdf' });
     fireEvent.change(screen.getByLabelText('Choose document'), { target: { files: [file] } });
