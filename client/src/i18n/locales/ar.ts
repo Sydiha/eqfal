@@ -33,6 +33,7 @@ const ar = {
   documents: {
     title: 'المستندات',
     description: 'رفع مستندات الشركة النشطة والوصول إليها بأمان.',
+    chooseFile: 'اختيار مستند',
     upload: 'رفع مستند',
     uploading: 'جارٍ الرفع…',
     loading: 'جارٍ تحميل المستندات…',
