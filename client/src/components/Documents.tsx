@@ -47,7 +47,8 @@ export function Documents({ canView, canUpload, onUnauthorized }: DocumentsProps
 
   const upload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const input = event.currentTarget.elements.namedItem('document') as HTMLInputElement | null;
+    const form = event.currentTarget;
+    const input = form.elements.namedItem('document') as HTMLInputElement | null;
     const file = input?.files?.[0];
     if (!file) return;
 
@@ -71,7 +72,7 @@ export function Documents({ canView, canUpload, onUnauthorized }: DocumentsProps
         setError(response.status === 413 ? t('documents.tooLarge') : t('documents.invalid'));
         return;
       }
-      event.currentTarget.reset();
+      form.reset();
       if (canView) await load();
     } catch {
       setError(t('documents.error'));
