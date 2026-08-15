@@ -4,104 +4,104 @@
 2026-08-15
 
 ## حالة المشروع
-مشروع **إقفال | EQFAL** مستمر في بناء Core MVP. تم إغلاق ودمج طبقة Auth/Session، Fiscal Year API، وFiscal Year UI داخل الـAuthenticated Application Shell، وأصبح GitHub Actions CI يعمل كطبقة تحقق دائمة قبل الدمج.
+مشروع **إقفال | EQFAL** مستمر في بناء Core MVP. تم إغلاق ودمج Core Security/Readiness، Phase 2A Secure Document Upload Foundation، وPhase 2B Document Review Workflow. لا توجد مهمة برمجية مفتوحة حاليًا؛ الحزمة الحالية هي Documentation Recovery فقط.
 
 ## المرجع المعتمد
 - Repository: `Sydiha/eqfal`
-- المرجع الوحيد للكود المدمج: `main`
-- آخر main معتمد: `df1c419906a280cc3057e7c99fce8c04530afbb8`
-- آخر Merge: PR #14 — Fiscal Years UI / Application Shell Integration.
+- المرجع الوحيد للكود المدمج: latest `main` على GitHub.
+- آخر Merge تشغيلي: PR #20 — `feat: add document review workflow`.
+- آخر Merge حوكمة قبلها: PR #19 — `docs: enforce strict Design Check compliance`.
+- لا يعتمد هذا الملف على SHA ثابت كمرجع دائم؛ عند الاستئناف يجب قراءة latest `main` مباشرة.
 
 ## ما تم إنجازه حتى الآن
-- Bootstrap Core Foundation — PR #2 merged.
-- Data / Tenancy Foundation — PR #3 merged.
-- Auth / Users Foundation — PR #4 merged.
-- Memberships + Roles + Capabilities Foundation — PR #5 merged.
-- Fiscal Years + Initial Audit Foundation — PR #6 merged.
-- i18n + Company Switcher Foundation — PR #7 merged.
-- Tool Routing / Operational Leadership documentation — PR #9 merged.
-- Auth / Session + Secure Company Switching — PR #10 merged.
-- Documentation recap refresh — PR #11 merged.
-- Fiscal Year API / Application Integration — PR #12 merged.
-- Permanent Tool & Cost Protocol — PR #13 merged.
-- GitHub Actions CI foundation — PR #15 merged.
-- Fiscal Years UI / Authenticated Shell Integration — PR #14 merged.
+- Bootstrap Core Foundation — DONE.
+- Data / Tenancy Foundation — DONE.
+- Auth / Users Foundation — DONE.
+- Memberships + Roles + Capabilities — DONE.
+- Fiscal Years + Initial Audit Foundation — DONE.
+- i18n + Company Switcher Foundation — DONE.
+- Auth / Session + Secure Company Switching — DONE.
+- Fiscal Year API / Application Integration — DONE.
+- Fiscal Years UI / Authenticated Shell — DONE.
+- GitHub Actions CI — DONE.
+- Core MVP Security & Readiness — DONE.
+- Phase 2A Secure Document Upload Foundation — DONE.
+- Phase 2B Document Review Workflow — DONE.
 
-## الحالة التقنية الحالية
-- Login/Session/Logout فعلي عبر Server-side sessions في PostgreSQL.
-- Session token عشوائي opaque عبر HttpOnly Cookie، ويُخزن hash في DB.
-- Active Company تأتي من Session الموثوقة، وتبديل الشركة يعاد التحقق منه Server-side.
-- الشركات المتاحة مشتقة من Active Memberships + Active Companies فقط.
-- Backend هو Security Boundary للصلاحيات، والـFrontend يستخدم capabilities للـUX فقط.
-- Fiscal Year API يدعم list/create/edit/close داخل الشركة النشطة فقط.
-- Fiscal Year UI تعرض السنوات المالية وتدعم create/edit/close حسب capabilities.
-- تبديل الشركة يعيد تهيئة البيانات company-scoped ويمنع عرض بيانات الشركة السابقة أثناء الانتقال.
-- 401 من application requests يعيد الواجهة إلى Login state.
-- العربية والإنجليزية وRTL/LTR موجودة.
-- لا Production deployment.
+## Phase 2A — Secure Document Upload Foundation
+- `document.view` و`document.upload`.
+- company-scoped metadata في PostgreSQL؛ لا BLOBs.
+- replaceable Storage Adapter مع local implementation حاليًا.
+- PDF/JPEG/PNG/WebP حتى 10 MB.
+- extension + MIME + signature validation.
+- SHA-256 server-side.
+- Same-Origin upload.
+- secure company-scoped file retrieval.
+- Audit `document.upload`.
+- Documents UI الأساسية.
+
+## Phase 2B — Document Review Workflow
+Transitions:
+- `uploaded -> needs_review` عبر `document.upload`.
+- `needs_review -> incomplete/rejected` عبر `document.review`.
+- `needs_review -> approved` عبر `document.approve`.
+
+API:
+- `POST /api/documents/:id/submit-review`
+- `POST /api/documents/:id/review`
+
+ضوابط أساسية:
+- Same-Origin + Auth + trusted Active Company.
+- Backend decision-specific capability enforcement.
+- company-scoped lookup + `FOR UPDATE` داخل transaction.
+- safe 404 للـcross-company/not-found.
+- 409 للحالة غير الصالحة.
+- review note max 500.
+- reason required لـincomplete/rejected؛ note اختيارية للاعتماد.
+- submit-review لا يملأ reviewer metadata.
+- final review actions تسجل `reviewed_by_user_id`, `reviewed_at`, `review_note`.
+- Audit actions منفصلة: submit_review / mark_incomplete / reject / approve.
+- الواجهة تفصل `canReview` و`canApprove` وتعرض review metadata عند وجودها.
 
 ## آخر تحقق تقني معتمد
-GitHub Actions على PR #14 نجح بالكامل على نفس الـPR المدمج:
+PR #20 اجتاز GitHub Actions CI بالكامل على نفس الـhead الذي تم دمجه:
 - Install dependencies: passed.
 - TypeScript: passed.
 - Tests: passed.
 - Build: passed.
 
-كما نجحت بوابات CI على PR #15 نفسه قبل دمجه.
-
-## GitHub Actions CI
-تم اعتماد Workflow دائم على كل PR إلى `main` وعلى push إلى `main` لتشغيل:
-1. dependency install.
-2. TypeScript.
-3. Tests.
-4. Build.
-
-ملاحظة تشغيلية مؤقتة:
-- `package-lock.json` الحالي يحتوي بعض registry URLs الخاصة ببيئة Replit القديمة.
-- الـCI يطبعها مؤقتًا إلى `registry.npmjs.org` داخل Runner فقط قبل `npm ci`.
-- تنظيف الـlockfile نفسه يبقى بندًا مستقلًا ولا يغيّر Business Logic.
-
-## قرار سير العمل المعتمد
+## قواعد سير العمل المعتمدة
 - `GitHub/main` هو المرجع الدائم.
-- لا يستخدم Replit Agent لتعديل كود إقفال.
-- Chat + GitHub مسؤولان عن الإدارة والمراجعة والـPR/CI/merge ضمن الصلاحيات المتاحة.
-- Codex يستخدم للأعمال البرمجية عند الحاجة، لكن المستخدم لا يكون وسيط نقل يدوي بين Chat وCodex كمسار تشغيل طبيعي.
-- Replit يبقى Runtime/Preview فقط عند الحاجة وبأقل تكلفة.
+- لا Replit Agent لتعديل الكود.
+- Chat + GitHub للإدارة، Design Check، المراجعة، PR/CI/merge ضمن الأدوات المتاحة.
+- Codex للبرمجة فقط بعد اعتماد Design Check.
+- Replit Runtime/Preview يدوي فقط عند الحاجة.
 - لا Production دون موافقة صريحة.
 - لا خدمات مدفوعة أو تكلفة تشغيلية جديدة دون موافقة.
 - مهمة برمجية واحدة فقط في كل مرة.
+- Approved Design Check = binding implementation contract.
+- **One-Shot Rule:** أمر Codex واحد شامل ومغلق بعد اعتماد التصميم.
+- **Zero-Loop Rule:** corrective pass واحد فقط؛ الحاجة إلى تصحيح ثانٍ توقف المهمة فورًا.
+- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـterminal/logs/patches.
+- القبول من diff الحقيقي + tests/CI + مطابقة Design Check، وليس من agent summary وحده.
 
-## قاعدة التوثيق
-بعد كل مرحلة جوهرية يتم تحديث رصيد المشروع في GitHub، وبشكل أساسي:
-- `TODO.md`
-- `DECISIONS.md`
-- `RECAP_SESSION.md`
-- `SECURITY_AND_TENANCY_CHECKLIST.md` عندما تتغير حالة بند أمني فعليًا.
+## ملاحظات تشغيلية معلقة وليست Blockers حالية
+- `package-lock.json` يحتوي registry URLs قديمة من Replit؛ CI يطبعها مؤقتًا إلى npm public registry داخل Runner فقط. تنظيفه مهمة تشغيلية مستقلة.
+- أي dependency vulnerability تحتاج مراجعة مستقلة قبل تغيير dependencies؛ لا automatic/breaking audit fix.
+- Production غير منشور.
 
 ## نقطة الاستئناف التالية
-**اسم المهمة التالية المقترحة:** Core MVP Security & Readiness Review
+بعد Merge حزمة Documentation Recovery:
+1. قراءة latest `main`.
+2. الرجوع للوثيقة التشغيلية الشاملة لتحديد المرحلة التالية.
+3. إجراء Read-only Design Check فقط.
+4. عدم كتابة أي كود حتى اعتماد المستخدم للتصميم.
 
-**الهدف:** مراجعة Read-only شاملة للحدود الأمنية والتكاملات الموجودة بعد اكتمال Auth/Session وFiscal Year API/UI، وتحديد فقط الاختبارات أو الإصلاحات الضرورية قبل الانتقال إلى الوحدة التشغيلية التالية.
-
-**يجب أن تبدأ المهمة بـ Design Check / Read-only review فقط قبل أي تعديل برمجي.**
-
-## نطاق المراجعة التالية
-- Auth/session invalidation behavior.
-- tenant isolation عبر HTTP/Application boundary.
-- Fiscal Year cross-company read/write protections.
-- capability enforcement coverage.
-- company-switch stale-state behavior.
-- audit coverage للأحداث الحساسة الحالية.
-- 401/403/404/409 behavior.
-- CI verification path.
-- تحديد أي blockers حقيقية فقط.
-
-## خارج نطاق المهمة التالية
-- Accounting periods.
-- Month/Quarter close.
-- Reopen workflow الكامل.
-- VAT/Zakat.
-- OCR والفواتير والبنوك.
-- Dashboard مالي كامل.
+## خارج النطاق الحالي
+- OCR / AI extraction.
+- VAT decisions/reconciliation.
+- accounting entries.
+- banks/reconciliation.
+- notifications/email.
 - Production deployment.
 - أي خدمة مدفوعة جديدة.
