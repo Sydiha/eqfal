@@ -1,13 +1,25 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
+import { CompanyProvider, type Company } from './context/CompanyContext';
+import { CompanySwitcher } from './components/CompanySwitcher';
 
-function App() {
+/**
+ * Placeholder companies — replaced by the Auth/Session layer once integrated.
+ * The CompanyProvider enforces that only companies in this list can be made
+ * active; no component can bypass the allowed-list check.
+ */
+const PLACEHOLDER_COMPANIES: Company[] = [
+  { id: 'co-1', name: 'شركة الخليج للمالية | Gulf Finance Co.' },
+  { id: 'co-2', name: 'مجموعة الأمانة | Al-Amana Group' },
+];
+
+function AppShell() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language === 'ar';
 
   useEffect(() => {
-    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+    document.documentElement.dir  = isRtl ? 'rtl' : 'ltr';
     document.documentElement.lang = i18n.language;
   }, [i18n.language, isRtl]);
 
@@ -32,6 +44,7 @@ function App() {
       <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 2rem)', margin: '0 0 1.5rem' }}>
         {t('app.title')}
       </h1>
+
       <button
         onClick={toggleLanguage}
         style={{
@@ -44,7 +57,18 @@ function App() {
       >
         {t('app.switchLanguage')}
       </button>
+
+      {/* Company switcher — reads allowedCompanies from the nearest Provider */}
+      <CompanySwitcher />
     </main>
+  );
+}
+
+function App() {
+  return (
+    <CompanyProvider allowedCompanies={PLACEHOLDER_COMPANIES}>
+      <AppShell />
+    </CompanyProvider>
   );
 }
 

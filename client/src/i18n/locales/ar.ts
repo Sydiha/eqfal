@@ -4,6 +4,11 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
+  company: {
+    label: 'الشركة النشطة',
+    none: 'لا توجد شركات متاحة',
+    switchAriaLabel: 'تبديل الشركة النشطة',
+  },
 } as const;
 
 export default ar;
