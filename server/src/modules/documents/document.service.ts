@@ -4,7 +4,7 @@ import logger from '../../shared/logger';
 import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { DocumentRepository } from './document.repository';
-import { DocumentRecord } from './document.types';
+import { DocumentRecord, DocumentReviewDecision } from './document.types';
 
 export interface UploadDocumentInput {
   companyId: string;
@@ -13,6 +13,20 @@ export interface UploadDocumentInput {
   mimeType: string;
   data: Buffer;
 }
+
+interface DocumentTransitionInput {
+  documentId: string;
+  companyId: string;
+  actorUserId: string;
+}
+
+export interface ReviewDocumentInput extends DocumentTransitionInput {
+  decision: DocumentReviewDecision;
+  note: string | null;
+}
+
+export class DocumentNotFoundError extends Error {}
+export class DocumentReviewConflictError extends Error {}
 
 export class DocumentService {
   private readonly documents: DocumentRepository;
@@ -90,5 +104,52 @@ export class DocumentService {
       }
       throw err;
     }
+  }
+
+  async submitReview(input: DocumentTransitionInput): Promise<DocumentRecord> {
+    return this.withTransaction(async (client) => {
+      const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+      if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.status !== 'uploaded') {
+        throw new DocumentReviewConflictError('Document cannot be submitted from its current status');
+      }
+      const document = await this.documents.submitForReview(input.documentId, input.companyId, client);
+      await this.audit.logEvent({
+        company_id: input.companyId,
+        actor_user_id: input.actorUserId,
+        action: 'document.submit_review',
+        entity_type: 'document',
+        entity_id: document.id,
+        before_data: { status: current.status },
+        after_data: { status: document.status },
+      }, client);
+      return document;
+    });
+  }
+
+  async review(input: ReviewDocumentInput): Promise<DocumentRecord> {
+    const actions: Record<DocumentReviewDecision, string> = {
+      approved: 'document.approve',
+      incomplete: 'document.mark_incomplete',
+      rejected: 'document.reject',
+    };
+    return this.withTransaction(async (client) => {
+      const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+      if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.status !== 'needs_review') {
+        throw new DocumentReviewConflictError('Document cannot be reviewed from its current status');
+      }
+      const document = await this.documents.updateReview(input.documentId, input.companyId, input.decision, input.actorUserId, input.note, client);
+      await this.audit.logEvent({
+        company_id: input.companyId,
+        actor_user_id: input.actorUserId,
+        action: actions[input.decision],
+        entity_type: 'document',
+        entity_id: document.id,
+        before_data: { status: current.status },
+        after_data: { status: document.status, ...(input.note ? { review_note: input.note } : {}) },
+      }, client);
+      return document;
+    });
   }
 }
