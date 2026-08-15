@@ -6,6 +6,7 @@ import {
   requireAuth,
   requireCapability,
 } from '../auth/auth.middleware';
+import { AuthSessionContext } from '../auth/session.service';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { FiscalYearService } from './fiscal-year.service';
 import { UpdateFiscalYearInput } from './fiscal-year.types';
@@ -15,6 +16,8 @@ export const fiscalYearRouter = Router();
 const VIEW_CAPABILITY = 'fiscal_year.view';
 const MANAGE_CAPABILITY = 'fiscal_year.manage';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
 
 function asyncRoute(
   handler: (req: Request, res: Response, next: NextFunction) => Promise<void>,
@@ -67,13 +70,13 @@ function normalizeName(value: unknown): string | null {
   return name;
 }
 
-function activeContext(req: Request, res: Response) {
+function activeContext(req: Request, res: Response): ActiveAuthContext | null {
   const context = getAuthenticatedContext(req);
   if (!context?.activeCompanyId) {
     res.status(403).json({ error: 'No active company' });
     return null;
   }
-  return context;
+  return context as ActiveAuthContext;
 }
 
 function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
