@@ -6,6 +6,7 @@ import {
   requireAuth,
   requireCapability,
 } from '../auth/auth.middleware';
+import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { FiscalYearService } from './fiscal-year.service';
@@ -125,6 +126,7 @@ fiscalYearRouter.get(
 
 fiscalYearRouter.post(
   '/fiscal-years',
+  requireSameOrigin,
   requireAuth,
   requireActiveCompany,
   requireCapability(MANAGE_CAPABILITY),
@@ -164,6 +166,7 @@ fiscalYearRouter.post(
 
 fiscalYearRouter.patch(
   '/fiscal-years/:id',
+  requireSameOrigin,
   requireAuth,
   requireActiveCompany,
   requireCapability(MANAGE_CAPABILITY),
@@ -222,6 +225,7 @@ fiscalYearRouter.patch(
 
 fiscalYearRouter.post(
   '/fiscal-years/:id/close',
+  requireSameOrigin,
   requireAuth,
   requireActiveCompany,
   requireCapability(MANAGE_CAPABILITY),
