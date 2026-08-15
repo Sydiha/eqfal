@@ -4,7 +4,7 @@ import logger from '../../shared/logger';
 import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { DocumentRepository } from './document.repository';
-import { DocumentRecord, DocumentReviewDecision } from './document.types';
+import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision } from './document.types';
 
 export interface UploadDocumentInput {
   companyId: string;
@@ -24,6 +24,8 @@ export interface ReviewDocumentInput extends DocumentTransitionInput {
   decision: DocumentReviewDecision;
   note: string | null;
 }
+
+export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; }
 
 export class DocumentNotFoundError extends Error {}
 export class DocumentReviewConflictError extends Error {}
@@ -122,6 +124,28 @@ export class DocumentService {
         entity_id: document.id,
         before_data: { status: current.status },
         after_data: { status: document.status },
+      }, client);
+      return document;
+    });
+  }
+
+  async updateIntake(input: UpdateDocumentIntakeInput): Promise<DocumentRecord> {
+    return this.withTransaction(async (client) => {
+      const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+      if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.status !== 'uploaded') throw new DocumentReviewConflictError('Document intake cannot be updated');
+      const changed = (Object.keys(input.intake) as (keyof DocumentIntake)[])
+        .filter((field) => field === 'total_amount'
+          ? Number(current[field]) !== Number(input.intake[field]) || (current[field] === null) !== (input.intake[field] === null)
+          : current[field] !== input.intake[field]);
+      if (changed.length === 0) return current;
+      const update = Object.fromEntries(changed.map((field) => [field, input.intake[field]])) as DocumentIntakeUpdate;
+      const document = await this.documents.updateIntake(input.documentId, input.companyId, update, client);
+      await this.audit.logEvent({
+        company_id: input.companyId, actor_user_id: input.actorUserId,
+        action: 'document.intake_update', entity_type: 'document', entity_id: document.id,
+        before_data: Object.fromEntries(changed.map((field) => [field, current[field]])),
+        after_data: Object.fromEntries(changed.map((field) => [field, document[field]])),
       }, client);
       return document;
     });

@@ -35,6 +35,7 @@ const record = {
   review_note: null,
   created_at: new Date(),
   updated_at: new Date(),
+  document_type: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null,
 };
 
 beforeEach(() => {
@@ -143,5 +144,24 @@ describe('DocumentService review workflow', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
     expect(updateReview).not.toHaveBeenCalled();
     expect(audit).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocumentService intake', () => {
+  it('locks, updates, audits changed values, and commits in one transaction', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
+    vi.spyOn(DocumentRepository.prototype, 'updateIntake').mockResolvedValue({ ...record, document_type: 'purchase', total_amount: '12.25' });
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+    await new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { document_type: 'purchase', total_amount: 12.25 } });
+    expect(DocumentRepository.prototype.findByIdForUpdate).toHaveBeenCalledWith('doc-1', 'co-a', client);
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'document.intake_update', company_id: 'co-a', actor_user_id: 'u2', entity_id: 'doc-1', before_data: { document_type: null, total_amount: null }, after_data: { document_type: 'purchase', total_amount: '12.25' } }), client);
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
+  });
+
+  it.each(['needs_review', 'approved', 'incomplete', 'rejected'] as const)('rolls back without update or audit in %s', async status => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue({ ...record, status });
+    const update = vi.spyOn(DocumentRepository.prototype, 'updateIntake'); const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent');
+    await expect(new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { intake_note: 'note' } })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
   });
 });

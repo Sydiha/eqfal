@@ -33,3 +33,6 @@ input, select, textarea { padding: .65rem; border: 1px solid #bcc5d3; border-rad
 .document-review-actions button {
   padding: 0.35rem 0.55rem;
 }
+.document-intake { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .6rem; margin-block: .75rem; padding: .75rem; background: #f7f9fb; border-radius: 6px; }
+.document-intake label { display: grid; gap: .25rem; }
+.document-intake textarea { min-height: 70px; }

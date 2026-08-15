@@ -13,7 +13,7 @@ import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
 import { DocumentRepository } from './document.repository';
 import { DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
-import { DocumentReviewDecision } from './document.types';
+import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType } from './document.types';
 
 export const documentRouter = Router();
 
@@ -110,6 +110,37 @@ function isValidUpload(filename: string, mimeType: string, data: Buffer): boolea
   return matchesMagic(mimeType, data);
 }
 
+const INTAKE_FIELDS = ['document_type', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
+
+function parseIntake(value: unknown): DocumentIntakeUpdate | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).length === 0 || Object.keys(body).some((key) => !INTAKE_FIELDS.includes(key as typeof INTAKE_FIELDS[number]))) return null;
+  const result: DocumentIntakeUpdate = {};
+  const types: DocumentType[] = ['purchase', 'expense', 'sale', 'other'];
+  if ('document_type' in body) {
+    if (body.document_type !== null && (typeof body.document_type !== 'string' || !types.includes(body.document_type as DocumentType))) return null;
+    result.document_type = body.document_type as DocumentType | null;
+  }
+  for (const [field, max] of [['counterparty_name', 200], ['reference_number', 100], ['intake_note', 500]] as const) {
+    if (field in body) {
+      if (body[field] !== null && (typeof body[field] !== 'string' || body[field].length > max)) return null;
+      result[field] = body[field] as string | null;
+    }
+  }
+  if ('document_date' in body) {
+    const date = body.document_date;
+    if (date !== null && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date)) return null;
+    result.document_date = date as string | null;
+  }
+  if ('total_amount' in body) {
+    const amount = body.total_amount;
+    if (amount !== null && (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || amount >= 1e16 || !/^\d+(\.\d{1,2})?$/.test(String(amount)))) return null;
+    result.total_amount = amount as number | null;
+  }
+  return result;
+}
+
 documentRouter.get(
   '/documents',
   requireAuth,
@@ -185,6 +216,30 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict' });
         return;
       }
+      throw err;
+    }
+  }),
+);
+
+documentRouter.patch(
+  '/documents/:id/intake',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(UPLOAD_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    const intake = parseIntake(req.body);
+    if (!intake) { res.status(400).json({ error: 'Invalid document intake' }); return; }
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const document = await service.updateIntake({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, intake });
+      res.status(200).json({ document });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict' }); return; }
       throw err;
     }
   }),

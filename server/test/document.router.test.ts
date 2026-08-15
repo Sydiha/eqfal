@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   review: vi.fn(),
   submitReview: vi.fn(),
+  updateIntake: vi.fn(),
   storageGet: vi.fn(),
 }));
 
@@ -34,7 +35,7 @@ vi.mock('../src/modules/documents/document.repository', () => ({
 vi.mock('../src/modules/documents/document.service', () => ({
   DocumentNotFoundError: class extends Error {},
   DocumentReviewConflictError: class extends Error {},
-  DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; },
+  DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; updateIntake = mocks.updateIntake; },
 }));
 vi.mock('../src/storage/local.storage', () => ({
   LocalStorageAdapter: class { get = mocks.storageGet; },
@@ -56,6 +57,7 @@ const document = {
   original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: pdf.length,
   storage_key: 'co-a/file-1', sha256: 'a'.repeat(64), reviewed_by_user_id: null, reviewed_at: null, review_note: null,
   created_at: new Date(), updated_at: new Date(),
+  document_type: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null,
 };
 
 function setContext(capabilities: string[], companyId: string | null = 'co-a') {
@@ -84,6 +86,7 @@ describe('Document API security boundary', () => {
     mocks.upload.mockReset();
     mocks.review.mockReset();
     mocks.submitReview.mockReset();
+    mocks.updateIntake.mockReset();
     mocks.storageGet.mockReset();
   });
 
@@ -181,6 +184,28 @@ describe('Document API security boundary', () => {
     const res = await request(app).post('/api/documents/doc-1/submit-review').send();
     expect(res.status).toBe(200);
     expect(mocks.submitReview).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1' });
+  });
+
+  it('allows an uploader to edit intake using only the active company', async () => {
+    setContext(['document.upload']); mocks.updateIntake.mockResolvedValue({ ...document, document_type: 'purchase' });
+    const res = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', company_id: 'co-other' });
+    expect(res.status).toBe(400);
+    const valid = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', total_amount: 12.25 });
+    expect(valid.status).toBe(200);
+    expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', total_amount: 12.25 } });
+  });
+
+  it('enforces intake capability, same origin, validation, 404, and conflict', async () => {
+    setContext([]); expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(403);
+    setContext(['document.upload']);
+    expect((await request(app).patch('/api/documents/doc-1/intake').set('Origin', 'https://evil.example').send({ intake_note: null })).status).toBe(403);
+    for (const body of [{ document_type: 'invoice' }, { document_date: '2026-02-30' }, { total_amount: 0 }, { total_amount: -1 }, { counterparty_name: 'x'.repeat(201) }, { reference_number: 'x'.repeat(101) }, { intake_note: 'x'.repeat(501) }]) {
+      expect((await request(app).patch('/api/documents/doc-1/intake').send(body)).status).toBe(400);
+    }
+    mocks.updateIntake.mockRejectedValueOnce(new DocumentNotFoundError());
+    expect((await request(app).patch('/api/documents/missing/intake').send({ intake_note: null })).status).toBe(404);
+    mocks.updateIntake.mockRejectedValue(new DocumentReviewConflictError());
+    expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(409);
   });
 
   it('requires document.upload and same origin to submit for review', async () => {
