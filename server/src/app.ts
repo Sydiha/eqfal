@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { healthRouter } from './modules/health/health.router';
 import { authRouter } from './modules/auth/auth.router';
 import { fiscalYearRouter } from './modules/fiscal-years/fiscal-year.router';
+import { documentRouter } from './modules/documents/document.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -18,6 +19,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.use('/api', healthRouter);
 app.use('/api', authRouter);
 app.use('/api', fiscalYearRouter);
+app.use('/api', documentRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
