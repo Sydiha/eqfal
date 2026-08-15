@@ -81,6 +81,32 @@ describe('Documents', () => {
     expect(screen.getByText('Counterparty / Supplier / Entity name: Supplier A')).toBeInTheDocument();
   });
 
+  it.each(['needs_review', 'approved', 'incomplete', 'rejected'])('hides editable Intake controls from uploaders when status is %s', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      documents: [{ ...intakeDocument, status }],
+    }), { status: 200 })));
+
+    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+
+    expect(await screen.findByText('invoice.pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Document Type')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['en', ['Document Type', 'Counterparty / Supplier / Entity name', 'Document Date', 'Invoice / Reference Number', 'Total Amount', 'Optional Note', 'Save Intake']],
+    ['ar', ['نوع المستند', 'اسم الطرف المقابل / المورد / الجهة', 'تاريخ المستند', 'رقم الفاتورة / المرجع', 'المبلغ الإجمالي', 'ملاحظة اختيارية', 'حفظ بيانات الإدخال']],
+  ] as const)('shows all Intake editor labels in %s', async (language, labels) => {
+    await i18n.changeLanguage(language);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [intakeDocument] }), { status: 200 })));
+
+    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+
+    expect(await screen.findByLabelText(labels[0])).toBeInTheDocument();
+    for (const label of labels.slice(1, 6)) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: labels[6] })).toBeInTheDocument();
+  });
+
   it('does not retain intake editor data after remounting for another company', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [intakeDocument] }), { status: 200 }))
