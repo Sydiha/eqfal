@@ -150,18 +150,20 @@ export class MembershipRepository {
   }
 
   /**
-   * Returns the active capabilities for a user in a company.
-   * Returns [] when no active membership/role/capability exists.
+   * Returns active capabilities only when membership, company, and role scope
+   * all agree. The explicit roles/company join is defense-in-depth against a
+   * corrupted or manually-written cross-company role_id.
    */
   async getActiveCapabilities(userId: string, companyId: string): Promise<string[]> {
     const { rows } = await this.pool.query<{ capability_id: string }>(
       `SELECT rc.capability_id
        FROM memberships m
-       JOIN role_capabilities rc ON rc.role_id = m.role_id
+       JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
+       JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       JOIN role_capabilities rc ON rc.role_id = r.id
        WHERE m.user_id    = $1
          AND m.company_id = $2
-         AND m.is_active  = TRUE
-         AND m.role_id IS NOT NULL`,
+         AND m.is_active  = TRUE`,
       [userId, companyId],
     );
     return rows.map((r) => r.capability_id);
