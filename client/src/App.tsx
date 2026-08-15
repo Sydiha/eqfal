@@ -1,151 +1,56 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
-import { CompanyProvider } from './context/CompanyContext';
+import './App.css';
+import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
 import { CompanySwitcher } from './components/CompanySwitcher';
+import { FiscalYears } from './components/FiscalYears';
 
 function LanguageButton() {
   const { t, i18n } = useTranslation();
-  const toggleLanguage = () => {
-    const next = i18n.language === 'ar' ? 'en' : 'ar';
-    void i18n.changeLanguage(next);
-  };
-
-  return (
-    <button
-      onClick={toggleLanguage}
-      style={{
-        padding: '0.5rem 1.25rem',
-        fontSize: '0.9rem',
-        cursor: 'pointer',
-        borderRadius: '6px',
-        border: '1px solid #ccc',
-      }}
-    >
-      {t('app.switchLanguage')}
-    </button>
-  );
+  return <button onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</button>;
 }
 
 function LoginForm() {
   const { t } = useTranslation();
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [invalid, setInvalid] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setInvalid(false);
-    try {
-      const ok = await login(email, password);
-      if (!ok) setInvalid(true);
-    } catch {
-      setInvalid(true);
-    } finally {
-      setSubmitting(false);
-    }
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSubmitting(true); setInvalid(false);
+    const data = new FormData(event.currentTarget);
+    try { if (!await login(String(data.get('email')), String(data.get('password')))) setInvalid(true); }
+    catch { setInvalid(true); } finally { setSubmitting(false); }
   };
+  return <div className="login"><h1>{t('app.title')}</h1><LanguageButton/><form className="login-form" onSubmit={submit}><label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required/></label><label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required/></label>{invalid && <p role="alert">{t('auth.invalid')}</p>}<button disabled={submitting}>{t('auth.login')}</button></form></div>;
+}
 
-  return (
-    <form onSubmit={submit} style={{ display: 'grid', gap: '0.75rem', width: 'min(100%, 360px)', marginTop: '1.5rem' }}>
-      <label style={{ display: 'grid', gap: '0.3rem', textAlign: 'start' }}>
-        <span>{t('auth.email')}</span>
-        <input
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          style={{ padding: '0.65rem', border: '1px solid #ccc', borderRadius: '6px' }}
-        />
-      </label>
-      <label style={{ display: 'grid', gap: '0.3rem', textAlign: 'start' }}>
-        <span>{t('auth.password')}</span>
-        <input
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          style={{ padding: '0.65rem', border: '1px solid #ccc', borderRadius: '6px' }}
-        />
-      </label>
-      {invalid && <p role="alert" style={{ margin: 0 }}>{t('auth.invalid')}</p>}
-      <button type="submit" disabled={submitting} style={{ padding: '0.65rem', cursor: submitting ? 'wait' : 'pointer' }}>
-        {t('auth.login')}
-      </button>
-    </form>
-  );
+function CompanyContent() {
+  const { t } = useTranslation();
+  const { companyKey, activeCompanyId } = useCompany();
+  const { session, handleUnauthorized } = useAuth();
+  if (!activeCompanyId) return <section className="panel"><p role="status">{t('company.none')}</p></section>;
+  if (activeCompanyId !== session?.activeCompanyId) {
+    return <section className="panel"><p role="status">{t('company.switching')}</p></section>;
+  }
+  const capabilities = session?.capabilities ?? [];
+  return <FiscalYears key={companyKey} canView={capabilities.includes('fiscal_year.view')} canManage={capabilities.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>;
 }
 
 function AuthenticatedShell() {
   const { t } = useTranslation();
   const { logout, switchCompany } = useAuth();
-
-  return (
-    <>
-      <CompanySwitcher onSwitch={switchCompany} />
-      <button onClick={() => void logout()} style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>
-        {t('auth.logout')}
-      </button>
-    </>
-  );
+  return <div className="app"><header className="topbar"><h1 className="brand">{t('app.title')}</h1><div className="top-actions"><CompanySwitcher onSwitch={switchCompany}/><LanguageButton/><button onClick={() => void logout()}>{t('auth.logout')}</button></div></header><main className="content"><CompanyContent/></main></div>;
 }
 
-function App() {
+export default function App() {
   const { t, i18n } = useTranslation();
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
-
-  useEffect(() => {
-    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
-    document.documentElement.lang = i18n.language;
-  }, [i18n.language, isRtl]);
-
-  const allowedCompanies = useMemo(
-    () => (session?.allowedCompanies ?? []).map((company) => ({
-      id: company.id,
-      name: isRtl && company.name_ar ? company.name_ar : company.name,
-    })),
-    [session?.allowedCompanies, isRtl],
-  );
-
-  return (
-    <main
-      style={{
-        minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, sans-serif',
-        padding: '1rem',
-        textAlign: 'center',
-      }}
-    >
-      <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 2rem)', margin: '0 0 1.5rem' }}>
-        {t('app.title')}
-      </h1>
-      <LanguageButton />
-
-      {loading ? (
-        <p role="status">{t('app.loading')}</p>
-      ) : session ? (
-        <CompanyProvider
-          allowedCompanies={allowedCompanies}
-          initialCompanyId={session.activeCompanyId}
-        >
-          <AuthenticatedShell />
-        </CompanyProvider>
-      ) : (
-        <LoginForm />
-      )}
-    </main>
-  );
+  useEffect(() => { document.documentElement.dir = isRtl ? 'rtl' : 'ltr'; document.documentElement.lang = i18n.language; }, [i18n.language, isRtl]);
+  const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
+  if (loading) return <main className="login"><h1>{t('app.title')}</h1><LanguageButton/><p role="status">{t('app.loading')}</p></main>;
+  if (!session) return <LoginForm/>;
+  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
 }
-
-export default App;

@@ -15,6 +15,20 @@ const en = {
     label: 'Active Company',
     none: 'No companies available',
     switchAriaLabel: 'Switch active company',
+    switching: 'Switching company…',
+  },
+  common: { cancel: 'Cancel', save: 'Save' },
+  fiscalYears: {
+    title: 'Fiscal Years', description: 'Manage the fiscal years for the active company.',
+    loading: 'Loading fiscal years…', empty: 'No fiscal years have been created yet.',
+    error: 'Unable to load or save fiscal years.', invalidRequest: 'Check the fiscal year details and try again.',
+    forbidden: 'You do not have permission to perform this action.', notFound: 'The fiscal year could not be found.',
+    conflict: 'The fiscal year conflicts with an existing year or its current status.', invalidRange: 'The end date must be after the start date.',
+    retry: 'Try again', noAccess: 'You do not have permission to view fiscal years.',
+    create: 'Create fiscal year', createTitle: 'Create fiscal year', editTitle: 'Edit fiscal year',
+    name: 'Name', start: 'Start date', end: 'End date', status: 'Status', actions: 'Actions',
+    open: 'Open', closed: 'Closed', edit: 'Edit', close: 'Close', closeTitle: 'Close fiscal year',
+    closeConfirmation: 'Close {{name}}? With the current functionality, a closed fiscal year cannot be modified.', reason: 'Reason (optional)', confirmClose: 'Confirm close',
   },
 } as const;
 
