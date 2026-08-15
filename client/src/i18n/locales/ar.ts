@@ -30,6 +30,30 @@ const ar = {
     open: 'مفتوحة', closed: 'مقفلة', edit: 'تعديل', close: 'إقفال', closeTitle: 'إقفال السنة المالية',
     closeConfirmation: 'هل تريد إقفال {{name}}؟ وفق الوظائف المتاحة حاليًا، لا يمكن تعديل السنة المالية المقفلة.', reason: 'السبب (اختياري)', confirmClose: 'تأكيد الإقفال',
   },
+  documents: {
+    title: 'المستندات',
+    description: 'رفع مستندات الشركة النشطة والوصول إليها بأمان.',
+    chooseFile: 'اختيار مستند',
+    upload: 'رفع مستند',
+    uploading: 'جارٍ الرفع…',
+    loading: 'جارٍ تحميل المستندات…',
+    empty: 'لا توجد مستندات مرفوعة بعد.',
+    error: 'تعذر تحميل المستندات أو رفعها.',
+    invalid: 'استخدم ملف PDF أو JPEG أو PNG أو WebP صالحًا وبحجم لا يتجاوز 10 ميجابايت.',
+    tooLarge: 'حجم المستند أكبر من 10 ميجابايت.',
+    file: 'الملف',
+    status: 'الحالة',
+    size: 'الحجم',
+    actions: 'الإجراءات',
+    open: 'فتح',
+    statuses: {
+      uploaded: 'مرفوع',
+      needs_review: 'يحتاج مراجعة',
+      approved: 'معتمد',
+      incomplete: 'ناقص',
+      rejected: 'مرفوض',
+    },
+  },
 } as const;
 
 export default ar;

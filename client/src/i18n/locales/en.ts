@@ -30,6 +30,30 @@ const en = {
     open: 'Open', closed: 'Closed', edit: 'Edit', close: 'Close', closeTitle: 'Close fiscal year',
     closeConfirmation: 'Close {{name}}? With the current functionality, a closed fiscal year cannot be modified.', reason: 'Reason (optional)', confirmClose: 'Confirm close',
   },
+  documents: {
+    title: 'Documents',
+    description: 'Upload and access documents for the active company.',
+    chooseFile: 'Choose document',
+    upload: 'Upload document',
+    uploading: 'Uploading…',
+    loading: 'Loading documents…',
+    empty: 'No documents uploaded yet.',
+    error: 'Unable to load or upload documents.',
+    invalid: 'Use a valid PDF, JPEG, PNG, or WebP file up to 10 MB.',
+    tooLarge: 'The document is larger than 10 MB.',
+    file: 'File',
+    status: 'Status',
+    size: 'Size',
+    actions: 'Actions',
+    open: 'Open',
+    statuses: {
+      uploaded: 'Uploaded',
+      needs_review: 'Needs review',
+      approved: 'Approved',
+      incomplete: 'Incomplete',
+      rejected: 'Rejected',
+    },
+  },
 } as const;
 
 export default en;
