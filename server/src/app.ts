@@ -22,4 +22,10 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+// Central error boundary: log server-side details, return a generic response.
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ err }, 'Unhandled request error');
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 export default app;
