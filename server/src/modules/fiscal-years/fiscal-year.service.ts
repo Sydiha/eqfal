@@ -11,25 +11,27 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 /**
  * FiscalYearService
  *
- * Orchestrates fiscal-year lifecycle operations with three invariants:
+ * Orchestrates fiscal-year lifecycle operations with four invariants:
  *
  *  1. Every mutating operation and its audit log entry are written in the
  *     same database transaction — atomically. A rollback removes both.
  *
  *  2. The overlap check runs inside the transaction on the same connection,
  *     guarded by a per-company advisory lock acquired before the SELECT.
- *     This prevents two concurrent requests from both passing the overlap
- *     check and then both inserting overlapping fiscal years (TOCTOU race).
+ *     Eliminates the TOCTOU race on concurrent fiscal-year creation.
  *
- *  3. Sensitive data (passwords, hashes, secrets) is never written to
- *     audit_log. AuditLogRepository strips known sensitive keys as a
- *     defence-in-depth measure at the persistence layer.
+ *  3. For closeFiscalYear and updateFiscalYear the pre-update read uses
+ *     SELECT … FOR UPDATE (findByIdForUpdate) inside the transaction.
+ *     This guarantees:
+ *       · before_data in the audit log reflects the row state at the moment
+ *         the mutation begins — never a stale pre-transaction snapshot.
+ *       · Concurrent calls for the same fiscal year block each other at the
+ *         row lock; the second sees the committed state of the first and
+ *         cannot silently overwrite or produce a misleading audit entry.
  *
- * Race-condition protection detail:
- *   pg_advisory_xact_lock(hashtext(company_id)) serialises all fiscal-year
- *   mutations for the same company within PostgreSQL. The lock is transaction-
- *   scoped and released automatically on COMMIT or ROLLBACK. No new extensions
- *   or external services are required.
+ *  4. Sensitive data (passwords, hashes, secrets) is never written to
+ *     audit_log. AuditLogRepository strips known sensitive keys recursively
+ *     at the persistence layer as a defence-in-depth measure.
  */
 export class FiscalYearService {
   private readonly fyRepo: FiscalYearRepository;
@@ -45,7 +47,7 @@ export class FiscalYearService {
   /**
    * Reject invalid date ranges.
    * ISO date strings ('YYYY-MM-DD') compare correctly as strings.
-   * Pure — no DB calls. Safe to call before opening a transaction.
+   * Pure — no DB calls.
    */
   private validateDates(startDate: string, endDate: string): void {
     if (startDate >= endDate) {
@@ -57,16 +59,13 @@ export class FiscalYearService {
 
   /**
    * Acquire a per-company advisory lock, then check for overlapping fiscal
-   * years — both on the same PoolClient so they share the transaction.
+   * years on the same PoolClient so they share the transaction.
    *
-   * Advisory lock: pg_advisory_xact_lock(hashtext(company_id))
+   * pg_advisory_xact_lock(hashtext(company_id)):
    *   · Transaction-scoped — released automatically on COMMIT or ROLLBACK.
    *   · Serialises all callers for the same company_id in PostgreSQL.
-   *   · Guarantees that the SELECT overlap check and the subsequent INSERT
-   *     are atomic with respect to other concurrent requests for the same
-   *     company — eliminating the TOCTOU race.
-   *
-   * @param excludeId  Exclude this ID from the overlap check (update path).
+   *   · Combined with findByIdForUpdate (FOR UPDATE on the current row),
+   *     this eliminates both the date-overlap race and the lost-update race.
    */
   private async lockAndCheckNoOverlap(
     client: PoolClient,
@@ -75,14 +74,11 @@ export class FiscalYearService {
     endDate: string,
     excludeId?: string,
   ): Promise<void> {
-    // Acquire transaction-scoped advisory lock keyed by company.
-    // hashtext returns int4; pg_advisory_xact_lock accepts int4 implicitly.
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [companyId],
     );
 
-    // Overlap query runs on the same client (same transaction snapshot).
     const overlapping = await this.fyRepo.findOverlapping(
       companyId,
       startDate,
@@ -126,20 +122,17 @@ export class FiscalYearService {
   /**
    * Create a new fiscal year.
    *
-   * Date validation runs before the transaction (pure check, no DB).
+   * Date validation is pure (no DB) and runs before the transaction.
    * The advisory lock + overlap check + INSERT + audit entry all execute
-   * on the same connection inside one transaction — atomically and safely
-   * under concurrent load.
+   * on the same connection inside one transaction.
    */
   async createFiscalYear(
     input: CreateFiscalYearInput,
     actorUserId: string,
   ): Promise<FiscalYear> {
-    // Pure validation — no DB, no transaction needed.
     this.validateDates(input.start_date, input.end_date);
 
     return this.withTransaction(async (client) => {
-      // Lock + overlap check inside the transaction on the same connection.
       await this.lockAndCheckNoOverlap(
         client,
         input.company_id,
@@ -178,9 +171,12 @@ export class FiscalYearService {
   /**
    * Close an open fiscal year.
    *
-   * The fiscal year is looked up with company_id as a guard — a caller
-   * supplying a mismatched companyId gets "not found or access denied".
-   * No overlap check is required (closing does not alter date ranges).
+   * Reads the row with SELECT … FOR UPDATE (findByIdForUpdate) inside the
+   * transaction so that:
+   *   · before_data in the audit log reflects the actual pre-close state.
+   *   · A concurrent close for the same fiscal year blocks at the row lock
+   *     and, once unblocked, sees status='closed' → throws "already closed".
+   * Company scoping is enforced by the WHERE company_id clause in the SELECT.
    */
   async closeFiscalYear(
     id: string,
@@ -188,17 +184,19 @@ export class FiscalYearService {
     actorUserId: string,
     reason?: string,
   ): Promise<FiscalYear> {
-    const existing = await this.fyRepo.findById(id, companyId);
-    if (!existing) {
-      throw new Error('Fiscal year not found or access denied');
-    }
-    if (existing.status === 'closed') {
-      throw new Error(`Fiscal year '${existing.name}' is already closed`);
-    }
-
     return this.withTransaction(async (client) => {
+      // Lock the row inside the transaction: authoritative read + row guard.
+      const existing = await this.fyRepo.findByIdForUpdate(id, companyId, client);
+      if (!existing) {
+        throw new Error('Fiscal year not found or access denied');
+      }
+      if (existing.status === 'closed') {
+        throw new Error(`Fiscal year '${existing.name}' is already closed`);
+      }
+
       const updated = await this.fyRepo.updateStatus(id, companyId, 'closed', client);
-      // Guard: row disappeared between the pre-check and the update (race).
+      // Defensive: row vanished between the FOR UPDATE read and the UPDATE
+      // (should never happen in practice, but we guard regardless).
       if (!updated) throw new Error('Fiscal year not found or access denied');
 
       await this.auditRepo.logEvent(
@@ -208,6 +206,7 @@ export class FiscalYearService {
           action:        'fiscal_year.status_change',
           entity_type:   'fiscal_year',
           entity_id:     id,
+          // before_data comes from the locked row — always accurate.
           before_data:   { status: existing.status },
           after_data:    { status: 'closed' },
           reason:        reason ?? null,
@@ -223,10 +222,10 @@ export class FiscalYearService {
   /**
    * Update mutable fields (name, start_date, end_date) on an open fiscal year.
    *
-   * Closed fiscal years are immutable. Date validation runs before the
-   * transaction (pure). The advisory lock + overlap check (excluding the
-   * fiscal year being edited) + UPDATE + audit entry all run inside one
-   * transaction on the same connection.
+   * Reads the row with SELECT … FOR UPDATE inside the transaction so that
+   * before_data is always accurate and a concurrent modification cannot
+   * silently succeed. The advisory lock + overlap check (excluding this FY)
+   * guards against concurrent insertions of overlapping fiscal years.
    */
   async updateFiscalYear(
     id: string,
@@ -234,21 +233,22 @@ export class FiscalYearService {
     input: UpdateFiscalYearInput,
     actorUserId: string,
   ): Promise<FiscalYear> {
-    const existing = await this.fyRepo.findById(id, companyId);
-    if (!existing) {
-      throw new Error('Fiscal year not found or access denied');
-    }
-    if (existing.status === 'closed') {
-      throw new Error(`Fiscal year '${existing.name}' is closed and cannot be modified`);
-    }
-
-    // Resolve effective dates and validate before opening the transaction.
-    const effectiveStart = input.start_date ?? existing.start_date;
-    const effectiveEnd   = input.end_date   ?? existing.end_date;
-    this.validateDates(effectiveStart, effectiveEnd);
-
     return this.withTransaction(async (client) => {
-      // Lock + overlap check (exclude this FY from its own check) inside tx.
+      // Lock the row: authoritative pre-update state + row guard.
+      const existing = await this.fyRepo.findByIdForUpdate(id, companyId, client);
+      if (!existing) {
+        throw new Error('Fiscal year not found or access denied');
+      }
+      if (existing.status === 'closed') {
+        throw new Error(`Fiscal year '${existing.name}' is closed and cannot be modified`);
+      }
+
+      // Resolve effective dates from the locked row, then validate (pure).
+      const effectiveStart = input.start_date ?? existing.start_date;
+      const effectiveEnd   = input.end_date   ?? existing.end_date;
+      this.validateDates(effectiveStart, effectiveEnd);
+
+      // Advisory lock + overlap check on the same client.
       await this.lockAndCheckNoOverlap(
         client,
         companyId,
@@ -267,6 +267,7 @@ export class FiscalYearService {
           action:        'fiscal_year.update',
           entity_type:   'fiscal_year',
           entity_id:     id,
+          // before_data from the locked row — always reflects actual pre-update state.
           before_data:   {
             name:       existing.name,
             start_date: existing.start_date,

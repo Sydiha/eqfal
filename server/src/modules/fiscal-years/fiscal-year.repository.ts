@@ -49,6 +49,34 @@ export class FiscalYearRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * Lock-and-read: SELECT … FOR UPDATE scoped to companyId.
+   *
+   * Acquires a row-level exclusive lock inside the caller's transaction so
+   * that any concurrent transaction attempting to read the same row with
+   * FOR UPDATE (or write to it) must wait until this transaction commits or
+   * rolls back. This guarantees:
+   *
+   *  · before_data in the audit log reflects the row state at the moment the
+   *    mutation begins, not a stale pre-transaction snapshot.
+   *  · Two concurrent calls for the same fiscal year cannot both pass the
+   *    status guard and both succeed — the second will see the committed
+   *    state (e.g. already 'closed') from the first.
+   *
+   * Must be called with a PoolClient that is already in a BEGIN block.
+   */
+  async findByIdForUpdate(
+    id: string,
+    companyId: string,
+    client: PoolClient,
+  ): Promise<FiscalYear | null> {
+    const { rows } = await client.query<FiscalYear>(
+      `SELECT * FROM fiscal_years WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [id, companyId],
+    );
+    return rows[0] ?? null;
+  }
+
   /** Return all fiscal years for a company, ordered chronologically. */
   async findByCompany(companyId: string): Promise<FiscalYear[]> {
     const { rows } = await this.pool.query<FiscalYear>(

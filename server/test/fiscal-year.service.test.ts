@@ -237,7 +237,7 @@ describe('FiscalYearService — cross-company access denied', () => {
   it('closeFiscalYear: returns "not found or access denied" when companyId does not match', async () => {
     const { service, fyRepo } = makeService();
     // findById with COMPANY_B returns null when the FY belongs to COMPANY_A
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(null);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(null);
 
     await expect(
       service.closeFiscalYear(FY_ID, COMPANY_B, USER_1),
@@ -246,7 +246,7 @@ describe('FiscalYearService — cross-company access denied', () => {
 
   it('updateFiscalYear: returns "not found or access denied" when companyId does not match', async () => {
     const { service, fyRepo } = makeService();
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(null);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(null);
 
     await expect(
       service.updateFiscalYear(FY_ID, COMPANY_B, { name: 'Renamed' }, USER_1),
@@ -255,7 +255,7 @@ describe('FiscalYearService — cross-company access denied', () => {
 
   it('cross-company denial makes no DB write', async () => {
     const { service, fyRepo } = makeService();
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(null);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(null);
     const writeSpy = vi.spyOn(fyRepo, 'updateStatus');
 
     await expect(service.closeFiscalYear(FY_ID, COMPANY_B, USER_1)).rejects.toThrow();
@@ -282,7 +282,7 @@ describe('FiscalYearService — cross-company access denied', () => {
 describe('FiscalYearService — closed fiscal year is immutable', () => {
   it('closeFiscalYear: throws when already closed', async () => {
     const { service, fyRepo } = makeService();
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
 
     await expect(
       service.closeFiscalYear(FY_ID, COMPANY_A, USER_1),
@@ -291,7 +291,7 @@ describe('FiscalYearService — closed fiscal year is immutable', () => {
 
   it('updateFiscalYear: throws when fiscal year is closed', async () => {
     const { service, fyRepo } = makeService();
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
 
     await expect(
       service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'New Name' }, USER_1),
@@ -363,7 +363,7 @@ describe('FiscalYearService — audit entry correctness', () => {
     const openFy = makeFiscalYear({ status: 'open' });
     const closedFy = makeFiscalYear({ status: 'closed' });
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(openFy);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(openFy);
     vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(closedFy);
     const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
       id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
@@ -384,7 +384,7 @@ describe('FiscalYearService — audit entry correctness', () => {
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'open' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'open' }));
     vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
     const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
       id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
@@ -404,7 +404,7 @@ describe('FiscalYearService — audit entry correctness', () => {
     const before = makeFiscalYear({ name: 'Old Name', start_date: '2024-01-01', end_date: '2024-12-31' });
     const after  = makeFiscalYear({ name: 'New Name', start_date: '2024-01-01', end_date: '2024-12-31' });
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(before);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(before);
     vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
     vi.spyOn(fyRepo, 'update').mockResolvedValue(after);
     const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
@@ -454,7 +454,7 @@ describe('FiscalYearService — no secrets in audit data', () => {
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'open' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'open' }));
     vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
     const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
       id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
@@ -504,7 +504,7 @@ describe('FiscalYearService — atomicity: no audit entry without committed chan
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'open' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'open' }));
     vi.spyOn(fyRepo, 'updateStatus').mockRejectedValue(new Error('DB update failed'));
     const logSpy = vi.spyOn(auditRepo, 'logEvent');
 
@@ -545,7 +545,7 @@ describe('FiscalYearService — atomicity: no committed change without audit ent
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ status: 'open' }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ status: 'open' }));
     vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
     vi.spyOn(auditRepo, 'logEvent').mockRejectedValue(new Error('audit DB failed'));
 
@@ -651,7 +651,7 @@ describe('FiscalYearService — advisory lock prevents concurrent overlap bypass
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
 
-    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ company_id: COMPANY_A }));
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear({ company_id: COMPANY_A }));
     vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
     vi.spyOn(fyRepo, 'update').mockResolvedValue(
       makeFiscalYear({ name: 'Renamed', company_id: COMPANY_A }),
@@ -778,5 +778,204 @@ describe('AuditLogRepository — strips sensitive fields before INSERT', () => {
       end_date: '2024-12-31',
       status: 'open',
     });
+  });
+
+  it('strips sensitive keys inside a nested object (recursive)', async () => {
+    const { AuditLogRepository: AuditRepo } = await import(
+      '../src/modules/audit-log/audit-log.repository'
+    );
+    const auditRepo = new AuditRepo();
+    const client    = makeClient();
+
+    await auditRepo.logEvent(
+      {
+        company_id:    COMPANY_A,
+        actor_user_id: USER_1,
+        action:        'test.nested',
+        entity_type:   'fiscal_year',
+        entity_id:     FY_ID,
+        before_data:   {
+          safe: 'keep',
+          user: {
+            email:         'a@b.com',    // safe
+            password_hash: 'bcrypt$...', // sensitive — must be removed
+            role:          'admin',      // safe
+          },
+        },
+        after_data: null,
+      },
+      client,
+    );
+
+    const insertCall = (client.query as ReturnType<typeof vi.fn>).mock.calls[0] as
+      [string, unknown[]];
+    const beforeData = insertCall[1][5] as Record<string, unknown>;
+
+    expect(beforeData).toEqual({
+      safe: 'keep',
+      user: { email: 'a@b.com', role: 'admin' },
+    });
+  });
+
+  it('strips sensitive keys inside objects within an array (recursive)', async () => {
+    const { AuditLogRepository: AuditRepo } = await import(
+      '../src/modules/audit-log/audit-log.repository'
+    );
+    const auditRepo = new AuditRepo();
+    const client    = makeClient();
+
+    await auditRepo.logEvent(
+      {
+        company_id:    COMPANY_A,
+        actor_user_id: USER_1,
+        action:        'test.array',
+        entity_type:   'fiscal_year',
+        entity_id:     FY_ID,
+        before_data:   null,
+        after_data:    {
+          members: [
+            { name: 'Alice', token: 'tok-A', active: true },
+            { name: 'Bob',   token: 'tok-B', active: false },
+          ],
+          total: 2,
+        },
+      },
+      client,
+    );
+
+    const insertCall = (client.query as ReturnType<typeof vi.fn>).mock.calls[0] as
+      [string, unknown[]];
+    const afterData = insertCall[1][6] as Record<string, unknown>;
+
+    expect(afterData).toEqual({
+      members: [
+        { name: 'Alice', active: true },
+        { name: 'Bob',   active: false },
+      ],
+      total: 2,
+    });
+  });
+});
+
+// ─── SELECT FOR UPDATE — lost-update & stale audit prevention ────────────────
+
+describe('FiscalYearService — findByIdForUpdate inside transaction', () => {
+  it('closeFiscalYear: findByIdForUpdate is called on the client (inside transaction)', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    const forUpdateSpy = vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(
+      makeFiscalYear({ status: 'open' }),
+    );
+    vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
+    vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.status_change', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.closeFiscalYear(FY_ID, COMPANY_A, USER_1);
+
+    // Must have been called with the pooled client — confirms it runs inside withTransaction.
+    expect(forUpdateSpy).toHaveBeenCalledWith(FY_ID, COMPANY_A, client);
+  });
+
+  it('closeFiscalYear: before_data.status comes from the locked row, not a pre-tx snapshot', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    // The locked row reports status 'open' — this is the ground truth.
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(
+      makeFiscalYear({ status: 'open' }),
+    );
+    vi.spyOn(fyRepo, 'updateStatus').mockResolvedValue(makeFiscalYear({ status: 'closed' }));
+    const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.status_change', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.closeFiscalYear(FY_ID, COMPANY_A, USER_1);
+
+    const [input] = logSpy.mock.calls[0]!;
+    expect(input.before_data).toEqual({ status: 'open' });
+    expect(input.after_data).toEqual({ status: 'closed' });
+  });
+
+  it('closeFiscalYear: second concurrent close sees status=closed from locked row → throws', async () => {
+    const client = makeClient();
+    const { service, fyRepo } = makeService(client);
+
+    // Simulate: by the time this transaction acquires the row lock, the first
+    // transaction has already committed — the row now shows status='closed'.
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(
+      makeFiscalYear({ status: 'closed' }),
+    );
+
+    await expect(
+      service.closeFiscalYear(FY_ID, COMPANY_A, USER_1),
+    ).rejects.toThrow(/already closed/i);
+
+    // Must not write anything.
+    expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+  });
+
+  it('updateFiscalYear: findByIdForUpdate is called on the client (inside transaction)', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    const forUpdateSpy = vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(
+      makeFiscalYear({ status: 'open' }),
+    );
+    vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
+    vi.spyOn(fyRepo, 'update').mockResolvedValue(makeFiscalYear({ name: 'Renamed' }));
+    vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.update', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'Renamed' }, USER_1);
+
+    expect(forUpdateSpy).toHaveBeenCalledWith(FY_ID, COMPANY_A, client);
+  });
+
+  it('updateFiscalYear: before_data reflects the locked row, after_data reflects the updated row', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    const lockedRow = makeFiscalYear({ name: 'Old Name', start_date: '2024-01-01', end_date: '2024-12-31', status: 'open' });
+    const updatedRow = makeFiscalYear({ name: 'New Name', start_date: '2024-01-01', end_date: '2024-12-31', status: 'open' });
+
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(lockedRow);
+    vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
+    vi.spyOn(fyRepo, 'update').mockResolvedValue(updatedRow);
+    const logSpy = vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.update', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'New Name' }, USER_1);
+
+    const [input] = logSpy.mock.calls[0]!;
+    expect(input.before_data).toMatchObject({ name: 'Old Name' });
+    expect(input.after_data).toMatchObject({ name: 'New Name' });
+  });
+
+  it('updateFiscalYear: concurrent close commits first → second update sees closed → throws', async () => {
+    const client = makeClient();
+    const { service, fyRepo } = makeService(client);
+
+    // The row lock reveals the FY was closed by a concurrent transaction.
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(
+      makeFiscalYear({ status: 'closed' }),
+    );
+
+    await expect(
+      service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'Too Late' }, USER_1),
+    ).rejects.toThrow(/closed and cannot be modified/i);
+
+    expect(client.query).not.toHaveBeenCalledWith('COMMIT');
   });
 });
