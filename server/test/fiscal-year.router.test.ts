@@ -151,6 +151,30 @@ describe('Fiscal Year API tenant and capability boundary', () => {
     expect(mocks.createFiscalYear).not.toHaveBeenCalled();
   });
 
+  it('rejects cross-origin create, update, and close before any mutation runs', async () => {
+    setContext(['fiscal_year.manage']);
+
+    const create = await request(app)
+      .post('/api/fiscal-years')
+      .set('Origin', 'https://evil.example')
+      .send({ name: 'FY 2026', start_date: '2026-01-01', end_date: '2027-01-01' });
+    const update = await request(app)
+      .patch('/api/fiscal-years/fy-1')
+      .set('Origin', 'https://evil.example')
+      .send({ name: 'Updated' });
+    const close = await request(app)
+      .post('/api/fiscal-years/fy-1/close')
+      .set('Origin', 'https://evil.example')
+      .send({});
+
+    expect(create.status).toBe(403);
+    expect(update.status).toBe(403);
+    expect(close.status).toBe(403);
+    expect(mocks.createFiscalYear).not.toHaveBeenCalled();
+    expect(mocks.updateFiscalYear).not.toHaveBeenCalled();
+    expect(mocks.closeFiscalYear).not.toHaveBeenCalled();
+  });
+
   it('rejects client-supplied company_id instead of trusting it', async () => {
     setContext(['fiscal_year.manage']);
     const res = await request(app)
