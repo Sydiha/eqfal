@@ -11,12 +11,16 @@
  *  · companyKey increments on every successful company switch, giving
  *    downstream components a stable React key to unmount/remount (clearing
  *    all company-scoped local state) without requiring explicit cleanup logic.
+ *  · activeCompanyId is always consistent with allowedCompanies: when the
+ *    prop changes after mount, the Provider reconciles automatically — it
+ *    never leaves a stale id that points to a company no longer permitted.
  */
 
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useReducer,
   type ReactNode,
 } from 'react';
@@ -73,12 +77,18 @@ interface CompanyProviderProps {
   children: ReactNode;
 }
 
-function resolveInitialId(
+/**
+ * Resolve the best available company id from a list.
+ * Prefers `preferredId` when it is in the list; falls back to the first
+ * element; returns null when the list is empty.
+ * Used both for initial state and for post-mount reconciliation.
+ */
+function resolveSyncedId(
   allowedCompanies: Company[],
-  initialCompanyId?: string | null,
+  preferredId?: string | null,
 ): string | null {
-  if (initialCompanyId && allowedCompanies.some(c => c.id === initialCompanyId)) {
-    return initialCompanyId;
+  if (preferredId != null && allowedCompanies.some(c => c.id === preferredId)) {
+    return preferredId;
   }
   return allowedCompanies[0]?.id ?? null;
 }
@@ -89,12 +99,24 @@ interface CompanyState {
   activeCompanyId: string | null;
   /**
    * Increments only when the active company actually changes.
-   * Re-selecting the current company leaves companyKey unchanged.
+   * Re-selecting the current company (or a sync that changes nothing)
+   * leaves companyKey unchanged.
    */
   companyKey: number;
 }
 
-type CompanyAction = { type: 'SET_COMPANY'; id: string };
+type CompanyAction =
+  | { type: 'SET_COMPANY'; id: string }
+  | {
+      type: 'SYNC_ALLOWED';
+      /** Fast-lookup set of currently permitted company ids. */
+      allowedIds: ReadonlySet<string>;
+      /**
+       * Preferred fallback id when the current active id is no longer
+       * permitted. Computed from initialCompanyId + new allowedCompanies.
+       */
+      fallbackId: string | null;
+    };
 
 function companyReducer(state: CompanyState, action: CompanyAction): CompanyState {
   switch (action.type) {
@@ -102,6 +124,18 @@ function companyReducer(state: CompanyState, action: CompanyAction): CompanyStat
       // No-op: same company already active — do not churn state or increment key.
       if (state.activeCompanyId === action.id) return state;
       return { activeCompanyId: action.id, companyKey: state.companyKey + 1 };
+
+    case 'SYNC_ALLOWED': {
+      const currentId = state.activeCompanyId;
+      // Keep the current id only when it is still permitted.
+      const newId =
+        currentId !== null && action.allowedIds.has(currentId)
+          ? currentId
+          : action.fallbackId;
+      // No effective change — return same object so React skips re-render.
+      if (newId === currentId) return state;
+      return { activeCompanyId: newId, companyKey: state.companyKey + 1 };
+    }
   }
 }
 
@@ -113,9 +147,21 @@ export function CompanyProvider({
   children,
 }: CompanyProviderProps) {
   const [{ activeCompanyId, companyKey }, dispatch] = useReducer(companyReducer, {
-    activeCompanyId: resolveInitialId(allowedCompanies, initialCompanyId),
+    activeCompanyId: resolveSyncedId(allowedCompanies, initialCompanyId),
     companyKey: 0,
   });
+
+  // ── Post-mount reconciliation ─────────────────────────────────────────────
+  // When allowedCompanies changes after the first render (e.g. arriving from
+  // Auth/Session), ensure activeCompanyId is still permitted.
+  // · Active id still in new list  → no-op (same state object, no re-render).
+  // · Active id removed or was null → promote initialCompanyId (if allowed)
+  //   or the first available company or null.
+  useEffect(() => {
+    const allowedIds = new Set(allowedCompanies.map(c => c.id));
+    const fallbackId = resolveSyncedId(allowedCompanies, initialCompanyId);
+    dispatch({ type: 'SYNC_ALLOWED', allowedIds, fallbackId });
+  }, [allowedCompanies, initialCompanyId]);
 
   const setActiveCompany = useCallback(
     (id: string) => {

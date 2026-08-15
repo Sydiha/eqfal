@@ -6,11 +6,12 @@
  *  · companyKey increments on every successful switch (signals state clear)
  *  · initialCompanyId not in allowedCompanies → falls back to first allowed
  *  · empty allowedCompanies → activeCompanyId is null
+ *  · rerender reconciliation — activeCompanyId always consistent with new list
  */
 
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CompanyProvider, useCompany, type Company } from '../context/CompanyContext';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -196,5 +197,173 @@ describe('CompanyContext — active company management', () => {
     expect(() => {
       renderHook(() => useCompany());
     }).toThrow(/CompanyProvider/i);
+  });
+});
+
+// ── rerender reconciliation ───────────────────────────────────────────────────
+// Tests for post-mount synchronisation: when allowedCompanies changes after
+// the first render, activeCompanyId must stay consistent with the new list.
+//
+// Pattern: a stateful Wrapper drives allowedCompanies so rerender() triggers
+// an actual React prop change into CompanyProvider.
+
+describe('CompanyContext — allowedCompanies rerender reconciliation', () => {
+  it('companies arrive after empty list → picks the first allowed company', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>([]);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies}>{children}</CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    expect(result.current.activeCompanyId).toBeNull();
+
+    await act(async () => { setCompanies(COMPANIES); });
+
+    expect(result.current.activeCompanyId).toBe('co-a');
+    expect(result.current.activeCompany?.name).toBe('Company A');
+  });
+
+  it('companies arrive after empty list → prefers initialCompanyId when allowed', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>([]);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies} initialCompanyId="co-c">
+          {children}
+        </CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    expect(result.current.activeCompanyId).toBeNull();
+
+    await act(async () => { setCompanies(COMPANIES); });
+
+    expect(result.current.activeCompanyId).toBe('co-c');
+  });
+
+  it('active company revoked → falls back to first remaining company', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>(COMPANIES);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies}>{children}</CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    // Start on co-a (first by default)
+    expect(result.current.activeCompanyId).toBe('co-a');
+
+    // Remove co-a from the list
+    await act(async () => { setCompanies([COMPANIES[1], COMPANIES[2]]); });
+
+    expect(result.current.activeCompanyId).toBe('co-b'); // next first
+  });
+
+  it('active company revoked → prefers initialCompanyId when still allowed', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>(COMPANIES);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies} initialCompanyId="co-c">
+          {children}
+        </CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    // Manually switch to co-b so activeCompanyId !== initialCompanyId
+    await act(async () => { result.current.setActiveCompany('co-b'); });
+    expect(result.current.activeCompanyId).toBe('co-b');
+
+    // Remove co-b — co-c (initialCompanyId) is still in the list
+    await act(async () => {
+      setCompanies([COMPANIES[0], COMPANIES[2]]); // co-a, co-c
+    });
+
+    expect(result.current.activeCompanyId).toBe('co-c');
+  });
+
+  it('allowedCompanies becomes empty → activeCompanyId becomes null', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>(COMPANIES);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies}>{children}</CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    expect(result.current.activeCompanyId).toBe('co-a');
+
+    await act(async () => { setCompanies([]); });
+
+    expect(result.current.activeCompanyId).toBeNull();
+    expect(result.current.activeCompany).toBeNull();
+  });
+
+  it('active company still in updated list → no change, companyKey unchanged', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>(COMPANIES);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies}>{children}</CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    await act(async () => { result.current.setActiveCompany('co-b'); });
+    const keyBefore = result.current.companyKey;
+
+    // Update list but keep co-b in it
+    await act(async () => {
+      setCompanies([COMPANIES[1], COMPANIES[2]]); // co-b, co-c — co-b still present
+    });
+
+    expect(result.current.activeCompanyId).toBe('co-b');
+    expect(result.current.companyKey).toBe(keyBefore); // no remount
+  });
+
+  it('revocation increments companyKey (signals downstream remount)', async () => {
+    let setCompanies!: (c: Company[]) => void;
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [companies, setC] = useState<Company[]>(COMPANIES);
+      setCompanies = setC;
+      return (
+        <CompanyProvider allowedCompanies={companies}>{children}</CompanyProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useCompany(), { wrapper: Wrapper });
+
+    const keyBefore = result.current.companyKey;
+
+    // Remove co-a (the active company) — forces a switch
+    await act(async () => { setCompanies([COMPANIES[1], COMPANIES[2]]); });
+
+    expect(result.current.companyKey).toBe(keyBefore + 1);
   });
 });
