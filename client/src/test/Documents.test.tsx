@@ -9,6 +9,7 @@ beforeEach(async () => {
 });
 
 describe('Documents', () => {
+  const intakeDocument = { id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'uploaded', created_at: '2026-08-15T00:00:00Z', review_note: null, reviewed_at: null, document_type: 'purchase', counterparty_name: 'Supplier A', document_date: '2026-08-14', reference_number: 'INV-7', total_amount: '42.50', intake_note: 'Original note' };
   it('renders nothing without document capabilities', () => {
     const { container } = render(<Documents canView={false} canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
@@ -67,5 +68,29 @@ describe('Documents', () => {
 
     render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(await screen.findByRole('button', { name: 'Submit for review' })).toBeInTheDocument();
+  });
+
+  it('shows stored intake and editable controls only to uploaders while uploaded', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [intakeDocument] }), { status: 200 })));
+    const { rerender } = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Save Intake' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Supplier A')).toBeInTheDocument();
+    expect(screen.getByText('Invoice / Reference Number: INV-7')).toBeInTheDocument();
+    rerender(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
+    expect(screen.getByText('Counterparty / Supplier / Entity name: Supplier A')).toBeInTheDocument();
+  });
+
+  it('does not retain intake editor data after remounting for another company', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [intakeDocument] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [{ ...intakeDocument, id: 'doc-2', counterparty_name: 'Supplier B' }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(await screen.findByDisplayValue('Supplier A')).toBeInTheDocument();
+    first.unmount();
+    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(await screen.findByDisplayValue('Supplier B')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Supplier A')).not.toBeInTheDocument();
   });
 });

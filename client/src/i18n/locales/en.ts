@@ -51,6 +51,12 @@ const en = {
     reviewReason: 'Enter the reason:',
     reviewNote: 'Review note',
     reviewedAt: 'Reviewed at',
+    intake: {
+      documentType: 'Document Type', document_type: 'Document Type', counterparty: 'Counterparty / Supplier / Entity name', counterparty_name: 'Counterparty / Supplier / Entity name',
+      documentDate: 'Document Date', document_date: 'Document Date', reference: 'Invoice / Reference Number', reference_number: 'Invoice / Reference Number',
+      totalAmount: 'Total Amount', total_amount: 'Total Amount', note: 'Optional Note', intake_note: 'Optional Note', none: 'Not specified',
+      save: 'Save Intake', saving: 'Saving…', error: 'Unable to save Intake.', types: { purchase: 'Purchase', expense: 'Expense', sale: 'Sale', other: 'Other' },
+    },
     reviewActions: { submit: 'Submit for review', approved: 'Approve', incomplete: 'Mark incomplete', rejected: 'Reject' },
     statuses: {
       uploaded: 'Uploaded',

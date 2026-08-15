@@ -1,6 +1,16 @@
 export type DocumentStatus = 'uploaded' | 'needs_review' | 'approved' | 'incomplete' | 'rejected';
+export type DocumentType = 'purchase' | 'expense' | 'sale' | 'other';
 
-export interface DocumentRecord {
+export interface DocumentIntake {
+  document_type: DocumentType | null;
+  counterparty_name: string | null;
+  document_date: string | null;
+  reference_number: string | null;
+  total_amount: string | null;
+  intake_note: string | null;
+}
+
+export interface DocumentRecord extends DocumentIntake {
   id: string;
   company_id: string;
   uploaded_by_user_id: string;
@@ -16,6 +26,10 @@ export interface DocumentRecord {
   created_at: Date;
   updated_at: Date;
 }
+
+export type DocumentIntakeUpdate = Partial<{
+  [K in keyof DocumentIntake]: K extends 'total_amount' ? number | null : DocumentIntake[K]
+}>;
 
 export type DocumentReviewDecision = Extract<DocumentStatus, 'approved' | 'incomplete' | 'rejected'>;
 

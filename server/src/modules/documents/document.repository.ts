@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { CreateDocumentInput, DocumentRecord, DocumentStatus } from './document.types';
+import { CreateDocumentInput, DocumentIntakeUpdate, DocumentRecord, DocumentStatus } from './document.types';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -51,6 +51,17 @@ export class DocumentRepository {
       [id, companyId],
     );
     return rows[0] ?? null;
+  }
+
+  async updateIntake(id: string, companyId: string, intake: DocumentIntakeUpdate, runner: QueryRunner): Promise<DocumentRecord> {
+    const fields = Object.keys(intake) as (keyof DocumentIntakeUpdate)[];
+    const assignments = fields.map((field, index) => `${field} = $${index + 3}`);
+    const { rows } = await runner.query<DocumentRecord>(
+      `UPDATE documents SET ${assignments.join(', ')}, updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 RETURNING *`,
+      [id, companyId, ...fields.map((field) => intake[field])],
+    );
+    return rows[0]!;
   }
 
   async submitForReview(id: string, companyId: string, runner: QueryRunner): Promise<DocumentRecord> {

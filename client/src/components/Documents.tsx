@@ -10,7 +10,47 @@ type DocumentItem = {
   review_note: string | null;
   reviewed_at: string | null;
   created_at: string;
+  document_type: 'purchase' | 'expense' | 'sale' | 'other' | null;
+  counterparty_name: string | null;
+  document_date: string | null;
+  reference_number: string | null;
+  total_amount: string | null;
+  intake_note: string | null;
 };
+
+const intakeFields = ['document_type', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
+
+function IntakeEditor({ document, onSaved, onUnauthorized }: { document: DocumentItem; onSaved: () => Promise<void>; onUnauthorized: () => void }) {
+  const { t } = useTranslation();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSaving(true); setError(false);
+    const data = new FormData(event.currentTarget);
+    const body = Object.fromEntries(intakeFields.map((field) => {
+      const value = String(data.get(field) ?? '');
+      return [field, value === '' ? null : field === 'total_amount' ? Number(value) : value];
+    }));
+    try {
+      const response = await fetch(`/api/documents/${document.id}/intake`, { method: 'PATCH', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (!response.ok) { setError(true); return; }
+      await onSaved();
+    } catch { setError(true); } finally { setSaving(false); }
+  };
+  return <form className="document-intake" onSubmit={save}>
+    <label>{t('documents.intake.documentType')}<select name="document_type" defaultValue={document.document_type ?? ''}>
+      <option value="">{t('documents.intake.none')}</option>{(['purchase', 'expense', 'sale', 'other'] as const).map(type => <option key={type} value={type}>{t(`documents.intake.types.${type}`)}</option>)}
+    </select></label>
+    <label>{t('documents.intake.counterparty')}<input name="counterparty_name" maxLength={200} defaultValue={document.counterparty_name ?? ''}/></label>
+    <label>{t('documents.intake.documentDate')}<input name="document_date" type="date" defaultValue={document.document_date?.slice(0, 10) ?? ''}/></label>
+    <label>{t('documents.intake.reference')}<input name="reference_number" maxLength={100} defaultValue={document.reference_number ?? ''}/></label>
+    <label>{t('documents.intake.totalAmount')}<input name="total_amount" type="number" min="0.01" step="0.01" defaultValue={document.total_amount ?? ''}/></label>
+    <label>{t('documents.intake.note')}<textarea name="intake_note" maxLength={500} defaultValue={document.intake_note ?? ''}/></label>
+    {error && <span role="alert">{t('documents.intake.error')}</span>}
+    <button disabled={saving}>{saving ? t('documents.intake.saving') : t('documents.intake.save')}</button>
+  </form>;
+}
 
 interface DocumentsProps {
   canView: boolean;
@@ -143,6 +183,8 @@ export function Documents({ canView, canUpload, canReview, canApprove, onUnautho
                     <div>{t(`documents.statuses.${document.status}`)}</div>
                     {document.review_note && <div>{t('documents.reviewNote')}: {document.review_note}</div>}
                     {document.reviewed_at && <div>{t('documents.reviewedAt')}: {new Date(document.reviewed_at).toLocaleString()}</div>}
+                    {intakeFields.map(field => document[field] != null && <div key={field}>{t(`documents.intake.${field}`)}: {field === 'document_type' ? t(`documents.intake.types.${document[field]}`) : document[field]}</div>)}
+                    {canUpload && document.status === 'uploaded' && <IntakeEditor key={document.id} document={document} onSaved={load} onUnauthorized={onUnauthorized}/>}
                   </td>
                   <td>{Math.max(1, Math.round(document.size_bytes / 1024))} KB</td>
                   <td>

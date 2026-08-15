@@ -51,6 +51,12 @@ const ar = {
     reviewReason: 'أدخل السبب:',
     reviewNote: 'ملاحظة المراجعة',
     reviewedAt: 'وقت المراجعة',
+    intake: {
+      documentType: 'نوع المستند', document_type: 'نوع المستند', counterparty: 'اسم الطرف المقابل / المورد / الجهة', counterparty_name: 'اسم الطرف المقابل / المورد / الجهة',
+      documentDate: 'تاريخ المستند', document_date: 'تاريخ المستند', reference: 'رقم الفاتورة / المرجع', reference_number: 'رقم الفاتورة / المرجع',
+      totalAmount: 'المبلغ الإجمالي', total_amount: 'المبلغ الإجمالي', note: 'ملاحظة اختيارية', intake_note: 'ملاحظة اختيارية', none: 'غير محدد',
+      save: 'حفظ بيانات الإدخال', saving: 'جارٍ الحفظ…', error: 'تعذر حفظ بيانات الإدخال.', types: { purchase: 'شراء', expense: 'مصروف', sale: 'بيع', other: 'أخرى' },
+    },
     reviewActions: { submit: 'إرسال للمراجعة', approved: 'اعتماد', incomplete: 'تحديد كناقص', rejected: 'رفض' },
     statuses: {
       uploaded: 'مرفوع',
