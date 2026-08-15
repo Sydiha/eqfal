@@ -153,4 +153,29 @@ describe('CompanySwitcher — company switching', () => {
 
     expect(capturedKey).toBe(initial + 1);
   });
+
+  it('re-selecting the active company via the UI is a no-op: companyKey unchanged', () => {
+    let capturedKey = -1;
+
+    function KeyInspector() {
+      const { companyKey } = useCompany();
+      capturedKey = companyKey;
+      return null;
+    }
+
+    render(
+      <Wrapper allowedCompanies={ALLOWED}>
+        <CompanySwitcher />
+        <KeyInspector />
+      </Wrapper>,
+    );
+
+    const keyBefore = capturedKey;
+    const select = screen.getByRole('combobox');
+
+    // Fire change event with the already-selected value
+    fireEvent.change(select, { target: { value: 'co-a' } });
+
+    expect(capturedKey).toBe(keyBefore);
+  });
 });

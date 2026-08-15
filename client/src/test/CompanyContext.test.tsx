@@ -144,6 +144,43 @@ describe('CompanyContext — active company management', () => {
     expect(result.current.companyKey).toBe(initial);
   });
 
+  it('re-selecting the already-active company is a no-op: activeCompanyId unchanged', () => {
+    const { result } = renderHook(() => useCompany(), {
+      wrapper: makeWrapper(COMPANIES, 'co-b'),
+    });
+
+    expect(result.current.activeCompanyId).toBe('co-b');
+
+    act(() => { result.current.setActiveCompany('co-b'); }); // same company
+
+    expect(result.current.activeCompanyId).toBe('co-b');
+  });
+
+  it('re-selecting the already-active company is a no-op: companyKey unchanged', () => {
+    const { result } = renderHook(() => useCompany(), {
+      wrapper: makeWrapper(COMPANIES, 'co-b'),
+    });
+
+    const keyBefore = result.current.companyKey;
+
+    act(() => { result.current.setActiveCompany('co-b'); }); // same company
+
+    expect(result.current.companyKey).toBe(keyBefore);
+  });
+
+  it('switching to a different company still increments companyKey', () => {
+    const { result } = renderHook(() => useCompany(), {
+      wrapper: makeWrapper(COMPANIES, 'co-a'),
+    });
+
+    const keyBefore = result.current.companyKey;
+
+    act(() => { result.current.setActiveCompany('co-b'); }); // different company
+
+    expect(result.current.activeCompanyId).toBe('co-b');
+    expect(result.current.companyKey).toBe(keyBefore + 1);
+  });
+
   it('activeCompanyId is null when allowedCompanies is empty', () => {
     const { result } = renderHook(() => useCompany(), {
       wrapper: makeWrapper([]),

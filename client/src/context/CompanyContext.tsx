@@ -17,7 +17,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useState,
+  useReducer,
   type ReactNode,
 } from 'react';
 
@@ -83,15 +83,39 @@ function resolveInitialId(
   return allowedCompanies[0]?.id ?? null;
 }
 
+// ── Reducer ───────────────────────────────────────────────────────────────────
+
+interface CompanyState {
+  activeCompanyId: string | null;
+  /**
+   * Increments only when the active company actually changes.
+   * Re-selecting the current company leaves companyKey unchanged.
+   */
+  companyKey: number;
+}
+
+type CompanyAction = { type: 'SET_COMPANY'; id: string };
+
+function companyReducer(state: CompanyState, action: CompanyAction): CompanyState {
+  switch (action.type) {
+    case 'SET_COMPANY':
+      // No-op: same company already active — do not churn state or increment key.
+      if (state.activeCompanyId === action.id) return state;
+      return { activeCompanyId: action.id, companyKey: state.companyKey + 1 };
+  }
+}
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
 export function CompanyProvider({
   allowedCompanies,
   initialCompanyId,
   children,
 }: CompanyProviderProps) {
-  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(
-    () => resolveInitialId(allowedCompanies, initialCompanyId),
-  );
-  const [companyKey, setCompanyKey] = useState(0);
+  const [{ activeCompanyId, companyKey }, dispatch] = useReducer(companyReducer, {
+    activeCompanyId: resolveInitialId(allowedCompanies, initialCompanyId),
+    companyKey: 0,
+  });
 
   const setActiveCompany = useCallback(
     (id: string) => {
@@ -100,10 +124,9 @@ export function CompanyProvider({
           `setActiveCompany: "${id}" is not in the list of allowed companies.`,
         );
       }
-      setActiveCompanyId(id);
-      // Increment regardless of whether the id is the same — a deliberate
-      // re-selection still signals a "switch intent" and clears stale state.
-      setCompanyKey(k => k + 1);
+      // Dispatch even for the same id — the reducer will return the existing
+      // state object unchanged (referential equality), so React skips re-render.
+      dispatch({ type: 'SET_COMPANY', id });
     },
     [allowedCompanies],
   );

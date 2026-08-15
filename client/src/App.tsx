@@ -1,18 +1,8 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
-import { CompanyProvider, type Company } from './context/CompanyContext';
+import { CompanyProvider } from './context/CompanyContext';
 import { CompanySwitcher } from './components/CompanySwitcher';
-
-/**
- * Placeholder companies — replaced by the Auth/Session layer once integrated.
- * The CompanyProvider enforces that only companies in this list can be made
- * active; no component can bypass the allowed-list check.
- */
-const PLACEHOLDER_COMPANIES: Company[] = [
-  { id: 'co-1', name: 'شركة الخليج للمالية | Gulf Finance Co.' },
-  { id: 'co-2', name: 'مجموعة الأمانة | Al-Amana Group' },
-];
 
 function AppShell() {
   const { t, i18n } = useTranslation();
@@ -65,8 +55,9 @@ function AppShell() {
 }
 
 function App() {
+  // allowedCompanies starts empty — populated by Auth/Session once available.
   return (
-    <CompanyProvider allowedCompanies={PLACEHOLDER_COMPANIES}>
+    <CompanyProvider allowedCompanies={[]}>
       <AppShell />
     </CompanyProvider>
   );
