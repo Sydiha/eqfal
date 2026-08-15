@@ -92,6 +92,7 @@ export function Documents({ canView, canUpload, onUnauthorized }: DocumentsProps
           <input
             name="document"
             type="file"
+            aria-label={t('documents.chooseFile')}
             accept="application/pdf,image/jpeg,image/png,image/webp"
             required
           />
