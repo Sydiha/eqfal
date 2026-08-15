@@ -32,6 +32,15 @@ These rules are mandatory for every automated agent, assistant, coding session, 
    - Passing TypeScript, tests, or build does not override a Design Check mismatch; design and security compliance are part of Definition of Done.
    - Security-sensitive separation of duties, capability boundaries, tenant isolation, audit requirements, and approved HTTP/API semantics must never be merged, weakened, or broadened without explicit approval.
 
+5. **One-Shot Rule is mandatory after design approval.**
+   - Once the user approves a Design Check, the implementation instruction to Codex must be one complete, closed prompt covering scope, API, capabilities, schema, state transitions, validation, error semantics, required tests, explicit out-of-scope items, and Definition of Done.
+   - Do not drip-feed missing requirements or redesign the task during implementation.
+
+6. **Zero-Loop Rule is mandatory.**
+   - After the initial implementation, only one corrective implementation pass is allowed if a real blocker is found.
+   - If a second corrective implementation pass would be required, stop the programming task immediately and escalate instead of entering another fix/review loop.
+   - Repeated manual transfer of terminal output, logs, patches, or SHAs through the user is not an acceptable normal workflow. Prefer GitHub PRs, CI, and direct tool inspection.
+
 ## Repository & Delivery Rules
 
 - `GitHub/main` is the permanent source of truth for merged work.
@@ -41,6 +50,7 @@ These rules are mandatory for every automated agent, assistant, coding session, 
 - No paid service, paid API, additional credits, plan upgrade, or new operating cost without explicit user approval.
 - Prefer the smallest solution that meets the requirement and preserves portability.
 - Do not claim tests, builds, reviews, deployments, or other actions succeeded unless they were actually executed and verified.
+- Acceptance is based on the real diff plus tests/CI and Design Check compliance, not on an agent summary alone.
 
 ## Instruction Priority
 
