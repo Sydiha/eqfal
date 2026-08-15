@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   findByCompany: vi.fn(),
   findById: vi.fn(),
   upload: vi.fn(),
+  review: vi.fn(),
+  submitReview: vi.fn(),
   storageGet: vi.fn(),
 }));
 
@@ -30,15 +32,19 @@ vi.mock('../src/modules/documents/document.repository', () => ({
   },
 }));
 vi.mock('../src/modules/documents/document.service', () => ({
-  DocumentService: class { upload = mocks.upload; },
+  DocumentNotFoundError: class extends Error {},
+  DocumentReviewConflictError: class extends Error {},
+  DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; },
 }));
 vi.mock('../src/storage/local.storage', () => ({
   LocalStorageAdapter: class { get = mocks.storageGet; },
 }));
 
 import { documentRouter } from '../src/modules/documents/document.router';
+import { DocumentNotFoundError, DocumentReviewConflictError } from '../src/modules/documents/document.service';
 
 const app = express();
+app.use(express.json());
 app.use('/api', documentRouter);
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err instanceof Error ? err.message : 'error' });
@@ -48,7 +54,8 @@ const pdf = Buffer.from('%PDF-1.7\ncontent');
 const document = {
   id: 'doc-1', company_id: 'co-a', uploaded_by_user_id: 'u1', status: 'uploaded',
   original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: pdf.length,
-  storage_key: 'co-a/file-1', sha256: 'a'.repeat(64), created_at: new Date(), updated_at: new Date(),
+  storage_key: 'co-a/file-1', sha256: 'a'.repeat(64), reviewed_by_user_id: null, reviewed_at: null, review_note: null,
+  created_at: new Date(), updated_at: new Date(),
 };
 
 function setContext(capabilities: string[], companyId: string | null = 'co-a') {
@@ -75,6 +82,8 @@ describe('Document API security boundary', () => {
     mocks.findByCompany.mockReset();
     mocks.findById.mockReset();
     mocks.upload.mockReset();
+    mocks.review.mockReset();
+    mocks.submitReview.mockReset();
     mocks.storageGet.mockReset();
   });
 
@@ -164,5 +173,60 @@ describe('Document API security boundary', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
     expect(mocks.storageGet).toHaveBeenCalledWith('co-a/file-1');
+  });
+
+  it('allows document.upload to submit an uploaded document for review', async () => {
+    setContext(['document.upload']);
+    mocks.submitReview.mockResolvedValue({ ...document, status: 'needs_review' });
+    const res = await request(app).post('/api/documents/doc-1/submit-review').send();
+    expect(res.status).toBe(200);
+    expect(mocks.submitReview).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1' });
+  });
+
+  it('requires document.upload and same origin to submit for review', async () => {
+    setContext([]);
+    expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(403);
+    setContext(['document.upload']);
+    expect((await request(app).post('/api/documents/doc-1/submit-review').set('Origin', 'https://evil.example')).status).toBe(403);
+    expect(mocks.submitReview).not.toHaveBeenCalled();
+  });
+
+  it('does not let document.review approve, but lets document.approve approve', async () => {
+    setContext(['document.review']);
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'approved' })).status).toBe(403);
+    setContext(['document.approve']);
+    mocks.review.mockResolvedValue({ ...document, status: 'approved' });
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'approved' })).status).toBe(200);
+    expect(mocks.review).toHaveBeenCalledWith(expect.objectContaining({ decision: 'approved', note: null }));
+  });
+
+  it('allows document.review to mark needs-review documents incomplete or rejected', async () => {
+    setContext(['document.review']);
+    mocks.review.mockResolvedValue({ ...document, status: 'incomplete' });
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'incomplete', note: 'Missing page' })).status).toBe(200);
+    expect(mocks.review).toHaveBeenCalledWith(expect.objectContaining({ decision: 'incomplete', note: 'Missing page' }));
+  });
+
+  it('rejects needs_review decisions, missing reasons, and notes over 500 characters', async () => {
+    setContext(['document.review']);
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'needs_review' })).status).toBe(400);
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'incomplete' })).status).toBe(400);
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'rejected', note: ' ' })).status).toBe(400);
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'incomplete', note: 'x'.repeat(501) })).status).toBe(400);
+  });
+
+  it('returns conflict for an invalid transition and safe 404 across companies', async () => {
+    setContext(['document.upload']);
+    mocks.submitReview.mockRejectedValueOnce(new DocumentReviewConflictError());
+    expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(409);
+    mocks.submitReview.mockRejectedValueOnce(new DocumentNotFoundError());
+    expect((await request(app).post('/api/documents/doc-other/submit-review')).status).toBe(404);
+  });
+
+  it('rejects cross-origin review mutations', async () => {
+    setContext(['document.review']);
+    const res = await request(app).post('/api/documents/doc-1/review').set('Origin', 'https://evil.example').send({ decision: 'rejected', note: 'Duplicate' });
+    expect(res.status).toBe(403);
+    expect(mocks.review).not.toHaveBeenCalled();
   });
 });
