@@ -5,20 +5,16 @@
 
 ## 1. الحالة التنفيذية المختصرة
 
-المشروع مستمر في بناء Core MVP بعد اكتمال طبقة الهوية والجلسة، Fiscal Year API، والواجهة التشغيلية الأولى للسنوات المالية داخل Authenticated Shell.
+مشروع **إقفال | EQFAL** مستمر في بناء Core MVP، وقد تم إغلاق ودمج الأساسات الأمنية والتشغيلية الأساسية، ثم Phase 2A لرفع المستندات الآمن وPhase 2B لتدفق مراجعة المستندات.
 
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main معتمد: `df1c419906a280cc3057e7c99fce8c04530afbb8`
+- المرجع الحالي دائمًا: latest GitHub `main`، ولا يعتمد هذا الملف على SHA ثابت يتقادم بعد كل Merge.
 
-آخر مراحل مكتملة:
-- Fiscal Year API / Application Integration — PR #12 merged.
-- GitHub Actions CI foundation — PR #15 merged.
-- Fiscal Years UI / Application Shell Integration — PR #14 merged.
-
-المهمة التالية المقترحة:
-- **Core MVP Security & Readiness Review** — Read-only أولًا.
+آخر الأعمال المدمجة:
+- PR #19 — Strict Design Check compliance.
+- PR #20 — Phase 2B Document Review Workflow.
 
 Production:
 - غير منشور.
@@ -26,139 +22,84 @@ Production:
 
 ---
 
-## 2. Completed Features & Tasks
+## 2. Completed Foundations — DONE
 
-### 2.1 Bootstrap Core Foundation — DONE
-- React + TypeScript + Vite + Mobile-first + RTL/LTR foundation.
-- Node.js + TypeScript + Express Modular Monolith.
-- Environment configuration، logging، health endpoint، PostgreSQL، migrations.
-- PR #2 merged.
-
-### 2.2 Data / Tenancy Foundation — DONE
-- Company entity/repository وtenant-aware primitives.
-- `company_id` foundation.
-- migration advisory lock وfatal startup behavior عند failure.
-- PR #3 merged.
-
-### 2.3 Auth / Users Foundation — DONE
-- Users repository/service.
-- Password hashing/verification.
-- SafeUser بدون `password_hash`.
-- dummy bcrypt timing mitigation.
-- PR #4 merged.
-
-### 2.4 Memberships + Roles + Capabilities — DONE
-- Global user + company memberships.
-- company-scoped roles.
-- operational capabilities.
-- cross-company role protection.
-- grant ceiling وself-escalation protection.
-- PR #5 merged.
-
-### 2.5 Fiscal Years + Initial Audit Foundation — DONE
-- Fiscal Years company-scoped.
-- `open` / `closed` states.
-- `start_date < end_date`.
-- overlap prevention داخل الشركة.
-- transaction/advisory locking و`FOR UPDATE` للعمليات الحساسة.
-- initial append-only application audit log مع recursive sanitization.
-- PR #6 merged.
-
-### 2.6 i18n + Company Switcher Foundation — DONE
-- العربية default + English.
-- RTL/LTR وdocument lang/dir.
-- CompanyContext + allowed companies + companyKey.
-- لا runtime placeholders.
-- PR #7 merged.
-
-### 2.7 Tool / Cost / Workflow Protocol — DONE
-- GitHub/main هو المرجع الدائم.
-- لا Replit Agent للبرمجة.
-- لا Production دون موافقة.
-- لا تكلفة تشغيلية جديدة دون موافقة.
-- مهمة برمجية واحدة في كل مرة.
-- PR #9 وPR #13 merged.
-
-### 2.8 Auth / Session + Secure Company Switching — DONE
-- Login فعلي باستخدام AuthService.
-- Server-side sessions في PostgreSQL.
-- opaque random token عبر HttpOnly Cookie مع DB hash.
-- Session bootstrap/logout/invalidation.
-- الشركات من Active Memberships + Active Companies فقط.
-- Active Company محفوظة في Session الموثوقة.
-- server-side membership/company validation عند switch.
-- backend capability enforcement boundary.
-- client session/company/capabilities ليست authority أمنية نهائية.
-- PR #10 merged.
-
-### 2.9 Fiscal Year API / Application Integration — DONE
-Endpoints الحالية:
-- `GET /api/fiscal-years`
-- `POST /api/fiscal-years`
-- `PATCH /api/fiscal-years/:id`
-- `POST /api/fiscal-years/:id/close`
-
-Capabilities:
-- `fiscal_year.view`
-- `fiscal_year.manage`
-
-الضوابط:
-- الشركة تؤخذ من authenticated Session فقط.
-- client لا يمرر `company_id` كمرجع authority.
-- GET يتطلب view، والعمليات المعدلة تتطلب manage.
-- actorUserId من Session.
-- cross-company lookup يعطي safe not-found semantics.
-- business/state conflicts تعالج بصورة آمنة.
-- PR #12 merged.
-
-### 2.10 Fiscal Years UI / Authenticated Shell — DONE
-- Fiscal Years أصبحت أول شاشة تشغيلية بعد Login.
-- Header بسيط: EQFAL + Company Switcher + Language + Logout.
-- list/create/edit/close.
-- capability-aware UX.
-- closed years غير قابلة للتعديل في الوظائف الحالية.
-- strict client range validation: start < end.
-- no `company_id` في payloads.
-- company switch يمسح stale company-scoped UI عبر remount/refetch.
-- 401 يعيد Login state.
-- Arabic/English strings.
-- PR #14 merged.
-
-### 2.11 GitHub Actions CI — DONE كأساس تحقق دائم
-على PR إلى `main` وعلى push إلى `main`:
-- dependency install.
-- TypeScript.
-- Tests.
-- Build.
-
-الضوابط:
-- standard runner فقط.
-- timeout محدود.
-- read-only contents permission.
-- no Production deployment.
-- PR #15 merged.
-
-ملاحظة:
-- package-lock يحتوي registry URLs قديمة من Replit.
-- CI يطبعها مؤقتًا إلى npm public registry داخل Runner فقط قبل install.
-- تنظيف lockfile نفسه بند تشغيلي مستقل.
+- Bootstrap Core Foundation.
+- Data / Tenancy Foundation.
+- Auth / Users Foundation.
+- Memberships + Roles + Capabilities.
+- Fiscal Years + Initial Audit Foundation.
+- Arabic/English + RTL/LTR.
+- Company Switcher Foundation.
+- Auth / Session + Secure Company Switching.
+- Fiscal Year API / Application Integration.
+- Fiscal Years UI / Authenticated Shell.
+- GitHub Actions CI.
+- Core MVP Security & Readiness hardening.
+- Permanent Tool / Cost / Design Check guardrails.
 
 ---
 
-## 3. Security / Reliability Fixes المحسومة
-- DB/migration critical failures أصبحت fatal.
-- migration advisory lock.
-- `company_id` وحده ليس Authorization.
-- auth timing mitigation للبريد غير الموجود.
-- Grant Ceiling + self escalation protection.
-- Fiscal Year concurrency locking.
-- sensitive audit sanitization.
-- Company Switcher بدون placeholders/stale tenant state.
-- Active Company أصبحت server-trusted session context.
-- cross-company capability drift protection.
-- generic backend error boundary لمسارات Auth.
-- Fiscal Year HTTP boundary company/capability enforced.
-- stale company UI لا يبقى ظاهرًا أثناء switch.
+## 3. Phase 2 — Documents
+
+### 3.1 Phase 2A — Secure Document Upload Foundation — DONE
+
+يشمل:
+- company-scoped `documents` table.
+- statuses: `uploaded | needs_review | approved | incomplete | rejected`.
+- capabilities: `document.view`, `document.upload`.
+- PDF/JPEG/PNG/WebP فقط، بحد 10 MB.
+- extension/MIME/signature validation.
+- SHA-256 server-side.
+- replaceable Storage Adapter مع local implementation حاليًا.
+- لا BLOBs داخل PostgreSQL.
+- company-scoped list/read/file retrieval.
+- Same-Origin للرفع.
+- Audit `document.upload`.
+- Documents UI الأساسية.
+
+### 3.2 Phase 2B — Document Review Workflow — DONE
+
+PR #20 merged.
+
+Transitions:
+- `uploaded -> needs_review` عبر `document.upload`.
+- `needs_review -> incomplete` عبر `document.review`.
+- `needs_review -> rejected` عبر `document.review`.
+- `needs_review -> approved` عبر `document.approve`.
+
+API:
+- `POST /api/documents/:id/submit-review`
+- `POST /api/documents/:id/review`
+
+Security / consistency:
+- Same-Origin على mutation endpoints.
+- Authenticated Session + trusted Active Company.
+- decision-specific capability enforcement في Backend.
+- company-scoped lookup.
+- `SELECT ... FOR UPDATE` داخل transaction.
+- safe 404 للـcross-company/not-found.
+- 409 للحالة غير الصالحة/stale transition.
+- `review_note` بحد 500 حرف.
+- سبب إلزامي لـ`incomplete` و`rejected`.
+- `approved` يسمح بملاحظة اختيارية.
+- `submit-review` لا يملأ reviewer metadata.
+- `reviewed_by_user_id`, `reviewed_at`, `review_note` تُسجل فقط عند قرار المراجعة النهائي.
+
+Audit actions:
+- `document.submit_review`
+- `document.mark_incomplete`
+- `document.reject`
+- `document.approve`
+
+UI:
+- Submit for review لمستخدمي `document.upload` على المستندات المرفوعة.
+- Incomplete/Reject لمستخدمي `document.review` على `needs_review`.
+- Approve لمستخدمي `document.approve` على `needs_review`.
+- عرض review note وreviewed at عند وجودهما.
+
+Verification:
+- Phase 2B اجتازت GitHub Actions CI على PR #20: Install + TypeScript + Tests + Build.
 
 ---
 
@@ -166,141 +107,62 @@ Capabilities:
 
 لا توجد مهمة برمجية مفتوحة حاليًا.
 
-آخر عمل مدمج:
-- PR #14 — Fiscal Years UI / Application Shell Integration.
+الحزمة الحالية:
+- **Documentation Recovery** فقط.
 
-آخر main معتمد:
-- `df1c419906a280cc3057e7c99fce8c04530afbb8`.
-
-النقطة التالية المقترحة:
-- **Core MVP Security & Readiness Review**.
-
-يجب أن تبدأ بـ Read-only Design Check قبل أي تعديل.
+بعد إغلاق التوثيق، لا تبدأ أي Feature جديدة قبل Read-only Design Check مستقل واعتماده.
 
 ---
 
-## 5. Remaining MVP Backlog / TODO
+## 5. Operating Rules — ACTIVE
 
-### Priority P0 — Core Security & Identity
-
-#### 5.1 Auth / Session Integration — DONE
-- Login/session/bootstrap/logout ✅
-- authenticated user من Server-side source ✅
-- current-session invalidation ✅
-- auth middleware boundary ✅
-
-#### 5.2 Authorized Companies / Active Company — DONE
-- active memberships + active companies فقط ✅
-- server-side company switch validation ✅
-- active company داخل trusted session ✅
-- client company values ليست authority ✅
-
-#### 5.3 Capability Enforcement — DONE كأساس
-- backend enforcement boundary ✅
-- DB-backed capability evaluation ✅
-- Fiscal Year endpoint capabilities ✅
-
-### Priority P1 — Core MVP Completion
-
-#### 5.4 Fiscal Year API / Application Integration — DONE
-- API/application boundary ✅
-- tenant-safe read/write ✅
-- audit/locking reuse ✅
-- cross-company protection ✅
-
-#### 5.5 Initial Application Shell — DONE للحد الأدنى المعتمد
-- login state ✅
-- authenticated shell ✅
-- Company Switcher ✅
-- Language Switcher ✅
-- Logout ✅
-- أول module فعلي: Fiscal Years ✅
-- mobile-first + RTL/LTR ✅
-
-لا يشمل بعد:
-- sidebar كامل.
-- dashboard مالي.
-- router framework موسع.
-- design system جديد.
-
-#### 5.6 Core MVP Security & Readiness Review — NEXT
-Read-only أولًا، ثم لا تنفيذ إلا للـblockers الحقيقية المعتمدة.
-
-المراجعة المطلوبة:
-- auth/session invalidation edge cases.
-- cross-company read/write عبر HTTP boundary.
-- Fiscal Year capability coverage.
-- inactive membership/company behavior.
-- company-switch stale-state behavior.
-- 401/403/404/409 semantics.
-- audit coverage للأحداث الحساسة الحالية.
-- CI behavior كمصدر تحقق مستقل.
-
-المخرجات المطلوبة:
-- ما يعمل فعليًا.
-- gaps أو blockers فقط.
-- الاختبارات الناقصة إن وجدت.
-- أقل حزمة إصلاح ممكنة.
-- قرار Go/No-Go للانتقال للوحدة التشغيلية التالية.
-
-### Priority P2 — Core Operational Readiness
-
-#### 5.7 Portable Dependency Lockfile
-- إزالة registry URLs الخاصة بـReplit من `package-lock.json` بصورة دائمة.
-- الحفاظ على نفس dependency graph قدر الإمكان.
-- تشغيل CI بعد التغيير.
-- لا تغيير Business Logic.
-
-#### 5.8 Audit Coverage Review
-- Audit فقط للعمليات الحساسة ذات القيمة المحاسبية/الإدارية.
-- يراجع coverage عند كل module جديد.
-
-#### 5.9 Documentation Refresh
-- بعد كل حزمة جوهرية: `TODO.md`, `DECISIONS.md`, `RECAP_SESSION.md`.
-- `SECURITY_AND_TENANCY_CHECKLIST.md` عند تغير حالة أمنية فعلية.
-
-#### 5.10 Staging Validation
-قبل أي Production مستقبلًا:
-- migrations على Staging.
-- Auth/Tenancy/Permissions smoke tests.
-- Build + smoke test.
-- secrets/environment isolation review.
-- Production ممنوع حتى الموافقة الصريحة.
+- `GitHub/main` هو المرجع الدائم.
+- Design Check المعتمد عقد تنفيذ ملزم.
+- One-Shot Rule: بعد اعتماد التصميم، Codex يستلم أمر تنفيذ واحدًا شاملًا ومغلقًا.
+- Zero-Loop Rule: يسمح بحد أقصى corrective pass واحد؛ الحاجة إلى تصحيح ثانٍ توقف المهمة فورًا.
+- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـlogs/terminal/patches.
+- القبول من diff الحقيقي + tests/CI + مطابقة Design Check، وليس من ملخص agent.
+- مهمة برمجية واحدة فقط في كل مرة.
+- لا Replit Agent للبرمجة.
+- لا Production دون موافقة.
+- لا تكلفة تشغيلية جديدة دون موافقة.
 
 ---
 
-## 6. Deferred — خارج Core MVP الحالي
-- Accounting periods / Month / Quarter close.
-- Reopen workflow الكامل.
-- Bank transactions / reconciliation.
-- OCR.
-- Purchase/Sales invoices.
-- Expenses workflow.
-- Unknown transfers.
-- Personal withdrawals.
-- Advances.
-- Manpower payroll.
+## 6. Remaining MVP / Operational Backlog
+
+### P1 — بعد اعتماد Design Check جديد
+- تحديد المرحلة التشغيلية التالية من الوثيقة الشاملة فقط بعد إغلاق Documentation Recovery.
+- لا OCR / VAT / AI / Banks / Accounting Entries ضمن Phase 2B المغلقة.
+
+### P2 — Operational cleanup مستقل
+- Portable Dependency Lockfile: إزالة registry URLs القديمة الخاصة بـReplit من `package-lock.json` مع الحفاظ على dependency graph قدر الإمكان ونجاح CI.
+- Dependency security review فقط عند الحاجة الفعلية؛ لا `npm audit fix` عشوائي أو breaking upgrade دون مراجعة.
+- Staging validation قبل أي Production مستقبلًا.
+
+### Deferred حتى مراحلها المعتمدة
+- OCR/AI extraction.
 - VAT reconciliation.
-- Zakat.
-- full year-end close workflow.
-- Financial statements / Qawaem output.
+- Purchase/Sales invoices accounting workflow.
+- Expenses / unknown transfers / personal withdrawals / advances.
+- Bank transactions / reconciliation.
+- Accounting periods / Month / Quarter close / reopen workflow.
+- Zakat / year-end close / Financial Statements / Qawaem output.
 - Notifications / email alerts.
 - E-invoicing / external ERP integrations.
 - Native mobile application.
 - Paid AI/APIs.
-- Permanent workers/queues.
-- MFA/OAuth حتى تظهر حاجة معتمدة.
-- Password reset / logout-all-devices حتى مرحلة إدارة الحسابات.
 
 ---
 
-## 7. Definition of Done — المهمة التالية
-مهمة **Core MVP Security & Readiness Review** لا تعتبر مكتملة إلا إذا:
-- تبدأ Read-only فقط.
-- تراجع latest `main` وليس branch قديم.
-- لا تعدّل الكود أثناء Design Check.
-- توثق coverage الحالي لـAuth/Tenancy/Capabilities/Fiscal Year HTTP/UI.
-- تحدد gaps أو blockers بأدلة من الكود/الاختبارات.
-- لا توسع النطاق إلى module جديد.
-- إذا لم توجد blockers: تصدر Go للمرحلة التالية بدون تغييرات شكلية.
-- إذا وجدت blockers: تحدد أقل حزمة تنفيذ مستقلة قبل أي code change.
+## 7. Gate للمهمة التالية
+
+قبل أي تنفيذ برمجي جديد يجب:
+1. قراءة latest `main` فقط.
+2. Read-only Design Check.
+3. Scope / out-of-scope / API / capabilities / schema / transitions / validations / error semantics / tests / DoD مكتوبة بوضوح.
+4. موافقة المستخدم الصريحة.
+5. One-Shot implementation prompt واحد فقط إلى Codex.
+6. مراجعة diff الفعلي.
+7. Single Fix واحد كحد أقصى إن ظهر blocker.
+8. PR + GitHub CI قبل Merge.
