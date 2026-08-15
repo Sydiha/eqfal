@@ -35,7 +35,7 @@ const en = {
   },
   documents: {
     title: 'Documents',
-    workspace: 'Document workspace', list: 'Document list', workflow: 'Workflow actions', uploadTitle: 'Upload document', accepted: 'PDF, JPEG, PNG, or WebP · Maximum 10 MB', reasonRequired: 'A reason is required.',
+    workspace: 'Document workspace', list: 'Document list', workflow: 'Workflow actions', uploadTitle: 'Upload document', accepted: 'PDF, JPEG, PNG, or WebP · Maximum 10 MB', reasonRequired: 'A reason is required.', approvalNote: 'Note (optional)',
     description: 'Upload and access documents for the active company.',
     chooseFile: 'Choose document',
     upload: 'Upload document',

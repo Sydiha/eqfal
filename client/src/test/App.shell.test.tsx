@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { AuthProvider } from '../context/AuthContext';
@@ -9,11 +9,12 @@ describe('authenticated application shell', () => {
   it('navigates between the three frontend workspaces', async () => {
     render(<AuthProvider><App/></AuthProvider>);
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
-    const fiscal = screen.getByRole('button', { name: 'Fiscal Years' });
-    const documents = screen.getByRole('button', { name: 'Documents' });
+    const navigation = screen.getByRole('navigation', { name: 'Main navigation' });
+    const fiscal = within(navigation).getByRole('button', { name: 'Fiscal Years' });
+    const documents = within(navigation).getByRole('button', { name: 'Documents' });
     fireEvent.click(fiscal); expect(fiscal).toHaveAttribute('aria-current', 'page');
     fireEvent.click(documents); expect(documents).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Home' }));
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
   });
 });

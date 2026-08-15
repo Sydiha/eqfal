@@ -35,7 +35,7 @@ const ar = {
   },
   documents: {
     title: 'المستندات',
-    workspace: 'مساحة عمل المستندات', list: 'قائمة المستندات', workflow: 'إجراءات سير العمل', uploadTitle: 'رفع مستند', accepted: 'PDF أو JPEG أو PNG أو WebP · الحد الأقصى 10 ميجابايت', reasonRequired: 'السبب مطلوب.',
+    workspace: 'مساحة عمل المستندات', list: 'قائمة المستندات', workflow: 'إجراءات سير العمل', uploadTitle: 'رفع مستند', accepted: 'PDF أو JPEG أو PNG أو WebP · الحد الأقصى 10 ميجابايت', reasonRequired: 'السبب مطلوب.', approvalNote: 'ملاحظة (اختيارية)',
     description: 'رفع مستندات الشركة النشطة والوصول إليها بأمان.',
     chooseFile: 'اختيار مستند',
     upload: 'رفع مستند',
