@@ -1,21 +1,22 @@
 /**
  * CompanySwitcher
  *
- * Renders a labelled <select> containing only the companies the current user
- * is allowed to access (sourced from CompanyContext). Selecting an option
- * calls setActiveCompany, which validates the choice and increments companyKey
- * to clear downstream state.
- *
- * When allowedCompanies is empty, renders a "no companies available" message
- * instead of an empty dropdown.
+ * Renders only companies present in CompanyContext. Runtime auth integration may
+ * supply onSwitch so the server validates membership before local state changes.
  */
 
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCompany } from '../context/CompanyContext';
 
-export function CompanySwitcher() {
+interface CompanySwitcherProps {
+  onSwitch?: (companyId: string) => Promise<boolean>;
+}
+
+export function CompanySwitcher({ onSwitch }: CompanySwitcherProps) {
   const { t } = useTranslation();
   const { activeCompanyId, allowedCompanies, setActiveCompany } = useCompany();
+  const [switching, setSwitching] = useState(false);
 
   if (allowedCompanies.length === 0) {
     return (
@@ -46,15 +47,29 @@ export function CompanySwitcher() {
         id="company-switcher"
         aria-label={t('company.switchAriaLabel')}
         value={activeCompanyId ?? ''}
+        disabled={switching}
         onChange={e => {
-          if (e.target.value) setActiveCompany(e.target.value);
+          const nextId = e.target.value;
+          if (!nextId || nextId === activeCompanyId) return;
+
+          if (!onSwitch) {
+            setActiveCompany(nextId);
+            return;
+          }
+
+          setSwitching(true);
+          void onSwitch(nextId)
+            .then((accepted) => {
+              if (accepted) setActiveCompany(nextId);
+            })
+            .finally(() => setSwitching(false));
         }}
         style={{
           padding: '0.45rem 0.75rem',
           fontSize: '0.9rem',
           borderRadius: '6px',
           border: '1px solid #ccc',
-          cursor: 'pointer',
+          cursor: switching ? 'wait' : 'pointer',
           minWidth: '220px',
           background: '#fff',
         }}
