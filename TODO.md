@@ -5,18 +5,18 @@
 
 ## 1. الحالة التنفيذية المختصرة
 
-المشروع انتقل بنجاح من مرحلة تأسيس النواة والربط إلى بناء Core MVP.
+المشروع مستمر في بناء Core MVP بعد اكتمال طبقة الهوية والجلسة وربط Company Switcher بالمستخدم الحقيقي.
 
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main معتمد قبل هذا التحديث: `264393e6188d04c7375909ce34cc6786ed77672a`
+- آخر main معتمد: `ff52b059b2f0ade41625d4c5a3a727061c47d6a3`
 
 آخر مرحلة مكتملة:
-- i18n + Company Switcher Foundation
+- Auth / Session + Company Switcher Integration — PR #10 merged.
 
-المهمة التالية:
-- Auth / Session + ربط Company Switcher بعضويات المستخدم الحقيقية.
+المهمة التالية المقترحة:
+- Fiscal Year API / Application Integration.
 
 Production:
 - غير منشور.
@@ -31,7 +31,6 @@ Production:
 - اعتماد `GitHub/main` كمرجع دائم ووحيد للكود المدمج.
 - ربط GitHub بالمشروع والتحقق من صلاحية الوصول.
 - ربط Replit بالمستودع.
-- التحقق عند إغلاق كل مرحلة من تطابق `main` مع `origin/main` ونظافة Working Tree.
 - إنشاء التوثيق الأساسي: `ARCHITECTURE.md` و`DECISIONS.md` و`DEVELOPMENT_WORKFLOW.md` و`PROJECT_BRIEF.md` و`RECAP_SESSION.md` و`SECURITY_AND_TENANCY_CHECKLIST.md` و`docs/ENVIRONMENTS.md`.
 
 ### 2.2 Bootstrap Core Foundation — مكتمل ومُدمج
@@ -54,7 +53,7 @@ Production:
 - Users model/repository/service.
 - Password hashing وverification.
 - Dummy bcrypt hash صالح لتقليل فروقات timing في محاولات الدخول غير الصحيحة.
-- هذه مرحلة Auth/User foundation فقط؛ Session/API login flow الفعلي لم يُبنَ بعد.
+- SafeUser لا يعرض `password_hash` للعميل.
 - TypeScript ناجح، Tests: 34/34 عند إغلاق المرحلة، Build ناجح.
 - PR #4 — merged.
 
@@ -69,7 +68,7 @@ Production:
 - TypeScript ناجح، Tests: 54/54 عند إغلاق المرحلة، Build ناجح.
 - PR #5 — merged.
 
-### 2.6 Fiscal Years Foundation — مكتمل ومُدمج
+### 2.6 Fiscal Years Foundation — مكتمل ومُدمج كأساس Domain
 - Fiscal Years مرتبطة بـ `company_id`.
 - حالات `open` و`closed`.
 - التحقق من `start_date < end_date`.
@@ -102,66 +101,94 @@ Production:
 - `CompanyContext` مركزي يدير `activeCompanyId`, `activeCompany`, `allowedCompanies`, `setActiveCompany`, `companyKey`.
 - لا يعرض إلا `allowedCompanies` المقدمة له.
 - منع اختيار Company ID خارج القائمة المسموحة وعدم تغيير الحالة عند المحاولة.
-- لا توجد شركات Demo/Placeholder في Runtime؛ القائمة الافتراضية فارغة حتى Auth/Session الحقيقي.
-- reconciliation عند تغير `allowedCompanies`:
-  - وصول شركات بعد قائمة فارغة → اختيار شركة مسموحة.
-  - فقد الوصول للشركة الحالية → fallback مسموح.
-  - بقاء الشركة الحالية مسموحة → لا reset غير ضروري.
-  - إعادة اختيار نفس الشركة → no-op ولا يزيد `companyKey`.
-- Company Switcher ليس Security Boundary نهائيًا؛ التحقق الحقيقي يجب أن يكون في Backend عبر authenticated user + membership + company + capability.
-- التحقق النهائي: Server 93/93، Client 40/40، الإجمالي 133/133، TypeScript ناجح، Build ناجح.
+- لا توجد شركات Demo/Placeholder في Runtime.
+- reconciliation عند تغير `allowedCompanies`.
+- إعادة اختيار نفس الشركة = no-op.
+- التحقق النهائي وقت الإغلاق: Server 93/93، Client 40/40، الإجمالي 133/133، TypeScript ناجح، Build ناجح.
 - PR #7 — merged.
-- Merge commit: `264393e6188d04c7375909ce34cc6786ed77672a`.
+
+### 2.10 Tool Routing / Operational Leadership — مكتمل توثيقيًا
+- توثيق مسؤولية ChatGPT في اختيار Chat/Work/Codex حسب طبيعة المهمة.
+- GitHub/main يبقى المرجع الدائم بغض النظر عن الأداة.
+- لا يستخدم Replit Agent لتعديل كود إقفال.
+- PR #9 — merged.
+- Merge commit السابق للمهمة البرمجية الحالية: `b51e4692121e2f307b663c31783b010703afc494`.
+
+### 2.11 Auth / Session + Secure Company Switching — مكتمل ومُدمج
+- Login flow فعلي باستخدام AuthService الحالي.
+- Server-side sessions في PostgreSQL.
+- opaque random session token عبر HttpOnly Cookie.
+- تخزين hash للتوكن في DB بدل التوكن الخام.
+- Session bootstrap فعلي.
+- Logout يبطل Session الحالية ويمسح Cookie.
+- المستخدم المعطل أو Session المنتهية/غير الصالحة لا تمنح وصولًا.
+- استخراج الشركات من Active Memberships + Active Companies فقط.
+- اختيار Active Company ابتدائية بصورة deterministic.
+- `activeCompanyId` محفوظة داخل Session الموثوقة.
+- Company Switch يعيد التحقق server-side من العضوية والشركة قبل التحديث.
+- failed switch لا يغير Active Company الحالية.
+- client `allowedCompanies`, `companyId`, `capabilities` ليست مرجعًا أمنيًا نهائيًا.
+- Capability enforcement middleware/boundary موجود في Backend.
+- capability lookup محمي أيضًا من cross-company role drift.
+- تغيير Membership/Role/Capabilities ينعكس من DB في الطلبات التالية.
+- AuthContext فعلي في Frontend مع Login/Logout/Session bootstrap.
+- Company Switcher مربوط بالـBackend validation قبل تغيير الحالة المحلية.
+- request logging لا يسجل bodies/cookies/tokens.
+- async Auth failures تمر عبر generic backend error boundary.
+- PR #10 — reviewed and merged.
+- Merge commit: `ff52b059b2f0ade41625d4c5a3a727061c47d6a3`.
+
+التحقق النهائي قبل Merge PR #10:
+- Server TypeScript: 0 errors.
+- Client TypeScript: 0 errors.
+- Server tests: 106/106 passed.
+- Client tests: 42/42 passed.
+- Total tests: 148/148 passed.
+- Server build: passed.
+- Client build: passed.
 
 ---
 
-## 3. Bug Fixes & Refactors
+## 3. Bug Fixes & Security Hardening المحسومة
 
-### 3.1 Migration/startup failure handling — محسوم
+### 3.1 Migration/startup failure handling
 - جعل فشل DB/migrations الحرج fatal وواضحًا.
 - إضافة advisory lock حول migrations.
 
-### 3.2 Tenant access clarification — محسوم معماريًا
+### 3.2 Tenant access clarification
 - `company_id` وcompany lookup primitive جزء من الحماية فقط وليسا Authorization كاملًا.
-- كل API/service/operation مستقبلية يجب أن تطبق company + membership + capability checks.
-- إخفاء الصفحة أو الزر ليس Security mechanism.
+- Backend company + membership + capability checks هي المرجع.
 
-### 3.3 Auth timing behavior — محسوم
-- استخدام dummy bcrypt hash صالح وإضافة اختبار timing-related behavior.
+### 3.3 Auth timing behavior
+- dummy bcrypt hash صالح لمسار البريد غير الموجود.
 
-### 3.4 Permission Grant Ceiling flaw — محسوم
-- إزالة الاعتماد على caller-provided `granterCompanyId`.
-- اشتقاق company scope من membership والسياق الموثوق.
-- إضافة bypass test.
+### 3.4 Permission Grant Ceiling flaw
+- عدم الاعتماد على caller-provided `granterCompanyId`.
+- منع self-escalation وcross-company ceiling bypass.
 
-### 3.5 Fiscal Year overlap race condition — محسوم
-- company-level transaction advisory lock.
-- overlap validation والكتابة على نفس transaction/client.
+### 3.5 Fiscal Year concurrency
+- advisory lock للـoverlap.
+- `SELECT ... FOR UPDATE` للعمليات الحساسة.
+- write + audit في transaction واحدة.
 
-### 3.6 Fiscal Year stale update / audit race — محسوم
-- transaction + `SELECT ... FOR UPDATE`.
-- status validation من الصف المقفول.
-- update + audit على نفس PoolClient.
-- `before_data` من الحالة الحالية داخل transaction.
+### 3.6 Audit sensitive data sanitization
+- recursive + arrays + case-insensitive sensitive keys.
 
-### 3.7 Audit sensitive data sanitization — محسوم
-- recursive sanitizer للـobjects والـarrays مع case-insensitive sensitive keys.
+### 3.7 Company Switcher placeholder/stale state
+- إزالة Placeholder runtime data.
+- reconciliation للـallowed companies.
+- same-company switch no-op.
 
-### 3.8 Company Switcher placeholder data — محسوم
-- إزالة كل شركات Placeholder/Demo من Runtime.
-- `allowedCompanies` تبدأ فارغة.
+### 3.8 Session / tenant authority
+- Active Company لم تعد Client-only state.
+- switch غير المصرح به يرفض server-side.
+- Session/role/membership stale authority لا تعتمد على نسخة Client طويلة العمر.
 
-### 3.9 Same-company unnecessary reset — محسوم
-- same-company selection أصبح no-op و`companyKey` لا يتغير.
+### 3.9 Cross-company capability drift defense
+- capability lookup يتحقق من توافق Role مع Company عبر membership relation ولا يسمح بدور من شركة مختلفة بأن يمنح capabilities فعالة.
 
-### 3.10 Dynamic allowedCompanies reconciliation — محسوم
-- منع stale/null `activeCompanyId` بعد تغير قائمة الشركات المسموحة.
-- الحفاظ على الحالية إن بقيت مسموحة وإلا fallback مسموح.
-
-### 3.11 Test command reporting error — محسوم تشغيليًا
-- تم تجاهل نتيجة تشغيل Jest اليدوي الخاطئ لأن المشروع يستخدم Vitest.
-- اعتماد scripts الرسمية من root فقط في تقارير المشروع.
-- النتيجة الصحيحة النهائية: Server 93/93 + Client 40/40 = 133/133.
+### 3.10 Backend error leakage
+- Auth async failures تمر إلى generic Express error boundary بدل تسريب تفاصيل داخلية للعميل.
 
 ---
 
@@ -170,15 +197,18 @@ Production:
 لا توجد مهمة برمجية مفتوحة حاليًا.
 
 آخر عمل مدمج:
-- PR #7 — i18n persistence and Company Switcher foundation.
+- PR #10 — Auth / Session + Secure Company Switching.
 
-النقطة التالية المعتمدة:
-- **Auth / Session + Company Switcher Integration**.
+آخر main معتمد:
+- `ff52b059b2f0ade41625d4c5a3a727061c47d6a3`.
+
+النقطة التالية المقترحة:
+- **Fiscal Year API / Application Integration**.
 
 يجب أن تبدأ بـ Design Check فقط قبل كتابة أي كود.
 
-طريقة العمل من المرحلة التالية:
-- ChatGPT + GitHub مسؤولان عن تنفيذ الكود والفروع والـPR والمراجعة والدمج بعد الموافقة.
+طريقة العمل:
+- ChatGPT + GitHub مسؤولان عن تنفيذ الكود والفروع والـPR والمراجعة والدمج وفق قواعد المشروع.
 - لا يستخدم Replit Agent لتعديل الكود.
 - Replit يبقى مؤقتًا للتشغيل والاختبارات والBuild والPreview عند الحاجة.
 
@@ -188,70 +218,82 @@ Production:
 
 ### Priority P0 — Core Security & Identity
 
-#### 5.1 Auth / Session Integration — NEXT
-- Login/session flow فعلي.
-- authenticated user من مصدر موثوق وليس قيمة يتحكم بها Client.
-- session bootstrap وlogout وsession invalidation behavior.
-- auth boundary لحماية endpoints المستقبلية.
+#### 5.1 Auth / Session Integration — DONE
+- Login/session flow فعلي ✅
+- authenticated user من مصدر Server-side موثوق ✅
+- session bootstrap/logout/invalidation current-session ✅
+- auth middleware boundary ✅
 
-#### 5.2 Authorized Companies from Memberships
-- تحميل Active Memberships للمستخدم.
-- استخراج الشركات المسموحة فقط.
-- استبعاد memberships المعطلة.
-- إعادة التحقق server-side عند اختيار شركة.
-- رفض cross-company selection.
-- عدم اعتبار client `allowedCompanies` مرجعًا أمنيًا.
+#### 5.2 Authorized Companies from Memberships — DONE
+- Active Memberships + Active Companies فقط ✅
+- استبعاد memberships/companies المعطلة ✅
+- server-side revalidation عند switch ✅
+- cross-company selection مرفوض ✅
+- client `allowedCompanies` ليست authority ✅
 
-#### 5.3 Active Company / Tenant Context
-- active company مرتبطة بالمستخدم والجلسة.
-- التحقق من membership عند كل switch وكل tenant-scoped request.
-- عدم الثقة بقيمة `company_id` الواردة من الواجهة دون verification.
+#### 5.3 Active Company / Tenant Context — DONE كأساس
+- Active Company مرتبطة بالجلسة ✅
+- membership validation عند switch ✅
+- tenant-scoped endpoints المستقبلية يجب أن تستخدم Active Company الموثوقة، وهذا يطبق عند بناء كل endpoint جديد.
 
-#### 5.4 Capability Enforcement
-- ربط capabilities الفعلية بطبقة التنفيذ.
-- Backend authorization middleware/service boundary.
-- اختبارات unauthorized، inactive membership، cross-company، missing capability، valid capability.
+#### 5.4 Capability Enforcement — DONE كأساس
+- Backend capability middleware/service boundary ✅
+- fresh DB-backed capability evaluation ✅
+- اختبارات authorization الأساسية موجودة ✅
+- كل endpoint جديد يجب أن يحدد Capability المطلوبة عند بنائه.
 
 ### Priority P1 — Core MVP Completion
 
-#### 5.5 Fiscal Year API / Application Integration
-بعد اكتمال Auth/Session:
+#### 5.5 Fiscal Year API / Application Integration — NEXT
+المطلوب بعد Design Check:
 - endpoints/use-cases الضرورية لإدارة Fiscal Years.
-- company context من session.
-- capability checks.
+- authenticated user من Session.
+- Active Company من Session الموثوقة.
+- capability checks لكل operation.
 - tenant-safe read/write.
-- audit integration الحالية.
+- الاستفادة من Fiscal Year service والlocking/audit الموجود بدل إعادة بناء Domain logic.
 
-لا يشمل: periods، monthly close، VAT.
+لا يشمل:
+- Accounting periods.
+- Month/Quarter close.
+- VAT.
+- Reopen workflow الكامل إلا إذا كان مطلوبًا لتكامل API الأساسي وتم اعتماده تصميميًا.
 
-#### 5.6 Initial Application Shell
-- login state.
-- authenticated layout.
-- Company Switcher الحقيقي.
-- Language Switcher.
+#### 5.6 Initial Application Shell — PARTIAL
+المكتمل:
+- login state ✅
+- Company Switcher الحقيقي ✅
+- Language Switcher ✅
+- mobile-first + RTL/LTR foundation ✅
+
+المتبقي:
+- authenticated layout المنظم.
 - basic navigation structure.
-- mobile-first + RTL/LTR.
-- لا Dashboard مالي كامل قبل اكتمال Core security.
+- ربط أول module فعلي بعد Auth بالواجهة.
+- لا Dashboard مالي كامل قبل اكتمال Core MVP.
 
-#### 5.7 Core MVP Final Security Tests
-- Login tests.
-- Session tests.
-- Company switch tests.
-- Membership/Capability tests.
-- Cross-company read/write tests.
-- inactive membership tests.
-- tenant context tests.
-- Fiscal Year authorization tests.
+#### 5.7 Core MVP Final Security Tests — IN PROGRESS
+مكتمل ضمن Auth/Session:
+- Login tests ✅
+- Session tests ✅
+- Company switch tests ✅
+- Membership/Capability tests ✅
+- inactive membership tests ✅
+- tenant context foundation tests ✅
+
+متبقي مع بناء وحدات التطبيق:
+- cross-company read/write tests لكل business endpoint.
+- Fiscal Year authorization tests عبر HTTP/Application boundary.
 
 ### Priority P2 — Core Operational Readiness
 
 #### 5.8 Audit coverage review
 - Audit فقط للعمليات الحساسة ذات القيمة المحاسبية/الإدارية، وليس لكل request.
+- يراجع coverage مع كل module فعلي.
 
 #### 5.9 Documentation refresh
-بعد إغلاق Core MVP:
-- تحديث `TODO.md`, `DECISIONS.md`, `RECAP_SESSION.md`, `SECURITY_AND_TENANCY_CHECKLIST.md`.
-- تحديث README/ARCHITECTURE فقط إذا تغير واقع معماري فعلي.
+- بعد كل حزمة جوهرية: تحديث `TODO.md`, `DECISIONS.md`, `RECAP_SESSION.md`, و`SECURITY_AND_TENANCY_CHECKLIST.md` عند تغير حالة أمنية.
+- README/ARCHITECTURE فقط إذا تغير واقع معماري فعلي.
 
 #### 5.10 Staging validation
 قبل أي Production:
@@ -281,24 +323,26 @@ Production:
 - Native mobile application.
 - Paid AI/APIs.
 - Permanent workers/queues.
+- MFA/OAuth حتى تظهر حاجة معتمدة.
+- Password reset / logout-all-devices حتى مرحلة إدارة الحسابات.
 
 ---
 
-## 7. Definition of Done — المرحلة التالية
-مهمة Auth / Session + Company Switcher Integration لا تعتبر مكتملة إلا إذا:
+## 7. Definition of Done — المهمة التالية المقترحة
+مهمة Fiscal Year API / Application Integration لا تعتبر مكتملة إلا إذا:
 - Design Check معتمد قبل التنفيذ.
-- branch مستقل.
-- authenticated identity لا تأتي من client-controlled value.
-- الشركات تأتي من memberships الفعلية وتستبعد inactive memberships.
-- Company switch يُعاد التحقق منه server-side.
-- cross-company selection مرفوض.
-- capabilities محترمة ضمن حدود المهمة.
-- لا توسع خارج scope ولا خدمات/تكلفة جديدة.
+- branch مستقل من latest `main`.
+- identity تأتي من Session لا من client-controlled user ID.
+- company context تأتي من Session/validated membership.
+- كل operation تحدد capability المطلوبة وتفرضها Backend-side.
+- لا endpoint يستطيع قراءة/تعديل Fiscal Year لشركة أخرى عبر ID مباشر.
+- لا إعادة بناء لمنطق Fiscal Year الموجود بلا حاجة.
+- audit behavior الحالي يبقى صحيحًا للعمليات الحساسة.
+- لا توسع إلى Accounting periods/VAT/monthly close.
 - TypeScript ناجح.
 - الاختبارات المرتبطة والكاملة الرسمية ناجحة.
 - Build ناجح.
 - diff reviewed.
 - PR مفتوح ومراجع.
-- Merge فقط بعد موافقة صريحة.
-- main يُزامن بعد الدمج وGit نظيف.
+- Merge وفق قواعد المشروع.
 - تحديث تقرير الحالة والقرارات قبل الانتقال للمهمة التالية.
