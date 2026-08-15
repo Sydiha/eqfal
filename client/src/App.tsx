@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
-import { CompanyProvider, useCompany } from './context/CompanyContext';
+import { CompanyProvider } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
 import { CompanySwitcher } from './components/CompanySwitcher';
 
@@ -85,17 +85,10 @@ function LoginForm() {
 function AuthenticatedShell() {
   const { t } = useTranslation();
   const { logout, switchCompany } = useAuth();
-  const { setActiveCompany } = useCompany();
-
-  const switchValidated = async (companyId: string): Promise<boolean> => {
-    const accepted = await switchCompany(companyId);
-    if (accepted) setActiveCompany(companyId);
-    return accepted;
-  };
 
   return (
     <>
-      <CompanySwitcher onSwitch={switchValidated} />
+      <CompanySwitcher onSwitch={switchCompany} />
       <button onClick={() => void logout()} style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>
         {t('auth.logout')}
       </button>
