@@ -22,6 +22,16 @@ These rules are mandatory for every automated agent, assistant, coding session, 
    - ChatGPT acts as Lead PM and must state the recommended tool for the next step whenever a next step exists.
    - The user should not need to guess which tool to use.
 
+4. **Approved Design Checks are binding implementation contracts.**
+   - When a task includes an approved Design Check or an explicitly approved implementation specification, implement it literally and only within its approved scope.
+   - Do not redesign, generalize, consolidate, rename, reinterpret, or "improve" approved architecture, security boundaries, capabilities, permissions, endpoints, state transitions, validation rules, limits, fields, workflows, or UX behavior without explicit approval.
+   - Do not add adjacent features, extra abstractions, new dependencies, new services, new tables, new APIs, broader limits, convenience behavior, fallback behavior, or speculative future-proofing unless the approved task explicitly requires them.
+   - Any work outside the approved scope is a defect, not a bonus.
+   - If an approved requirement is technically impossible, internally inconsistent, unsafe, or blocked by the current codebase, stop before implementing the deviation and escalate the exact conflict to the Lead PM/user for a decision.
+   - Never silently substitute a different design because it appears simpler, cleaner, more reusable, or more conventional.
+   - Passing TypeScript, tests, or build does not override a Design Check mismatch; design and security compliance are part of Definition of Done.
+   - Security-sensitive separation of duties, capability boundaries, tenant isolation, audit requirements, and approved HTTP/API semantics must never be merged, weakened, or broadened without explicit approval.
+
 ## Repository & Delivery Rules
 
 - `GitHub/main` is the permanent source of truth for merged work.
