@@ -33,6 +33,7 @@ const en = {
   documents: {
     title: 'Documents',
     description: 'Upload and access documents for the active company.',
+    chooseFile: 'Choose document',
     upload: 'Upload document',
     uploading: 'Uploading…',
     loading: 'Loading documents…',
