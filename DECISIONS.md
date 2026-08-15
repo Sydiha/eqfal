@@ -171,3 +171,32 @@
 لا يتم تحديث الملفات لمجرد تغيير شكلي أو تعديل صغير لا يؤثر على حالة المشروع أو قراراته.
 
 **السبب:** ضمان أن GitHub يحتوي دائمًا على رصيد المشروع الحقيقي، وأن استئناف المشروع لا يعتمد على ذاكرة محادثة أو Workspace.
+
+## 2026-08-15 — Server-side Session بدل JWT في Client
+**القرار:** Session المصادقة في Core MVP تكون Server-side ومخزنة في PostgreSQL، مع opaque random token في HttpOnly Cookie. لا يستخدم النظام JWT في localStorage كمرجع أمني.
+
+**الضوابط:**
+- لا يخزن session token الخام في قاعدة البيانات؛ يخزن hash فقط.
+- Session لها عمر انتهاء ويمكن إبطالها Server-side.
+- Logout يبطل Session الحالية ويمسح Cookie.
+- المستخدم المعطل أو Session المنتهية لا تمنح وصولًا.
+
+**السبب:** تبسيط الإبطال الحقيقي للجلسة، ودعم تغيّر العضويات والصلاحيات أثناء الجلسة، وتقليل مخاطر تسريب token إلى JavaScript.
+
+## 2026-08-15 — Active Company محفوظة في Session ويعاد التحقق منها
+**القرار:** `activeCompanyId` جزء من Session الموثوقة، وليس قيمة Client مستقلة تحدد Tenant authority.
+
+**الضوابط:**
+- الشركات المسموحة تُستخرج من Active Memberships + Active Companies.
+- Company Switch يعيد التحقق server-side من العضوية والشركة قبل تحديث Session.
+- فشل التبديل لا يغيّر الشركة الحالية.
+- لا يسمح Client بتجاوز الشركة النشطة بإرسال `company_id` مختلف لمسار حساس.
+
+**السبب:** منع cross-company access وstale tenant context.
+
+## 2026-08-15 — Capabilities لا تُجمّد كمرجع أمني داخل Session
+**القرار:** يمكن إرجاع capabilities للواجهة لتحسين UX، لكن Backend يعيد الاعتماد على الحالة الحالية في DB عند enforcement ولا يعتبر نسخة Client أو Session طويلة العمر مرجعًا نهائيًا.
+
+**النتيجة:** تعطيل Membership أو تغيير Role/Capabilities ينعكس على الطلبات اللاحقة دون انتظار انتهاء Session.
+
+**السبب:** منع استمرار صلاحيات قديمة بعد تغييرها إداريًا.
