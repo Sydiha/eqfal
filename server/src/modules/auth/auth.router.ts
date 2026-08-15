@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction, RequestHandler } from 'express
 import pool from '../../db/pool';
 import config from '../../config';
 import { SessionService } from './session.service';
+import { requireSameOrigin } from './origin.middleware';
 
 const SESSION_COOKIE = 'eqfal_session';
 const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -58,29 +59,6 @@ function clearSessionCookie(res: Response): void {
     secure: config.env === 'production',
     path: '/',
   });
-}
-
-function requireSameOrigin(req: Request, res: Response, next: NextFunction): void {
-  const origin = req.headers.origin;
-  if (!origin) {
-    next();
-    return;
-  }
-
-  const expectedHost = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
-    .split(',')[0]
-    ?.trim();
-
-  try {
-    if (expectedHost && new URL(origin).host === expectedHost) {
-      next();
-      return;
-    }
-  } catch {
-    // fall through to rejection
-  }
-
-  res.status(403).json({ error: 'Invalid request origin' });
 }
 
 authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) => {
