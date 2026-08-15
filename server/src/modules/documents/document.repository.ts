@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { CreateDocumentInput, DocumentRecord } from './document.types';
+import { CreateDocumentInput, DocumentRecord, DocumentStatus } from './document.types';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -43,5 +43,33 @@ export class DocumentRepository {
       [id, companyId],
     );
     return rows[0] ?? null;
+  }
+
+  async findByIdForUpdate(id: string, companyId: string, runner: QueryRunner): Promise<DocumentRecord | null> {
+    const { rows } = await runner.query<DocumentRecord>(
+      `SELECT * FROM documents WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [id, companyId],
+    );
+    return rows[0] ?? null;
+  }
+
+  async submitForReview(id: string, companyId: string, runner: QueryRunner): Promise<DocumentRecord> {
+    const { rows } = await runner.query<DocumentRecord>(
+      `UPDATE documents
+       SET status = 'needs_review', updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 RETURNING *`,
+      [id, companyId],
+    );
+    return rows[0]!;
+  }
+
+  async updateReview(id: string, companyId: string, status: DocumentStatus, actorUserId: string, note: string | null, runner: QueryRunner): Promise<DocumentRecord> {
+    const { rows } = await runner.query<DocumentRecord>(
+      `UPDATE documents
+       SET status = $3, reviewed_by_user_id = $4, reviewed_at = NOW(), review_note = $5, updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 RETURNING *`,
+      [id, companyId, status, actorUserId, note],
+    );
+    return rows[0]!;
   }
 }
