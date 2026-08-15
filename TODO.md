@@ -5,16 +5,16 @@
 
 ## 1. الحالة التنفيذية المختصرة
 
-مشروع **إقفال | EQFAL** مستمر في بناء Core MVP، وقد تم إغلاق ودمج الأساسات الأمنية والتشغيلية الأساسية، ثم Phase 2A لرفع المستندات الآمن وPhase 2B لتدفق مراجعة المستندات.
+مشروع **إقفال | EQFAL** مستمر في بناء Core MVP. تم إغلاق ودمج الأساسات الأمنية والتشغيلية الأساسية، Phase 2A لرفع المستندات الآمن، Phase 2B لتدفق مراجعة المستندات، وحزمة Documentation Recovery.
 
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- المرجع الحالي دائمًا: latest GitHub `main`، ولا يعتمد هذا الملف على SHA ثابت يتقادم بعد كل Merge.
+- المرجع الحالي دائمًا: latest GitHub `main`.
 
 آخر الأعمال المدمجة:
-- PR #19 — Strict Design Check compliance.
 - PR #20 — Phase 2B Document Review Workflow.
+- PR #21 — Documentation Recovery through Phase 2B.
 
 Production:
 - غير منشور.
@@ -37,14 +37,13 @@ Production:
 - GitHub Actions CI.
 - Core MVP Security & Readiness hardening.
 - Permanent Tool / Cost / Design Check guardrails.
+- Documentation Recovery through Phase 2B.
 
 ---
 
 ## 3. Phase 2 — Documents
 
 ### 3.1 Phase 2A — Secure Document Upload Foundation — DONE
-
-يشمل:
 - company-scoped `documents` table.
 - statuses: `uploaded | needs_review | approved | incomplete | rejected`.
 - capabilities: `document.view`, `document.upload`.
@@ -59,13 +58,11 @@ Production:
 - Documents UI الأساسية.
 
 ### 3.2 Phase 2B — Document Review Workflow — DONE
-
 PR #20 merged.
 
 Transitions:
 - `uploaded -> needs_review` عبر `document.upload`.
-- `needs_review -> incomplete` عبر `document.review`.
-- `needs_review -> rejected` عبر `document.review`.
+- `needs_review -> incomplete/rejected` عبر `document.review`.
 - `needs_review -> approved` عبر `document.approve`.
 
 API:
@@ -76,41 +73,51 @@ Security / consistency:
 - Same-Origin على mutation endpoints.
 - Authenticated Session + trusted Active Company.
 - decision-specific capability enforcement في Backend.
-- company-scoped lookup.
-- `SELECT ... FOR UPDATE` داخل transaction.
+- company-scoped lookup + `SELECT ... FOR UPDATE` داخل transaction.
 - safe 404 للـcross-company/not-found.
 - 409 للحالة غير الصالحة/stale transition.
 - `review_note` بحد 500 حرف.
 - سبب إلزامي لـ`incomplete` و`rejected`.
 - `approved` يسمح بملاحظة اختيارية.
 - `submit-review` لا يملأ reviewer metadata.
-- `reviewed_by_user_id`, `reviewed_at`, `review_note` تُسجل فقط عند قرار المراجعة النهائي.
-
-Audit actions:
-- `document.submit_review`
-- `document.mark_incomplete`
-- `document.reject`
-- `document.approve`
-
-UI:
-- Submit for review لمستخدمي `document.upload` على المستندات المرفوعة.
-- Incomplete/Reject لمستخدمي `document.review` على `needs_review`.
-- Approve لمستخدمي `document.approve` على `needs_review`.
-- عرض review note وreviewed at عند وجودهما.
+- Audit actions: `document.submit_review`, `document.mark_incomplete`, `document.reject`, `document.approve`.
 
 Verification:
 - Phase 2B اجتازت GitHub Actions CI على PR #20: Install + TypeScript + Tests + Build.
+
+### 3.3 Phase 2C — Manager Document Intake — BLOCKED ON DELIVERY
+
+Design Check: **APPROVED**.
+
+Codex reported implementation completed on local branch:
+- branch: `phase-2c-manager-document-intake`
+- local commit: `facd60c49aaf5b3f4c5010d0daddffd5bd713f07`
+- reported tests: server 155 passed, client 60 passed.
+- reported TypeScript/build/`git diff --check`: passed.
+- reported out-of-scope changes: none.
+
+However, this implementation is **not accepted and not merged** because Chat/GitHub cannot inspect the real diff: the Codex environment had no configured GitHub remote and could not push the branch. Codex also could not provide a transferable file artifact through the current interaction path.
+
+Important:
+- This is a **delivery/tooling blocker**, not a confirmed code defect.
+- No Single Fix has been consumed for Phase 2C.
+- No PR exists for Phase 2C.
+- `main` remains unchanged by Phase 2C.
+- Phase 2 is **not closed** until Phase 2C is reviewable on GitHub, accepted, CI-tested, and merged.
+- Do not reimplement or reconstruct Phase 2C from memory/summary as a substitute for reviewing the real diff.
 
 ---
 
 ## 4. Current Status
 
-لا توجد مهمة برمجية مفتوحة حاليًا.
+Current active blocker:
+- **Codex → GitHub delivery path for Phase 2C.**
 
-الحزمة الحالية:
-- **Documentation Recovery** فقط.
-
-بعد إغلاق التوثيق، لا تبدأ أي Feature جديدة قبل Read-only Design Check مستقل واعتماده.
+The user plans to return later to resolve this Codex file/remote delivery issue fundamentally. Until then:
+- do not advance to Phase 3;
+- do not claim Phase 2 closed;
+- do not request repeated manual transfer of logs/patches/files from the user;
+- preserve the approved Phase 2C Design Check and the reported local commit reference above.
 
 ---
 
@@ -120,7 +127,7 @@ Verification:
 - Design Check المعتمد عقد تنفيذ ملزم.
 - One-Shot Rule: بعد اعتماد التصميم، Codex يستلم أمر تنفيذ واحدًا شاملًا ومغلقًا.
 - Zero-Loop Rule: يسمح بحد أقصى corrective pass واحد؛ الحاجة إلى تصحيح ثانٍ توقف المهمة فورًا.
-- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـlogs/terminal/patches.
+- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـlogs/terminal/patches/files.
 - القبول من diff الحقيقي + tests/CI + مطابقة Design Check، وليس من ملخص agent.
 - مهمة برمجية واحدة فقط في كل مرة.
 - لا Replit Agent للبرمجة.
@@ -131,9 +138,16 @@ Verification:
 
 ## 6. Remaining MVP / Operational Backlog
 
-### P1 — بعد اعتماد Design Check جديد
-- تحديد المرحلة التشغيلية التالية من الوثيقة الشاملة فقط بعد إغلاق Documentation Recovery.
-- لا OCR / VAT / AI / Banks / Accounting Entries ضمن Phase 2B المغلقة.
+### P0 — Resolve Phase 2C delivery blocker
+- Establish a reliable Codex-to-GitHub branch delivery path or another direct reviewable artifact path that does not make the user a manual transport layer.
+- Review the actual Phase 2C diff against the approved Design Check.
+- If PASS: open PR, run GitHub CI, merge after approval.
+- If a genuine code blocker exists: only one Single Fix is allowed.
+
+### P1 — Close Phase 2
+After Phase 2C is accepted and merged:
+- run the practical manager document journey validation.
+- close Phase 2 only if the upload → intake → submit → review/approve flow passes.
 
 ### P2 — Operational cleanup مستقل
 - Portable Dependency Lockfile: إزالة registry URLs القديمة الخاصة بـReplit من `package-lock.json` مع الحفاظ على dependency graph قدر الإمكان ونجاح CI.
@@ -157,12 +171,10 @@ Verification:
 
 ## 7. Gate للمهمة التالية
 
-قبل أي تنفيذ برمجي جديد يجب:
-1. قراءة latest `main` فقط.
-2. Read-only Design Check.
-3. Scope / out-of-scope / API / capabilities / schema / transitions / validations / error semantics / tests / DoD مكتوبة بوضوح.
-4. موافقة المستخدم الصريحة.
-5. One-Shot implementation prompt واحد فقط إلى Codex.
-6. مراجعة diff الفعلي.
-7. Single Fix واحد كحد أقصى إن ظهر blocker.
-8. PR + GitHub CI قبل Merge.
+لا تبدأ Phase 3 قبل:
+1. حل مسار تسليم Phase 2C بحيث يصبح الـdiff الحقيقي قابلًا للمراجعة مباشرة.
+2. Acceptance Review للـdiff الحقيقي.
+3. Single Fix واحد كحد أقصى فقط إذا ظهر blocker برمجي.
+4. PR + GitHub CI.
+5. Merge بعد الموافقة.
+6. نجاح الرحلة العملية لـPhase 2.

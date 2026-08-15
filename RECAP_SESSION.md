@@ -4,13 +4,14 @@
 2026-08-15
 
 ## حالة المشروع
-مشروع **إقفال | EQFAL** مستمر في بناء Core MVP. تم إغلاق ودمج Core Security/Readiness، Phase 2A Secure Document Upload Foundation، وPhase 2B Document Review Workflow. لا توجد مهمة برمجية مفتوحة حاليًا؛ الحزمة الحالية هي Documentation Recovery فقط.
+مشروع **إقفال | EQFAL** مستمر في بناء Core MVP. تم إغلاق ودمج Core Security/Readiness، Phase 2A Secure Document Upload Foundation، Phase 2B Document Review Workflow، وDocumentation Recovery عبر PR #21.
+
+Phase 2C — Manager Document Intake تم تصميمها واعتمادها، وCodex أفاد بإكمال التنفيذ محليًا، لكنها **موقوفة حاليًا عند التسليم والمراجعة** لأن بيئة Codex لا تحتوي GitHub remote قابلًا للدفع، ولا يوجد مسار مباشر متاح لإرسال الملف/patch إلى Chat. لذلك لا يوجد PR ولا Merge لـPhase 2C، ولا تعتبر مقبولة بعد.
 
 ## المرجع المعتمد
 - Repository: `Sydiha/eqfal`
 - المرجع الوحيد للكود المدمج: latest `main` على GitHub.
-- آخر Merge تشغيلي: PR #20 — `feat: add document review workflow`.
-- آخر Merge حوكمة قبلها: PR #19 — `docs: enforce strict Design Check compliance`.
+- آخر Merge: PR #21 — Documentation Recovery through Phase 2B.
 - لا يعتمد هذا الملف على SHA ثابت كمرجع دائم؛ عند الاستئناف يجب قراءة latest `main` مباشرة.
 
 ## ما تم إنجازه حتى الآن
@@ -27,6 +28,34 @@
 - Core MVP Security & Readiness — DONE.
 - Phase 2A Secure Document Upload Foundation — DONE.
 - Phase 2B Document Review Workflow — DONE.
+- Documentation Recovery — DONE.
+- Phase 2C Manager Document Intake — DESIGN APPROVED / IMPLEMENTATION REPORTED / DELIVERY BLOCKED.
+
+## Phase 2C — الحالة المحفوظة
+Design Check: approved.
+
+Codex reported:
+- branch: `phase-2c-manager-document-intake`
+- local commit: `facd60c49aaf5b3f4c5010d0daddffd5bd713f07`
+- TypeScript: passed.
+- Tests: server 155 passed; client 60 passed.
+- Build: passed.
+- `git diff --check`: passed.
+- no out-of-scope implementation reported.
+- no PR/merge/Production.
+
+Delivery limitation:
+- repository snapshot inside Codex had no configured GitHub remote.
+- exact branch/commit could not be pushed.
+- Chat therefore could not inspect the real diff on GitHub.
+- Codex interaction path did not provide the requested patch as an attachable file.
+
+Result:
+- Phase 2C is **not accepted**.
+- Phase 2 is **not closed**.
+- no Single Fix has been consumed because no verified code defect was found.
+- no further manual patch/log/file transport should be requested from the user.
+- the user intends to return later to solve the Codex delivery issue fundamentally.
 
 ## Phase 2A — Secure Document Upload Foundation
 - `document.view` و`document.upload`.
@@ -64,11 +93,9 @@ API:
 - الواجهة تفصل `canReview` و`canApprove` وتعرض review metadata عند وجودها.
 
 ## آخر تحقق تقني معتمد
-PR #20 اجتاز GitHub Actions CI بالكامل على نفس الـhead الذي تم دمجه:
-- Install dependencies: passed.
-- TypeScript: passed.
-- Tests: passed.
-- Build: passed.
+آخر تحقق تقني يمكن اعتباره معتمدًا على GitHub هو CI الخاص بالأعمال المدمجة حتى PR #21.
+
+تقارير Codex الخاصة بـPhase 2C محفوظة كدليل تنفيذ محلي فقط، وليست بديلًا عن مراجعة diff حقيقي + GitHub CI.
 
 ## قواعد سير العمل المعتمدة
 - `GitHub/main` هو المرجع الدائم.
@@ -82,22 +109,26 @@ PR #20 اجتاز GitHub Actions CI بالكامل على نفس الـhead ال
 - Approved Design Check = binding implementation contract.
 - **One-Shot Rule:** أمر Codex واحد شامل ومغلق بعد اعتماد التصميم.
 - **Zero-Loop Rule:** corrective pass واحد فقط؛ الحاجة إلى تصحيح ثانٍ توقف المهمة فورًا.
-- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـterminal/logs/patches.
+- لا يعتمد المستخدم كوسيط نقل يدوي متكرر للـterminal/logs/patches/files.
 - القبول من diff الحقيقي + tests/CI + مطابقة Design Check، وليس من agent summary وحده.
 
-## ملاحظات تشغيلية معلقة وليست Blockers حالية
+## ملاحظات تشغيلية معلقة
+- Codex-to-GitHub delivery path يحتاج حلًا جذريًا قبل استئناف Phase 2C.
 - `package-lock.json` يحتوي registry URLs قديمة من Replit؛ CI يطبعها مؤقتًا إلى npm public registry داخل Runner فقط. تنظيفه مهمة تشغيلية مستقلة.
 - أي dependency vulnerability تحتاج مراجعة مستقلة قبل تغيير dependencies؛ لا automatic/breaking audit fix.
 - Production غير منشور.
 
 ## نقطة الاستئناف التالية
-بعد Merge حزمة Documentation Recovery:
-1. قراءة latest `main`.
-2. الرجوع للوثيقة التشغيلية الشاملة لتحديد المرحلة التالية.
-3. إجراء Read-only Design Check فقط.
-4. عدم كتابة أي كود حتى اعتماد المستخدم للتصميم.
+عند عودة المستخدم لمناقشة Codex:
+1. حل الوصول/التسليم بحيث يستطيع Chat مراجعة artifact حقيقي دون نقل يدوي متكرر من المستخدم.
+2. استعادة exact Phase 2C implementation إن أمكن من نفس بيئة Codex/branch، وليس إعادة بنائها تخمينيًا.
+3. مراجعة diff الحقيقي مقابل Design Check.
+4. إذا PASS: PR + GitHub CI + Merge بعد الموافقة.
+5. إذا ظهر blocker برمجي: Single Fix واحد فقط.
+6. بعد نجاح الرحلة العملية، يغلق Phase 2 ثم فقط يبدأ Design Check لـPhase 3.
 
 ## خارج النطاق الحالي
+- Phase 3 قبل إغلاق Phase 2C.
 - OCR / AI extraction.
 - VAT decisions/reconciliation.
 - accounting entries.
