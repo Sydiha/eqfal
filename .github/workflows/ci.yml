@@ -28,6 +28,14 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Normalize lockfile registry for CI
+        run: |
+          sed -i 's#http://package-firewall.replit.local/npm/#https://registry.npmjs.org/#g' package-lock.json
+          if grep -q 'package-firewall.replit.local' package-lock.json; then
+            echo 'Replit-internal registry URLs remain in package-lock.json'
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
