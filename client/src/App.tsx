@@ -1,13 +1,15 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
+import { CompanyProvider } from './context/CompanyContext';
+import { CompanySwitcher } from './components/CompanySwitcher';
 
-function App() {
+function AppShell() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language === 'ar';
 
   useEffect(() => {
-    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+    document.documentElement.dir  = isRtl ? 'rtl' : 'ltr';
     document.documentElement.lang = i18n.language;
   }, [i18n.language, isRtl]);
 
@@ -32,6 +34,7 @@ function App() {
       <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 2rem)', margin: '0 0 1.5rem' }}>
         {t('app.title')}
       </h1>
+
       <button
         onClick={toggleLanguage}
         style={{
@@ -44,7 +47,19 @@ function App() {
       >
         {t('app.switchLanguage')}
       </button>
+
+      {/* Company switcher — reads allowedCompanies from the nearest Provider */}
+      <CompanySwitcher />
     </main>
+  );
+}
+
+function App() {
+  // allowedCompanies starts empty — populated by Auth/Session once available.
+  return (
+    <CompanyProvider allowedCompanies={[]}>
+      <AppShell />
+    </CompanyProvider>
   );
 }
 
