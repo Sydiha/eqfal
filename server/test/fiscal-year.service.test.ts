@@ -224,9 +224,9 @@ describe('FiscalYearService — same period in different companies is allowed', 
     );
     expect(result.company_id).toBe(COMPANY_B);
 
-    // Verify the overlap check was called with COMPANY_B, not COMPANY_A
+    // Verify the overlap check was called with COMPANY_B (not COMPANY_A) and the client.
     expect(fyRepo.findOverlapping).toHaveBeenCalledWith(
-      COMPANY_B, '2024-01-01', '2024-12-31', undefined,
+      COMPANY_B, '2024-01-01', '2024-12-31', undefined, client,
     );
   });
 });
@@ -556,5 +556,227 @@ describe('FiscalYearService — atomicity: no committed change without audit ent
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
     expect(client.query).not.toHaveBeenCalledWith('COMMIT');
     expect(client.release).toHaveBeenCalled();
+  });
+});
+
+// ─── Advisory lock — race-condition prevention ────────────────────────────────
+
+describe('FiscalYearService — advisory lock prevents concurrent overlap bypass', () => {
+  it('createFiscalYear: pg_advisory_xact_lock is called on the client with company_id', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
+    vi.spyOn(fyRepo, 'create').mockResolvedValue(makeFiscalYear());
+    vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.create', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.createFiscalYear(
+      { company_id: COMPANY_A, name: 'FY 2024', start_date: '2024-01-01', end_date: '2024-12-31' },
+      USER_1,
+    );
+
+    const clientCalls = (client.query as ReturnType<typeof vi.fn>).mock.calls as [string, unknown[]][];
+    const lockCall = clientCalls.find(([sql]) => /pg_advisory_xact_lock/.test(sql));
+    expect(lockCall).toBeDefined();
+    // The lock must be keyed by company_id so concurrent requests for the same
+    // company block each other but different companies run in parallel.
+    expect(lockCall![1]).toContain(COMPANY_A);
+  });
+
+  it('createFiscalYear: advisory lock is acquired inside the transaction, before overlap check', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    // Track call order across the client.query mock and the findOverlapping spy.
+    const callOrder: string[] = [];
+
+    (client.query as ReturnType<typeof vi.fn>).mockImplementation(
+      (sql: unknown, ..._rest: unknown[]) => {
+        if (typeof sql === 'string' && /pg_advisory_xact_lock/.test(sql)) {
+          callOrder.push('advisory_lock');
+        }
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      },
+    );
+
+    vi.spyOn(fyRepo, 'findOverlapping').mockImplementation(async (..._args) => {
+      callOrder.push('findOverlapping');
+      return [];
+    });
+    vi.spyOn(fyRepo, 'create').mockResolvedValue(makeFiscalYear());
+    vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.create', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.createFiscalYear(
+      { company_id: COMPANY_A, name: 'FY 2024', start_date: '2024-01-01', end_date: '2024-12-31' },
+      USER_1,
+    );
+
+    const lockIdx    = callOrder.indexOf('advisory_lock');
+    const overlapIdx = callOrder.indexOf('findOverlapping');
+    expect(lockIdx).toBeGreaterThanOrEqual(0);    // lock was acquired
+    expect(overlapIdx).toBeGreaterThan(lockIdx);  // overlap checked AFTER the lock
+  });
+
+  it('createFiscalYear: overlap rejection inside transaction triggers ROLLBACK', async () => {
+    const client = makeClient();
+    const { service, fyRepo } = makeService(client);
+
+    // Overlap check (now inside tx) returns a conflict.
+    vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([makeFiscalYear()]);
+    const writeSpy = vi.spyOn(fyRepo, 'create');
+
+    await expect(
+      service.createFiscalYear(
+        { company_id: COMPANY_A, name: 'FY', start_date: '2024-06-01', end_date: '2025-01-01' },
+        USER_1,
+      ),
+    ).rejects.toThrow(/overlap/i);
+
+    // Transaction was opened → must be rolled back, never committed.
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  it('updateFiscalYear: advisory lock uses membership.company_id (not a caller-supplied company)', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+
+    vi.spyOn(fyRepo, 'findById').mockResolvedValue(makeFiscalYear({ company_id: COMPANY_A }));
+    vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]);
+    vi.spyOn(fyRepo, 'update').mockResolvedValue(
+      makeFiscalYear({ name: 'Renamed', company_id: COMPANY_A }),
+    );
+    vi.spyOn(auditRepo, 'logEvent').mockResolvedValue({
+      id: AUDIT_ID, company_id: COMPANY_A, actor_user_id: USER_1,
+      action: 'fiscal_year.update', entity_type: 'fiscal_year', entity_id: FY_ID,
+      before_data: null, after_data: null, reason: null, created_at: new Date(),
+    });
+
+    await service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'Renamed' }, USER_1);
+
+    const clientCalls = (client.query as ReturnType<typeof vi.fn>).mock.calls as [string, unknown[]][];
+    const lockCall = clientCalls.find(([sql]) => /pg_advisory_xact_lock/.test(sql));
+    expect(lockCall).toBeDefined();
+    expect(lockCall![1]).toContain(COMPANY_A);
+  });
+});
+
+// ─── AuditLogRepository — sensitive-field stripping ──────────────────────────
+
+describe('AuditLogRepository — strips sensitive fields before INSERT', () => {
+  it('removes password_hash from before_data and token from after_data', async () => {
+    // Test the repository directly — not through a service mock.
+    const { AuditLogRepository: AuditRepo } = await import(
+      '../src/modules/audit-log/audit-log.repository'
+    );
+    const auditRepo = new AuditRepo();
+    const client    = makeClient();
+
+    await auditRepo.logEvent(
+      {
+        company_id:    COMPANY_A,
+        actor_user_id: USER_1,
+        action:        'test.action',
+        entity_type:   'fiscal_year',
+        entity_id:     FY_ID,
+        before_data:   { name: 'old', password_hash: 'bcrypt$...', status: 'open' },
+        after_data:    { name: 'new', token: 'eyJhbGci...', status: 'closed' },
+      },
+      client,
+    );
+
+    // The INSERT params: $6 = before_data, $7 = after_data
+    const insertCall = (client.query as ReturnType<typeof vi.fn>).mock.calls[0] as
+      [string, unknown[]];
+    const beforeData = insertCall[1][5] as Record<string, unknown>;
+    const afterData  = insertCall[1][6] as Record<string, unknown>;
+
+    expect(beforeData).not.toHaveProperty('password_hash');
+    expect(beforeData).toHaveProperty('name', 'old');
+    expect(beforeData).toHaveProperty('status', 'open');
+
+    expect(afterData).not.toHaveProperty('token');
+    expect(afterData).toHaveProperty('name', 'new');
+    expect(afterData).toHaveProperty('status', 'closed');
+  });
+
+  it('strips all keys in SENSITIVE_KEYS regardless of what the caller passes', async () => {
+    const { AuditLogRepository: AuditRepo } = await import(
+      '../src/modules/audit-log/audit-log.repository'
+    );
+    const auditRepo = new AuditRepo();
+    const client    = makeClient();
+
+    await auditRepo.logEvent(
+      {
+        company_id:    COMPANY_A,
+        actor_user_id: USER_1,
+        action:        'test.action',
+        entity_type:   'fiscal_year',
+        entity_id:     FY_ID,
+        before_data:   {
+          safe_field:  'keep',
+          password:    'p@ss',
+          hash:        'abc',
+          secret:      'shhh',
+          token:       'tok',
+          credential:  'cred',
+          private_key: 'pk',
+          api_key:     'ak',
+        },
+        after_data: null,
+      },
+      client,
+    );
+
+    const insertCall = (client.query as ReturnType<typeof vi.fn>).mock.calls[0] as
+      [string, unknown[]];
+    const beforeData = insertCall[1][5] as Record<string, unknown>;
+    const afterData  = insertCall[1][6];
+
+    expect(beforeData).toEqual({ safe_field: 'keep' });
+    expect(afterData).toBeNull();
+  });
+
+  it('preserves non-sensitive fields intact after stripping', async () => {
+    const { AuditLogRepository: AuditRepo } = await import(
+      '../src/modules/audit-log/audit-log.repository'
+    );
+    const auditRepo = new AuditRepo();
+    const client    = makeClient();
+
+    await auditRepo.logEvent(
+      {
+        company_id:    COMPANY_A,
+        actor_user_id: USER_1,
+        action:        'fiscal_year.create',
+        entity_type:   'fiscal_year',
+        entity_id:     FY_ID,
+        before_data:   null,
+        after_data:    { name: 'FY 2024', start_date: '2024-01-01', end_date: '2024-12-31', status: 'open' },
+      },
+      client,
+    );
+
+    const insertCall = (client.query as ReturnType<typeof vi.fn>).mock.calls[0] as
+      [string, unknown[]];
+    const afterData = insertCall[1][6] as Record<string, unknown>;
+
+    expect(afterData).toEqual({
+      name: 'FY 2024',
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      status: 'open',
+    });
   });
 });

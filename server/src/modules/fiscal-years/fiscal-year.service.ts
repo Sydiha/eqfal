@@ -11,16 +11,25 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 /**
  * FiscalYearService
  *
- * Orchestrates fiscal-year lifecycle operations with two invariants:
+ * Orchestrates fiscal-year lifecycle operations with three invariants:
  *
  *  1. Every mutating operation and its audit log entry are written in the
  *     same database transaction — atomically. A rollback removes both.
  *
- *  2. The company context used for capability / overlap checks is always
- *     derived from the fiscal year row fetched from the DB, never from a
- *     caller-supplied value that could name a different company.
+ *  2. The overlap check runs inside the transaction on the same connection,
+ *     guarded by a per-company advisory lock acquired before the SELECT.
+ *     This prevents two concurrent requests from both passing the overlap
+ *     check and then both inserting overlapping fiscal years (TOCTOU race).
  *
- * Sensitive data (passwords, hashes, secrets) is never written to audit_log.
+ *  3. Sensitive data (passwords, hashes, secrets) is never written to
+ *     audit_log. AuditLogRepository strips known sensitive keys as a
+ *     defence-in-depth measure at the persistence layer.
+ *
+ * Race-condition protection detail:
+ *   pg_advisory_xact_lock(hashtext(company_id)) serialises all fiscal-year
+ *   mutations for the same company within PostgreSQL. The lock is transaction-
+ *   scoped and released automatically on COMMIT or ROLLBACK. No new extensions
+ *   or external services are required.
  */
 export class FiscalYearService {
   private readonly fyRepo: FiscalYearRepository;
@@ -36,6 +45,7 @@ export class FiscalYearService {
   /**
    * Reject invalid date ranges.
    * ISO date strings ('YYYY-MM-DD') compare correctly as strings.
+   * Pure — no DB calls. Safe to call before opening a transaction.
    */
   private validateDates(startDate: string, endDate: string): void {
     if (startDate >= endDate) {
@@ -46,24 +56,41 @@ export class FiscalYearService {
   }
 
   /**
-   * Reject any date range that overlaps with an existing fiscal year
-   * in the same company.
+   * Acquire a per-company advisory lock, then check for overlapping fiscal
+   * years — both on the same PoolClient so they share the transaction.
    *
-   * @param excludeId  Exclude this fiscal year ID (used during updates so
-   *                   the year being edited does not conflict with itself).
+   * Advisory lock: pg_advisory_xact_lock(hashtext(company_id))
+   *   · Transaction-scoped — released automatically on COMMIT or ROLLBACK.
+   *   · Serialises all callers for the same company_id in PostgreSQL.
+   *   · Guarantees that the SELECT overlap check and the subsequent INSERT
+   *     are atomic with respect to other concurrent requests for the same
+   *     company — eliminating the TOCTOU race.
+   *
+   * @param excludeId  Exclude this ID from the overlap check (update path).
    */
-  private async checkNoOverlap(
+  private async lockAndCheckNoOverlap(
+    client: PoolClient,
     companyId: string,
     startDate: string,
     endDate: string,
     excludeId?: string,
   ): Promise<void> {
+    // Acquire transaction-scoped advisory lock keyed by company.
+    // hashtext returns int4; pg_advisory_xact_lock accepts int4 implicitly.
+    await client.query(
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      [companyId],
+    );
+
+    // Overlap query runs on the same client (same transaction snapshot).
     const overlapping = await this.fyRepo.findOverlapping(
       companyId,
       startDate,
       endDate,
       excludeId,
+      client,
     );
+
     if (overlapping.length > 0) {
       const conflict = overlapping[0]!;
       throw new Error(
@@ -99,17 +126,27 @@ export class FiscalYearService {
   /**
    * Create a new fiscal year.
    *
-   * Validates date order and absence of overlap within the company before
-   * opening a transaction that writes the fiscal year row and its audit entry.
+   * Date validation runs before the transaction (pure check, no DB).
+   * The advisory lock + overlap check + INSERT + audit entry all execute
+   * on the same connection inside one transaction — atomically and safely
+   * under concurrent load.
    */
   async createFiscalYear(
     input: CreateFiscalYearInput,
     actorUserId: string,
   ): Promise<FiscalYear> {
+    // Pure validation — no DB, no transaction needed.
     this.validateDates(input.start_date, input.end_date);
-    await this.checkNoOverlap(input.company_id, input.start_date, input.end_date);
 
     return this.withTransaction(async (client) => {
+      // Lock + overlap check inside the transaction on the same connection.
+      await this.lockAndCheckNoOverlap(
+        client,
+        input.company_id,
+        input.start_date,
+        input.end_date,
+      );
+
       const fy = await this.fyRepo.create(input, client);
 
       await this.auditRepo.logEvent(
@@ -143,6 +180,7 @@ export class FiscalYearService {
    *
    * The fiscal year is looked up with company_id as a guard — a caller
    * supplying a mismatched companyId gets "not found or access denied".
+   * No overlap check is required (closing does not alter date ranges).
    */
   async closeFiscalYear(
     id: string,
@@ -185,8 +223,10 @@ export class FiscalYearService {
   /**
    * Update mutable fields (name, start_date, end_date) on an open fiscal year.
    *
-   * Closed fiscal years are immutable. Date validation and overlap checks run
-   * before the transaction is opened.
+   * Closed fiscal years are immutable. Date validation runs before the
+   * transaction (pure). The advisory lock + overlap check (excluding the
+   * fiscal year being edited) + UPDATE + audit entry all run inside one
+   * transaction on the same connection.
    */
   async updateFiscalYear(
     id: string,
@@ -202,14 +242,21 @@ export class FiscalYearService {
       throw new Error(`Fiscal year '${existing.name}' is closed and cannot be modified`);
     }
 
-    // Resolve effective dates for validation (merge input with current values).
+    // Resolve effective dates and validate before opening the transaction.
     const effectiveStart = input.start_date ?? existing.start_date;
     const effectiveEnd   = input.end_date   ?? existing.end_date;
     this.validateDates(effectiveStart, effectiveEnd);
-    // Exclude the fiscal year being updated from its own overlap check.
-    await this.checkNoOverlap(companyId, effectiveStart, effectiveEnd, id);
 
     return this.withTransaction(async (client) => {
+      // Lock + overlap check (exclude this FY from its own check) inside tx.
+      await this.lockAndCheckNoOverlap(
+        client,
+        companyId,
+        effectiveStart,
+        effectiveEnd,
+        id,
+      );
+
       const updated = await this.fyRepo.update(id, companyId, input, client);
       if (!updated) throw new Error('Fiscal year not found or access denied');
 

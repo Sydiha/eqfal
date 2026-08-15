@@ -65,12 +65,17 @@ export class FiscalYearRepository {
    * Adjacent ranges (end of one = start of next) do NOT overlap.
    *
    * @param excludeId  Optional — exclude this fiscal year ID (used during update checks).
+   * @param runner     Optional QueryRunner — pass the active PoolClient when calling
+   *                   from inside a transaction so the query participates in the same
+   *                   connection and sees the correct snapshot. Defaults to the pool
+   *                   (auto-commit mode) when omitted.
    */
   async findOverlapping(
     companyId: string,
     startDate: string,
     endDate: string,
     excludeId?: string,
+    runner: QueryRunner = this.pool,
   ): Promise<FiscalYear[]> {
     const params: unknown[] = [companyId, startDate, endDate];
     let sql = `
@@ -83,7 +88,7 @@ export class FiscalYearRepository {
       params.push(excludeId);
       sql += ` AND id <> $${params.length}`;
     }
-    const { rows } = await this.pool.query<FiscalYear>(sql, params);
+    const { rows } = await runner.query<FiscalYear>(sql, params);
     return rows;
   }
 
