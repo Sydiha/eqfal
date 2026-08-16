@@ -10,20 +10,18 @@
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد وقت هذا التحديث: `4895bbbc66387e5574d97bc2b051c45dc400078a`.
+- آخر main مؤكد وقت هذا التحديث: `39f8b888248711a306830bb8babd8cd29b759cc1`.
 
 الحالة الحالية:
 - Core security / tenancy / auth / memberships / capabilities foundations: DONE.
 - Fiscal Years foundation + API + UI: DONE.
-- Phase 2A Secure Document Upload: DONE.
-- Phase 2B Document Review Workflow: DONE.
-- Phase 2C Manager Document Intake: DONE.
-- Practical Manager Document Journey Validation على `main`: PASS.
-- **Phase 2 — Documents: CLOSED.**
+- Phase 2 — Documents: CLOSED.
 - UI Modernization العام: CLOSED حتى PR #42.
-- **Phase 3A — Bank Import Foundation: CLOSED.**
-- **Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.**
-- **Phase 3C — Payment Settlement Foundation: CLOSED.**
+- Phase 3A — Bank Import Foundation: CLOSED.
+- Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.
+- Phase 3C — Payment Settlement Foundation: CLOSED.
+- **Phase 3D — Custody / Advances Foundation: CLOSED.**
+- **Phase 3 — البنوك والدفعات والعهد: IN PROGRESS** حتى نجاح Practical Phase 3 sample validation.
 
 Production:
 - غير منشور.
@@ -33,33 +31,14 @@ Production:
 
 ## 2. Phase 2 — Documents — CLOSED
 
-### 2.1 ما تم إنجازه
-- رفع آمن ومستندات company-scoped.
-- PDF/JPEG/PNG/WebP حتى 10 MB مع MIME/extension/signature validation وSHA-256.
-- Storage Adapter قابل للاستبدال، بدون BLOBs كبيرة داخل PostgreSQL.
-- دورة الحالات: `uploaded -> needs_review -> approved | incomplete | rejected`.
-- صلاحيات مستقلة للعرض/الرفع/المراجعة/الاعتماد مع Backend enforcement.
-- Manager Document Intake: نوع المستند، الجهة المقابلة، التاريخ، المرجع، الإجمالي، الملاحظة.
-- Audit للتغييرات الحساسة.
-- Documents UI responsive مع RTL/LTR وdialogs وحالات مشتركة.
-
-### 2.2 التحقق العملي النهائي
-تم تنفيذ الرحلة العملية على `main` ونجحت بالكامل:
-1. Upload document — PASS.
-2. Save intake metadata — PASS.
-3. Submit for review — PASS.
-4. Transition to `needs_review` — PASS.
-5. Approve — PASS.
-6. Transition to `approved` — PASS.
-7. Open original file — PASS.
-
-بذلك تحققت بوابة Phase 2 المعتمدة: **رحلة رفع/مراجعة عملية ناجحة**.
+يشمل Secure Upload، review workflow، Manager Intake، company isolation، Audit، والرحلة العملية المعتمدة:
+Upload → Intake → Submit → `needs_review` → Approve → Open original — PASS.
 
 ---
 
 ## 3. UI Modernization — CLOSED
 
-تم إغلاق مسار التحديث البصري العام حتى PR #42، ويشمل AppShell/Home، Documents، Fiscal Years، Login، responsive Desktop/Mobile، RTL/LTR، date display، والحالات والنماذج والحوارات المشتركة.
+المسار العام مغلق حتى PR #42، ويشمل AppShell/Home، Documents، Fiscal Years، Login، responsive Desktop/Mobile، RTL/LTR، date display، والحالات والنماذج والحوارات المشتركة.
 
 لا يبدأ polishing عام جديد دون حاجة عملية مرتبطة بوظيفة أو شاشة جديدة.
 
@@ -67,116 +46,130 @@ Production:
 
 ## 4. Phase 3 — البنوك والدفعات والعهد — IN PROGRESS
 
-بوابة المرحلة في الوثيقة التشغيلية:
+بوابة المرحلة:
 - **استيراد ومطابقة وتسويات على عينات.**
 
 المبادئ الحاكمة:
 - Excel/CSV أولًا؛ لا تكامل بنكي مباشر في MVP.
-- البنك يثبت ما دخل وخرج فعليًا لكنه لا يحدد وحده التصنيف المحاسبي.
-- كل حركة مهمة يجب أن ترتبط تدريجيًا بالسبب/الجهة/المستند/العملية والمراجعة.
+- البنك يثبت حركة النقد ولا يحدد وحده التصنيف المحاسبي.
 - منع الاستيراد المكرر عبر idempotency/fingerprints.
-- التنفيذ بحزم صغيرة مستقلة وقابلة للاختبار.
+- الصلاحيات مستقلة ولا يجوز أن تمنح DB defaults صلاحيات زائدة.
+- company isolation عبر `company_id` + relationship checks وقيود مركبة حيث يلزم.
+- Audit للتغييرات الحساسة.
+- منع silent overwrite بالتزامن المناسب.
 
 ### 4.1 Phase 3A — Bank Import Foundation — CLOSED
 
-تم إنجاز:
-- CSV/XLSX import.
-- Bank accounts foundation.
-- Column mapping.
-- Preview/confirm flow.
-- Bank transactions persistence.
-- Strong/weak duplicate fingerprints وidempotency controls.
-- Company-scoped data access والعلاقات المركبة المطلوبة.
-- Bank capabilities الأساسية.
-- Audit للعمليات الحساسة.
-- XLSX security hardening.
-- Banking UI الأساسية.
-- TypeScript / Tests / Build / CI: PASS.
+تم إنجاز CSV/XLSX import، bank accounts، mapping، preview/confirm، persistence، duplicate/idempotency protection، company-scoped constraints، capabilities، audit، XLSX security hardening، وBanking UI الأساسية.
 
 ### 4.2 Phase 3B — Bank Transaction Matching / Reconciliation Foundation — CLOSED
 
-PR المعتمد: #50.
-Merge commit: `e70d34d119669e45d2650fbe3d52bbf868070950`.
+PR #50. Merge commit `e70d34d119669e45d2650fbe3d52bbf868070950`.
 
-تم إنجاز:
-- manual bank transaction ↔ document matching.
-- حالات التسوية البنكية: `unmatched / matched / reconciled`.
-- صلاحيات مستقلة: `bank.match` و`bank.reconcile`.
-- Eligible document matching ضمن `needs_review` أو `approved`.
-- منع reconciliation النهائي إلا مع document معتمد.
-- company-scoped lookups وsafe 404.
-- composite DB tenancy constraints مع unique keys صالحة لـPostgreSQL.
-- transactional row locking/state validation.
-- Audit لأحداث match / unmatch / reconcile / reopen.
-- minimal Banking reconciliation UI.
-- migration-integrity test لمنع تكرار خطأ composite FK.
-
-التحقق النهائي:
-- TypeScript: PASS.
-- Tests: PASS.
-- Build: PASS.
-- GitHub CI على PR: PASS.
-- GitHub CI على `main` بعد الدمج: PASS.
-
-ملاحظة:
-PR #49 أُغلق بدون دمج بعد اكتشاف blocker في migration integrity، ثم أُعيد التنفيذ من `main` في PR #50 مع معالجة القيد من البداية.
+تم إنجاز manual bank transaction ↔ document matching، حالات `unmatched / matched / reconciled`، صلاحيات `bank.match` و`bank.reconcile`، company-scoped safe lookups، composite constraints، row locking/state validation، audit، وminimal reconciliation UI.
 
 ### 4.3 Phase 3C — Payment Settlement Foundation — CLOSED
 
-PR المعتمد: #54.
-Merge commit: `4895bbbc66387e5574d97bc2b051c45dc400078a`.
+PR #54. Merge commit `4895bbbc66387e5574d97bc2b051c45dc400078a`.
 
 تم إنجاز:
-- capability مستقلة: `payment.settle`.
-- جدول `document_settlements` بعلاقات company-scoped مركبة.
-- one bank transaction per settlement في الحزمة الحالية.
-- السماح بعدة حركات بنكية لتسوية مستند واحد تدريجيًا.
-- اشتراط document معتمد ووجود match مسبق للحركة البنكية مع نفس المستند.
-- منع over-settlement.
-- حساب `unpaid / partially_paid / paid` مشتقًا من مبالغ التسويات دون تلويث حالة المستند التشغيلية.
-- row locking على document والحركة البنكية لمنع التسوية المتزامنة غير الآمنة.
-- Audit لإنشاء وحذف التسويات، مع سبب حذف إلزامي.
-- منع فك match عن حركة بنكية لديها settlement قائمة.
-- minimal bilingual settlement UI ضمن Banking flow.
-- حسابات مالية decimal-safe باستخدام integer cents و`BigInt` بدل JavaScript floating-point arithmetic.
-- regression test لدقة الهللات عند القيم الكبيرة.
-- authorization / tenancy / state / migration-integrity / UI gating coverage المرتبطة بالحزمة.
+- جدول `document_settlements`.
+- صلاحية مستقلة `payment.settle`.
+- settlement فقط مقابل document معتمد وحركة بنكية مطابقة له.
+- عدة settlements للمستند عبر حركات بنكية مختلفة.
+- منع استخدام حركة بنكية واحدة في أكثر من settlement.
+- derived payment status: `unpaid / partially_paid / paid`.
+- رفض overpayment.
+- عدم خلط settlement status مع document review status أو accounting/tax classification.
+- create/delete APIs مع mandatory reason عند الحذف.
+- company isolation وsafe 404 وcomposite DB constraints.
+- transaction + row locking وإعادة حساب الإجمالي داخل المعاملة.
+- Audit create/delete.
+- minimal Settlement UI.
+- exact monetary arithmetic باستخدام integer cents/`BigInt` بدل floating point.
 
 التحقق النهائي:
+- CI على PR #54: PASS.
+- post-merge CI على `main`: PASS — run #95.
+- TypeScript / Tests / Build: PASS.
+- لا يوجد ادعاء بتطبيق migration 014 على PostgreSQL فعلي؛ التحقق المسجل tests/migration integrity/CI فقط.
+
+### 4.4 Phase 3D — Custody / Advances Foundation — CLOSED
+
+التنفيذ المعتمد: PR #57.
+Merge commit: `39f8b888248711a306830bb8babd8cd29b759cc1`.
+
+تم إنجاز:
+- جدول `custody_advances` لتمثيل العهدة/السلفة التشغيلية.
+- جدول `custody_document_allocations` لربط المستندات المعتمدة بالعهدة.
+- صلاحيات مستقلة: `custody.view`, `custody.manage`, `custody.close`.
+- تمويل العهدة من حركة بنكية خارجة واحدة ضمن هذه الحزمة.
+- مرتجعات العهدة عبر حركات بنكية داخلة، مع إمكانية تعدد المرتجعات.
+- توسيع `bank_transaction_matches` إلى bank-explanation boundary مشترك بأنواع `document / custody_funding / custody_return` مع بقاء حركة بنكية واحدة = تفسير تشغيلي واحد.
+- المستند الممول من العهدة يجب أن يكون `approved`.
+- في هذه المرحلة، Custody Allocation للمستند يغطي كامل إجمالي المستند، ولا يُسمح بمصدر تمويل آخر موازٍ له.
+- derived funded / allocated / returned / remaining balances باستخدام exact integer cents و`BigInt`.
+- منع الرصيد السالب غير المتسق بدل إخفائه أو clamp إلى صفر.
+- رفض Return يتجاوز المتبقي، ورفض إعادة استخدام حركة بنكية مستخدمة.
+- Close فقط عند remaining = 0.
+- Reopen بسبب إلزامي وAudit.
+- منع التعديل على العهدة بعد الإغلاق حتى إعادة فتحها.
+- reconciliation البنكي يدعم custody explanations دون أن يعني إغلاق العهدة.
+- company isolation وsafe lookups وعلاقات مركبة مرتبطة بالشركة.
+- transaction + row locking للمسارات الحساسة.
+- Audit لإنشاء العهدة، allocation/remove، return link/unlink، close/reopen.
+- minimal bilingual Custody UI ضمن Banking.
+- behavioral tests للقواعد الحرجة إضافة إلى migration-integrity وUI capability gating.
+
+التحقق النهائي:
+- PR #56: أُغلق بدون دمج وفق Zero-Loop بعد أن أظهرت المراجعة النهائية نقصًا في التغطية السلوكية لبعض شروط القبول.
+- PR #57: إعادة تنفيذ نظيفة من `main` ضمن نفس Design Check.
+- CI على PR #57: run #101 — PASS.
+- post-merge CI على `main`: run #102 — PASS.
 - TypeScript: PASS.
 - Tests: PASS.
 - Build: PASS.
-- GitHub CI على PR: PASS.
-- GitHub CI #95 على `main` بعد الدمج: PASS.
+- لا Production.
+- لا خدمات أو تكاليف تشغيلية جديدة.
+- لا يوجد ادعاء بتطبيق migration 015 على PostgreSQL فعلي؛ التحقق المسجل tests/migration integrity/CI فقط.
 
-ملاحظات تنفيذية:
-- PR #52 أُغلق بدون دمج وفق Zero-Loop Rule بعد تعثر اختبار UI جديد عقب محاولة التصحيح الوحيدة.
-- PR #54 أعاد التنفيذ من `main` في مسار نظيف.
-- أثناء review النهائي اكتُشف خطر دقة مالية في `Number/toFixed()`؛ استُخدمت محاولة التصحيح الوحيدة لاستبدالها بحسابات integer cents وإضافة regression test، ثم نجح CI.
-- PR #53 كان PR مكررًا أُنشئ بالخطأ وأُغلق فورًا بدون دمج.
-
-Phase 3 ما زالت **IN PROGRESS** لأن العهد/السلف والسيناريوهات المتقدمة ليست مغلقة بعد، كما لم يُسجل بعد اختبار عملي شامل لبوابة Phase 3 على عينات حقيقية من الاستيراد → المطابقة → التسوية.
+حدود Phase 3D المؤجلة:
+- الدفع الشخصي من مال المدير/الموظف نيابة عن الشركة.
+- multiple funding sources للمستند.
+- أكثر من Funding transfer للعهدة نفسها.
+- one bank transaction → multiple operations.
+- splitting one bank transaction across multiple documents/operations.
+- advanced overpayment/prepayment allocation.
+- GL/VAT/accounting classification.
+- AI/external services.
 
 ---
 
-## 5. المهمة التالية المقترحة — Read-only Design Check
+## 5. المهمة التالية — Practical Phase 3 Sample Validation
 
-**Phase 3D — Custody / Advances Foundation**.
+**Phase 3 لا تُغلق بعد.**
 
-قبل أي كود:
-- مراجعة أحدث `main` فقط والوثيقة التشغيلية المعتمدة.
-- تحديد أقل نموذج للعهدة/السلفة يمكن اختباره دون توسع مبكر.
-- حسم علاقته بالحركة البنكية والمستند والمستفيد.
-- تحديد حالات الصرف والتسوية والإرجاع والإقفال.
-- حسم ما إذا كان الدفع الشخصي نيابة عن الشركة يدخل في نفس النموذج أو يؤجل.
-- حسم الصلاحيات وBackend enforcement.
-- حسم company isolation وsafe 404.
-- حسم Audit والتزامن/idempotency.
-- تحديد الاختبارات المطلوبة.
-- إبقاء many-to-many، overpayment، prepayment، والتصنيف المحاسبي النهائي خارج النطاق ما لم يثبت أنها لازمة للحزمة الأولى.
-- لا تنفيذ قبل اعتماد Design Check.
+الخطوة التالية هي إعداد واعتماد **Read-only/Test Execution Plan** للتحقق العملي من بوابة المرحلة، ثم تنفيذ التحقق فقط دون توسع برمجي إلا إذا كشف الاختبار blocker حقيقي يحتاج مهمة مستقلة.
 
-بعد اكتمال حزمة Phase 3D، يجب تنفيذ **Practical Phase 3 sample validation** للتحقق من بوابة المرحلة: استيراد → مطابقة → تسويات على عينات، قبل إعلان Phase 3 مغلقة.
+العينة العملية يجب أن تثبت على الأقل:
+1. CSV/XLSX import لعينة آمنة.
+2. إعادة نفس الاستيراد وإثبات idempotency وعدم التكرار.
+3. Match لحركة بنكية مع مستند ضمن active company.
+4. Reconciliation للمسار المسموح.
+5. Payment Settlement لمستند معتمد ومطابق.
+6. Custody creation من حركة بنكية خارجة.
+7. Custody allocation لمستند معتمد.
+8. Custody return من حركة بنكية داخلة إذا بقي رصيد.
+9. Close عند remaining = 0.
+10. التحقق من company isolation والصلاحيات والأثر المسجل في Audit أثناء الرحلة.
+
+شروط التحقق:
+- لا Production.
+- لا بيانات حقيقية حساسة في Staging/Preview دون تنقيح.
+- لا تكلفة تشغيلية جديدة.
+- لا تعديل برمجي ضمن مهمة التحقق نفسها إلا بعد فتح Design Check/مهمة مستقلة لأي blocker يظهر.
+
+بعد نجاح هذا الاختبار وتوثيق الأدلة يمكن تقييم إغلاق Phase 3 العامة والانتقال إلى المرحلة التالية في الوثيقة التشغيلية.
 
 ---
 
@@ -188,7 +181,7 @@ Phase 3 ما زالت **IN PROGRESS** لأن العهد/السلف والسين�
 - Zero-Loop Rule: corrective pass واحد كحد أقصى للمهمة البرمجية.
 - القبول من diff الحقيقي + tests/CI + مطابقة Design Check.
 - مهمة برمجية واحدة فقط في كل مرة.
-- Replit Agent محظور؛ Replit Runtime / Preview يدوي فقط.
+- Replit Agent محظور؛ Replit Runtime / Preview يدوي فقط عند الحاجة.
 - لا Production دون موافقة.
 - لا تكلفة تشغيلية جديدة دون موافقة.
 
@@ -201,11 +194,12 @@ Phase 3 ما زالت **IN PROGRESS** لأن العهد/السلف والسين�
 - Staging validation قبل أي Production مستقبلًا.
 
 ### Deferred حتى مراحلها المعتمدة
-- المطابقة التلقائية/scoring/AI للمستندات والحركات.
+- Practical Phase 3 sample validation قبل إغلاق Phase 3.
+- المطابقة التلقائية/scoring/AI.
 - many-to-many transaction/document matching.
-- overpayment / prepayment flows.
-- الدفع الشخصي نيابة عن الشركة إذا لم يدخل في Phase 3D المعتمد.
-- العهد/السلف المتقدمة خارج الحد الأدنى للحزمة التالية.
+- one bank transaction → multiple operations.
+- advanced partial / over / prepayment allocation beyond current foundations.
+- الدفع الشخصي نيابة عن الشركة.
 - OCR/AI extraction المدفوع أو أي AI محاسبي نهائي.
 - VAT reconciliation.
 - الشركاء والذمم (Phase 4).
