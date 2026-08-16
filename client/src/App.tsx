@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -8,10 +9,25 @@ import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
+import { eqfalTheme } from './theme';
 
 function LanguageButton() {
   const { t, i18n } = useTranslation();
   return <button onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</button>;
+}
+
+export function MantineDirectionSync() {
+  const { i18n } = useTranslation();
+  const { setDirection } = useDirection();
+  const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+
+  useEffect(() => {
+    setDirection(direction);
+    document.documentElement.dir = direction;
+    document.documentElement.lang = i18n.language;
+  }, [direction, i18n.language, setDirection]);
+
+  return null;
 }
 
 function LoginForm() {
@@ -42,13 +58,18 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
   return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>}</div>;
 }
 
-export default function App() {
+function AppContent() {
   const { t, i18n } = useTranslation();
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
-  useEffect(() => { document.documentElement.dir = isRtl ? 'rtl' : 'ltr'; document.documentElement.lang = i18n.language; }, [i18n.language, isRtl]);
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
   if (loading) return <main className="login"><h1>{t('app.title')}</h1><LanguageButton/><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
   return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
+}
+
+export default function App() {
+  const { i18n } = useTranslation();
+  const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  return <DirectionProvider initialDirection={direction}><MantineDirectionSync /><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
 }

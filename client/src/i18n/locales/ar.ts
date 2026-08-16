@@ -2,6 +2,7 @@ const ar = {
   app: {
     title: 'إقفال — المالية والعمليات',
     shortTitle: 'إقفال',
+    subtitle: 'العمليات المالية',
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },

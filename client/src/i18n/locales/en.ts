@@ -2,6 +2,7 @@ const en = {
   app: {
     title: 'Eqfal — Financial Close & Operations',
     shortTitle: 'EQFAL',
+    subtitle: 'Financial operations',
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },

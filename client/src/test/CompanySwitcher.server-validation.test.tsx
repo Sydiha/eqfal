@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MantineProvider } from '@mantine/core';
 import { CompanyProvider, useCompany, type Company } from '../context/CompanyContext';
 import { CompanySwitcher } from '../components/CompanySwitcher';
 import '../i18n';
@@ -21,10 +22,10 @@ describe('CompanySwitcher — server validation boundary', () => {
     const onSwitch = vi.fn().mockResolvedValue(false);
 
     render(
-      <CompanyProvider allowedCompanies={ALLOWED}>
+      <MantineProvider><CompanyProvider allowedCompanies={ALLOWED}>
         <CompanySwitcher onSwitch={onSwitch} />
         <Inspector capture={(id) => { active = id; }} />
-      </CompanyProvider>,
+      </CompanyProvider></MantineProvider>,
     );
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'co-b' } });
@@ -38,10 +39,10 @@ describe('CompanySwitcher — server validation boundary', () => {
     const onSwitch = vi.fn().mockResolvedValue(true);
 
     render(
-      <CompanyProvider allowedCompanies={ALLOWED}>
+      <MantineProvider><CompanyProvider allowedCompanies={ALLOWED}>
         <CompanySwitcher onSwitch={onSwitch} />
         <Inspector capture={(id) => { active = id; }} />
-      </CompanyProvider>,
+      </CompanyProvider></MantineProvider>,
     );
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'co-b' } });
