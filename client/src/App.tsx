@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
+import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
@@ -89,8 +90,8 @@ function AuthenticatedShell() {
 
 function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: Page) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized } = useAuth();
-  if (!activeCompanyId) return <section className="panel"><p role="status">{t('company.none')}</p></section>;
-  if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status">{t('company.switching')}</p></section>;
+  if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
+  if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
   return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>}</div>;
 }
