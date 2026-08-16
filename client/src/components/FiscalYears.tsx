@@ -142,27 +142,52 @@ export function FiscalYears({ canView, canManage, onUnauthorized }: Props) {
   };
 
   return (
-    <section className="panel" aria-labelledby="fiscal-years-title">
-      <div className="section-heading">
-        <div><h2 id="fiscal-years-title">{t('fiscalYears.title')}</h2><p>{t('fiscalYears.description')}</p></div>
-        {canManage && <button onClick={() => setForm({ kind: 'create' })}>{t('fiscalYears.create')}</button>}
+    <section className="panel fiscal-years-page" aria-labelledby="fiscal-years-title">
+      <div className="section-heading fiscal-years-heading">
+        <div>
+          <p className="eyebrow">{t('fiscalYears.title')}</p>
+          <h2 id="fiscal-years-title">{t('fiscalYears.title')}</h2>
+          <p>{t('fiscalYears.description')}</p>
+        </div>
+        {canManage && <button className="primary" onClick={() => setForm({ kind: 'create' })}>{t('fiscalYears.create')}</button>}
       </div>
 
-      {errorKey && !form && !closeTarget && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)} {errorKey !== 'invalidRange' && <button onClick={() => void load()}>{t('fiscalYears.retry')}</button>}</div>}
-      {loading ? <p role="status">{t('fiscalYears.loading')}</p> : years.length === 0 ? <p role="status" className="empty">{t('fiscalYears.empty')}</p> : (
-        <div className="table-wrap"><table><thead><tr><th>{t('fiscalYears.name')}</th><th>{t('fiscalYears.start')}</th><th>{t('fiscalYears.end')}</th><th>{t('fiscalYears.status')}</th>{canManage && <th>{t('fiscalYears.actions')}</th>}</tr></thead>
-          <tbody>{years.map(year => <tr key={year.id}><td>{year.name}</td><td>{year.start_date}</td><td>{year.end_date}</td><td><span className={`badge ${year.status}`}>{t(`fiscalYears.${year.status}`)}</span></td>{canManage && <td className="actions">{year.status === 'open' && <><button onClick={() => setForm({ kind: 'edit', fiscalYear: year })}>{t('fiscalYears.edit')}</button><button className="danger" onClick={() => setCloseTarget(year)}>{t('fiscalYears.close')}</button></>}</td>}</tr>)}</tbody>
-        </table></div>
+      {errorKey && !form && !closeTarget && <div role="alert" className="message error fiscal-years-message">{t(`fiscalYears.${errorKey}`)} {errorKey !== 'invalidRange' && <button onClick={() => void load()}>{t('fiscalYears.retry')}</button>}</div>}
+      {loading ? <p role="status" className="state-card fiscal-years-state">{t('fiscalYears.loading')}</p> : years.length === 0 ? <p role="status" className="empty fiscal-years-state">{t('fiscalYears.empty')}</p> : (
+        <div className="fiscal-years-grid">
+          {years.map(year => (
+            <article key={year.id} className={`fiscal-year-card ${year.status}`}>
+              <div className="fiscal-year-card-header">
+                <div>
+                  <h3>{year.name}</h3>
+                  <span className={`badge ${year.status}`}>{t(`fiscalYears.${year.status}`)}</span>
+                </div>
+              </div>
+              <dl className="fiscal-year-dates">
+                <div><dt>{t('fiscalYears.start')}</dt><dd>{year.start_date}</dd></div>
+                <div><dt>{t('fiscalYears.end')}</dt><dd>{year.end_date}</dd></div>
+              </dl>
+              {canManage && year.status === 'open' && (
+                <div className="fiscal-year-actions">
+                  <button onClick={() => setForm({ kind: 'edit', fiscalYear: year })}>{t('fiscalYears.edit')}</button>
+                  <button className="danger" onClick={() => setCloseTarget(year)}>{t('fiscalYears.close')}</button>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
       )}
 
-      {form && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="fy-form-title" className="modal"><h3 id="fy-form-title">{t(form.kind === 'create' ? 'fiscalYears.createTitle' : 'fiscalYears.editTitle')}</h3>{errorKey && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)}</div>}<form onSubmit={save} className="form-grid">
+      {form && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="fy-form-title" className="modal fiscal-year-modal"><h3 id="fy-form-title">{t(form.kind === 'create' ? 'fiscalYears.createTitle' : 'fiscalYears.editTitle')}</h3>{errorKey && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)}</div>}<form onSubmit={save} className="form-grid fiscal-year-form">
         <label>{t('fiscalYears.name')}<input name="name" required maxLength={120} defaultValue={form.kind === 'edit' ? form.fiscalYear.name : ''} /></label>
-        <label>{t('fiscalYears.start')}<input name="start_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.start_date : ''} /></label>
-        <label>{t('fiscalYears.end')}<input name="end_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.end_date : ''} /></label>
-        <div className="modal-actions"><button type="button" onClick={() => setForm(null)}>{t('common.cancel')}</button><button type="submit" disabled={saving}>{t('common.save')}</button></div>
+        <div className="fiscal-year-date-fields">
+          <label>{t('fiscalYears.start')}<input name="start_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.start_date : ''} /></label>
+          <label>{t('fiscalYears.end')}<input name="end_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.end_date : ''} /></label>
+        </div>
+        <div className="modal-actions"><button type="button" onClick={() => setForm(null)}>{t('common.cancel')}</button><button className="primary" type="submit" disabled={saving}>{t('common.save')}</button></div>
       </form></div></div>}
 
-      {closeTarget && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="close-title" className="modal"><h3 id="close-title">{t('fiscalYears.closeTitle')}</h3><p>{t('fiscalYears.closeConfirmation', { name: closeTarget.name })}</p>{errorKey && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)}</div>}<form onSubmit={close} className="form-grid"><label>{t('fiscalYears.reason')}<textarea name="reason" maxLength={500} /></label><div className="modal-actions"><button type="button" onClick={() => setCloseTarget(null)}>{t('common.cancel')}</button><button className="danger" type="submit" disabled={saving}>{t('fiscalYears.confirmClose')}</button></div></form></div></div>}
+      {closeTarget && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="close-title" className="modal fiscal-year-modal fiscal-year-close-modal"><h3 id="close-title">{t('fiscalYears.closeTitle')}</h3><p>{t('fiscalYears.closeConfirmation', { name: closeTarget.name })}</p>{errorKey && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)}</div>}<form onSubmit={close} className="form-grid"><label>{t('fiscalYears.reason')}<textarea name="reason" maxLength={500} /></label><div className="modal-actions"><button type="button" onClick={() => setCloseTarget(null)}>{t('common.cancel')}</button><button className="danger" type="submit" disabled={saving}>{t('fiscalYears.confirmClose')}</button></div></form></div></div>}
     </section>
   );
 }
