@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
+import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
 import { FiscalYears } from './components/FiscalYears';
@@ -11,9 +12,9 @@ import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
 import { eqfalTheme } from './theme';
 
-function LanguageButton() {
+function LanguageButton({ className = '' }: { className?: string }) {
   const { t, i18n } = useTranslation();
-  return <button onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</button>;
+  return <button className={className} onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</button>;
 }
 
 export function MantineDirectionSync() {
@@ -30,6 +31,17 @@ export function MantineDirectionSync() {
   return null;
 }
 
+function LoginBrand() {
+  const { t } = useTranslation();
+  return <div className="login-brand" aria-hidden="true">
+    <div className="login-brand-mark">إ</div>
+    <div>
+      <p className="login-brand-name">{t('app.shortTitle')} <span>EQFAL</span></p>
+      <p className="login-brand-subtitle">{t('app.subtitle')}</p>
+    </div>
+  </div>;
+}
+
 function LoginForm() {
   const { t } = useTranslation();
   const { login } = useAuth();
@@ -41,7 +53,32 @@ function LoginForm() {
     try { if (!await login(String(data.get('email')), String(data.get('password')))) setInvalid(true); }
     catch { setInvalid(true); } finally { setSubmitting(false); }
   };
-  return <div className="login"><h1>{t('app.title')}</h1><LanguageButton/><form className="login-form" onSubmit={submit}><label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required/></label><label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required/></label>{invalid && <p role="alert">{t('auth.invalid')}</p>}<button disabled={submitting}>{t('auth.login')}</button></form></div>;
+  return <main className="login-shell">
+    <div className="login-language"><LanguageButton /></div>
+    <section className="login-layout" aria-labelledby="login-title">
+      <aside className="login-identity">
+        <LoginBrand />
+        <div className="login-identity-copy">
+          <p className="eyebrow">EQFAL</p>
+          <h1>{t('app.title')}</h1>
+          <p>{t('app.subtitle')}</p>
+        </div>
+      </aside>
+      <div className="login-card">
+        <div className="login-card-header">
+          <div className="login-card-mobile-brand"><LoginBrand /></div>
+          <h2 id="login-title">{t('auth.login')}</h2>
+          <p>{t('app.subtitle')}</p>
+        </div>
+        <form className="login-form" onSubmit={submit}>
+          <label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required aria-invalid={invalid || undefined}/></label>
+          <label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required aria-invalid={invalid || undefined}/></label>
+          {invalid && <p role="alert" className="login-error">{t('auth.invalid')}</p>}
+          <button className="primary login-submit" disabled={submitting}>{t('auth.login')}</button>
+        </form>
+      </div>
+    </section>
+  </main>;
 }
 
 function AuthenticatedShell() {
@@ -63,7 +100,7 @@ function AppContent() {
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
-  if (loading) return <main className="login"><h1>{t('app.title')}</h1><LanguageButton/><p role="status">{t('app.loading')}</p></main>;
+  if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
   return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
 }
