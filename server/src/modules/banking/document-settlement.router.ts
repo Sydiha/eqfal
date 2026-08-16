@@ -70,7 +70,7 @@ function parseCreateBody(body: unknown): { transactionId: string; amount: string
   if (Object.keys(x).some((key) => !['bank_transaction_id', 'amount', 'note'].includes(key))) return null;
   const transactionId = parseId(x.bank_transaction_id);
   const amount = typeof x.amount === 'string' ? x.amount.trim() : typeof x.amount === 'number' ? String(x.amount) : '';
-  if (!transactionId || !AMOUNT_RE.test(amount) || Number(amount) <= 0) return null;
+  if (!transactionId || !AMOUNT_RE.test(amount) || moneyToCents(amount) <= 0n) return null;
   if (x.note !== undefined && x.note !== null && typeof x.note !== 'string') return null;
   const note = typeof x.note === 'string' ? x.note.trim() || null : null;
   if (note && note.length > 500) return null;
@@ -84,6 +84,19 @@ function parseDeleteBody(body: unknown): { reason: string } | null {
   const reason = x.reason.trim();
   if (!reason || reason.length > 500) return null;
   return { reason };
+}
+
+function moneyToCents(value: string): bigint {
+  const [whole, fraction = ''] = value.split('.');
+  return BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
+}
+
+function centsToMoney(value: bigint): string {
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const whole = absolute / 100n;
+  const fraction = (absolute % 100n).toString().padStart(2, '0');
+  return `${negative ? '-' : ''}${whole}.${fraction}`;
 }
 
 class DocumentSettlementRepository {
@@ -187,14 +200,14 @@ export class DocumentSettlementService {
       this.repo.settledTotal(documentId, companyId),
       this.repo.list(documentId, companyId),
     ]);
-    const total = document.total_amount === null ? null : Number(document.total_amount);
-    const settled = Number(settledAmount);
-    const remaining = total === null ? null : Math.max(0, total - settled);
-    const paymentStatus = total === null || settled === 0 ? 'unpaid' : settled < total ? 'partially_paid' : 'paid';
+    const total = document.total_amount === null ? null : moneyToCents(document.total_amount);
+    const settled = moneyToCents(settledAmount);
+    const remaining = total === null ? null : total > settled ? total - settled : 0n;
+    const paymentStatus = total === null || settled === 0n ? 'unpaid' : settled < total ? 'partially_paid' : 'paid';
     return {
       document: { id: document.id, status: document.status, original_filename: document.original_filename, total_amount: document.total_amount },
-      settled_amount: settled.toFixed(2),
-      remaining_amount: remaining === null ? null : remaining.toFixed(2),
+      settled_amount: centsToMoney(settled),
+      remaining_amount: remaining === null ? null : centsToMoney(remaining),
       payment_status: paymentStatus,
       settlements,
     };
@@ -212,10 +225,10 @@ export class DocumentSettlementService {
       const match = await this.repo.match(transactionId, documentId, companyId, client);
       if (!match) throw new DocumentSettlementConflictError('Bank transaction must be matched to this document first');
 
-      const before = Number(await this.repo.settledTotal(documentId, companyId, client));
-      const requested = Number(amount);
-      const total = Number(document.total_amount);
-      if (before + requested > total + 0.000001) throw new DocumentSettlementConflictError('Settlement amount exceeds document remaining amount');
+      const before = moneyToCents(await this.repo.settledTotal(documentId, companyId, client));
+      const requested = moneyToCents(amount);
+      const total = moneyToCents(document.total_amount);
+      if (before + requested > total) throw new DocumentSettlementConflictError('Settlement amount exceeds document remaining amount');
 
       const settlement = await this.repo.create({ companyId, documentId, transactionId, amount, actor, note }, client);
       const after = before + requested;
@@ -225,10 +238,10 @@ export class DocumentSettlementService {
         action: 'document_settlement.create',
         entity_type: 'document_settlement',
         entity_id: settlement.id,
-        before_data: { document_id: documentId, settled_amount: before.toFixed(2) },
-        after_data: { document_id: documentId, bank_transaction_id: transactionId, amount, settled_amount: after.toFixed(2), note },
+        before_data: { document_id: documentId, settled_amount: centsToMoney(before) },
+        after_data: { document_id: documentId, bank_transaction_id: transactionId, amount, settled_amount: centsToMoney(after), note },
       }, client);
-      return { settlement, settled_amount: after.toFixed(2), remaining_amount: Math.max(0, total - after).toFixed(2) };
+      return { settlement, settled_amount: centsToMoney(after), remaining_amount: centsToMoney(total - after) };
     }).catch((error) => {
       if ((error as { code?: string }).code === '23505') throw new DocumentSettlementConflictError('Bank transaction already has a settlement');
       if ((error as { code?: string }).code === '23503') throw new DocumentSettlementConflictError('Settlement relationship is no longer valid');
@@ -242,19 +255,20 @@ export class DocumentSettlementService {
       if (!document) throw new DocumentSettlementNotFoundError('Document not found');
       const settlement = await this.repo.settlement(settlementId, documentId, companyId, client, true);
       if (!settlement) throw new DocumentSettlementNotFoundError('Settlement not found');
-      const before = Number(await this.repo.settledTotal(documentId, companyId, client));
+      const before = moneyToCents(await this.repo.settledTotal(documentId, companyId, client));
       await this.repo.delete(settlementId, documentId, companyId, client);
-      const after = Math.max(0, before - Number(settlement.amount));
+      const settlementAmount = moneyToCents(settlement.amount);
+      const after = before > settlementAmount ? before - settlementAmount : 0n;
       await this.audit.logEvent({
         company_id: companyId,
         actor_user_id: actor,
         action: 'document_settlement.delete',
         entity_type: 'document_settlement',
         entity_id: settlementId,
-        before_data: { document_id: documentId, bank_transaction_id: settlement.bank_transaction_id, amount: settlement.amount, settled_amount: before.toFixed(2) },
-        after_data: { document_id: documentId, settled_amount: after.toFixed(2), reason },
+        before_data: { document_id: documentId, bank_transaction_id: settlement.bank_transaction_id, amount: settlement.amount, settled_amount: centsToMoney(before) },
+        after_data: { document_id: documentId, settled_amount: centsToMoney(after), reason },
       }, client);
-      return { status: 'deleted' as const, settled_amount: after.toFixed(2) };
+      return { status: 'deleted' as const, settled_amount: centsToMoney(after) };
     });
   }
 }
