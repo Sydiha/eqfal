@@ -8,7 +8,8 @@ ALTER TABLE bank_transactions
   ADD COLUMN reconciliation_status TEXT NOT NULL DEFAULT 'unmatched'
     CHECK (reconciliation_status IN ('unmatched','matched','reconciled')),
   ADD COLUMN reconciled_by_user_id UUID REFERENCES users(id),
-  ADD COLUMN reconciled_at TIMESTAMPTZ;
+  ADD COLUMN reconciled_at TIMESTAMPTZ,
+  ADD CONSTRAINT bank_transactions_company_identity_unique UNIQUE (id, company_id);
 
 ALTER TABLE bank_transactions
   ADD CONSTRAINT bank_transactions_reconciliation_metadata_check
