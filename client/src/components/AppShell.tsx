@@ -4,6 +4,7 @@ import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLi
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
 import '../mobile.css';
+import '../visual-polish.css';
 
 export type Page = 'home' | 'fiscalYears' | 'documents';
 
