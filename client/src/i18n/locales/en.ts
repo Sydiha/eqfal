@@ -6,7 +6,7 @@ const en = {
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },
-  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', documents: 'Documents', openMenu: 'Open navigation menu' },
+  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', documents: 'Documents', banks: 'Banks', openMenu: 'Open navigation menu' },
   home: {
     workspace: 'Company workspace',
     welcome: 'Welcome back',
@@ -84,6 +84,14 @@ const en = {
       incomplete: 'Incomplete',
       rejected: 'Rejected',
     },
+  },
+  banks: {
+    title: 'Banks', description: 'Import bank statements safely for the active company.', noAccess: 'You do not have permission to view banking data.', error: 'Unable to load or update banking data.',
+    accounts: 'Bank accounts', account: 'Bank account', accountName: 'Account name', bankName: 'Bank name', currency: 'Currency', createAccount: 'Create account', noAccounts: 'No bank accounts yet.', active: 'Active', inactive: 'Inactive', status: 'Status',
+    import: 'Import statement', accepted: 'CSV or XLSX · maximum 5 MB · up to 10,000 data rows', file: 'File', upload: 'Upload', mapping: 'Column mapping', amountMode: 'Amount format', signed: 'Signed amount', debitCredit: 'Separate debit / credit', dateFormat: 'Date format', transactionDate: 'Transaction date', amount: 'Amount', debit: 'Debit', credit: 'Credit', valueDate: 'Value date', descriptionField: 'Description', reference: 'Bank reference', balance: 'Running balance', preview: 'Preview import', confirm: 'Confirm import',
+    total: 'Total', valid: 'Valid', duplicates: 'Duplicates', possibleDuplicates: 'Possible duplicates', invalid: 'Invalid', importHistory: 'Import history', noImports: 'No imports yet.', transactions: 'Bank transactions', noTransactions: 'No imported transactions yet.',
+    rowStatus: { valid: 'Valid', duplicate: 'Duplicate', possible_duplicate: 'Possible duplicate', invalid: 'Invalid' },
+    batchStatus: { mapping_required: 'Mapping required', preview_ready: 'Preview ready', confirmed: 'Confirmed' },
   },
 } as const;
 

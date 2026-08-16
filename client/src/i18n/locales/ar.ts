@@ -6,7 +6,7 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
-  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', openMenu: 'فتح قائمة التنقل' },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', banks: 'البنوك', openMenu: 'فتح قائمة التنقل' },
   home: {
     workspace: 'مساحة عمل الشركة',
     welcome: 'مرحبًا بعودتك',
@@ -84,6 +84,14 @@ const ar = {
       incomplete: 'ناقص',
       rejected: 'مرفوض',
     },
+  },
+  banks: {
+    title: 'البنوك', description: 'استيراد كشوف الحسابات البنكية بأمان للشركة النشطة.', noAccess: 'ليس لديك صلاحية عرض بيانات البنوك.', error: 'تعذر تحميل أو تحديث بيانات البنوك.',
+    accounts: 'الحسابات البنكية', account: 'الحساب البنكي', accountName: 'اسم الحساب', bankName: 'اسم البنك', currency: 'العملة', createAccount: 'إنشاء حساب', noAccounts: 'لا توجد حسابات بنكية بعد.', active: 'نشط', inactive: 'غير نشط', status: 'الحالة',
+    import: 'استيراد كشف', accepted: 'CSV أو XLSX · الحد الأقصى 5 ميجابايت · حتى 10,000 صف بيانات', file: 'الملف', upload: 'رفع', mapping: 'ربط الأعمدة', amountMode: 'صيغة المبلغ', signed: 'مبلغ بإشارة', debitCredit: 'مدين / دائن منفصلان', dateFormat: 'صيغة التاريخ', transactionDate: 'تاريخ الحركة', amount: 'المبلغ', debit: 'مدين', credit: 'دائن', valueDate: 'تاريخ القيمة', descriptionField: 'الوصف', reference: 'المرجع البنكي', balance: 'الرصيد الجاري', preview: 'معاينة الاستيراد', confirm: 'تأكيد الاستيراد',
+    total: 'الإجمالي', valid: 'صحيح', duplicates: 'مكرر', possibleDuplicates: 'مكرر محتمل', invalid: 'غير صالح', importHistory: 'سجل الاستيراد', noImports: 'لا توجد عمليات استيراد بعد.', transactions: 'الحركات البنكية', noTransactions: 'لا توجد حركات مستوردة بعد.',
+    rowStatus: { valid: 'صحيح', duplicate: 'مكرر', possible_duplicate: 'مكرر محتمل', invalid: 'غير صالح' },
+    batchStatus: { mapping_required: 'يحتاج ربط الأعمدة', preview_ready: 'المعاينة جاهزة', confirmed: 'مؤكد' },
   },
 } as const;
 

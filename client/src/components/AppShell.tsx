@@ -6,20 +6,21 @@ import { CompanySwitcher } from './CompanySwitcher';
 import '../mobile.css';
 import '../visual-polish.css';
 
-export type Page = 'home' | 'fiscalYears' | 'documents';
+export type Page = 'home' | 'fiscalYears' | 'documents' | 'banks';
 
-type IconName = 'home' | 'calendar' | 'document';
+type IconName = 'home' | 'calendar' | 'document' | 'bank';
 
 function ShellIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     home: <><path d="M3.5 10.5 12 3l8.5 7.5"/><path d="M5.5 9.5V21h13V9.5"/><path d="M9.5 21v-6h5v6"/></>,
     calendar: <><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3v5M16.5 3v5M3.5 10h17"/><path d="M8 14h2M14 14h2M8 17.5h2M14 17.5h2"/></>,
     document: <><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h8M8 16h8"/></>,
+    bank: <><path d="M3 9h18M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 18h18M2 21h20M12 3 3 7h18L12 3Z"/></>,
   };
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank' };
 
 export function AppShell({ page, setPage, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -97,7 +98,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
-        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}</Stack>
+        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}{nav('banks')}</Stack>
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main className="eqfal-workspace">

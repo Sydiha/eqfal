@@ -11,6 +11,7 @@ const config = {
   sessionSecret: process.env['SESSION_SECRET'] ?? '',
   logLevel: process.env['LOG_LEVEL'] ?? 'info',
   documentStorageDir: process.env['DOCUMENT_STORAGE_DIR'] ?? path.resolve(process.cwd(), '.data/documents'),
+  bankStorageDir: process.env['BANK_STORAGE_DIR'] ?? path.resolve(process.cwd(), '.data/bank-imports'),
 } as const;
 
 export default config;
