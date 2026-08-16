@@ -11,6 +11,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
+import { isSafeXlsxArchive } from './xlsx-security';
 
 export const bankRouter = Router();
 
@@ -131,7 +132,7 @@ function uploadFormat(filename: string, mime: string, data: Buffer): SourceForma
   if (!data.length || data.length > MAX_FILE_SIZE) return null;
   const ext = path.extname(filename).toLowerCase();
   if (ext === '.csv' && mime === CSV_MIME) return 'csv';
-  if (ext === '.xlsx' && mime === XLSX_MIME && data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b) return 'xlsx';
+  if (ext === '.xlsx' && mime === XLSX_MIME && data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b && isSafeXlsxArchive(data)) return 'xlsx';
   return null;
 }
 

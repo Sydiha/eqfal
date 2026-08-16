@@ -7,6 +7,7 @@ type Batch = { id:string; bank_account_id:string; original_filename:string; stat
 type Transaction = { id:string; transaction_date:string; description:string|null; bank_reference:string|null; amount:string; running_balance:string|null; currency_code:string };
 type PreviewRow = { source_row_number:number; transaction_date:string; description:string|null; bank_reference:string|null; amount:string; running_balance:string|null; status:'valid'|'duplicate'|'possible_duplicate'|'invalid'; error:string|null };
 type Preview = { totalRows:number; validRows:number; duplicateRows:number; possibleDuplicateRows:number; invalidRows:number; rows:PreviewRow[] };
+export type BankConfirmResult = { importedRows:number; duplicateRows:number; idempotent:boolean };
 
 type Props = { canView:boolean; canImport:boolean; canManage:boolean; onUnauthorized:()=>void };
 
@@ -18,10 +19,15 @@ async function api<T>(url:string, init?:RequestInit, onUnauthorized?:()=>void):P
   return body as T;
 }
 
+export function BankConfirmSummary({result}:{result:BankConfirmResult}){
+  const {t}=useTranslation();
+  return <Alert color="green" role="status">{t('banks.batchStatus.confirmed')} · {t('banks.valid')}: {result.importedRows} · {t('banks.duplicates')}: {result.duplicateRows}{result.idempotent?` · ${t('banks.batchStatus.confirmed')}`:''}</Alert>;
+}
+
 export function Banking({canView,canImport,canManage,onUnauthorized}:Props){
   const {t}=useTranslation();
   const [accounts,setAccounts]=useState<Account[]>([]); const [batches,setBatches]=useState<Batch[]>([]); const [transactions,setTransactions]=useState<Transaction[]>([]);
-  const [loading,setLoading]=useState(false); const [error,setError]=useState('');
+  const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [confirmResult,setConfirmResult]=useState<BankConfirmResult|null>(null);
   const [selectedAccount,setSelectedAccount]=useState<string|null>(null); const [file,setFile]=useState<File|null>(null); const [columns,setColumns]=useState<string[]>([]); const [batchId,setBatchId]=useState<string|null>(null);
   const [mode,setMode]=useState<'signed'|'debit_credit'>('signed'); const [dateFormat,setDateFormat]=useState('YYYY-MM-DD');
   const [dateCol,setDateCol]=useState<string|null>(null); const [amountCol,setAmountCol]=useState<string|null>(null); const [debitCol,setDebitCol]=useState<string|null>(null); const [creditCol,setCreditCol]=useState<string|null>(null);
@@ -33,16 +39,17 @@ export function Banking({canView,canImport,canManage,onUnauthorized}:Props){
 
   const createAccount=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();setError('');const data=new FormData(event.currentTarget);try{await api('/api/bank-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_name:String(data.get('display_name')||''),bank_name:String(data.get('bank_name')||'')||null,currency_code:String(data.get('currency_code')||'SAR')})},onUnauthorized);event.currentTarget.reset();await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
 
-  const upload=async()=>{if(!file||!selectedAccount)return;setError('');setPreview(null);const ext=file.name.toLowerCase().endsWith('.xlsx');try{const body=await api<{batch:Batch;columns:string[]}>('/api/bank-import-batches',{method:'POST',headers:{'Content-Type':ext?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'text/csv','X-File-Name':encodeURIComponent(file.name),'X-Bank-Account-Id':selectedAccount},body:file},onUnauthorized);setBatchId(body.batch.id);setColumns(body.columns);setDateCol(null);setAmountCol(null);setDebitCol(null);setCreditCol(null);await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
+  const upload=async()=>{if(!file||!selectedAccount)return;setError('');setConfirmResult(null);setPreview(null);const ext=file.name.toLowerCase().endsWith('.xlsx');try{const body=await api<{batch:Batch;columns:string[]}>('/api/bank-import-batches',{method:'POST',headers:{'Content-Type':ext?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'text/csv','X-File-Name':encodeURIComponent(file.name),'X-Bank-Account-Id':selectedAccount},body:file},onUnauthorized);setBatchId(body.batch.id);setColumns(body.columns);setDateCol(null);setAmountCol(null);setDebitCol(null);setCreditCol(null);await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
 
   const ref=(value:string|null)=>value===null?undefined:{index:Number(value),label:columns[Number(value)]};
   const saveMapping=async()=>{if(!batchId||dateCol===null)return;const mapping:any={amount_mode:mode,date_format:dateFormat,transaction_date:ref(dateCol),value_date:ref(valueDateCol),description:ref(descriptionCol),bank_reference:ref(referenceCol),running_balance:ref(balanceCol)};if(mode==='signed')mapping.amount=ref(amountCol);else{mapping.debit=ref(debitCol);mapping.credit=ref(creditCol);}Object.keys(mapping).forEach((k)=>mapping[k]===undefined&&delete mapping[k]);setError('');try{const result=await api<{preview:Preview}>(`/api/bank-import-batches/${batchId}/mapping`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(mapping)},onUnauthorized);setPreview(result.preview);await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
-  const confirm=async()=>{if(!batchId||!preview||preview.invalidRows>0)return;setError('');try{await api(`/api/bank-import-batches/${batchId}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},onUnauthorized);setBatchId(null);setColumns([]);setPreview(null);setFile(null);await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
+  const confirm=async()=>{if(!batchId||!preview||preview.invalidRows>0)return;setError('');try{const result=await api<BankConfirmResult>(`/api/bank-import-batches/${batchId}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},onUnauthorized);setConfirmResult(result);setBatchId(null);setColumns([]);setPreview(null);setFile(null);await refresh();}catch(e){setError(e instanceof Error?e.message:t('banks.error'));}};
 
   if(!canView)return <section className="panel"><Text role="status">{t('banks.noAccess')}</Text></section>;
   return <Stack gap="lg">
     <Group justify="space-between" align="end"><div><Title order={1}>{t('banks.title')}</Title><Text c="dimmed">{t('banks.description')}</Text></div><Button variant="light" onClick={()=>void refresh()} loading={loading}>{t('common.retry')}</Button></Group>
     {error&&<Alert color="red" role="alert">{error}</Alert>}
+    {confirmResult&&<BankConfirmSummary result={confirmResult}/>} 
 
     <Card withBorder padding="lg"><Stack gap="md"><Title order={2} size="h3">{t('banks.accounts')}</Title>
       {canManage&&<form onSubmit={createAccount}><Group align="end"><TextInput name="display_name" label={t('banks.accountName')} required/><TextInput name="bank_name" label={t('banks.bankName')}/><TextInput name="currency_code" label={t('banks.currency')} defaultValue="SAR" maxLength={3} required/><Button type="submit">{t('banks.createAccount')}</Button></Group></form>}
