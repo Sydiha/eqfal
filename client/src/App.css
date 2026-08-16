@@ -63,8 +63,8 @@ textarea { min-height: 96px; resize: vertical; }
 .sidebar-footer { padding-block-start: var(--space-4); }
 .user-summary { min-width: 0; padding-inline: 2px; }
 .user-summary p:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace { min-width: 0; padding: clamp(1rem, 3vw, 2.25rem); }
-.workspace > div { width: min(100%, 1180px); margin-inline: auto; }
+.workspace { min-width: 0; overflow-x: hidden; }
+.workspace-content { width: 100%; max-width: 1180px; margin-inline: auto; padding: clamp(1rem, 3vw, 2.25rem); }
 
 /* Home */
 .home-page { display: grid; gap: clamp(1.5rem, 3vw, 2.25rem); }
@@ -100,7 +100,7 @@ textarea { min-height: 96px; resize: vertical; }
   .company-switcher { width: min(43vw, 190px); }
   .company-switcher label { display: none; }
   .language-switch { padding-inline: var(--space-2); }
-  .workspace { padding: var(--space-4); }
+  .workspace-content { padding: var(--space-4); }
   .panel { padding: var(--space-4); }
   .context-grid, .action-grid { grid-template-columns: 1fr; }
   .action-card { min-height: 120px; }
@@ -124,5 +124,5 @@ textarea { min-height: 96px; resize: vertical; }
   .topbar-content { gap: 5px; padding-inline: var(--space-2); }
   .company-switcher { width: min(42vw, 155px); }
   .language-switch { max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
-  .workspace { padding-inline: var(--space-3); }
+  .workspace-content { padding-inline: var(--space-3); }
 }
