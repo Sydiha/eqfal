@@ -66,6 +66,30 @@ describe('Document settlement rules',()=>{
     expect(mocks.auditLogEvent).toHaveBeenCalledWith(expect.objectContaining({action:'document_settlement.create',company_id:'co-a'}),client);
   });
 
+  it('keeps cent-exact arithmetic beyond JavaScript safe integers',async()=>{
+    setContext(['payment.settle']);
+    const hugeApproved={...approved,total_amount:'9999999999999999.99'};
+    const hugeSettlement={...settlement,amount:'0.01'};
+    const client=makeClient((sql)=>{
+      if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
+      if(sql.includes('FROM documents'))return{rows:[hugeApproved]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a'}]};
+      if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
+      if(sql.includes('SUM(amount)'))return{rows:[{total:'9999999999999999.98'}]};
+      if(sql.includes('INSERT INTO document_settlements'))return{rows:[hugeSettlement]};
+      return{rows:[]};
+    });
+    mocks.connect.mockResolvedValue(client);
+    const res=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'0.01'});
+    expect(res.status).toBe(201);
+    expect(res.body.settled_amount).toBe('9999999999999999.99');
+    expect(res.body.remaining_amount).toBe('0.00');
+    expect(mocks.auditLogEvent).toHaveBeenCalledWith(expect.objectContaining({
+      before_data:expect.objectContaining({settled_amount:'9999999999999999.98'}),
+      after_data:expect.objectContaining({settled_amount:'9999999999999999.99'}),
+    }),client);
+  });
+
   it('rejects settlement when document is not approved',async()=>{
     setContext(['payment.settle']);
     const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[{...approved,status:'needs_review'}]};return{rows:[]};});
