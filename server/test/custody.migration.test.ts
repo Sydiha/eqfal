@@ -18,10 +18,13 @@ describe('Phase 3D custody integrity',()=>{
  it('rejects reuse of already matched transactions',()=>expect(source).toContain('Bank transaction is already matched'));
  it('rejects document with an existing funding source',()=>expect(source).toContain('Document already has a funding source'));
  it('requires approved documents',()=>expect(source).toContain('Document must be approved with a total amount'));
+ it('requires a custody-funded document to be fully funded in this single-source phase',()=>expect(source).toContain('Custody allocation must equal document total in this phase'));
  it('prevents allocation and return over the remaining amount',()=>{expect(source).toContain('Allocation exceeds custody remaining amount');expect(source).toContain('Return exceeds custody remaining amount');});
+ it('does not hide a negative custody balance',()=>expect(source).toContain('Custody balances are inconsistent'));
  it('requires same currency for a bank return',()=>expect(source).toContain('Return currency must match custody funding currency'));
  it('locks custody, documents, and bank transactions during mutations',()=>expect((source.match(/FOR UPDATE/g)??[]).length).toBeGreaterThanOrEqual(3));
  it('requires zero remaining amount before close',()=>expect(source).toContain('Custody cannot close while a balance remains'));
- it('records create allocate return close and reopen audits',()=>{for(const action of ['custody.create','custody.document.allocate','custody.return.link','custody.close','custody.reopen'])expect(source).toContain(action);});
+ it('records create allocate remove return unlink close and reopen audits',()=>{for(const action of ['custody.create','custody.document.allocate','custody.document.remove','custody.return.link','custody.return.unlink','custody.close','custody.reopen'])expect(source).toContain(action);});
+ it('requires reasons for allocation removal, return unlink, and reopen',()=>{expect(source).toMatch(/documents\/:allocationId'[\s\S]*reasonBody/);expect(source).toMatch(/returns\/:transactionId'[\s\S]*reasonBody/);expect(source).toMatch(/reopen'[\s\S]*reasonBody/);});
  it('uses same-origin and independent capability middleware on mutations',()=>{expect(source).toContain('requireSameOrigin');expect(source).toContain('requireCapability(MANAGE)');expect(source).toContain('requireCapability(CLOSE)');});
 });
