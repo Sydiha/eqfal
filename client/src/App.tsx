@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DirectionProvider, MantineProvider } from '@mantine/core';
+import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -14,6 +14,20 @@ import { eqfalTheme } from './theme';
 function LanguageButton() {
   const { t, i18n } = useTranslation();
   return <button onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</button>;
+}
+
+export function MantineDirectionSync() {
+  const { i18n } = useTranslation();
+  const { setDirection } = useDirection();
+  const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+
+  useEffect(() => {
+    setDirection(direction);
+    document.documentElement.dir = direction;
+    document.documentElement.lang = i18n.language;
+  }, [direction, i18n.language, setDirection]);
+
+  return null;
 }
 
 function LoginForm() {
@@ -48,7 +62,6 @@ function AppContent() {
   const { t, i18n } = useTranslation();
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
-  useEffect(() => { document.documentElement.dir = isRtl ? 'rtl' : 'ltr'; document.documentElement.lang = i18n.language; }, [i18n.language, isRtl]);
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
   if (loading) return <main className="login"><h1>{t('app.title')}</h1><LanguageButton/><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
@@ -58,5 +71,5 @@ function AppContent() {
 export default function App() {
   const { i18n } = useTranslation();
   const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
-  return <DirectionProvider initialDirection={direction}><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
+  return <DirectionProvider initialDirection={direction}><MantineDirectionSync /><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
 }

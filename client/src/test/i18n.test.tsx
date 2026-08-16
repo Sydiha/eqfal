@@ -11,7 +11,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { useTranslation } from 'react-i18next';
 import { useEffect } from 'react';
+import { DirectionProvider, useDirection } from '@mantine/core';
 import i18n, { getSavedLang, LANG_KEY } from '../i18n';
+import { MantineDirectionSync } from '../App';
 
 // ── helper: minimal component that mirrors App's dir/lang effect ─────────────
 
@@ -42,6 +44,24 @@ afterEach(() => {
 // ── RTL / LTR ────────────────────────────────────────────────────────────────
 
 describe('i18n — RTL/LTR direction', () => {
+  it('updates Mantine direction when the language changes at runtime', async () => {
+    function MantineDirectionProbe() {
+      const { dir } = useDirection();
+      return <output data-testid="mantine-direction">{dir}</output>;
+    }
+
+    const view = render(
+      <DirectionProvider initialDirection="rtl">
+        <MantineDirectionSync />
+        <MantineDirectionProbe />
+      </DirectionProvider>,
+    );
+
+    expect(view.getByTestId('mantine-direction')).toHaveTextContent('rtl');
+    await act(async () => { await i18n.changeLanguage('en'); });
+    expect(view.getByTestId('mantine-direction')).toHaveTextContent('ltr');
+  });
+
   it('Arabic language sets dir="rtl" on <html>', async () => {
     render(<DirMirror />);
 
