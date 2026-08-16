@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MantineProvider } from '@mantine/core';
 import { CompanyProvider, useCompany, type Company } from '../context/CompanyContext';
 import { CompanySwitcher } from '../components/CompanySwitcher';
 import '../i18n'; // ensure i18n is initialised
@@ -30,9 +31,11 @@ function Wrapper({
   children: ReactNode;
 }) {
   return (
-    <CompanyProvider allowedCompanies={allowedCompanies}>
-      {children}
-    </CompanyProvider>
+    <MantineProvider>
+      <CompanyProvider allowedCompanies={allowedCompanies}>
+        {children}
+      </CompanyProvider>
+    </MantineProvider>
   );
 }
 

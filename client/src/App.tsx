@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MantineProvider } from '@mantine/core';
 import './i18n';
 import './App.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -8,6 +9,7 @@ import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
+import { eqfalTheme } from './theme';
 
 function LanguageButton() {
   const { t, i18n } = useTranslation();
@@ -42,7 +44,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
   return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>}</div>;
 }
 
-export default function App() {
+function AppContent() {
   const { t, i18n } = useTranslation();
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
@@ -51,4 +53,8 @@ export default function App() {
   if (loading) return <main className="login"><h1>{t('app.title')}</h1><LanguageButton/><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
   return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
+}
+
+export default function App() {
+  return <MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider>;
 }

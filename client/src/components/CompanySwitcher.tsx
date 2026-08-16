@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { NativeSelect, Text } from '@mantine/core';
 import { useCompany } from '../context/CompanyContext';
 
 interface CompanySwitcherProps {
@@ -20,27 +21,23 @@ export function CompanySwitcher({ onSwitch }: CompanySwitcherProps) {
 
   if (allowedCompanies.length === 0) {
     return (
-      <p
-        role="status"
-        style={{ fontSize: '0.85rem', color: '#888', marginTop: '1.5rem' }}
-      >
+      <Text role="status" size="sm" c="dimmed">
         {t('company.none')}
-      </p>
+      </Text>
     );
   }
 
   return (
     <div className="company-switcher">
-      <label htmlFor="company-switcher">
-        {t('company.label')}
-      </label>
-      <select
+      <NativeSelect
         id="company-switcher"
+        label={t('company.label')}
         aria-label={t('company.switchAriaLabel')}
         value={activeCompanyId ?? ''}
         disabled={switching}
-        onChange={e => {
-          const nextId = e.target.value;
+        data={allowedCompanies.map(c => ({ value: c.id, label: c.name }))}
+        onChange={event => {
+          const nextId = event.currentTarget.value;
           if (!nextId || nextId === activeCompanyId) return;
 
           if (!onSwitch) {
@@ -55,13 +52,7 @@ export function CompanySwitcher({ onSwitch }: CompanySwitcherProps) {
             })
             .finally(() => setSwitching(false));
         }}
-      >
-        {allowedCompanies.map(c => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      />
     </div>
   );
 }
