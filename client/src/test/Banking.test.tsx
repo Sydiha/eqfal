@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n';
@@ -31,6 +31,37 @@ describe('Banking',()=>{
     expect(screen.queryByText('Import statement')).not.toBeInTheDocument();
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock.mock.calls.map(call=>call[0])).toEqual(['/api/bank-accounts','/api/bank-import-batches','/api/bank-transactions']);
+  });
+
+  it('resets the bank account form after a successful create without surfacing an error',async()=>{
+    const created={id:'a1',display_name:'Validation account',bank_name:'Test Bank',currency_code:'SAR',is_active:true};
+    const fetchMock=vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({accounts:[]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({batches:[]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({transactions:[]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({account:created}),{status:201}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({accounts:[created]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({batches:[]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({transactions:[]}),{status:200}));
+    vi.stubGlobal('fetch',fetchMock);
+    renderBanking({ canView:true, canImport:false, canManage:true, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+
+    const accountName=await screen.findByRole('textbox',{name:/Account name/i});
+    const bankName=screen.getByRole('textbox',{name:/Bank name/i});
+    const currency=screen.getByRole('textbox',{name:/Currency/i});
+    fireEvent.change(accountName,{target:{value:'Validation account'}});
+    fireEvent.change(bankName,{target:{value:'Test Bank'}});
+    fireEvent.change(currency,{target:{value:'USD'}});
+    fireEvent.click(screen.getByRole('button',{name:'Create account'}));
+
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(7));
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('/api/bank-accounts');
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({method:'POST'});
+    expect(accountName).toHaveValue('');
+    expect(bankName).toHaveValue('');
+    expect(currency).toHaveValue('SAR');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(await screen.findByText('Validation account')).toBeInTheDocument();
   });
 
   it('shows matching action only when bank.match is granted',async()=>{
