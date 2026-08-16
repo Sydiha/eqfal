@@ -8,7 +8,7 @@ export const eqfalTheme = createTheme({
   },
   fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
   headings: { fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif', fontWeight: '700' },
-  defaultRadius: 'md',
+  defaultRadius: 'sm',
   radius: { xs: rem(4), sm: rem(8), md: rem(12), lg: rem(16), xl: rem(24) },
   spacing: { xs: rem(4), sm: rem(8), md: rem(12), lg: rem(16), xl: rem(24) },
   shadows: {
