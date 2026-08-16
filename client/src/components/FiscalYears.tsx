@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDisplayDate } from '../date-format';
 
 export interface FiscalYear {
   id: string;
@@ -50,7 +51,7 @@ function errorKeyFor(reason: unknown): ErrorKey {
 }
 
 export function FiscalYears({ canView, canManage, onUnauthorized }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [loading, setLoading] = useState(canView);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
@@ -164,8 +165,8 @@ export function FiscalYears({ canView, canManage, onUnauthorized }: Props) {
                 </div>
               </div>
               <dl className="fiscal-year-dates">
-                <div><dt>{t('fiscalYears.start')}</dt><dd>{year.start_date}</dd></div>
-                <div><dt>{t('fiscalYears.end')}</dt><dd>{year.end_date}</dd></div>
+                <div><dt>{t('fiscalYears.start')}</dt><dd>{formatDisplayDate(year.start_date, i18n.language)}</dd></div>
+                <div><dt>{t('fiscalYears.end')}</dt><dd>{formatDisplayDate(year.end_date, i18n.language)}</dd></div>
               </dl>
               {canManage && year.status === 'open' && (
                 <div className="fiscal-year-actions">
