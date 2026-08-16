@@ -23,22 +23,71 @@ export function MantineDirectionSync() {
   const { i18n } = useTranslation();
   const { setDirection } = useDirection();
   const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
-  useEffect(() => { setDirection(direction); document.documentElement.dir = direction; document.documentElement.lang = i18n.language; }, [direction, i18n.language, setDirection]);
+
+  useEffect(() => {
+    setDirection(direction);
+    document.documentElement.dir = direction;
+    document.documentElement.lang = i18n.language;
+  }, [direction, i18n.language, setDirection]);
+
   return null;
 }
 
 function LoginBrand() {
   const { t } = useTranslation();
-  return <div className="login-brand" aria-hidden="true"><div className="login-brand-mark">إ</div><div><p className="login-brand-name">{t('app.shortTitle')} <span>EQFAL</span></p><p className="login-brand-subtitle">{t('app.subtitle')}</p></div></div>;
+  return <div className="login-brand" aria-hidden="true">
+    <div className="login-brand-mark">إ</div>
+    <div>
+      <p className="login-brand-name">{t('app.shortTitle')} <span>EQFAL</span></p>
+      <p className="login-brand-subtitle">{t('app.subtitle')}</p>
+    </div>
+  </div>;
 }
 
 function LoginForm() {
-  const { t } = useTranslation(); const { login } = useAuth(); const [submitting, setSubmitting] = useState(false); const [invalid, setInvalid] = useState(false);
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setSubmitting(true); setInvalid(false); const data = new FormData(event.currentTarget); try { if (!await login(String(data.get('email')), String(data.get('password')))) setInvalid(true); } catch { setInvalid(true); } finally { setSubmitting(false); } };
-  return <main className="login-shell"><div className="login-language"><LanguageButton /></div><section className="login-layout" aria-labelledby="login-title"><aside className="login-identity"><LoginBrand /><div className="login-identity-copy"><p className="eyebrow">EQFAL</p><h1>{t('app.title')}</h1><p>{t('app.subtitle')}</p></div></aside><div className="login-card"><div className="login-card-header"><div className="login-card-mobile-brand"><LoginBrand /></div><h2 id="login-title">{t('auth.login')}</h2><p>{t('app.subtitle')}</p></div><form className="login-form" onSubmit={submit}><label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required aria-invalid={invalid || undefined}/></label><label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required aria-invalid={invalid || undefined}/></label>{invalid && <p role="alert" className="login-error">{t('auth.invalid')}</p>}<button className="primary login-submit" disabled={submitting}>{t('auth.login')}</button></form></div></section></main>;
+  const { t } = useTranslation();
+  const { login } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
+  const [invalid, setInvalid] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSubmitting(true); setInvalid(false);
+    const data = new FormData(event.currentTarget);
+    try { if (!await login(String(data.get('email')), String(data.get('password')))) setInvalid(true); }
+    catch { setInvalid(true); } finally { setSubmitting(false); }
+  };
+  return <main className="login-shell">
+    <div className="login-language"><LanguageButton /></div>
+    <section className="login-layout" aria-labelledby="login-title">
+      <aside className="login-identity">
+        <LoginBrand />
+        <div className="login-identity-copy">
+          <p className="eyebrow">EQFAL</p>
+          <h1>{t('app.title')}</h1>
+          <p>{t('app.subtitle')}</p>
+        </div>
+      </aside>
+      <div className="login-card">
+        <div className="login-card-header">
+          <div className="login-card-mobile-brand"><LoginBrand /></div>
+          <h2 id="login-title">{t('auth.login')}</h2>
+          <p>{t('app.subtitle')}</p>
+        </div>
+        <form className="login-form" onSubmit={submit}>
+          <label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required aria-invalid={invalid || undefined}/></label>
+          <label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required aria-invalid={invalid || undefined}/></label>
+          {invalid && <p role="alert" className="login-error">{t('auth.invalid')}</p>}
+          <button className="primary login-submit" disabled={submitting}>{t('auth.login')}</button>
+        </form>
+      </div>
+    </section>
+  </main>;
 }
 
-function AuthenticatedShell() { const { logout, switchCompany, session } = useAuth(); const [page, setPage] = useState<Page>('home'); return <AppShell page={page} setPage={setPage} email={session!.user.email} onSwitch={switchCompany} onLogout={logout}><CompanyContentForPage page={page} setPage={setPage}/></AppShell>; }
+function AuthenticatedShell() {
+  const { logout, switchCompany, session } = useAuth();
+  const [page, setPage] = useState<Page>('home');
+  return <AppShell page={page} setPage={setPage} email={session!.user.email} onSwitch={switchCompany} onLogout={logout}><CompanyContentForPage page={page} setPage={setPage}/></AppShell>;
+}
 
 function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: Page) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized } = useAuth();
@@ -49,11 +98,17 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
 }
 
 function AppContent() {
-  const { t, i18n } = useTranslation(); const { loading, session } = useAuth(); const isRtl = i18n.language === 'ar';
+  const { t, i18n } = useTranslation();
+  const { loading, session } = useAuth();
+  const isRtl = i18n.language === 'ar';
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
   if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><h1>{t('app.title')}</h1><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
   return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
 }
 
-export default function App() { const { i18n } = useTranslation(); const direction = i18n.language === 'ar' ? 'rtl' : 'ltr'; return <DirectionProvider initialDirection={direction}><MantineDirectionSync /><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>; }
+export default function App() {
+  const { i18n } = useTranslation();
+  const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  return <DirectionProvider initialDirection={direction}><MantineDirectionSync /><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
+}

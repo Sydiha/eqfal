@@ -7,6 +7,7 @@ import '../mobile.css';
 import '../visual-polish.css';
 
 export type Page = 'home' | 'fiscalYears' | 'documents' | 'banks';
+
 type IconName = 'home' | 'calendar' | 'document' | 'bank';
 
 function ShellIcon({ name }: { name: IconName }) {
@@ -22,12 +23,87 @@ function ShellIcon({ name }: { name: IconName }) {
 const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank' };
 
 export function AppShell({ page, setPage, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
-  const { t, i18n } = useTranslation(); const [menuOpen, { toggle, close }] = useDisclosure(false); useEffect(close, [page, close]);
-  const nav = (next: Page) => <NavLink component="button" className="eqfal-nav-link" active={page === next} aria-current={page === next ? 'page' : undefined} label={t(`nav.${next}`)} leftSection={<span aria-hidden="true" className="nav-icon"><ShellIcon name={navIcons[next]} /></span>} onClick={() => setPage(next)} />;
-  const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out'; const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
-  return <MantineAppShell className="app-shell" header={{ height: 72 }} navbar={{ width: 256, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }} layout="alt" padding={0}>
-    <MantineAppShell.Header className="topbar"><Group h="100%" wrap="nowrap" gap="md"><Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} /><Text className="mobile-brand" fw={800}>{t('app.shortTitle')}</Text><Stack gap={0} className="page-context"><Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text><Text className="page-context-title" fw={750}>{t(`nav.${page}`)}</Text></Stack><Box className="topbar-spacer" /><CompanySwitcher onSwitch={onSwitch} /><Button className="header-action language-action" aria-label={t('app.switchLanguage')} variant="subtle" size="compact-md" onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}><span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span><span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span></Button><Divider orientation="vertical" className="top-divider" /><Group gap="sm" wrap="nowrap" className="user-summary"><span className="user-avatar" aria-hidden="true">{userInitial}</span><Stack gap={0} className="user-copy"><Text size="xs" c="dimmed">{t('home.currentUser')}</Text><Text size="sm" fw={650}>{email}</Text></Stack></Group><Button className="header-action logout-action" aria-label={t('auth.logout')} variant="subtle" size="compact-md" onClick={() => void onLogout()}><span className="desktop-action-label">{t('auth.logout')}</span><span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span></Button></Group></MantineAppShell.Header>
-    <MantineAppShell.Navbar className="sidebar" p="lg"><UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}><span className="brand-symbol" aria-hidden="true"><span /><span /><span /></span><span className="brand-copy"><Text fw={850} size="lg">{t('app.shortTitle')}</Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span></UnstyledButton><Divider my="xl" className="sidebar-divider" /><Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text><Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}{nav('banks')}</Stack></MantineAppShell.Navbar>
-    <MantineAppShell.Main className="eqfal-workspace"><div className="workspace-content">{children}</div></MantineAppShell.Main>
-  </MantineAppShell>;
+  const { t, i18n } = useTranslation();
+  const [menuOpen, { toggle, close }] = useDisclosure(false);
+  useEffect(close, [page, close]);
+
+  const nav = (next: Page) => (
+    <NavLink
+      component="button"
+      className="eqfal-nav-link"
+      active={page === next}
+      aria-current={page === next ? 'page' : undefined}
+      label={t(`nav.${next}`)}
+      leftSection={<span aria-hidden="true" className="nav-icon"><ShellIcon name={navIcons[next]} /></span>}
+      onClick={() => setPage(next)}
+    />
+  );
+
+  const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
+  const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
+
+  return (
+    <MantineAppShell
+      className="app-shell"
+      header={{ height: 72 }}
+      navbar={{ width: 256, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      layout="alt"
+      padding={0}
+    >
+      <MantineAppShell.Header className="topbar">
+        <Group h="100%" wrap="nowrap" gap="md">
+          <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
+          <Text className="mobile-brand" fw={800}>{t('app.shortTitle')}</Text>
+          <Stack gap={0} className="page-context">
+            <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
+            <Text className="page-context-title" fw={750}>{t(`nav.${page}`)}</Text>
+          </Stack>
+          <Box className="topbar-spacer" />
+          <CompanySwitcher onSwitch={onSwitch} />
+          <Button
+            className="header-action language-action"
+            aria-label={t('app.switchLanguage')}
+            variant="subtle"
+            size="compact-md"
+            onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
+          >
+            <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
+            <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
+          </Button>
+          <Divider orientation="vertical" className="top-divider" />
+          <Group gap="sm" wrap="nowrap" className="user-summary">
+            <span className="user-avatar" aria-hidden="true">{userInitial}</span>
+            <Stack gap={0} className="user-copy">
+              <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
+              <Text size="sm" fw={650}>{email}</Text>
+            </Stack>
+          </Group>
+          <Button
+            className="header-action logout-action"
+            aria-label={t('auth.logout')}
+            variant="subtle"
+            size="compact-md"
+            onClick={() => void onLogout()}
+          >
+            <span className="desktop-action-label">{t('auth.logout')}</span>
+            <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
+          </Button>
+        </Group>
+      </MantineAppShell.Header>
+
+      <MantineAppShell.Navbar className="sidebar" p="lg">
+        <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
+          <span className="brand-symbol" aria-hidden="true"><span /><span /><span /></span>
+          <span className="brand-copy"><Text fw={850} size="lg">{t('app.shortTitle')}</Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span>
+        </UnstyledButton>
+        <Divider my="xl" className="sidebar-divider" />
+        <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
+        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}{nav('banks')}</Stack>
+      </MantineAppShell.Navbar>
+
+      <MantineAppShell.Main className="eqfal-workspace">
+        <div className="workspace-content">{children}</div>
+      </MantineAppShell.Main>
+    </MantineAppShell>
+  );
 }
