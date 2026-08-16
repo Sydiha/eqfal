@@ -112,6 +112,14 @@ class BankReconciliationRepository {
     return rows[0] ?? null;
   }
 
+  async settlement(transactionId: string, companyId: string, client: PoolClient): Promise<{ id: string } | null> {
+    const { rows } = await client.query<{ id: string }>(
+      'SELECT id FROM document_settlements WHERE bank_transaction_id=$1 AND company_id=$2',
+      [transactionId, companyId],
+    );
+    return rows[0] ?? null;
+  }
+
   async document(id: string, companyId: string, client?: PoolClient): Promise<CandidateDocument | null> {
     const db = client ?? this.db;
     const { rows } = await db.query<CandidateDocument>(
@@ -230,6 +238,7 @@ export class BankReconciliationService {
       if (transaction.reconciliation_status !== 'matched') throw new BankReconciliationConflictError('Bank transaction is not matched');
       const match = await this.repo.match(transactionId, companyId, client);
       if (!match) throw new BankReconciliationConflictError('Bank transaction match is missing');
+      if (await this.repo.settlement(transactionId, companyId, client)) throw new BankReconciliationConflictError('Delete the payment settlement before unmatching');
       await this.repo.deleteMatch(transactionId, companyId, client);
       await this.repo.setStatus(transactionId, companyId, 'unmatched', null, client);
       await this.audit.logEvent({
