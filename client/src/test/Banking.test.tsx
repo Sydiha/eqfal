@@ -46,9 +46,9 @@ describe('Banking',()=>{
     vi.stubGlobal('fetch',fetchMock);
     renderBanking({ canView:true, canImport:false, canManage:true, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
 
-    const accountName=await screen.findByLabelText('Account name');
-    const bankName=screen.getByLabelText('Bank name');
-    const currency=screen.getByLabelText('Currency');
+    const accountName=await screen.findByRole('textbox',{name:/Account name/i});
+    const bankName=screen.getByRole('textbox',{name:/Bank name/i});
+    const currency=screen.getByRole('textbox',{name:/Currency/i});
     fireEvent.change(accountName,{target:{value:'Validation account'}});
     fireEvent.change(bankName,{target:{value:'Test Bank'}});
     fireEvent.change(currency,{target:{value:'USD'}});
