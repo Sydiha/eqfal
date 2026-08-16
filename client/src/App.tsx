@@ -10,6 +10,7 @@ import { useAuth } from './context/AuthContext';
 import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { Banking } from './components/Banking';
+import { SettlementPanel } from './components/SettlementPanel';
 import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
 import { eqfalTheme } from './theme';
@@ -94,7 +95,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
-  return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>} {page === 'banks' && <Banking canView={c.includes('bank.view')} canImport={c.includes('bank.import')} canManage={c.includes('bank.account.manage')} canMatch={c.includes('bank.match')} canReconcile={c.includes('bank.reconcile')} onUnauthorized={handleUnauthorized}/>}</div>;
+  return <div key={companyKey}>{page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>} {page === 'banks' && <><Banking canView={c.includes('bank.view')} canImport={c.includes('bank.import')} canManage={c.includes('bank.account.manage')} canMatch={c.includes('bank.match')} canReconcile={c.includes('bank.reconcile')} onUnauthorized={handleUnauthorized}/><SettlementPanel canView={c.includes('bank.view')} canSettle={c.includes('payment.settle')} onUnauthorized={handleUnauthorized}/></>}</div>;
 }
 
 function AppContent() {
