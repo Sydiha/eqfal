@@ -581,3 +581,234 @@
     min-height: 0;
   }
 }
+
+/* Fiscal years UX modernization */
+.fiscal-years-page {
+  max-width: 1160px;
+  padding: 0;
+  overflow: hidden;
+  border-color: #dce4ed;
+  box-shadow: 0 10px 30px rgba(24, 45, 72, .055);
+}
+
+.fiscal-years-heading {
+  margin: 0;
+  padding: 26px 28px 22px;
+  align-items: center;
+  border-bottom: 1px solid #e7edf3;
+  background:
+    radial-gradient(circle at 90% -24%, rgba(62, 101, 145, .08), transparent 36%),
+    linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+}
+
+.fiscal-years-heading > div {
+  max-width: 660px;
+}
+
+.fiscal-years-heading h2 {
+  margin-top: 2px;
+  font-size: clamp(1.45rem, 2vw, 1.8rem);
+  letter-spacing: -.02em;
+}
+
+.fiscal-years-heading > div > p:last-child {
+  max-width: 610px;
+  margin-top: 6px;
+  line-height: 1.65;
+}
+
+.fiscal-years-heading > .primary {
+  min-width: 142px;
+  min-height: 40px;
+  padding-inline: 18px;
+  border-radius: 9px;
+  box-shadow: 0 6px 14px rgba(23, 55, 94, .12);
+}
+
+.fiscal-years-message,
+.fiscal-years-state {
+  margin: 20px 28px;
+}
+
+.fiscal-years-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 22px 28px 28px;
+  background: #f8fafc;
+}
+
+.fiscal-year-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 190px;
+  padding: 18px;
+  border: 1px solid #dde5ed;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(24, 45, 72, .04);
+}
+
+.fiscal-year-card.open {
+  border-color: #cbdbe9;
+  box-shadow: inset 0 3px #17375e, 0 5px 16px rgba(24, 45, 72, .045);
+}
+
+.fiscal-year-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.fiscal-year-card-header > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 10px;
+  align-items: center;
+}
+
+.fiscal-year-card h3 {
+  margin: 0;
+  color: #1d2e43;
+  font-size: 1.02rem;
+}
+
+.fiscal-year-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.fiscal-year-dates > div {
+  padding: 12px;
+  border: 1px solid #e7edf3;
+  border-radius: 9px;
+  background: #fbfcfd;
+}
+
+.fiscal-year-dates dt {
+  color: #748195;
+  font-size: .72rem;
+  font-weight: 650;
+}
+
+.fiscal-year-dates dd {
+  margin: 5px 0 0;
+  color: #29394d;
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.fiscal-year-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f5;
+}
+
+.fiscal-year-actions button {
+  min-height: 36px;
+  padding-inline: 13px;
+  font-size: .8rem;
+}
+
+.fiscal-year-modal {
+  width: min(100%, 540px);
+  border: 1px solid #dfe6ee;
+  box-shadow: 0 24px 70px rgba(7, 17, 31, .22);
+}
+
+.fiscal-year-modal > h3 {
+  margin-bottom: 18px;
+  color: #1f3046;
+}
+
+.fiscal-year-form {
+  gap: 16px;
+}
+
+.fiscal-year-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.fiscal-year-date-fields label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fiscal-year-modal .modal-actions {
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.fiscal-year-close-modal > p {
+  margin: -4px 0 18px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+@media (max-width: 62em) {
+  .fiscal-years-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 48em) {
+  .fiscal-years-page {
+    border-radius: 14px;
+  }
+
+  .fiscal-years-heading {
+    gap: 16px;
+    padding: 20px 18px 18px;
+    align-items: stretch;
+  }
+
+  .fiscal-years-heading > .primary {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .fiscal-years-message,
+  .fiscal-years-state {
+    margin: 16px;
+  }
+
+  .fiscal-years-grid {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .fiscal-year-card {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .fiscal-year-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fiscal-year-actions button {
+    width: 100%;
+  }
+
+  .fiscal-year-date-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 34em) {
+  .fiscal-year-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .fiscal-year-actions {
+    grid-template-columns: 1fr;
+  }
+}
