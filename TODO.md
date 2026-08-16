@@ -10,7 +10,7 @@
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد وقت هذا التحديث: `e70d34d119669e45d2650fbe3d52bbf868070950`.
+- آخر main مؤكد وقت هذا التحديث: `4895bbbc66387e5574d97bc2b051c45dc400078a`.
 
 الحالة الحالية:
 - Core security / tenancy / auth / memberships / capabilities foundations: DONE.
@@ -23,6 +23,7 @@
 - UI Modernization العام: CLOSED حتى PR #42.
 - **Phase 3A — Bank Import Foundation: CLOSED.**
 - **Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.**
+- **Phase 3C — Payment Settlement Foundation: CLOSED.**
 
 Production:
 - غير منشور.
@@ -99,7 +100,7 @@ Merge commit: `e70d34d119669e45d2650fbe3d52bbf868070950`.
 
 تم إنجاز:
 - manual bank transaction ↔ document matching.
-- حالات التسوية: `unmatched / matched / reconciled`.
+- حالات التسوية البنكية: `unmatched / matched / reconciled`.
 - صلاحيات مستقلة: `bank.match` و`bank.reconcile`.
 - Eligible document matching ضمن `needs_review` أو `approved`.
 - منع reconciliation النهائي إلا مع document معتمد.
@@ -120,21 +121,62 @@ Merge commit: `e70d34d119669e45d2650fbe3d52bbf868070950`.
 ملاحظة:
 PR #49 أُغلق بدون دمج بعد اكتشاف blocker في migration integrity، ثم أُعيد التنفيذ من `main` في PR #50 مع معالجة القيد من البداية.
 
+### 4.3 Phase 3C — Payment Settlement Foundation — CLOSED
+
+PR المعتمد: #54.
+Merge commit: `4895bbbc66387e5574d97bc2b051c45dc400078a`.
+
+تم إنجاز:
+- capability مستقلة: `payment.settle`.
+- جدول `document_settlements` بعلاقات company-scoped مركبة.
+- one bank transaction per settlement في الحزمة الحالية.
+- السماح بعدة حركات بنكية لتسوية مستند واحد تدريجيًا.
+- اشتراط document معتمد ووجود match مسبق للحركة البنكية مع نفس المستند.
+- منع over-settlement.
+- حساب `unpaid / partially_paid / paid` مشتقًا من مبالغ التسويات دون تلويث حالة المستند التشغيلية.
+- row locking على document والحركة البنكية لمنع التسوية المتزامنة غير الآمنة.
+- Audit لإنشاء وحذف التسويات، مع سبب حذف إلزامي.
+- منع فك match عن حركة بنكية لديها settlement قائمة.
+- minimal bilingual settlement UI ضمن Banking flow.
+- حسابات مالية decimal-safe باستخدام integer cents و`BigInt` بدل JavaScript floating-point arithmetic.
+- regression test لدقة الهللات عند القيم الكبيرة.
+- authorization / tenancy / state / migration-integrity / UI gating coverage المرتبطة بالحزمة.
+
+التحقق النهائي:
+- TypeScript: PASS.
+- Tests: PASS.
+- Build: PASS.
+- GitHub CI على PR: PASS.
+- GitHub CI #95 على `main` بعد الدمج: PASS.
+
+ملاحظات تنفيذية:
+- PR #52 أُغلق بدون دمج وفق Zero-Loop Rule بعد تعثر اختبار UI جديد عقب محاولة التصحيح الوحيدة.
+- PR #54 أعاد التنفيذ من `main` في مسار نظيف.
+- أثناء review النهائي اكتُشف خطر دقة مالية في `Number/toFixed()`؛ استُخدمت محاولة التصحيح الوحيدة لاستبدالها بحسابات integer cents وإضافة regression test، ثم نجح CI.
+- PR #53 كان PR مكررًا أُنشئ بالخطأ وأُغلق فورًا بدون دمج.
+
+Phase 3 ما زالت **IN PROGRESS** لأن العهد/السلف والسيناريوهات المتقدمة ليست مغلقة بعد، كما لم يُسجل بعد اختبار عملي شامل لبوابة Phase 3 على عينات حقيقية من الاستيراد → المطابقة → التسوية.
+
 ---
 
 ## 5. المهمة التالية المقترحة — Read-only Design Check
 
-**Phase 3C — Payments / Settlement Foundation**.
+**Phase 3D — Custody / Advances Foundation**.
 
 قبل أي كود:
 - مراجعة أحدث `main` فقط والوثيقة التشغيلية المعتمدة.
-- تحديد أقل نموذج Payment/Settlement يمكن اختباره دون توسع مبكر.
-- تحديد علاقته بالحركة البنكية والمستند.
-- حسم الحالات والصلاحيات وBackend enforcement.
+- تحديد أقل نموذج للعهدة/السلفة يمكن اختباره دون توسع مبكر.
+- حسم علاقته بالحركة البنكية والمستند والمستفيد.
+- تحديد حالات الصرف والتسوية والإرجاع والإقفال.
+- حسم ما إذا كان الدفع الشخصي نيابة عن الشركة يدخل في نفس النموذج أو يؤجل.
+- حسم الصلاحيات وBackend enforcement.
 - حسم company isolation وsafe 404.
 - حسم Audit والتزامن/idempotency.
-- تحديد السيناريو الأحادي الأول وتأجيل partial/over/prepayment وmany-to-many والعهد المتقدمة إذا لم تكن لازمة للحزمة الأولى.
+- تحديد الاختبارات المطلوبة.
+- إبقاء many-to-many، overpayment، prepayment، والتصنيف المحاسبي النهائي خارج النطاق ما لم يثبت أنها لازمة للحزمة الأولى.
 - لا تنفيذ قبل اعتماد Design Check.
+
+بعد اكتمال حزمة Phase 3D، يجب تنفيذ **Practical Phase 3 sample validation** للتحقق من بوابة المرحلة: استيراد → مطابقة → تسويات على عينات، قبل إعلان Phase 3 مغلقة.
 
 ---
 
@@ -161,8 +203,9 @@ PR #49 أُغلق بدون دمج بعد اكتشاف blocker في migration int
 ### Deferred حتى مراحلها المعتمدة
 - المطابقة التلقائية/scoring/AI للمستندات والحركات.
 - many-to-many transaction/document matching.
-- partial / over / prepayment flows إذا لم تدخل ضمن الحزمة المعتمدة لاحقًا.
-- العهد المتقدمة حتى Design Check مستقل داخل Phase 3.
+- overpayment / prepayment flows.
+- الدفع الشخصي نيابة عن الشركة إذا لم يدخل في Phase 3D المعتمد.
+- العهد/السلف المتقدمة خارج الحد الأدنى للحزمة التالية.
 - OCR/AI extraction المدفوع أو أي AI محاسبي نهائي.
 - VAT reconciliation.
 - الشركاء والذمم (Phase 4).
