@@ -1,51 +1,100 @@
+.workspace {
+  min-width: 0;
+  overflow-x: hidden;
+  padding: 0 !important;
+}
+
+.workspace-content {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding: var(--space-6);
+}
+
+.mobile-action-label {
+  display: none;
+}
+
 @media (max-width: 48em) {
+  .topbar {
+    height: 64px;
+    padding-inline: var(--space-2);
+  }
+
   .topbar [class*="mantine-Group-root"] {
     width: 100%;
     min-width: 0;
+    gap: 6px;
   }
 
-  .topbar-spacer {
+  .topbar-spacer,
+  .mobile-brand,
+  .user-summary,
+  .top-divider {
     display: none;
   }
 
   .company-switcher {
     flex: 1 1 auto;
     width: auto;
-    min-width: 0;
-    max-width: 170px;
+    min-width: 120px;
+    max-width: 165px;
   }
 
-  .header-action {
-    width: 36px;
-    min-width: 36px;
-    flex: 0 0 36px;
-    padding-inline: 0 !important;
-  }
-
-  .header-action [class*="mantine-Button-label"] {
+  .company-switcher label {
     display: none;
   }
 
-  .header-action::after {
-    content: attr(data-mobile-label);
-    font-size: .75rem;
+  .company-switcher input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-action {
+    min-width: 0;
+    flex: 0 0 auto;
+    padding-inline: 9px !important;
+  }
+
+  .desktop-action-label {
+    display: none;
+  }
+
+  .mobile-action-label {
+    display: inline;
+    white-space: nowrap;
+    font-size: .78rem;
     font-weight: 700;
-    line-height: 1;
+  }
+
+  .language-action {
+    min-width: 40px;
+  }
+
+  .logout-action {
+    min-width: 50px;
+  }
+
+  .workspace-content {
+    padding: var(--space-4) var(--space-3);
   }
 
   .modal-backdrop {
-    align-items: end;
-    padding: 0;
-    padding-block-start: max(.75rem, env(safe-area-inset-top));
+    place-items: center;
+    padding: max(var(--space-3), env(safe-area-inset-top)) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom));
   }
 
   .modal {
-    width: 100%;
-    max-width: none;
-    max-height: calc(100dvh - .75rem);
+    width: min(100%, 440px);
+    max-width: 440px;
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
     padding: var(--space-4);
-    padding-block-end: max(var(--space-4), env(safe-area-inset-bottom));
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-radius: var(--radius-lg);
+  }
+
+  .modal h3 {
+    margin-block-end: var(--space-4);
   }
 
   .upload-form {
@@ -54,15 +103,22 @@
   }
 
   .file-drop {
-    min-height: 140px;
+    position: relative;
+    min-height: 132px;
     padding: var(--space-4);
     overflow: hidden;
+    cursor: pointer;
   }
 
-  .file-drop input {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+  .file-drop input[type="file"] {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
 
   .selected-file {
@@ -78,15 +134,10 @@
   }
 
   .modal-actions {
-    position: sticky;
-    bottom: calc(-1 * var(--space-4));
-    z-index: 1;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2);
-    margin-inline: calc(-1 * var(--space-4));
-    padding: var(--space-3) var(--space-4) max(var(--space-4), env(safe-area-inset-bottom));
-    background: linear-gradient(to bottom, rgba(255,255,255,.92), var(--surface) 35%);
+    margin-block-start: var(--space-3);
   }
 
   .modal-actions button {
@@ -96,7 +147,20 @@
 }
 
 @media (max-width: 22em) {
+  .topbar [class*="mantine-Group-root"] {
+    gap: 4px;
+  }
+
   .company-switcher {
-    max-width: 132px;
+    min-width: 105px;
+    max-width: 130px;
+  }
+
+  .header-action {
+    padding-inline: 7px !important;
+  }
+
+  .logout-action {
+    min-width: 46px;
   }
 }
