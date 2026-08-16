@@ -3,6 +3,7 @@ import { healthRouter } from './modules/health/health.router';
 import { authRouter } from './modules/auth/auth.router';
 import { fiscalYearRouter } from './modules/fiscal-years/fiscal-year.router';
 import { documentRouter } from './modules/documents/document.router';
+import { bankRouter } from './modules/banking/bank.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api', healthRouter);
 app.use('/api', authRouter);
 app.use('/api', fiscalYearRouter);
 app.use('/api', documentRouter);
+app.use('/api', bankRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
