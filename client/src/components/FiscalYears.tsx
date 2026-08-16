@@ -182,8 +182,8 @@ export function FiscalYears({ canView, canManage, onUnauthorized }: Props) {
       {form && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="fy-form-title" className="modal fiscal-year-modal"><h3 id="fy-form-title">{t(form.kind === 'create' ? 'fiscalYears.createTitle' : 'fiscalYears.editTitle')}</h3>{errorKey && <div role="alert" className="message error">{t(`fiscalYears.${errorKey}`)}</div>}<form onSubmit={save} className="form-grid fiscal-year-form">
         <label>{t('fiscalYears.name')}<input name="name" required maxLength={120} defaultValue={form.kind === 'edit' ? form.fiscalYear.name : ''} /></label>
         <div className="fiscal-year-date-fields">
-          <label>{t('fiscalYears.start')}<input name="start_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.start_date.slice(0, 10) : ''} /></label>
-          <label>{t('fiscalYears.end')}<input name="end_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.end_date.slice(0, 10) : ''} /></label>
+          <label>{t('fiscalYears.start')}<input name="start_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.start_date : ''} /></label>
+          <label>{t('fiscalYears.end')}<input name="end_date" type="date" required defaultValue={form.kind === 'edit' ? form.fiscalYear.end_date : ''} /></label>
         </div>
         <div className="modal-actions"><button type="button" onClick={() => setForm(null)}>{t('common.cancel')}</button><button className="primary" type="submit" disabled={saving}>{t('common.save')}</button></div>
       </form></div></div>}
