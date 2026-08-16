@@ -4,12 +4,20 @@ INSERT INTO capabilities (id)
 VALUES ('bank.match'), ('bank.reconcile')
 ON CONFLICT (id) DO NOTHING;
 
+-- Composite tenancy references below require matching UNIQUE keys on the
+-- referenced tables. bank_transactions already receives its composite key in
+-- Phase 3A; documents needs an explicit company-scoped unique key here.
+ALTER TABLE documents
+  ADD CONSTRAINT documents_id_company_uidx UNIQUE (id, company_id);
+
+ALTER TABLE bank_transactions
+  ADD CONSTRAINT bank_transactions_id_company_uidx UNIQUE (id, company_id);
+
 ALTER TABLE bank_transactions
   ADD COLUMN reconciliation_status TEXT NOT NULL DEFAULT 'unmatched'
     CHECK (reconciliation_status IN ('unmatched','matched','reconciled')),
   ADD COLUMN reconciled_by_user_id UUID REFERENCES users(id),
-  ADD COLUMN reconciled_at TIMESTAMPTZ,
-  ADD CONSTRAINT bank_transactions_company_identity_unique UNIQUE (id, company_id);
+  ADD COLUMN reconciled_at TIMESTAMPTZ;
 
 ALTER TABLE bank_transactions
   ADD CONSTRAINT bank_transactions_reconciliation_metadata_check
