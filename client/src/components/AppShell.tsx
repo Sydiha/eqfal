@@ -51,7 +51,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
       <MantineAppShell.Navbar className="sidebar" p="lg">
         <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
           <span className="brand-symbol" aria-hidden="true">E</span>
-          <span><Text fw={800} size="lg">{t('app.shortTitle')}</Text><Text size="xs" className="brand-subtitle">Financial operations</Text></span>
+          <span><Text fw={800} size="lg">{t('app.shortTitle')}</Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span>
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" tt="uppercase" size="xs" fw={700}>{t('nav.main')}</Text>

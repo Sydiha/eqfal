@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MantineProvider } from '@mantine/core';
+import { DirectionProvider, MantineProvider } from '@mantine/core';
 import './i18n';
 import './App.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -56,5 +56,7 @@ function AppContent() {
 }
 
 export default function App() {
-  return <MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider>;
+  const { i18n } = useTranslation();
+  const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  return <DirectionProvider initialDirection={direction}><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
 }
