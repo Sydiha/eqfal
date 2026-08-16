@@ -26,11 +26,14 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
     />
   );
 
+  const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
+
   return (
     <MantineAppShell
       className="app-shell"
       header={{ height: 76 }}
       navbar={{ width: 252, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      layout="alt"
       padding={0}
     >
       <MantineAppShell.Header className="topbar">
@@ -40,14 +43,14 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
           <Box className="topbar-spacer" />
           <CompanySwitcher onSwitch={onSwitch} />
           <Button
-            className="header-action"
-            data-mobile-label={i18n.language === 'ar' ? 'EN' : 'AR'}
+            className="header-action language-action"
             aria-label={t('app.switchLanguage')}
             variant="subtle"
             size="compact-md"
             onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
           >
-            {t('app.switchLanguage')}
+            <span className="desktop-action-label">{t('app.switchLanguage')}</span>
+            <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
           </Button>
           <Divider orientation="vertical" className="top-divider" />
           <Stack gap={0} className="user-summary">
@@ -55,14 +58,14 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
             <Text size="sm" fw={600}>{email}</Text>
           </Stack>
           <Button
-            className="header-action"
-            data-mobile-label="⏻"
+            className="header-action logout-action"
             aria-label={t('auth.logout')}
             variant="default"
             size="compact-md"
             onClick={() => void onLogout()}
           >
-            {t('auth.logout')}
+            <span className="desktop-action-label">{t('auth.logout')}</span>
+            <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
           </Button>
         </Group>
       </MantineAppShell.Header>
@@ -77,7 +80,9 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
         <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}</Stack>
       </MantineAppShell.Navbar>
 
-      <MantineAppShell.Main className="workspace">{children}</MantineAppShell.Main>
+      <MantineAppShell.Main className="workspace">
+        <div className="workspace-content">{children}</div>
+      </MantineAppShell.Main>
     </MantineAppShell>
   );
 }
