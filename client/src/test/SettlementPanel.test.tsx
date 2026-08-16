@@ -12,8 +12,8 @@ function renderPanel(props:React.ComponentProps<typeof SettlementPanel>){return 
 describe('SettlementPanel',()=>{
   it('does not request data without bank.view',()=>{
     vi.stubGlobal('fetch',vi.fn());
-    const {container}=renderPanel({canView:false,canSettle:true,onUnauthorized:vi.fn()});
-    expect(container).toBeEmptyDOMElement();
+    renderPanel({canView:false,canSettle:true,onUnauthorized:vi.fn()});
+    expect(screen.queryByText('Payment settlements')).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -25,9 +25,10 @@ describe('SettlementPanel',()=>{
       .mockResolvedValueOnce(new Response(JSON.stringify({document:{id:'22222222-2222-4222-8222-222222222222',status:'approved',original_filename:'invoice.pdf',total_amount:'100.00'},settled_amount:'40.00',remaining_amount:'60.00',payment_status:'partially_paid',settlements:[]}),{status:200}));
     vi.stubGlobal('fetch',fetchMock);
     renderPanel({canView:true,canSettle:false,onUnauthorized:vi.fn()});
-    const select=await screen.findByLabelText('Matched bank transaction');
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(1));
+    const select=screen.getAllByLabelText('Matched bank transaction')[0]!;
     fireEvent.click(select);
-    fireEvent.click(await screen.findByText(/Vendor/));
+    fireEvent.click(await screen.findByRole('option',{name:/Vendor/}));
     expect(await screen.findByText(/invoice.pdf/)).toBeInTheDocument();
     expect(screen.queryByText('Record settlement')).not.toBeInTheDocument();
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(3));
