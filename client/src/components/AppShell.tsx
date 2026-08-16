@@ -80,7 +80,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
         <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}</Stack>
       </MantineAppShell.Navbar>
 
-      <MantineAppShell.Main className="workspace">
+      <MantineAppShell.Main className="eqfal-workspace">
         <div className="workspace-content">{children}</div>
       </MantineAppShell.Main>
     </MantineAppShell>
