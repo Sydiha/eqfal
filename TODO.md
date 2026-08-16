@@ -10,21 +10,17 @@
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد وقت هذا التحديث: `98f1e82806c2210f391779504bdfaf3e76235d89`.
+- آخر main مؤكد وقت هذا التحديث: `4e2ace50f8720f2cf758570d8d28405a185b67d3`.
 
 الحالة الحالية:
 - Core security / tenancy / auth / memberships / capabilities foundations: DONE.
 - Fiscal Years foundation + API + UI: DONE.
 - Phase 2A Secure Document Upload: DONE.
 - Phase 2B Document Review Workflow: DONE.
-- Phase 2C Manager Document Intake: DONE ومُدمجة عبر PR #23.
-- UI Shell / Documents redesign: DONE.
-- Mantine UI foundation + responsive shell modernization: DONE.
-- Documents UX modernization: DONE.
-- Fiscal Years UX modernization: DONE.
-- Locale-aware Gregorian date display: DONE.
-- Login UX modernization: DONE عبر PR #41.
-- Shared UI consistency / states / dialogs / forms polish: DONE عبر PR #42.
+- Phase 2C Manager Document Intake: DONE عبر PR #23.
+- Practical Manager Document Journey Validation على `main`: PASS.
+- **Phase 2 — Documents: CLOSED.**
+- UI Modernization العام: CLOSED حتى PR #42.
 
 Production:
 - غير منشور.
@@ -32,119 +28,65 @@ Production:
 
 ---
 
-## 2. Completed Foundations — DONE
+## 2. Phase 2 — Documents — CLOSED
 
-- Bootstrap Core Foundation.
-- Data / Tenancy Foundation.
-- Auth / Users Foundation.
-- Memberships + Roles + Capabilities.
-- Fiscal Years + Initial Audit Foundation.
-- Arabic/English + RTL/LTR.
-- Company Switcher Foundation.
-- Auth / Session + Secure Company Switching.
-- Fiscal Year API / Application Integration.
-- Fiscal Years UI / Authenticated Shell.
-- GitHub Actions CI.
-- Core MVP Security & Readiness hardening.
-- Permanent Tool / Cost / Design Check guardrails.
+### 2.1 ما تم إنجازه
+- رفع آمن ومستندات company-scoped.
+- PDF/JPEG/PNG/WebP حتى 10 MB مع MIME/extension/signature validation وSHA-256.
+- Storage Adapter قابل للاستبدال، بدون BLOBs كبيرة داخل PostgreSQL.
+- دورة الحالات: `uploaded -> needs_review -> approved | incomplete | rejected`.
+- صلاحيات مستقلة للعرض/الرفع/المراجعة/الاعتماد مع Backend enforcement.
+- Manager Document Intake: نوع المستند، الجهة المقابلة، التاريخ، المرجع، الإجمالي، الملاحظة.
+- Audit للتغييرات الحساسة.
+- Documents UI responsive مع RTL/LTR وdialogs وحالات مشتركة.
 
----
+### 2.2 التحقق العملي النهائي
+تم تنفيذ الرحلة العملية على `main` الحالي ونجحت بالكامل:
+1. Upload document — PASS.
+2. Save intake metadata — PASS.
+3. Submit for review — PASS.
+4. Transition to `needs_review` — PASS.
+5. Approve — PASS.
+6. Transition to `approved` — PASS.
+7. Open original file — PASS.
 
-## 3. Phase 2 — Documents
-
-### 3.1 Phase 2A — Secure Document Upload Foundation — DONE
-- company-scoped `documents` table.
-- statuses: `uploaded | needs_review | approved | incomplete | rejected`.
-- capabilities: `document.view`, `document.upload`.
-- PDF/JPEG/PNG/WebP فقط، بحد 10 MB.
-- extension/MIME/signature validation.
-- SHA-256 server-side.
-- replaceable Storage Adapter مع local implementation حاليًا.
-- لا BLOBs داخل PostgreSQL.
-- company-scoped list/read/file retrieval.
-- Same-Origin للرفع.
-- Audit `document.upload`.
-
-### 3.2 Phase 2B — Document Review Workflow — DONE
-PR #20 merged.
-
-Transitions:
-- `uploaded -> needs_review` عبر `document.upload`.
-- `needs_review -> incomplete/rejected` عبر `document.review`.
-- `needs_review -> approved` عبر `document.approve`.
-
-API:
-- `POST /api/documents/:id/submit-review`
-- `POST /api/documents/:id/review`
-
-Security / consistency:
-- Same-Origin على mutation endpoints.
-- Authenticated Session + trusted Active Company.
-- decision-specific capability enforcement في Backend.
-- company-scoped lookup + transaction locking.
-- safe 404 للـcross-company/not-found.
-- 409 للحالة غير الصالحة/stale transition.
-- `review_note` بحد 500 حرف.
-- سبب إلزامي لـ`incomplete` و`rejected`.
-- `approved` يسمح بملاحظة اختيارية.
-- Audit actions for submit/review/approve transitions.
-
-### 3.3 Phase 2C — Manager Document Intake — DONE
-PR #23 merged.
-
-تمت إضافة intake metadata للمستند مع الحفاظ على عزل الشركات والصلاحيات والتدفق الحالي، وتشمل الحقول الحالية:
-- document type.
-- counterparty name.
-- document date.
-- reference number.
-- total amount.
-- intake note.
-
-الـUI الحالية تعرض وتسمح بتعديل بيانات intake ضمن الصلاحيات والحالة المسموحة، مع بقاء Backend هو المرجع النهائي للـauthorization والـworkflow.
-
-### 3.4 UI / UX for Documents — DONE
-- list/detail workspace.
-- upload dialog.
-- intake editor.
-- review/approval dialogs.
-- responsive desktop/mobile behavior.
-- RTL/LTR support.
-- shared form/state/dialog styling.
+بذلك تحققت بوابة Phase 2 المعتمدة: **رحلة رفع/مراجعة عملية ناجحة**.
 
 ---
 
-## 4. UI Modernization — CLOSED
+## 3. UI Modernization — CLOSED
 
-تم إغلاق مسار التحديث البصري العام حتى PR #42.
+تم إغلاق مسار التحديث البصري العام حتى PR #42، ويشمل AppShell/Home، Documents، Fiscal Years، Login، responsive Desktop/Mobile، RTL/LTR، date display، والحالات والنماذج والحوارات المشتركة.
 
-يشمل:
-- AppShell + Home modernization.
-- responsive desktop/mobile shell.
-- RTL/LTR fixes.
-- Documents UX modernization.
-- Fiscal Years UX modernization.
-- Gregorian locale-aware display formatting.
-- Login UX modernization.
-- Shared loading/empty/error/no-access states.
-- Shared form / button / dialog consistency.
-
-لا يبدأ مسار polishing عام جديد دون حاجة عملية واضحة مرتبطة بوظيفة أو شاشة جديدة.
+لا يبدأ polishing عام جديد دون حاجة عملية مرتبطة بوظيفة أو شاشة جديدة.
 
 ---
 
-## 5. Current Status / Next Gate
+## 4. المرحلة التالية المعتمدة من الوثيقة التشغيلية
 
-لم يعد هناك blocker لتسليم Phase 2C؛ تم حل مسار التسليم والـPR والدمج.
+**Phase 3 — البنوك والدفعات والعهد**.
 
-الخطوة التالية قبل إعلان Phase 2 مغلقة بالكامل:
-- تنفيذ **Practical Manager Document Journey Validation** على `main` الحالي:
-  1. upload document.
-  2. save intake metadata.
-  3. submit for review.
-  4. review as incomplete/rejected أو approve حسب capability.
-  5. التأكد من تحديث الحالة والبيانات والعرض بدون regression.
+بوابة الانتقال المحددة في الوثيقة التشغيلية:
+- **استيراد ومطابقة وتسويات على عينات.**
 
-إذا نجحت الرحلة العملية، تُغلق Phase 2 رسميًا ثم يُنفذ Design Check للمهمة الوظيفية التالية من المرجع التشغيلي المعتمد.
+المبادئ الحاكمة للمرحلة:
+- Excel/CSV أولًا؛ لا تكامل بنكي مباشر في MVP.
+- البنك يثبت ما دخل وخرج فعليًا لكنه لا يحدد وحده التصنيف المحاسبي.
+- كل حركة مهمة يجب أن ترتبط تدريجيًا بالسبب/الجهة/المستند/العملية والمراجعة.
+- منع الاستيراد المكرر عبر idempotency/fingerprints عند بناء الاستيراد.
+- المرحلة تشمل البنوك والدفعات والعهد، لكن التنفيذ يبدأ بأصغر حزمة واحدة بعد Design Check، ولا تُبنى المرحلة كاملة دفعة واحدة.
+
+---
+
+## 5. المهمة التالية — Read-only Design Check
+
+قبل أي كود في Phase 3:
+- مراجعة `main` الحالية فقط.
+- تحديد أقل حزمة أولى قابلة للاختبار من Phase 3.
+- تحديد data model/API/capabilities/audit/tenancy boundaries المطلوبة.
+- تحديد تنسيق Excel/CSV الأولي وسياسة duplicate detection.
+- تحديد ما هو داخل النطاق وخارجه بوضوح.
+- لا تنفيذ قبل اعتماد Design Check.
 
 ---
 
@@ -162,33 +104,20 @@ PR #23 merged.
 
 ---
 
-## 7. Remaining MVP / Operational Backlog
+## 7. Operational Backlog مستقل
 
-### P0 — Practical Phase 2 Journey Validation
-- upload → intake → submit-review → review/approve.
-- validate both desktop and mobile only where UX is materially involved.
-- no code changes unless a real blocker is found.
-
-### P1 — Select next functional phase
-بعد إغلاق Phase 2:
-- Read-only Design Check من الوثيقة التشغيلية المعتمدة.
-- تحديد أقل حزمة وظيفية تالية دون توسع.
-- لا يبدأ التنفيذ قبل اعتماد التصميم.
-
-### P2 — Operational cleanup مستقل
 - Portable Dependency Lockfile: إزالة registry URLs القديمة الخاصة بـReplit من `package-lock.json` مع الحفاظ على dependency graph قدر الإمكان ونجاح CI.
 - Dependency security review فقط عند الحاجة الفعلية؛ لا `npm audit fix` عشوائي أو breaking upgrade دون مراجعة.
 - Staging validation قبل أي Production مستقبلًا.
 
 ### Deferred حتى مراحلها المعتمدة
-- OCR/AI extraction.
+- OCR/AI extraction المدفوع أو أي AI محاسبي نهائي.
 - VAT reconciliation.
-- Purchase/Sales invoices accounting workflow.
-- Expenses / unknown transfers / personal withdrawals / advances.
-- Bank transactions / reconciliation.
-- Accounting periods / Month / Quarter close / reopen workflow.
-- Zakat / year-end close / Financial Statements / Qawaem output.
-- Notifications / email alerts.
+- الشركاء والذمم (Phase 4).
+- الإقفال الشهري (Phase 5).
+- VAT (Phase 6).
+- الزكاة والقوائم والإقفال السنوي (Phase 7).
+- Production readiness (Phase 9).
 - E-invoicing / external ERP integrations.
 - Native mobile application.
 - Paid AI/APIs.
