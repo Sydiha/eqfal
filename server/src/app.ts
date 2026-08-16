@@ -5,6 +5,7 @@ import { fiscalYearRouter } from './modules/fiscal-years/fiscal-year.router';
 import { documentRouter } from './modules/documents/document.router';
 import { bankRouter } from './modules/banking/bank.router';
 import { bankReconciliationRouter } from './modules/banking/bank-reconciliation.router';
+import { documentSettlementRouter } from './modules/banking/document-settlement.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -24,6 +25,7 @@ app.use('/api', fiscalYearRouter);
 app.use('/api', documentRouter);
 app.use('/api', bankRouter);
 app.use('/api', bankReconciliationRouter);
+app.use('/api', documentSettlementRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
