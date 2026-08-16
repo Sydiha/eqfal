@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
+import '../mobile.css';
 
 export type Page = 'home' | 'fiscalYears' | 'documents';
 
@@ -38,13 +39,31 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
           <Text className="mobile-brand" fw={800}>{t('app.shortTitle')}</Text>
           <Box className="topbar-spacer" />
           <CompanySwitcher onSwitch={onSwitch} />
-          <Button variant="subtle" size="compact-md" onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{t('app.switchLanguage')}</Button>
+          <Button
+            className="header-action"
+            data-mobile-label={i18n.language === 'ar' ? 'EN' : 'AR'}
+            aria-label={t('app.switchLanguage')}
+            variant="subtle"
+            size="compact-md"
+            onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
+          >
+            {t('app.switchLanguage')}
+          </Button>
           <Divider orientation="vertical" className="top-divider" />
           <Stack gap={0} className="user-summary">
             <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
             <Text size="sm" fw={600}>{email}</Text>
           </Stack>
-          <Button variant="default" size="compact-md" onClick={() => void onLogout()}>{t('auth.logout')}</Button>
+          <Button
+            className="header-action"
+            data-mobile-label="⏻"
+            aria-label={t('auth.logout')}
+            variant="default"
+            size="compact-md"
+            onClick={() => void onLogout()}
+          >
+            {t('auth.logout')}
+          </Button>
         </Group>
       </MantineAppShell.Header>
 
