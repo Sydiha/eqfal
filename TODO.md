@@ -10,17 +10,19 @@
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد وقت هذا التحديث: `4e2ace50f8720f2cf758570d8d28405a185b67d3`.
+- آخر main مؤكد وقت هذا التحديث: `e70d34d119669e45d2650fbe3d52bbf868070950`.
 
 الحالة الحالية:
 - Core security / tenancy / auth / memberships / capabilities foundations: DONE.
 - Fiscal Years foundation + API + UI: DONE.
 - Phase 2A Secure Document Upload: DONE.
 - Phase 2B Document Review Workflow: DONE.
-- Phase 2C Manager Document Intake: DONE عبر PR #23.
+- Phase 2C Manager Document Intake: DONE.
 - Practical Manager Document Journey Validation على `main`: PASS.
 - **Phase 2 — Documents: CLOSED.**
 - UI Modernization العام: CLOSED حتى PR #42.
+- **Phase 3A — Bank Import Foundation: CLOSED.**
+- **Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.**
 
 Production:
 - غير منشور.
@@ -41,7 +43,7 @@ Production:
 - Documents UI responsive مع RTL/LTR وdialogs وحالات مشتركة.
 
 ### 2.2 التحقق العملي النهائي
-تم تنفيذ الرحلة العملية على `main` الحالي ونجحت بالكامل:
+تم تنفيذ الرحلة العملية على `main` ونجحت بالكامل:
 1. Upload document — PASS.
 2. Save intake metadata — PASS.
 3. Submit for review — PASS.
@@ -62,30 +64,76 @@ Production:
 
 ---
 
-## 4. المرحلة التالية المعتمدة من الوثيقة التشغيلية
+## 4. Phase 3 — البنوك والدفعات والعهد — IN PROGRESS
 
-**Phase 3 — البنوك والدفعات والعهد**.
-
-بوابة الانتقال المحددة في الوثيقة التشغيلية:
+بوابة المرحلة في الوثيقة التشغيلية:
 - **استيراد ومطابقة وتسويات على عينات.**
 
-المبادئ الحاكمة للمرحلة:
+المبادئ الحاكمة:
 - Excel/CSV أولًا؛ لا تكامل بنكي مباشر في MVP.
 - البنك يثبت ما دخل وخرج فعليًا لكنه لا يحدد وحده التصنيف المحاسبي.
 - كل حركة مهمة يجب أن ترتبط تدريجيًا بالسبب/الجهة/المستند/العملية والمراجعة.
-- منع الاستيراد المكرر عبر idempotency/fingerprints عند بناء الاستيراد.
-- المرحلة تشمل البنوك والدفعات والعهد، لكن التنفيذ يبدأ بأصغر حزمة واحدة بعد Design Check، ولا تُبنى المرحلة كاملة دفعة واحدة.
+- منع الاستيراد المكرر عبر idempotency/fingerprints.
+- التنفيذ بحزم صغيرة مستقلة وقابلة للاختبار.
+
+### 4.1 Phase 3A — Bank Import Foundation — CLOSED
+
+تم إنجاز:
+- CSV/XLSX import.
+- Bank accounts foundation.
+- Column mapping.
+- Preview/confirm flow.
+- Bank transactions persistence.
+- Strong/weak duplicate fingerprints وidempotency controls.
+- Company-scoped data access والعلاقات المركبة المطلوبة.
+- Bank capabilities الأساسية.
+- Audit للعمليات الحساسة.
+- XLSX security hardening.
+- Banking UI الأساسية.
+- TypeScript / Tests / Build / CI: PASS.
+
+### 4.2 Phase 3B — Bank Transaction Matching / Reconciliation Foundation — CLOSED
+
+PR المعتمد: #50.
+Merge commit: `e70d34d119669e45d2650fbe3d52bbf868070950`.
+
+تم إنجاز:
+- manual bank transaction ↔ document matching.
+- حالات التسوية: `unmatched / matched / reconciled`.
+- صلاحيات مستقلة: `bank.match` و`bank.reconcile`.
+- Eligible document matching ضمن `needs_review` أو `approved`.
+- منع reconciliation النهائي إلا مع document معتمد.
+- company-scoped lookups وsafe 404.
+- composite DB tenancy constraints مع unique keys صالحة لـPostgreSQL.
+- transactional row locking/state validation.
+- Audit لأحداث match / unmatch / reconcile / reopen.
+- minimal Banking reconciliation UI.
+- migration-integrity test لمنع تكرار خطأ composite FK.
+
+التحقق النهائي:
+- TypeScript: PASS.
+- Tests: PASS.
+- Build: PASS.
+- GitHub CI على PR: PASS.
+- GitHub CI على `main` بعد الدمج: PASS.
+
+ملاحظة:
+PR #49 أُغلق بدون دمج بعد اكتشاف blocker في migration integrity، ثم أُعيد التنفيذ من `main` في PR #50 مع معالجة القيد من البداية.
 
 ---
 
-## 5. المهمة التالية — Read-only Design Check
+## 5. المهمة التالية المقترحة — Read-only Design Check
 
-قبل أي كود في Phase 3:
-- مراجعة `main` الحالية فقط.
-- تحديد أقل حزمة أولى قابلة للاختبار من Phase 3.
-- تحديد data model/API/capabilities/audit/tenancy boundaries المطلوبة.
-- تحديد تنسيق Excel/CSV الأولي وسياسة duplicate detection.
-- تحديد ما هو داخل النطاق وخارجه بوضوح.
+**Phase 3C — Payments / Settlement Foundation**.
+
+قبل أي كود:
+- مراجعة أحدث `main` فقط والوثيقة التشغيلية المعتمدة.
+- تحديد أقل نموذج Payment/Settlement يمكن اختباره دون توسع مبكر.
+- تحديد علاقته بالحركة البنكية والمستند.
+- حسم الحالات والصلاحيات وBackend enforcement.
+- حسم company isolation وsafe 404.
+- حسم Audit والتزامن/idempotency.
+- تحديد السيناريو الأحادي الأول وتأجيل partial/over/prepayment وmany-to-many والعهد المتقدمة إذا لم تكن لازمة للحزمة الأولى.
 - لا تنفيذ قبل اعتماد Design Check.
 
 ---
@@ -111,6 +159,10 @@ Production:
 - Staging validation قبل أي Production مستقبلًا.
 
 ### Deferred حتى مراحلها المعتمدة
+- المطابقة التلقائية/scoring/AI للمستندات والحركات.
+- many-to-many transaction/document matching.
+- partial / over / prepayment flows إذا لم تدخل ضمن الحزمة المعتمدة لاحقًا.
+- العهد المتقدمة حتى Design Check مستقل داخل Phase 3.
 - OCR/AI extraction المدفوع أو أي AI محاسبي نهائي.
 - VAT reconciliation.
 - الشركاء والذمم (Phase 4).
