@@ -12,6 +12,7 @@ import { Documents } from './components/Documents';
 import { BankingWorkspace } from './components/BankingWorkspace';
 import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
+import { Partners } from './components/Partners';
 import { eqfalTheme } from './theme';
 
 function LanguageButton({ className = '' }: { className?: string }) {
@@ -95,9 +96,9 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
   return <div key={companyKey}>
-    {page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>} 
-    {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>} 
-    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>} 
+    {page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>}
+    {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'banks' && <BankingWorkspace
       canView={c.includes('bank.view')}
       canImport={c.includes('bank.import')}
@@ -110,6 +111,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
       canCloseCustody={c.includes('custody.close')}
       onUnauthorized={handleUnauthorized}
     />}
+    {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
 
