@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, NumberInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
+import { formatDisplayDate } from '../date-format';
+import { financialStatusColor, formatFinancialAmount } from '../financial-format';
 
 type Transaction = { id:string; transaction_date:string; description:string|null; bank_reference:string|null; amount:string; reconciliation_status:'unmatched'|'matched'|'reconciled' };
 type MatchResponse = { match:{document_id:string|null}|null };
@@ -23,30 +25,46 @@ const strings={
 };
 
 export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
-  const {i18n}=useTranslation(); const s=i18n.language==='ar'?strings.ar:strings.en;
-  const [transactions,setTransactions]=useState<Transaction[]>([]); const [selectedTx,setSelectedTx]=useState<string|null>(null); const [documentId,setDocumentId]=useState<string|null>(null); const [summary,setSummary]=useState<Summary|null>(null);
-  const [amount,setAmount]=useState<number|string>(''); const [note,setNote]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const {i18n}=useTranslation();
+  const s=i18n.language==='ar'?strings.ar:strings.en;
+  const [transactions,setTransactions]=useState<Transaction[]>([]);
+  const [selectedTx,setSelectedTx]=useState<string|null>(null);
+  const [documentId,setDocumentId]=useState<string|null>(null);
+  const [summary,setSummary]=useState<Summary|null>(null);
+  const [amount,setAmount]=useState<number|string>('');
+  const [note,setNote]=useState('');
+  const [reason,setReason]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
 
   useEffect(()=>{if(!canView)return;void api<{transactions:Transaction[]}>('/api/bank-transactions',undefined,onUnauthorized).then(x=>setTransactions(x.transactions.filter(t=>t.reconciliation_status!=='unmatched'))).catch(e=>setError(e instanceof Error?e.message:s.error));},[canView]);
 
-  const options=useMemo(()=>transactions.map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions]);
+  const options=useMemo(()=>transactions.map(t=>({
+    value:t.id,
+    label:`${formatDisplayDate(t.transaction_date,i18n.language)} · ${t.description||t.bank_reference||t.id} · ${formatFinancialAmount(t.amount,null,i18n.language)}`,
+  })),[transactions,i18n.language]);
 
   const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setError('');if(!value)return;setBusy(true);try{const match=await api<MatchResponse>(`/api/bank-transactions/${value}/match-candidates`,undefined,onUnauthorized);if(!match.match?.document_id)throw new Error(s.select);setDocumentId(match.match.document_id);const data=await api<Summary>(`/api/documents/${match.match.document_id}/settlements`,undefined,onUnauthorized);setSummary(data);const tx=transactions.find(t=>t.id===value);if(tx&&data.remaining_amount!==null)setAmount(Math.min(Math.abs(Number(tx.amount)),Number(data.remaining_amount)));}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
   const refresh=async()=>{if(!documentId)return;setSummary(await api<Summary>(`/api/documents/${documentId}/settlements`,undefined,onUnauthorized));};
-
   const create=async(event:FormEvent)=>{event.preventDefault();if(!documentId||!selectedTx||!amount)return;setBusy(true);setError('');try{await api(`/api/documents/${documentId}/settlements`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bank_transaction_id:selectedTx,amount:String(amount),note:note||undefined})},onUnauthorized);setNote('');await refresh();}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
   const remove=async(id:string)=>{if(!documentId||!reason.trim())return;setBusy(true);setError('');try{await api(`/api/documents/${documentId}/settlements/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason.trim()})},onUnauthorized);setReason('');await refresh();}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
 
   if(!canView)return null;
-  return <Card withBorder padding="lg"><Stack gap="md">
+  return <Card className="financial-module" withBorder padding="lg"><Stack gap="md">
     <div><Title order={2} size="h3">{s.title}</Title><Text c="dimmed">{s.description}</Text></div>
     {error&&<Alert color="red" role="alert">{error}</Alert>}
     <Select label={s.transaction} placeholder={s.select} data={options} value={selectedTx} onChange={v=>void choose(v)} searchable clearable disabled={busy}/>
     {summary&&<>
-      <Group><Badge>{s.document}: {summary.document.original_filename}</Badge><Badge>{s.status}: {s[summary.payment_status]}</Badge><Badge>{s.total}: {summary.document.total_amount??'—'}</Badge><Badge>{s.settled}: {summary.settled_amount}</Badge><Badge>{s.remaining}: {summary.remaining_amount??'—'}</Badge></Group>
-      {canSettle&&summary.document.status==='approved'&&summary.remaining_amount!==null&&Number(summary.remaining_amount)>0&&<form onSubmit={create}><Group align="end"><NumberInput label={s.amount} value={amount} onChange={setAmount} min={0.01} decimalScale={2} required/><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy}>{s.create}</Button></Group></form>}
+      <Group className="financial-summary">
+        <Badge>{s.document}: {summary.document.original_filename}</Badge>
+        <Badge color={financialStatusColor(summary.payment_status)}>{s.status}: {s[summary.payment_status]}</Badge>
+        <Badge>{s.total}: <span dir="ltr">{formatFinancialAmount(summary.document.total_amount,null,i18n.language)}</span></Badge>
+        <Badge>{s.settled}: <span dir="ltr">{formatFinancialAmount(summary.settled_amount,null,i18n.language)}</span></Badge>
+        <Badge>{s.remaining}: <span dir="ltr">{formatFinancialAmount(summary.remaining_amount,null,i18n.language)}</span></Badge>
+      </Group>
+      {canSettle&&summary.document.status==='approved'&&summary.remaining_amount!==null&&Number(summary.remaining_amount)>0&&<form onSubmit={create}><Group className="financial-form-row" align="end"><NumberInput label={s.amount} value={amount} onChange={setAmount} min={0.01} decimalScale={2} required/><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy}>{s.create}</Button></Group></form>}
       <Title order={3} size="h4">{s.history}</Title>
-      {summary.settlements.length===0?<Text c="dimmed">{s.none}</Text>:<Table.ScrollContainer minWidth={700}><Table><Table.Thead><Table.Tr><Table.Th>{s.transaction}</Table.Th><Table.Th>{s.amount}</Table.Th><Table.Th>{s.note}</Table.Th>{canSettle&&<Table.Th>{s.delete}</Table.Th>}</Table.Tr></Table.Thead><Table.Tbody>{summary.settlements.map(x=><Table.Tr key={x.id}><Table.Td>{x.transaction_date} · {x.transaction_description||x.bank_reference||x.bank_transaction_id}</Table.Td><Table.Td>{x.amount}</Table.Td><Table.Td>{x.note||'—'}</Table.Td>{canSettle&&<Table.Td><Group align="end"><TextInput aria-label={s.reason} placeholder={s.reason} value={reason} onChange={e=>setReason(e.currentTarget.value)} maxLength={500}/><Button color="red" variant="light" onClick={()=>void remove(x.id)} disabled={!reason.trim()} loading={busy}>{s.deleteAction}</Button></Group></Table.Td>}</Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
+      {summary.settlements.length===0?<Text c="dimmed">{s.none}</Text>:<Table.ScrollContainer minWidth={680}><Table className="financial-table" striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>{s.transaction}</Table.Th><Table.Th>{s.amount}</Table.Th><Table.Th>{s.note}</Table.Th>{canSettle&&<Table.Th>{s.delete}</Table.Th>}</Table.Tr></Table.Thead><Table.Tbody>{summary.settlements.map(x=><Table.Tr key={x.id}><Table.Td><span className="financial-date">{formatDisplayDate(x.transaction_date,i18n.language)}</span> · <span className="financial-description" title={x.transaction_description||x.bank_reference||x.bank_transaction_id}>{x.transaction_description||x.bank_reference||x.bank_transaction_id}</span></Table.Td><Table.Td className="financial-money">{formatFinancialAmount(x.amount,null,i18n.language)}</Table.Td><Table.Td><span className="financial-description" title={x.note||'—'}>{x.note||'—'}</span></Table.Td>{canSettle&&<Table.Td><Group className="financial-actions" align="end"><TextInput aria-label={s.reason} placeholder={s.reason} value={reason} onChange={e=>setReason(e.currentTarget.value)} maxLength={500}/><Button color="red" variant="light" onClick={()=>void remove(x.id)} disabled={!reason.trim()} loading={busy}>{s.deleteAction}</Button></Group></Table.Td>}</Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
     </>}
   </Stack></Card>;
 }
