@@ -222,6 +222,9 @@ export class DocumentSettlementService {
 
       const transaction = await this.repo.transaction(transactionId, companyId, client, true);
       if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
+      if ((await client.query('SELECT 1 FROM obligation_settlements WHERE bank_transaction_id=$1', [transactionId])).rowCount) {
+        throw new DocumentSettlementConflictError('Bank transaction already has an obligation settlement');
+      }
       const match = await this.repo.match(transactionId, documentId, companyId, client);
       if (!match) throw new DocumentSettlementConflictError('Bank transaction must be matched to this document first');
 

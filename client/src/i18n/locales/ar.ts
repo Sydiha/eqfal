@@ -6,7 +6,7 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
-  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', openMenu: 'فتح قائمة التنقل' },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', obligations:'الذمم', openMenu: 'فتح قائمة التنقل' },
   home: {
     workspace: 'مساحة عمل الشركة',
     welcome: 'مرحبًا بعودتك',
@@ -36,6 +36,7 @@ const ar = {
   },
   common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة' },
   partners: { title:'الشركاء',description:'إدارة الشركاء القانونيين وسجل الملكية.',noAccess:'ليس لديك صلاحية عرض الشركاء.',create:'إنشاء شريك',edit:'تعديل',name:'الاسم',active:'نشط',inactive:'غير نشط',ownership:'الملكية',effectiveFrom:'ساري من',effectiveTo:'ساري إلى',unknown:'غير معروف',unconfirmed:'غير مؤكد',confirmed:'مؤكد',openEnded:'مفتوح',history:'سجل الملكية',addOwnership:'إضافة فترة ملكية',noHistory:'لا يوجد سجل ملكية بعد.',source:'المستند المصدر',note:'ملاحظة',reason:'سبب التصحيح',status:'حالة التحقق',editOrConfirm:'تعديل / تأكيد',loading:'جارٍ تحميل الشركاء…',empty:'لا يوجد شركاء بعد.',error:'تعذر تحميل الشركاء أو حفظهم.' },
+  obligations:{title:'الذمم',description:'إدارة الذمم المدينة والدائنة.',noAccess:'ليس لديك صلاحية عرض الذمم.',error:'تعذر تحميل الذمم.',createCounterparty:'إنشاء طرف مقابل',openReceivables:'الذمم المدينة المفتوحة',openPayables:'الذمم الدائنة المفتوحة',partialCount:'مسددة جزئيًا',overdueCount:'متأخرة',direction:'الاتجاه',state:'الحالة',counterparty:'الطرف المقابل',all:'الكل',receivable:'مدينة',payable:'دائنة',source:'المصدر',original:'المبلغ الأصلي',settledAmount:'المبلغ المسدد',remaining:'المبلغ المتبقي',due:'تاريخ الاستحقاق',verification:'التحقق',open:'مفتوحة',partial:'جزئية',settled:'مسددة',overdue:'متأخرة',unknown:'غير معروف',unconfirmed:'غير مؤكد',confirmed:'مؤكد',document:'مستند',opening_balance:'رصيد افتتاحي',manual:'يدوي',recognized:'تاريخ الإثبات',settlementHistory:'سجل التسويات',none:'لا توجد تسويات',edit:'تعديل الذمة',cancel:'إلغاء الذمة',addSettlement:'إضافة تسوية',type:'النوع',customer:'عميل',supplier:'مورد',government:'جهة حكومية',other:'أخرى',createObligation:'إنشاء ذمة',editCounterparty:'تعديل الطرف المقابل',removeSettlement:'إزالة',reason:'السبب',note:'ملاحظة',bankTransaction:'معرف الحركة البنكية',counterparties:'الأطراف المقابلة',eligibleDocument:'المستند المعتمد',disableCounterparty:'تعطيل',reactivateCounterparty:'إعادة تفعيل'},
   fiscalYears: {
     title: 'السنوات المالية', description: 'إدارة السنوات المالية للشركة النشطة.',
     loading: 'جارٍ تحميل السنوات المالية…', empty: 'لم يتم إنشاء أي سنة مالية بعد.',

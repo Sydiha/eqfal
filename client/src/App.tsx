@@ -13,6 +13,7 @@ import { BankingWorkspace } from './components/BankingWorkspace';
 import { AppShell, Page } from './components/AppShell';
 import { Home } from './components/Home';
 import { Partners } from './components/Partners';
+import { Obligations } from './components/Obligations';
 import { eqfalTheme } from './theme';
 
 function LanguageButton({ className = '' }: { className?: string }) {
@@ -112,6 +113,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
 
