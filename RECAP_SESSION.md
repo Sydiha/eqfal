@@ -1,16 +1,16 @@
 # RECAP_SESSION
 
 ## آخر تحديث
-2026-08-16
+2026-08-17
 
 ## المرجع الحالي
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد: `39f8b888248711a306830bb8babd8cd29b759cc1`
+- مرجع الإغلاق العملي لـPhase 3: `18348d67482048e6bf0edb5375936f1b23dfdea1`
 - Production: غير منشور.
 
 ## الحالة الحالية
-تم إغلاق **Phase 3D — Custody / Advances Foundation** تقنيًا على `main` بعد دمج PR #57 ونجاح CI على فرع الـPR ثم post-merge CI على `main`.
+تم إغلاق **Phase 3 — البنوك والدفعات والعهد** رسميًا بعد نجاح Practical Phase 3 Sample Validation على بيئة الاختبار، بدون Production وبدون تعديل كود المنتج أثناء التحقق.
 
 الحالة المعتمدة:
 - Phase 2 — Documents: CLOSED.
@@ -19,7 +19,8 @@
 - Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.
 - Phase 3C — Payment Settlement Foundation: CLOSED.
 - Phase 3D — Custody / Advances Foundation: CLOSED.
-- Phase 3 — البنوك والدفعات والعهد: IN PROGRESS حتى نجاح Practical Phase 3 sample validation.
+- Phase 3E — Real Bank Statement Import Readiness: CLOSED.
+- **Phase 3 — البنوك والدفعات والعهد: CLOSED.**
 
 ## ما تم إنجازه فعليًا
 - Core security / tenancy / auth / memberships / capabilities foundations.
@@ -34,53 +35,117 @@
 - Phase 3B: manual bank transaction ↔ document matching, reconciliation states `unmatched / matched / reconciled`, independent `bank.match` / `bank.reconcile` capabilities, tenant-safe constraints, transactional locking/state validation, audit, minimal Banking UI.
 - Phase 3C: `document_settlements`, independent `payment.settle`, approved-document + exact bank-match requirement, derived `unpaid / partially_paid / paid`, overpayment rejection, create/delete audit, tenant-safe constraints, row locking, minimal settlement UI, exact integer-cent arithmetic with `BigInt`.
 - Phase 3D: custody/advance model tied to an outbound bank transaction, approved-document allocations, inbound bank returns, derived remaining balance, close/reopen workflow, independent `custody.view / custody.manage / custody.close`, shared bank-explanation boundary, custody-aware reconciliation, tenant-safe relationships, audit, row locking, minimal bilingual Banking UI, and exact integer-cent arithmetic.
+- Phase 3E: readiness for real bank XLSX import, including recovery/resume for incomplete imports.
 
-## Phase 3D — الإغلاق النهائي
-- المحاولة الأولى: PR #56 أُغلقت بدون دمج وفق Zero-Loop بعد أن كشفت المراجعة النهائية أن التغطية السلوكية لبعض قواعد القبول الحرجة لم تكن كافية.
-- التنفيذ البديل النظيف: PR #57.
-- Merge commit على `main`: `39f8b888248711a306830bb8babd8cd29b759cc1`.
-- CI على PR #57: run #101 — PASS.
-- post-merge CI على `main`: run #102 — PASS.
-- TypeScript: PASS.
-- Tests: PASS.
-- Build: PASS.
-- لا Production.
-- لا خدمات أو تكاليف تشغيلية جديدة.
-- لم يتم تسجيل تطبيق migration 015 على PostgreSQL فعلي ضمن هذا الإغلاق؛ التحقق المسجل هو migration-integrity/tests/CI فقط.
+## Practical Phase 3 Sample Validation — PASS
 
-### الحدود المعتمدة في Phase 3D
-- مصدر تمويل العهدة في هذه الحزمة هو حركة بنكية خارجة واحدة.
-- المرتجعات هي حركات بنكية داخلة ويمكن أن تكون متعددة.
-- المستند الممول من العهدة يجب أن يكون `approved` وأن يغطي تخصيص العهدة كامل إجمالي المستند في هذه المرحلة، منعًا لمصدر تمويل جزئي غير قابل للإكمال ضمن النموذج الحالي.
-- المستند لا يجمع في هذه المرحلة بين Bank Settlement وCustody Allocation أو أكثر من مصدر عهدة.
-- حركة بنكية واحدة تبقى لها علة/تفسير تشغيلي واحد فقط عبر match boundary المشترك.
-- reconciliation البنكي لا يعني إغلاق العهدة؛ إغلاق العهدة مستقل ويتطلب remaining = 0 وصلاحية `custody.close`.
-- الدفع الشخصي من مال المدير/الموظف نيابة عن الشركة لم يدخل Phase 3D وما زال مؤجلًا.
+### Real bank statement import evidence
+تم اختبار كشف XLSX بنكي حقيقي End-to-End:
+- Preview: `289/289` صحيحة.
+- Duplicate: `0`.
+- Invalid: `0`.
+- Confirm: تم إنشاء `289` حركة فعلية في `bank_transactions`.
+- تم التحقق عمليًا من المدين/الدائن والأرصدة.
 
-## المرحلة الحالية حسب الوثيقة التشغيلية المعتمدة
-**Phase 3 — البنوك والدفعات والعهد** ما زالت IN PROGRESS كمرحلة عامة.
+### Database readiness
+تم التحقق فعليًا من تطبيق migrations التالية في PostgreSQL الخاص ببيئة الاختبار:
+- `013_bank_transaction_reconciliation.sql`
+- `014_document_settlements.sql`
+- `015_custody_advances.sql`
 
-بوابة المرحلة:
-**استيراد ومطابقة وتسويات على عينات.**
+### Bank transaction ↔ Document / Reconciliation / Settlement
+عينة الدفع المسجلة:
+- Bank transaction: `EQFAL payment sample` بقيمة `-150.00`.
+- Document: `sign test.png`، الحالة `approved`، الإجمالي `200.00`.
+- Match: موجود فعليًا.
+- Reconciliation: `reconciled`.
+- Settlement: موجود فعليًا بقيمة `150.00`.
 
-الأساس التقني أصبح يغطي import → match/reconcile → payment settlement → custody/returns/closure، لكن لم يتم بعد تسجيل اختبار عملي مترابط للبوابة كاملة على عينات فعلية/تجريبية داخل بيئة تشغيل.
+### Custody journey
+العهدة العملية:
+- purpose: `Phase 3 validation custody`.
+- Funding transaction: `EQFAL custody funding` بقيمة `-500.00`.
+- Allocation: `350.00` إلى مستند معتمد إجماليه `350.00`.
+- Return transaction: `EQFAL custody return` بقيمة `+150.00`.
+- Remaining: `0.00`.
+- Final status: `closed`.
+
+الحساب المثبت عمليًا:
+`500.00 - 350.00 - 150.00 = 0.00`.
+
+### Audit trail
+تم التحقق من وجود الأحداث التالية فعليًا وربطها بالمستخدم والشركة والكيان:
+- `bank_transaction.match`
+- `bank_transaction.reconcile`
+- `document_settlement.create`
+- `custody.create`
+- `custody.document.allocate`
+- `custody.return.link`
+- `custody.close`
+
+كما ظهرت before/after data ذات الصلة للمسار التشغيلي.
+
+### Company isolation
+تم إنشاء Fixture مؤقت لشركة ثانية باسم `Phase 3 Gate Company B` وربط المستخدم الحالي بها عبر Role محدود للقراءة فقط.
+
+التحقق العملي:
+- تم التبديل إلى Company B عبر Company Switcher.
+- لم تظهر الحسابات البنكية أو الـ289 حركة أو المستندات أو العهدة الخاصة بـCompany A.
+- بعد الاختبار تم حذف Membership/Role/Company الخاصة بالـfixture بالكامل.
+- بقيت `Test Company` فقط في قاعدة الاختبار.
+
+### Capabilities / permissions
+الـfixture المحدود امتلك فقط:
+- `bank.view`
+- `custody.view`
+
+ولإثبات enforcement على مستوى Backend، تم تشغيل اختبارات الـroutes/authorization الموجودة في `main`.
+
+النتيجة النهائية:
+- Test Files: `5 passed (5)`.
+- Tests: `31 passed (31)`.
+
+الملفات المشغلة:
+- `bank-reconciliation.router.test.ts`
+- `document-settlement.router.test.ts`
+- `custody.router.test.ts`
+- `company.repository.test.ts`
+- `membership.authorization.repository.test.ts`
+
+لا يوجد Blocker برمجي جديد كشفه Practical Gate.
+
+## قرار الإغلاق
+بوابة Phase 3 المطلوبة في الوثيقة التشغيلية — **استيراد ومطابقة وتسويات على عينات** — اجتازت التحقق العملي.
+
+**Phase 3 — CLOSED.**
+
+الحدود التي تبقى مؤجلة ولا تدخل ضمن إعادة فتح Phase 3:
+- الدفع الشخصي من مال المدير/الموظف نيابة عن الشركة.
+- multiple funding sources للمستند.
+- أكثر من Funding transfer للعهدة نفسها.
+- one bank transaction → multiple operations.
+- splitting one bank transaction across multiple documents/operations.
+- advanced overpayment/prepayment allocation.
+- المطابقة التلقائية/scoring/AI.
+- GL/VAT/accounting classification.
+
+## ملاحظة UI/UX المسجلة
+بعد الإغلاق، توجد مهمة مستقلة لمراجعة UI/UX للصفحات المتأثرة، خصوصًا جداول البنوك:
+- النصوص المقطوعة.
+- عدم تساوي/اتساق الأزرار والحالات.
+- عرض الأعمدة.
+- RTL/LTR.
+- المبالغ والتواريخ.
+- responsive behavior.
+
+المعالجة يجب أن تكون على مستوى النمط المشترك والصفحات المتأثرة، وليس ترقيع صفحة واحدة.
 
 ## المهمة التالية المقترحة
-**Practical Phase 3 Sample Validation — Read-only/Test Execution Plan أولًا، ثم تنفيذ التحقق فقط بعد اعتماد الخطة.**
+**UI/UX Review — Banking & Affected Operational Tables**
 
-يجب أن تغطي العينة المترابطة على الأقل:
-1. استيراد كشف CSV/XLSX بعينة آمنة.
-2. إثبات idempotency بإعادة نفس الاستيراد وعدم تكرار الحركات.
-3. مطابقة حركة بنكية بمستند واعتماد reconciliation ضمن القواعد الحالية.
-4. إنشاء Payment Settlement لمستند معتمد ومطابق.
-5. إنشاء عهدة من حركة بنكية خارجة.
-6. ربط مستند معتمد بالعهدة.
-7. ربط حركة مرتجع داخلة بالعهدة عند وجود متبقٍ.
-8. إغلاق العهدة عند remaining = 0.
-9. التحقق من company isolation والصلاحيات ذات الصلة أثناء الرحلة.
-10. تسجيل النتائج والأدلة دون Production ودون بيانات حقيقية حساسة.
+Read-only Design Check أولًا، ولا يبدأ أي تعديل قبل الاعتماد.
 
-لا تُغلق Phase 3 العامة قبل نجاح هذا التحقق وتوثيقه.
+بعدها أقرب مرحلة أعمال رئيسية حسب الوثيقة التشغيلية هي **Phase 4 — الشركاء والذمم**.
 
 ## قواعد التشغيل المستمرة
 - `GitHub/main` المرجع الوحيد.

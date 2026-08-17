@@ -269,3 +269,23 @@
 3. نجاح الاختبارات/TypeScript/Build المطلوبة.
 4. نجاح GitHub CI على نفس الـPR/commit المراد دمجه.
 5. لا Merge إذا بقي blocker غير محسوم.
+
+---
+
+## 2026-08-17 — إغلاق Phase 3 بعد Practical End-to-End Gate
+**القرار:** إغلاق **Phase 3 — البنوك والدفعات والعهد** رسميًا بعد نجاح البوابة العملية المطلوبة، وليس بمجرد اكتمال الأساس البرمجي.
+
+**الأدلة:**
+- استيراد كشف XLSX بنكي حقيقي: Preview `289/289`، `0` duplicate، `0` invalid، ثم Confirm وإنشاء `289` حركة فعلية.
+- migrations `013`, `014`, `015` مثبتة فعليًا في PostgreSQL الخاص ببيئة الاختبار.
+- Bank transaction ↔ Document Match: PASS.
+- Reconciliation: PASS.
+- Payment Settlement: PASS.
+- Custody journey: Funding `500.00`، Allocation `350.00`، Return `150.00`، Remaining `0.00`، Close = PASS.
+- Audit trail: PASS للتسلسل الحساس، بما في ذلك `custody.return.link`.
+- Company isolation: PASS باستخدام Fixture مؤقت لشركة ثانية ثم تنظيفه بالكامل.
+- Capabilities/permissions: PASS؛ `31/31` اختبارًا نجح عبر 5 ملفات authorization/router مرتبطة.
+
+**الحد:** هذا الإغلاق لا يوسع نطاق Phase 3 إلى المطابقة التلقائية، many-to-many matching، multiple funding sources، advanced over/prepayment، الدفع الشخصي نيابة عن الشركة، أو GL/VAT classification؛ هذه تبقى مؤجلة لمراحل/مهام مستقلة.
+
+**ملاحظة UX:** مشاكل الجداول/RTL/LTR/الأعمدة/المبالغ/التواريخ/الresponsive المسجلة لا تعيد فتح Phase 3؛ تعالج في مهمة UI/UX مستقلة وعلى مستوى النمط المشترك والصفحات المتأثرة.

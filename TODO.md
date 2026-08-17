@@ -1,7 +1,7 @@
 # إقفال | EQFAL
 # Project Progress & Status Report
 
-آخر تحديث: 2026-08-16
+آخر تحديث: 2026-08-17
 
 ## 1. الحالة التنفيذية المختصرة
 
@@ -10,7 +10,7 @@
 المرجع الدائم والوحيد للكود المدمج:
 - Repository: `Sydiha/eqfal`
 - Branch: `main`
-- آخر main مؤكد وقت هذا التحديث: `39f8b888248711a306830bb8babd8cd29b759cc1`.
+- مرجع الإغلاق العملي لـPhase 3: `18348d67482048e6bf0edb5375936f1b23dfdea1`.
 
 الحالة الحالية:
 - Core security / tenancy / auth / memberships / capabilities foundations: DONE.
@@ -20,8 +20,9 @@
 - Phase 3A — Bank Import Foundation: CLOSED.
 - Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.
 - Phase 3C — Payment Settlement Foundation: CLOSED.
-- **Phase 3D — Custody / Advances Foundation: CLOSED.**
-- **Phase 3 — البنوك والدفعات والعهد: IN PROGRESS** حتى نجاح Practical Phase 3 sample validation.
+- Phase 3D — Custody / Advances Foundation: CLOSED.
+- Phase 3E — Real Bank Statement Import Readiness: CLOSED.
+- **Phase 3 — البنوك والدفعات والعهد: CLOSED.**
 
 Production:
 - غير منشور.
@@ -40,14 +41,14 @@ Upload → Intake → Submit → `needs_review` → Approve → Open original �
 
 المسار العام مغلق حتى PR #42، ويشمل AppShell/Home، Documents، Fiscal Years، Login، responsive Desktop/Mobile، RTL/LTR، date display، والحالات والنماذج والحوارات المشتركة.
 
-لا يبدأ polishing عام جديد دون حاجة عملية مرتبطة بوظيفة أو شاشة جديدة.
+تم تسجيل مهمة UI/UX مستقلة بعد إغلاق Phase 3 لمراجعة الصفحات المتأثرة، خصوصًا جداول البنوك: النصوص المقطوعة، اتساق الأزرار والحالات، عرض الأعمدة، RTL/LTR، المبالغ والتواريخ، والـresponsive behavior. لا تعالج هذه الملاحظات بترقيع صفحة واحدة.
 
 ---
 
-## 4. Phase 3 — البنوك والدفعات والعهد — IN PROGRESS
+## 4. Phase 3 — البنوك والدفعات والعهد — CLOSED
 
 بوابة المرحلة:
-- **استيراد ومطابقة وتسويات على عينات.**
+- **استيراد ومطابقة وتسويات على عينات — PASS عمليًا.**
 
 المبادئ الحاكمة:
 - Excel/CSV أولًا؛ لا تكامل بنكي مباشر في MVP.
@@ -88,12 +89,6 @@ PR #54. Merge commit `4895bbbc66387e5574d97bc2b051c45dc400078a`.
 - minimal Settlement UI.
 - exact monetary arithmetic باستخدام integer cents/`BigInt` بدل floating point.
 
-التحقق النهائي:
-- CI على PR #54: PASS.
-- post-merge CI على `main`: PASS — run #95.
-- TypeScript / Tests / Build: PASS.
-- لا يوجد ادعاء بتطبيق migration 014 على PostgreSQL فعلي؛ التحقق المسجل tests/migration integrity/CI فقط.
-
 ### 4.4 Phase 3D — Custody / Advances Foundation — CLOSED
 
 التنفيذ المعتمد: PR #57.
@@ -109,7 +104,6 @@ Merge commit: `39f8b888248711a306830bb8babd8cd29b759cc1`.
 - المستند الممول من العهدة يجب أن يكون `approved`.
 - في هذه المرحلة، Custody Allocation للمستند يغطي كامل إجمالي المستند، ولا يُسمح بمصدر تمويل آخر موازٍ له.
 - derived funded / allocated / returned / remaining balances باستخدام exact integer cents و`BigInt`.
-- منع الرصيد السالب غير المتسق بدل إخفائه أو clamp إلى صفر.
 - رفض Return يتجاوز المتبقي، ورفض إعادة استخدام حركة بنكية مستخدمة.
 - Close فقط عند remaining = 0.
 - Reopen بسبب إلزامي وAudit.
@@ -119,57 +113,66 @@ Merge commit: `39f8b888248711a306830bb8babd8cd29b759cc1`.
 - transaction + row locking للمسارات الحساسة.
 - Audit لإنشاء العهدة، allocation/remove، return link/unlink، close/reopen.
 - minimal bilingual Custody UI ضمن Banking.
-- behavioral tests للقواعد الحرجة إضافة إلى migration-integrity وUI capability gating.
 
-التحقق النهائي:
-- PR #56: أُغلق بدون دمج وفق Zero-Loop بعد أن أظهرت المراجعة النهائية نقصًا في التغطية السلوكية لبعض شروط القبول.
-- PR #57: إعادة تنفيذ نظيفة من `main` ضمن نفس Design Check.
-- CI على PR #57: run #101 — PASS.
-- post-merge CI على `main`: run #102 — PASS.
-- TypeScript: PASS.
-- Tests: PASS.
-- Build: PASS.
-- لا Production.
-- لا خدمات أو تكاليف تشغيلية جديدة.
-- لا يوجد ادعاء بتطبيق migration 015 على PostgreSQL فعلي؛ التحقق المسجل tests/migration integrity/CI فقط.
+### 4.5 Phase 3E — Real Bank Statement Import Readiness — CLOSED
 
-حدود Phase 3D المؤجلة:
+تم التحقق من كشف XLSX بنكي حقيقي End-to-End:
+- Preview: `289/289` صحيحة.
+- Duplicate: `0`.
+- Invalid: `0`.
+- Confirm: تم إنشاء `289` حركة فعلية في `bank_transactions`.
+- تم التحقق عمليًا من المدين/الدائن والأرصدة.
+
+### 4.6 Practical Phase 3 Sample Validation — PASS
+
+تم تنفيذ بوابة الإغلاق عمليًا على بيئة الاختبار بدون Production وبدون تعديل كود المنتج.
+
+الأدلة المسجلة:
+- migrations `013`, `014`, `015` مطبقة فعليًا في PostgreSQL الخاص ببيئة الاختبار.
+- Bank transaction ↔ Document Match: PASS.
+- Reconciliation: PASS.
+- Payment Settlement: PASS؛ settlement فعلي بقيمة `150.00` على مستند معتمد ومطابق.
+- Custody creation: PASS من حركة خارجة `-500.00`.
+- Custody allocation: PASS بقيمة `350.00` لمستند معتمد.
+- Custody return: PASS بحركة داخلة `+150.00`.
+- Custody remaining: `0.00`.
+- Custody close: PASS والحالة النهائية `closed`.
+- Audit trail: PASS، بما يشمل `bank_transaction.match`, `bank_transaction.reconcile`, `document_settlement.create`, `custody.create`, `custody.document.allocate`, `custody.return.link`, `custody.close`.
+- Company isolation: PASS عمليًا عبر Company B مؤقتة؛ لم تظهر بيانات Company A في العرض، ثم حُذف الـfixture بعد الاختبار.
+- Capabilities/permissions: PASS؛ تشغيل 5 ملفات اختبار مرتبطة أعطى `31/31` اختبار ناجح، وتشمل حدود reconciliation/settlement/custody والعزل/authorization.
+- Fixture الاختبار المؤقت تم تنظيفه بالكامل؛ بقيت `Test Company` فقط.
+- لم يظهر Blocker برمجي جديد أثناء Practical Gate.
+
+**الحكم النهائي:** Phase 3 العامة مغلقة رسميًا بعد نجاح بوابة العينة العملية.
+
+حدود Phase 3 المؤجلة:
 - الدفع الشخصي من مال المدير/الموظف نيابة عن الشركة.
 - multiple funding sources للمستند.
 - أكثر من Funding transfer للعهدة نفسها.
 - one bank transaction → multiple operations.
 - splitting one bank transaction across multiple documents/operations.
 - advanced overpayment/prepayment allocation.
+- المطابقة التلقائية/scoring/AI.
 - GL/VAT/accounting classification.
 - AI/external services.
 
 ---
 
-## 5. المهمة التالية — Practical Phase 3 Sample Validation
+## 5. المهمة التالية المقترحة
 
-**Phase 3 لا تُغلق بعد.**
+**UI/UX Review — Banking & Affected Operational Tables**
 
-الخطوة التالية هي إعداد واعتماد **Read-only/Test Execution Plan** للتحقق العملي من بوابة المرحلة، ثم تنفيذ التحقق فقط دون توسع برمجي إلا إذا كشف الاختبار blocker حقيقي يحتاج مهمة مستقلة.
+مهمة مستقلة Read-only Design Check أولًا لمعالجة النمط على الصفحات المتأثرة، خصوصًا:
+- النصوص المقطوعة.
+- عدم اتساق الأزرار والحالات.
+- توزيع وعرض الأعمدة.
+- RTL/LTR.
+- تنسيق المبالغ والتواريخ.
+- responsive behavior.
 
-العينة العملية يجب أن تثبت على الأقل:
-1. CSV/XLSX import لعينة آمنة.
-2. إعادة نفس الاستيراد وإثبات idempotency وعدم التكرار.
-3. Match لحركة بنكية مع مستند ضمن active company.
-4. Reconciliation للمسار المسموح.
-5. Payment Settlement لمستند معتمد ومطابق.
-6. Custody creation من حركة بنكية خارجة.
-7. Custody allocation لمستند معتمد.
-8. Custody return من حركة بنكية داخلة إذا بقي رصيد.
-9. Close عند remaining = 0.
-10. التحقق من company isolation والصلاحيات والأثر المسجل في Audit أثناء الرحلة.
+لا يبدأ أي تعديل قبل Design Check واعتماد النطاق، ولا تعالج المشكلة بترقيع صفحة واحدة.
 
-شروط التحقق:
-- لا Production.
-- لا بيانات حقيقية حساسة في Staging/Preview دون تنقيح.
-- لا تكلفة تشغيلية جديدة.
-- لا تعديل برمجي ضمن مهمة التحقق نفسها إلا بعد فتح Design Check/مهمة مستقلة لأي blocker يظهر.
-
-بعد نجاح هذا الاختبار وتوثيق الأدلة يمكن تقييم إغلاق Phase 3 العامة والانتقال إلى المرحلة التالية في الوثيقة التشغيلية.
+بعد هذه المهمة يمكن متابعة Roadmap الوظيفي المعتمد، وأقرب مرحلة أعمال رئيسية في الوثيقة التشغيلية هي Phase 4 — الشركاء والذمم.
 
 ---
 
@@ -189,12 +192,12 @@ Merge commit: `39f8b888248711a306830bb8babd8cd29b759cc1`.
 
 ## 7. Operational Backlog مستقل
 
+- UI/UX review للصفحات المتأثرة بعد إغلاق Practical Phase 3 Gate.
 - Portable Dependency Lockfile: إزالة registry URLs القديمة الخاصة بـReplit من `package-lock.json` مع الحفاظ على dependency graph قدر الإمكان ونجاح CI.
 - Dependency security review فقط عند الحاجة الفعلية؛ لا `npm audit fix` عشوائي أو breaking upgrade دون مراجعة.
 - Staging validation قبل أي Production مستقبلًا.
 
 ### Deferred حتى مراحلها المعتمدة
-- Practical Phase 3 sample validation قبل إغلاق Phase 3.
 - المطابقة التلقائية/scoring/AI.
 - many-to-many transaction/document matching.
 - one bank transaction → multiple operations.
