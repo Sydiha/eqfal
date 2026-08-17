@@ -113,7 +113,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
 
