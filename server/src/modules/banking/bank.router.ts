@@ -31,8 +31,11 @@ type SourceFormat = 'csv' | 'xlsx';
 type AmountMode = 'signed' | 'debit_credit';
 type DateFormat = 'YYYY-MM-DD' | 'DD/MM/YYYY' | 'DD-MM-YYYY';
 type Cell = string | number | null;
-type ParsedTable = { headers: string[]; rows: Cell[][]; formulaCells: Set<string> };
+type PhysicalRow = { sourceRowNumber: number; cells: Cell[] };
+type ParsedTable = { headers: string[]; rows: Cell[][]; sourceRowNumbers: number[]; formulaCells: Set<string> };
 type ColumnRef = { index: number; label?: string };
+type HeaderProfile = { dateIndex: number; amountIndex: number | null; debitIndex: number | null; creditIndex: number | null; score: number };
+type DetectedTable = ParsedTable & { detectionScore: number };
 
 export type BankColumnMapping = {
   amount_mode: AmountMode;
@@ -196,7 +199,7 @@ function parseCsvText(text: string): string[][] {
   }
   if (quoted) throw new BankValidationError('Invalid CSV quoting');
   if (field.length || row.length) { row.push(field.replace(/\r$/, '')); rows.push(row); }
-  return rows.filter((r) => r.some((v) => v.trim() !== ''));
+  return rows;
 }
 
 function decodeCsv(data: Buffer): string {
@@ -252,6 +255,144 @@ function xmlTag(body: string, tag: string): string | null {
   return match ? decodeXml(match[1]!.replace(/<[^>]+>/g, '')) : null;
 }
 
+function canonicalHeader(value: Cell): string {
+  return String(value ?? '').normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function headerKind(value: Cell): 'date' | 'amount' | 'debit' | 'credit' | 'balance' | 'description' | 'reference' | null {
+  const text = canonicalHeader(value);
+  if (!text) return null;
+  const has = (terms: string[]) => terms.some((term) => text === term || text.includes(term));
+  if (has(['transaction date','posting date','value date','date','التاريخ','تاريخ'])) return 'date';
+  if (has(['debit','withdrawal','مدين','خصم','المخصوم'])) return 'debit';
+  if (has(['credit','deposit','دائن','إيداع','ايداع'])) return 'credit';
+  if (has(['transaction amount','amount','المبلغ','مبلغ'])) return 'amount';
+  if (has(['balance','الرصيد'])) return 'balance';
+  if (has(['description','details','narration','memo','تفاصيل','الوصف','البيان','بيان'])) return 'description';
+  if (has(['reference','transaction id','transaction no','ref','المرجع','رقم العملية','رقم المرجع'])) return 'reference';
+  return null;
+}
+
+function profileHeader(row: Cell[]): HeaderProfile | null {
+  let dateIndex: number | null = null;
+  let amountIndex: number | null = null;
+  let debitIndex: number | null = null;
+  let creditIndex: number | null = null;
+  let score = 0;
+  const seen = new Set<string>();
+  for (let i = 0; i < row.length; i++) {
+    const kind = headerKind(row[i] ?? null);
+    if (!kind) continue;
+    if (!seen.has(kind)) { score++; seen.add(kind); }
+    if (kind === 'date' && dateIndex === null) dateIndex = i;
+    else if (kind === 'amount' && amountIndex === null) amountIndex = i;
+    else if (kind === 'debit' && debitIndex === null) debitIndex = i;
+    else if (kind === 'credit' && creditIndex === null) creditIndex = i;
+  }
+  if (dateIndex === null) return null;
+  if (amountIndex === null && (debitIndex === null || creditIndex === null)) return null;
+  return { dateIndex, amountIndex, debitIndex, creditIndex, score };
+}
+
+function looksLikeDateCell(value: Cell): boolean {
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 1 && value <= 2_958_465;
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  return /^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(text) || /^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(text);
+}
+
+function numericValue(value: Cell): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value === null || value === undefined) return null;
+  let text = String(value).trim();
+  if (!text) return null;
+  let negative = false;
+  if (/^\(.*\)$/.test(text)) { negative = true; text = text.slice(1, -1); }
+  text = text.replace(/[\s,٬]/g, '').replace(/٫/g, '.');
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(text)) return null;
+  const number = Number(text);
+  if (!Number.isFinite(number)) return null;
+  return negative ? -Math.abs(number) : number;
+}
+
+function looksLikeTransaction(row: Cell[], profile: HeaderProfile): boolean {
+  if (!looksLikeDateCell(row[profile.dateIndex] ?? null)) return false;
+  if (profile.amountIndex !== null) {
+    const amount = numericValue(row[profile.amountIndex] ?? null);
+    return amount !== null && amount !== 0;
+  }
+  const debit = numericValue(row[profile.debitIndex!] ?? null);
+  const credit = numericValue(row[profile.creditIndex!] ?? null);
+  const debitNonZero = debit !== null && debit !== 0;
+  const creditNonZero = credit !== null && credit !== 0;
+  return debitNonZero !== creditNonZero;
+}
+
+function rowIsBlank(row: Cell[]): boolean {
+  return !row.some((value) => value !== null && value !== undefined && String(value).trim() !== '');
+}
+
+function looksLikeFooter(row: Cell[]): boolean {
+  const text = row.map((value) => canonicalHeader(value)).filter(Boolean).join(' | ');
+  if (!text) return false;
+  return ['summary','total','totals','opening balance','closing balance','transaction count','عدد عمليات','عدد  عمليات','مجموع','الرصيد الافتتاحي','رصيد الافتتاح','رصيد الاغلاق','رصيد الإغلاق'].some((term) => text.includes(term));
+}
+
+function detectTransactionTable(rows: PhysicalRow[], physicalFormulaCells: Set<string>): DetectedTable {
+  const candidates: { rowIndex: number; profile: HeaderProfile; score: number }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const profile = profileHeader(rows[i]!.cells);
+    if (!profile) continue;
+    let valid = 0; let inspected = 0;
+    for (let j = i + 1; j < rows.length && inspected < 25; j++) {
+      const cells = rows[j]!.cells;
+      if (rowIsBlank(cells)) continue;
+      if (looksLikeFooter(cells)) break;
+      if (profileHeader(cells)) break;
+      inspected++;
+      if (looksLikeTransaction(cells, profile)) valid++;
+    }
+    const evidenceRatio = inspected > 0 ? valid / inspected : 0;
+    if (valid >= 2 && evidenceRatio >= 0.5) candidates.push({ rowIndex: i, profile, score: profile.score * 100 + Math.min(valid, 25) });
+  }
+  if (!candidates.length) throw new BankValidationError('Could not confidently detect bank transaction table');
+  candidates.sort((a,b) => b.score - a.score || a.rowIndex - b.rowIndex);
+  const best = candidates[0]!;
+
+  let lastValid = -1;
+  for (let i = best.rowIndex + 1; i < rows.length; i++) if (looksLikeTransaction(rows[i]!.cells, best.profile)) lastValid = i;
+  if (lastValid < 0) throw new BankValidationError('Could not confidently detect bank transaction table');
+
+  let end = lastValid;
+  for (let i = lastValid + 1; i < rows.length; i++) {
+    const row = rows[i]!.cells;
+    if (rowIsBlank(row) || looksLikeFooter(row)) break;
+    if (profileHeader(row)) continue;
+    end = i;
+  }
+
+  const dataRows: PhysicalRow[] = [];
+  for (let i = best.rowIndex + 1; i <= end; i++) {
+    const row = rows[i]!;
+    if (rowIsBlank(row.cells)) continue;
+    if (profileHeader(row.cells)) continue;
+    dataRows.push(row);
+  }
+  if (!dataRows.length) throw new BankValidationError('Could not confidently detect bank transaction table');
+
+  const headerCells = rows[best.rowIndex]!.cells;
+  const headers = headerCells.map((value, i) => String(value ?? `Column ${i + 1}`).trim() || `Column ${i + 1}`);
+  const sourceRowNumbers = dataRows.map((row) => row.sourceRowNumber);
+  const sourceIndex = new Map(sourceRowNumbers.map((sourceRowNumber, index) => [sourceRowNumber, index]));
+  const formulaCells = new Set<string>();
+  for (const key of physicalFormulaCells) {
+    const [source, column] = key.split(':');
+    const index = sourceIndex.get(Number(source));
+    if (index !== undefined && column !== undefined) formulaCells.add(`${index}:${column}`);
+  }
+  return { headers, rows: dataRows.map((row) => row.cells), sourceRowNumbers, formulaCells, detectionScore: best.score };
+}
+
 function parseXlsx(data: Buffer): ParsedTable {
   const zip = readZipEntries(data);
   const sharedXml = zip.get('xl/sharedStrings.xml')?.toString('utf8') ?? '';
@@ -270,17 +411,23 @@ function parseXlsx(data: Buffer): ParsedTable {
     if (target) candidates.push(target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`.replace(/xl\/xl\//, 'xl/'));
   }
   if (!candidates.length) candidates.push('xl/worksheets/sheet1.xml');
+  let selected: DetectedTable | null = null;
+  let ambiguous = false;
   for (const sheetPath of candidates) {
     const xml = zip.get(sheetPath)?.toString('utf8');
     if (!xml) continue;
-    const rows: Cell[][] = []; const formulaCells = new Set<string>();
-    for (const rowMatch of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/gi)) {
+    const rows: PhysicalRow[] = []; const formulaCells = new Set<string>();
+    let fallbackRow = 1;
+    for (const rowMatch of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/gi)) {
+      const rowAttrs = rowMatch[1]!; const rowBody = rowMatch[2]!;
+      const sourceRowNumber = Number(rowAttrs.match(/\br="(\d+)"/i)?.[1] ?? fallbackRow);
+      fallbackRow = sourceRowNumber + 1;
       const row: Cell[] = [];
-      for (const cellMatch of rowMatch[1]!.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)) {
+      for (const cellMatch of rowBody.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)) {
         const attrs = cellMatch[1]!; const body = cellMatch[2]!;
-        const ref = attrs.match(/\br="([^"]+)"/i)?.[1] ?? `A${rows.length + 1}`;
+        const ref = attrs.match(/\br="([^"]+)"/i)?.[1] ?? `A${sourceRowNumber}`;
         const index = colIndex(ref); const type = attrs.match(/\bt="([^"]+)"/i)?.[1] ?? 'n';
-        if (/<f(?:\s|>)/i.test(body)) formulaCells.add(`${rows.length}:${index}`);
+        if (/<f(?:\s|>)/i.test(body)) formulaCells.add(`${sourceRowNumber}:${index}`);
         let value: Cell = null;
         if (type === 'inlineStr') value = xmlTag(body, 't');
         else {
@@ -293,24 +440,31 @@ function parseXlsx(data: Buffer): ParsedTable {
         }
         row[index] = value;
       }
-      if (row.some((v) => v !== null && String(v).trim() !== '')) rows.push(row);
+      rows.push({ sourceRowNumber, cells: row });
     }
-    if (rows.length) {
-      const headers = rows[0]!.map((v, i) => String(v ?? `Column ${i + 1}`).trim() || `Column ${i + 1}`);
-      return { headers, rows: rows.slice(1), formulaCells: new Set([...formulaCells].map((k) => { const [r,c] = k.split(':'); return `${Number(r)-1}:${c}`; }).filter((k) => !k.startsWith('-1:'))) };
+    if (!rows.some((row) => !rowIsBlank(row.cells))) continue;
+    try {
+      const detected = detectTransactionTable(rows, formulaCells);
+      if (!selected || detected.detectionScore > selected.detectionScore) { selected = detected; ambiguous = false; }
+      else if (detected.detectionScore === selected.detectionScore) ambiguous = true;
+    } catch (err) {
+      if (!(err instanceof BankValidationError)) throw err;
     }
   }
-  throw new BankValidationError('XLSX has no non-empty worksheet');
+  if (!selected) throw new BankValidationError('Could not confidently detect bank transaction table');
+  if (ambiguous) throw new BankValidationError('Ambiguous bank transaction table');
+  const { detectionScore: _score, ...table } = selected;
+  return table;
 }
 
 export function parseBankFile(format: SourceFormat, data: Buffer): ParsedTable {
   if (format === 'csv') {
     const rows = parseCsvText(decodeCsv(data));
-    if (!rows.length) throw new BankValidationError('CSV is empty');
-    const headers = rows[0]!.map((v, i) => v.trim() || `Column ${i + 1}`);
-    const body = rows.slice(1);
-    if (body.length > MAX_ROWS) throw new BankValidationError('Bank import exceeds row limit');
-    return { headers, rows: body, formulaCells: new Set() };
+    const physicalRows = rows.map((cells, index) => ({ sourceRowNumber: index + 1, cells }));
+    if (!physicalRows.some((row) => !rowIsBlank(row.cells))) throw new BankValidationError('CSV is empty');
+    const { detectionScore: _score, ...table } = detectTransactionTable(physicalRows, new Set());
+    if (table.rows.length > MAX_ROWS) throw new BankValidationError('Bank import exceeds row limit');
+    return table;
   }
   const table = parseXlsx(data);
   if (table.rows.length > MAX_ROWS) throw new BankValidationError('Bank import exceeds row limit');
@@ -436,7 +590,7 @@ export class BankService {
     const results:NormalizedTransaction[]=[]; let valid=0,duplicate=0,possible=0,invalid=0;
     const mappedIndices=[mapping.transaction_date,mapping.amount,mapping.debit,mapping.credit,mapping.value_date,mapping.description,mapping.bank_reference,mapping.running_balance].filter(Boolean).map((r)=>r!.index);
     for(let i=0;i<table.rows.length;i++){
-      const row=table.rows[i]!; const source=i+2;
+      const row=table.rows[i]!; const source=table.sourceRowNumbers[i] ?? i+2;
       const formula=mappedIndices.some((idx)=>table.formulaCells.has(`${i}:${idx}`));
       let error:string|null=null;
       const date=normalizeDate(row[mapping.transaction_date.index] ?? null,mapping.date_format); if(!date) error='Invalid date';
@@ -469,7 +623,7 @@ export class BankService {
     const mapping=mappingOverride ?? batch.column_mapping; if(!mapping) throw new BankConflictError('Column mapping required');
     const account=await this.repo.account(batch.bank_account_id,companyId); if(!account) throw new BankNotFoundError('Bank account not found');
     const table=parseBankFile(batch.source_format,await this.files.get(batch.storage_key));
-    const refs=[...new Set(table.rows.map((row,i)=>{
+    const refs=[...new Set(table.rows.map((row)=>{
       const date=normalizeDate(row[mapping.transaction_date.index]??null,mapping.date_format); let amount:string|null=null;
       if(mapping.amount_mode==='signed') amount=normalizeMoney(row[mapping.amount!.index]??null);
       else { const d=normalizeMoney(row[mapping.debit!.index]??null,true); const c=normalizeMoney(row[mapping.credit!.index]??null,true); if(d&&Number(d)!==0) amount=(-Math.abs(Number(d))).toFixed(2); else if(c&&Number(c)!==0) amount=Math.abs(Number(c)).toFixed(2); }

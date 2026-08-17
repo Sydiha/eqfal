@@ -43,7 +43,7 @@ function zip(entries:Record<string,string>):Buffer{
 function formulaXlsx():Buffer{return zip({
   'xl/workbook.xml':'<workbook xmlns:r="r"><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>',
   'xl/_rels/workbook.xml.rels':'<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
-  'xl/worksheets/sheet1.xml':'<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Date</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>2026-08-01</t></is></c><c r="B2"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>'
+  'xl/worksheets/sheet1.xml':'<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Date</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>2026-08-01</t></is></c><c r="B2"><f>1+1</f><v>2</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>2026-08-02</t></is></c><c r="B3"><v>3</v></c></row></sheetData></worksheet>'
 });}
 
 beforeEach(()=>{
@@ -132,6 +132,6 @@ describe('Bank confirmation transaction guarantees',()=>{
 
 describe('Bank file parsing',()=>{
   it('parses CSV headers and data without external dependencies',()=>{const table=parseBankFile('csv',csv);expect(table.headers).toEqual(['Date','Description','Amount','Reference']);expect(table.rows).toHaveLength(2);expect(table.rows[0]?.[2]).toBe('100.00');});
-  it('supports UTF-16LE CSV with BOM',()=>{const data=Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from('Date,Amount\n2026-08-01,5.00\n','utf16le')]);const table=parseBankFile('csv',data);expect(table.rows[0]?.[1]).toBe('5.00');});
+  it('supports UTF-16LE CSV with BOM',()=>{const data=Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from('Date,Amount\n2026-08-01,5.00\n2026-08-02,-1.00\n','utf16le')]);const table=parseBankFile('csv',data);expect(table.rows[0]?.[1]).toBe('5.00');});
   it('parses the first XLSX worksheet and tracks formula cells',()=>{const table=parseBankFile('xlsx',formulaXlsx());expect(table.headers).toEqual(['Date','Amount']);expect(table.rows[0]?.[1]).toBe(2);expect(table.formulaCells.has('0:1')).toBe(true);});
 });
