@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Badge, Group, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Banking } from './Banking';
+import { BankTransactionsView } from './BankTransactionsView';
 import { SettlementPanel } from './SettlementPanel';
 import { CustodyPanel } from './CustodyPanel';
 import './banking-workspace.css';
@@ -20,7 +21,7 @@ type Props = {
 };
 
 type BankingSection = 'transactions' | 'import' | 'accounts' | 'settlements' | 'custody';
-type CoreSection = 'transactions' | 'import' | 'accounts';
+type CoreSection = 'import' | 'accounts';
 
 const copy = {
   ar: {
@@ -53,7 +54,7 @@ export function BankingWorkspace(props: Props) {
   const { i18n } = useTranslation();
   const s = i18n.language === 'ar' ? copy.ar : copy.en;
   const [section, setSection] = useState<BankingSection>('transactions');
-  const coreSection: CoreSection = section === 'import' || section === 'accounts' ? section : 'transactions';
+  const coreSection: CoreSection | null = section === 'import' || section === 'accounts' ? section : null;
 
   return <Stack gap="lg" className="banking-workspace">
     <section className="banking-workspace__hero">
@@ -78,17 +79,18 @@ export function BankingWorkspace(props: Props) {
       </Tabs.List>
     </Tabs>
 
-    {(section === 'transactions' || section === 'import' || section === 'accounts') &&
-      <div className={`banking-core banking-core--${coreSection}`}>
-        <Banking
-          canView={props.canView}
-          canImport={props.canImport}
-          canManage={props.canManage}
-          canMatch={props.canMatch}
-          canReconcile={props.canReconcile}
-          onUnauthorized={props.onUnauthorized}
-        />
-      </div>}
+    {section === 'transactions' && <BankTransactionsView canView={props.canView} canMatch={props.canMatch} canReconcile={props.canReconcile} onUnauthorized={props.onUnauthorized}/>} 
+
+    {coreSection && <div className={`banking-core banking-core--${coreSection}`}>
+      <Banking
+        canView={props.canView}
+        canImport={props.canImport}
+        canManage={props.canManage}
+        canMatch={props.canMatch}
+        canReconcile={props.canReconcile}
+        onUnauthorized={props.onUnauthorized}
+      />
+    </div>}
 
     {section === 'settlements' && <div className="banking-feature-pane"><SettlementPanel canView={props.canView} canSettle={props.canSettle} onUnauthorized={props.onUnauthorized}/></div>}
     {section === 'custody' && <div className="banking-feature-pane"><CustodyPanel canView={props.canViewCustody} canManage={props.canManageCustody} canClose={props.canCloseCustody} onUnauthorized={props.onUnauthorized}/></div>}
