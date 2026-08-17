@@ -6,7 +6,7 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
-  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', banks: 'البنوك', openMenu: 'فتح قائمة التنقل' },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', openMenu: 'فتح قائمة التنقل' },
   home: {
     workspace: 'مساحة عمل الشركة',
     welcome: 'مرحبًا بعودتك',
@@ -35,6 +35,7 @@ const ar = {
     switching: 'جارٍ تبديل الشركة…',
   },
   common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة' },
+  partners: { title:'الشركاء',description:'إدارة الشركاء القانونيين وسجل الملكية.',noAccess:'ليس لديك صلاحية عرض الشركاء.',create:'إنشاء شريك',edit:'تعديل',name:'الاسم',active:'نشط',inactive:'غير نشط',ownership:'الملكية',effectiveFrom:'ساري من',effectiveTo:'ساري إلى',unknown:'غير معروف',unconfirmed:'غير مؤكد',confirmed:'مؤكد',openEnded:'مفتوح',history:'سجل الملكية',addOwnership:'إضافة فترة ملكية',noHistory:'لا يوجد سجل ملكية بعد.',source:'المستند المصدر',note:'ملاحظة',reason:'سبب التصحيح',status:'حالة التحقق',editOrConfirm:'تعديل / تأكيد',loading:'جارٍ تحميل الشركاء…',empty:'لا يوجد شركاء بعد.',error:'تعذر تحميل الشركاء أو حفظهم.' },
   fiscalYears: {
     title: 'السنوات المالية', description: 'إدارة السنوات المالية للشركة النشطة.',
     loading: 'جارٍ تحميل السنوات المالية…', empty: 'لم يتم إنشاء أي سنة مالية بعد.',

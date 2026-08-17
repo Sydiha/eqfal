@@ -6,7 +6,7 @@ const en = {
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },
-  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', documents: 'Documents', banks: 'Banks', openMenu: 'Open navigation menu' },
+  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', documents: 'Documents', banks: 'Banks', partners: 'Partners', openMenu: 'Open navigation menu' },
   home: {
     workspace: 'Company workspace',
     welcome: 'Welcome back',
@@ -35,6 +35,7 @@ const en = {
     switching: 'Switching company…',
   },
   common: { cancel: 'Cancel', close: 'Close', save: 'Save', confirm: 'Confirm', retry: 'Try again' },
+  partners: { title:'Partners',description:'Manage legal partners and ownership history.',noAccess:'You do not have permission to view partners.',create:'Create partner',edit:'Edit',name:'Name',active:'Active',inactive:'Inactive',ownership:'Ownership',effectiveFrom:'Effective from',effectiveTo:'Effective to',unknown:'Unknown',unconfirmed:'Unconfirmed',confirmed:'Confirmed',openEnded:'Open-ended',history:'Ownership history',addOwnership:'Add ownership period',noHistory:'No ownership history yet.',source:'Source document',note:'Note',reason:'Correction reason',status:'Verification status',editOrConfirm:'Edit / confirm',loading:'Loading partners…',empty:'No partners yet.',error:'Unable to load or save partners.' },
   fiscalYears: {
     title: 'Fiscal Years', description: 'Manage the fiscal years for the active company.',
     loading: 'Loading fiscal years…', empty: 'No fiscal years have been created yet.',

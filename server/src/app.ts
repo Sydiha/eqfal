@@ -8,6 +8,7 @@ import { bankImportResumeRouter } from './modules/banking/bank-import-resume.rou
 import { bankReconciliationRouter } from './modules/banking/bank-reconciliation.router';
 import { documentSettlementRouter } from './modules/banking/document-settlement.router';
 import { custodyRouter } from './modules/banking/custody.router';
+import { partnerRouter } from './modules/partners/partner.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api', bankImportResumeRouter);
 app.use('/api', bankReconciliationRouter);
 app.use('/api', documentSettlementRouter);
 app.use('/api', custodyRouter);
+app.use('/api', partnerRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {

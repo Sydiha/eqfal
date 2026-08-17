@@ -6,9 +6,9 @@ import { CompanySwitcher } from './CompanySwitcher';
 import '../mobile.css';
 import '../visual-polish.css';
 
-export type Page = 'home' | 'fiscalYears' | 'documents' | 'banks';
+export type Page = 'home' | 'fiscalYears' | 'documents' | 'banks' | 'partners';
 
-type IconName = 'home' | 'calendar' | 'document' | 'bank';
+type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners';
 
 function ShellIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -16,11 +16,12 @@ function ShellIcon({ name }: { name: IconName }) {
     calendar: <><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3v5M16.5 3v5M3.5 10h17"/><path d="M8 14h2M14 14h2M8 17.5h2M14 17.5h2"/></>,
     document: <><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h8M8 16h8"/></>,
     bank: <><path d="M3 9h18M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 18h18M2 21h20M12 3 3 7h18L12 3Z"/></>,
+    partners: <><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c0-4 2-6 6-6s6 2 6 6M15 15c3 0 5 2 5 5"/></>,
   };
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank', partners: 'partners' };
 
 export function AppShell({ page, setPage, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -98,7 +99,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
-        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}{nav('banks')}</Stack>
+        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('documents')}{nav('banks')}{nav('partners')}</Stack>
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main className="eqfal-workspace">
