@@ -10,7 +10,7 @@ ChatGPT acts as Lead PM for task framing, Design Checks, scope control, decision
 
 ### Codex
 
-Codex is the implementation tool for programming work after Design Approval. It must work from an independent branch and deliver through the approved GitHub branch/PR path. It is responsible for the implementation, required tests, commit, and push/update needed for GitHub review.
+Codex is the implementation tool for programming work after Design Approval. It must work against the approved repository/environment and deliver through the approved GitHub branch/PR path. In Codex Cloud, PR delivery may be exposed through the task result screen via native `Create PR` / `Create draft PR` UI rather than through a sandbox `git remote` or `make_pr` command.
 
 ### GitHub
 
@@ -28,36 +28,39 @@ The standard lifecycle for a programming task is:
 2. Mandatory Delivery Preflight in the same conversation.
 3. Read-only Design Check.
 4. Explicit Design Approval.
-5. One-Shot Codex implementation on an independent branch.
+5. One-Shot Codex implementation against the approved repository/environment.
 6. Required tests and validation.
-7. Commit and push to the approved branch.
-8. Existing/new PR to `main`.
-9. GitHub diff review and Design Check compliance review.
-10. CI verification.
-11. Explicit merge approval.
-12. Merge.
-13. Post-merge closeout and baseline update.
+7. Review the Codex result diff.
+8. Deliver through Codex native `Create PR` / `Create draft PR` or another approved healthy GitHub branch/PR path.
+9. Confirm the created GitHub PR targets `main` and is independently reviewable.
+10. GitHub diff review and Design Check compliance review.
+11. CI verification.
+12. Explicit merge approval.
+13. Merge.
+14. Post-merge closeout and baseline update.
 
 Documentation-only governance tasks may be performed directly through a healthy GitHub connector when no programming implementation is involved and the repository can be updated cleanly through branch + commit + PR.
 
 ## 3. Mandatory Preflight Checklist
 
-Before any programming task begins, the Lead PM must verify through actual GitHub operations in the same conversation:
+Before any programming task begins, the Lead PM must verify through actual GitHub operations and the applicable Codex delivery UI in the same managing conversation/session:
 
 - [ ] Repository `Sydiha/eqfal` is accessible.
 - [ ] `main` is accessible.
 - [ ] Latest `main` HEAD SHA is read and recorded.
 - [ ] `AGENTS.md` is read from that `main`.
-- [ ] Branch creation capability required by the task is available.
-- [ ] PR read capability is available.
-- [ ] PR create capability is available when a new PR may be required.
-- [ ] PR update capability is available when an existing PR may be updated.
+- [ ] `docs/WORKFLOW_GOVERNANCE.md` is readable from that `main`.
+- [ ] The Codex task is attached to the intended repository/environment.
+- [ ] PR read capability is available from the managing GitHub connector.
+- [ ] PR delivery is available through Codex native `Create PR` / `Create draft PR` UI or another approved GitHub branch/PR path.
 - [ ] GitHub connector/session health is demonstrated by successful live reads.
-- [ ] No known blocker exists between implementation branch and PR delivery.
+- [ ] No known blocker exists between the Codex task result and a reviewable GitHub PR.
 
 A connector shown as “Connected” in settings does not satisfy this checklist by itself.
 
-If any required item fails, the programming task does not start.
+The absence of a sandbox `git remote`, `make_pr`, or equivalent in-task command is **not by itself a failed preflight** when the task is attached to the correct repository/environment and Codex native PR delivery UI is available.
+
+If an actually required item fails, the programming task does not start.
 
 ## 4. Design Gate
 
@@ -74,7 +77,7 @@ Before implementation:
 After Design Approval:
 
 - The implementation instruction to Codex must be one complete One-Shot prompt.
-- The task must use one independent branch.
+- The task must run against the approved repository/environment.
 - Only the approved programming task may be changed.
 - Required tests must actually be executed and verified.
 - At most one corrective programming pass is allowed under the existing Zero-Loop Rule.
@@ -82,18 +85,24 @@ After Design Approval:
 
 ## 6. Delivery Gate
 
-The required delivery sequence is:
+The approved Codex Cloud delivery sequence is:
 
-`implementation → tests → commit → push → existing/new PR`
+`implementation → tests → result diff → native Create PR/Create draft PR → GitHub PR review`
 
-The task passes the Delivery Gate only when the implementation is present on the intended GitHub branch and is reviewable through the intended PR path.
+An equivalent healthy direct GitHub branch/PR delivery path is also acceptable when available and verified.
 
-If Codex reports local completion but cannot deliver the commit/branch/PR state to GitHub, the Delivery Gate has failed. Stop there.
+The task passes the Delivery Gate only when the implementation is present in an actual GitHub PR targeting the intended base and is independently reviewable from GitHub.
+
+Codex Cloud may not configure a normal sandbox `git remote` or expose an in-task `make_pr` command. Those absences alone do not mean delivery has failed.
+
+A single explicit user action to press Codex native `Create PR` / `Create draft PR` after reviewing the task result is an approved product action and does not violate the User Burden Rule.
+
+If the task result does not expose Codex native PR delivery and no other approved GitHub branch/PR path is available, the Delivery Gate has failed. Stop there.
 
 The following are not valid substitutes for a failed Delivery Gate:
 
-- manual patch copy/paste;
-- `git apply` or equivalent patch handoff;
+- `Copy patch` or manual patch copy/paste;
+- `Copy git apply`, `git apply`, or equivalent patch handoff;
 - moving code through Replit;
 - reconstructing a Codex branch in Replit;
 - force-pushing as routine delivery repair;
@@ -103,7 +112,7 @@ The following are not valid substitutes for a failed Delivery Gate:
 
 Before merge approval:
 
-- Review the actual GitHub diff, not only an implementation summary.
+- Review the actual GitHub diff, not only an implementation summary or only the Codex result diff.
 - Verify that only approved files/scope changed.
 - Verify Design Check compliance.
 - Verify security, tenancy, capability, audit, cost, and architecture boundaries when applicable.
@@ -128,27 +137,31 @@ Do not merge solely because CI is green. Do not merge work whose delivery path o
 
 Stop the task immediately when any of the following occurs:
 
-- GitHub connector/session becomes unavailable for required delivery operations.
-- The approved branch cannot be created, read, updated, or delivered as required.
-- Codex cannot commit/push/update the intended GitHub branch or PR.
+- GitHub connector/session becomes unavailable for required review operations and no verified equivalent path exists.
+- The Codex task is attached to the wrong repository/environment.
+- Codex native PR delivery is absent or fails and no other approved GitHub branch/PR path is available.
+- The resulting PR cannot be created, read, updated, or safely reviewed as required.
 - The PR delivery path becomes invalid or cannot be safely repaired through the normal GitHub workflow.
 - A second corrective programming pass would be required.
 - Continuing would require a prohibited recovery pattern.
 
-When stopped, classify the issue as a workflow/tooling incident. Do not disguise it as a code-fix task.
+Do **not** classify missing sandbox `git remote` or missing in-task `make_pr` alone as a workflow/tooling incident when the native Codex PR delivery UI remains available.
+
+When a real delivery failure occurs, classify it as a workflow/tooling incident. Do not disguise it as a code-fix task.
 
 ## 10. Prohibited Recovery Patterns
 
 The following are prohibited as normal or emergency shortcuts unless a separately approved repository-recovery plan explicitly authorizes an exceptional action:
 
 - Copying patch text from one tool to another for delivery.
-- `git apply`, equivalent patch reconstruction, or manual patch replay as the delivery path.
+- Using Codex `Copy patch` as the delivery path.
+- Using Codex `Copy git apply`, `git apply`, equivalent patch reconstruction, or manual patch replay as the delivery path.
 - Using Replit as a Git bridge for Codex work.
 - Recreating Codex branches in Replit to rescue delivery.
 - Rewriting or force-pushing branch history to repair routine delivery failures.
 - Repeatedly asking the user to run Git commands to move work between tools.
 - Repeatedly asking the user to copy logs, SHAs, commits, diffs, or terminal output between tools.
-- Continuing implementation after the delivery channel is known to be broken.
+- Continuing implementation after the actual delivery channel is known to be broken.
 
 ## 11. User Burden Protections
 
@@ -156,21 +169,24 @@ The user is the decision-maker and approver, not a manual integration layer.
 
 Accordingly:
 
-- Routine delivery must be handled by the connected tools.
+- Routine delivery must be handled by connected product/GitHub tooling.
+- A single native Codex `Create PR` / `Create draft PR` action by the user after reviewing the result is an approved part of the normal product workflow.
 - The user should not be asked to transfer patches, commits, logs, or SHAs between ChatGPT, Codex, GitHub, and Replit.
 - The user should not be asked to perform routine Git delivery commands on behalf of the workflow.
-- If a manual user action is genuinely unavoidable, explain the blocker, why no compliant direct path exists, the exact minimal action requested, and the risk. Proceed only after the user's explicit agreement.
+- If manual action beyond the native product delivery UI is genuinely unavoidable, explain the blocker, why no compliant direct path exists, the exact minimal action requested, and the risk. Proceed only after the user's explicit agreement.
 
 ## 12. Session Health Rule
 
 The conversation that will manage a programming task must demonstrate live GitHub health through successful reads in that same conversation.
 
-If GitHub tools are disabled, inaccessible, stale, or unable to perform the operations required for the task:
+For Codex Cloud, repository identity and delivery health are evaluated separately from sandbox Git configuration:
 
-- do not begin implementation;
-- do not rely on a previous conversation's connector state as proof of current health;
-- a new conversation may be opened only when there is a genuine technical session-health reason;
-- repeat the full Mandatory Preflight in the new conversation before continuing.
+- the task must be attached to the intended repository/environment;
+- the managing conversation must have live GitHub read access for baseline/review;
+- Codex native `Create PR` / `Create draft PR` UI may satisfy the PR-delivery part of the workflow;
+- missing sandbox `git remote` or `make_pr` does not invalidate the session on its own.
+
+If the GitHub review connector is inaccessible and no verified equivalent review path exists, or if Codex native PR delivery is unavailable, do not begin implementation. A new conversation/session may be opened only when there is a genuine technical session-health reason, and the relevant preflight must then be repeated.
 
 ## 13. Exception Handling
 
@@ -188,13 +204,13 @@ Phase 4B produced a technically successful result but exposed a delivery-process
 
 In summary:
 
-- Codex reached local completion, but that completion was not directly publishable through the expected GitHub delivery path.
+- Codex reached local completion, but the native Codex PR-delivery path was not used as the authoritative delivery mechanism.
 - The implementation branch was subsequently updated from outside Codex.
-- The expected Update PR flow became invalid for the task state.
 - Recovery then relied on patch transfer, `git apply`, Replit as an intermediary, and force-push behavior.
-- The final technical state succeeded, but the delivery workflow was considered unacceptable because it was fragile, difficult to verify end-to-end, and placed avoidable integration burden on the user.
+- The final technical state succeeded, but the recovery workflow was considered unacceptable because it was fragile, difficult to verify end-to-end, and placed avoidable integration burden on the user.
+- A later workflow review confirmed that Codex Cloud can expose PR creation through the result-screen `Create PR` / `Create draft PR` UI even when the sandbox itself does not expose a normal `git remote` or `make_pr` action.
 
-The rules in `AGENTS.md` and this document are intended to prevent recurrence by requiring verified delivery health before coding, stopping immediately when the delivery channel fails, and prohibiting improvised patch/Replit/force-push recovery chains.
+The rules in `AGENTS.md` and this document therefore distinguish between **sandbox Git/tool availability** and **actual product PR-delivery availability**. They preserve the prohibition on improvised patch/Replit/force-push recovery while allowing Codex's native PR delivery flow as the normal path.
 
 This lesson is process-focused and assigns no blame to any person or tool.
 
