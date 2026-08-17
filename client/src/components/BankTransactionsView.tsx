@@ -105,7 +105,6 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     finally { setMatchBusy(false); }
   };
   const closeMatch = () => {
-    if (matchBusy) return;
     setMatchTransaction(null); setCandidateData(null); setCandidateSearch(''); setSelectedDocument(null); setMatchNote('');
   };
   const createMatch = async () => {
@@ -113,7 +112,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     setMatchBusy(true); setError('');
     try {
       await api(`/api/bank-transactions/${matchTransaction.id}/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: selectedDocument, note: matchNote || undefined }) }, onUnauthorized);
-      closeMatch(); await refresh();
+      setMatchBusy(false); closeMatch(); await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); setMatchBusy(false); }
   };
   const unmatch = async (transaction: Transaction) => {
