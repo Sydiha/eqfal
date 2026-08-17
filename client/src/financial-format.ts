@@ -14,7 +14,7 @@ export function formatFinancialAmount(
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
     useGrouping: true,
-  }).format(amount);
+  }).format(amount).replace(/[\u061c\u200e\u200f]/g, '');
   return currencyCode ? `${formatted} ${currencyCode}` : formatted;
 }
 
