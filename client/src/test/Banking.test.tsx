@@ -3,7 +3,7 @@ import { MantineProvider } from '@mantine/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n';
 import i18n from '../i18n';
-import { Banking } from '../components/Banking';
+import { Banking, displayTransactionDate } from '../components/Banking';
 
 beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();});
 
@@ -12,6 +12,12 @@ function renderBanking(props: React.ComponentProps<typeof Banking>) {
 }
 
 describe('Banking',()=>{
+  it('formats imported transaction dates for display without ISO time noise',()=>{
+    expect(displayTransactionDate('2026-08-16T00:00:00.000Z')).toBe('16/08/2026');
+    expect(displayTransactionDate('2026-08-16')).toBe('16/08/2026');
+    expect(displayTransactionDate('not-a-date')).toBe('not-a-date');
+  });
+
   it('does not request banking data without bank.view',()=>{
     vi.stubGlobal('fetch',vi.fn());
     renderBanking({ canView:false, canImport:true, canManage:true, canMatch:true, canReconcile:true, onUnauthorized:vi.fn() });
