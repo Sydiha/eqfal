@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Card, Group, NativeSelect, NumberInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Card, Group, NativeSelect, NumberInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 
 type Tx={id:string;transaction_date:string;description:string|null;bank_reference:string|null;amount:string;currency_code:string;reconciliation_status:'unmatched'|'matched'|'reconciled'};
