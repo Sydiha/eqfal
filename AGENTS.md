@@ -44,6 +44,70 @@ These rules are mandatory for every automated agent, assistant, coding session, 
    - If a second corrective implementation pass would be required, stop the programming task immediately and escalate instead of entering another fix/review loop.
    - Repeated manual transfer of terminal output, logs, patches, or SHAs through the user is not an acceptable normal workflow. Prefer GitHub PRs, CI, and direct tool inspection.
 
+## Delivery Integrity & Workflow Governance
+
+The detailed lifecycle and failure-stop policy is defined in `docs/WORKFLOW_GOVERNANCE.md`. The following rules are mandatory and additive to the guardrails above.
+
+### A. Delivery Integrity Rule
+
+- `GitHub/main` is the only source of truth for merged work.
+- No programming task may begin until the Mandatory Delivery Preflight Gate has passed in the same conversation that will manage the task.
+- Manual patch transfer between Codex, Replit, ChatGPT, terminals, or workspaces is prohibited as a delivery mechanism.
+- Copying patch text and using `git apply` or equivalent patch-application workflows is prohibited as a normal or recovery delivery path.
+- Force-push must not be used as part of the normal workflow to repair or reconstruct Codex delivery. If exceptional repository recovery ever requires it, stop and obtain explicit approval first.
+- Replit is not a Git delivery bridge and must not be used to relay Codex work into GitHub.
+- If the approved delivery channel fails, stop the task at the failure point. Do not invent a patch-based, shell-based, force-push, or Replit-mediated workaround.
+
+### B. Mandatory Delivery Preflight Gate
+
+Before any programming task, verify through actual GitHub operations in the same conversation:
+
+- repository access;
+- latest `main` and its exact HEAD SHA;
+- readable `AGENTS.md` from that `main`;
+- branch creation capability for the required task branch;
+- the PR read/create/update capabilities required by the task;
+- active GitHub connector/session/tool health through successful reads;
+- no known blocker in the delivery path from implementation branch to PR.
+
+A GitHub integration merely appearing as “Connected” in product settings is not sufficient evidence that this gate passed.
+
+### C. Connector Session Health Rule
+
+- The conversation that will manage a programming task must perform at least one successful real GitHub read before implementation begins.
+- If the GitHub tool/connector is disabled, inaccessible, unhealthy, or cannot perform the required repository/PR operations in that session, implementation must not begin.
+- Opening a new conversation is allowed when this is a genuine technical session-health reason. The full Delivery Preflight must then be repeated in the new conversation before implementation starts.
+
+### D. User Burden Rule
+
+- The user is not an integration layer between ChatGPT, Codex, GitHub, and Replit.
+- Do not require the user to repeatedly copy patches, commits, SHAs, logs, terminal output, or other delivery artifacts between tools.
+- Do not require manual Git commands from the user as the routine delivery or recovery path.
+- Manual user intervention is exceptional only: there must be a clear technical reason, the smallest possible action, and the user's explicit agreement before proceeding.
+
+### E. Codex Delivery Contract
+
+After Design Approval, the standard programming delivery path is:
+
+`Design → One-Shot Codex implementation → tests → commit → push → existing/new PR → GitHub review → CI → merge approval`
+
+- Codex must deliver the implementation to GitHub through the approved branch/PR path.
+- If Codex completes locally but cannot commit/push/update the approved GitHub delivery path, stop the task at that failure point.
+- Do not complete the delivery through Replit, manual patch handoff, `git apply`, force-push recovery, or user-mediated transfer.
+- Delivery failure is a workflow/tooling incident, not permission to improvise a different code-delivery architecture.
+
+### F. Replit Boundary
+
+- Replit Agent remains absolutely prohibited under the existing rule above.
+- Manual Replit Shell/Runtime/Preview may be used only for runtime execution, Preview, or practical validation when genuinely needed.
+- Replit must not be used to transfer Codex code to GitHub, reconstruct a Codex branch, rewrite Git history, rescue a PR, or serve as an alternate delivery pipeline.
+
+### G. Zero-Loop Clarification
+
+- The existing Zero-Loop Rule still permits at most one corrective programming pass after the initial implementation when a real code blocker is found.
+- Tooling, connector, branch-delivery, PR-delivery, or session failures do not consume or create additional code-fix loops; they stop the programming task and are handled separately as workflow/tooling incidents.
+- A delivery-path failure must not trigger repeated code edits, repeated patch attempts, repeated branch reconstruction, or repeated manual log transfer.
+
 ## Repository & Delivery Rules
 
 - `GitHub/main` is the permanent source of truth for merged work.
