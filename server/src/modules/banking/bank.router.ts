@@ -345,11 +345,15 @@ function detectTransactionTable(rows: PhysicalRow[], physicalFormulaCells: Set<s
     if (!profile) continue;
     let valid = 0; let inspected = 0;
     for (let j = i + 1; j < rows.length && inspected < 25; j++) {
-      if (rowIsBlank(rows[j]!.cells)) continue;
+      const cells = rows[j]!.cells;
+      if (rowIsBlank(cells)) continue;
+      if (looksLikeFooter(cells)) break;
+      if (profileHeader(cells)) break;
       inspected++;
-      if (looksLikeTransaction(rows[j]!.cells, profile)) valid++;
+      if (looksLikeTransaction(cells, profile)) valid++;
     }
-    if (valid > 0) candidates.push({ rowIndex: i, profile, score: profile.score * 100 + Math.min(valid, 25) });
+    const evidenceRatio = inspected > 0 ? valid / inspected : 0;
+    if (valid >= 2 && evidenceRatio >= 0.5) candidates.push({ rowIndex: i, profile, score: profile.score * 100 + Math.min(valid, 25) });
   }
   if (!candidates.length) throw new BankValidationError('Could not confidently detect bank transaction table');
   candidates.sort((a,b) => b.score - a.score || a.rowIndex - b.rowIndex);
