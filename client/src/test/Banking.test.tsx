@@ -74,4 +74,21 @@ describe('Banking',()=>{
     rerender(<MantineProvider><Banking canView canImport={false} canManage={false} canMatch canReconcile={false} onUnauthorized={vi.fn()}/></MantineProvider>);
     expect(await screen.findByText('Match')).toBeInTheDocument();
   });
+
+  it('keeps long transaction descriptions accessible while constraining their table cell',async()=>{
+    const description='Name-1: AHMADSALMAN PULLUMKATTLE SIDDICK / Name-2: AHMADSALMAN PULLUMKA / CA: 106000010006086518378';
+    const reference='LONG-BANK-REFERENCE-1234567890';
+    const transaction={id:'22222222-2222-4222-8222-222222222222',transaction_date:'2025-07-21',description,bank_reference:reference,amount:'-200.00',running_balance:'1250.00',currency_code:'SAR',reconciliation_status:'unmatched'};
+    const responses=[{accounts:[]},{batches:[]},{transactions:[transaction]}];
+    vi.stubGlobal('fetch',vi.fn().mockImplementation(()=>Promise.resolve(new Response(JSON.stringify(responses.shift()),{status:200}))));
+
+    renderBanking({ canView:true, canImport:false, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+
+    const descriptionNode=await screen.findByTitle(description);
+    const referenceNode=screen.getByTitle(reference);
+    expect(descriptionNode).toHaveClass('bank-tx-description-text');
+    expect(referenceNode).toHaveClass('bank-tx-reference-text');
+    expect(descriptionNode.closest('td')).toHaveClass('bank-tx-description');
+    expect(referenceNode.closest('td')).toHaveClass('bank-tx-reference');
+  });
 });
