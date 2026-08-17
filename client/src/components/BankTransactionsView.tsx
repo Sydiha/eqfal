@@ -160,7 +160,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
             <div className="bank-transaction-main">
               <time className="bank-transaction-date" dir="ltr">{displayDate(tx.transaction_date)}</time>
               <div className="bank-transaction-description">
-                <Text fw={650} lineClamp={2}><span dir="auto">{tx.description || '—'}</span></Text>
+                <Text fw={550} lineClamp={2}><span dir="auto">{tx.description || '—'}</span></Text>
                 {tx.bank_reference && <Text size="xs" c="dimmed" className="bank-transaction-mobile-meta"><span dir="ltr">{tx.bank_reference}</span></Text>}
               </div>
               <Text className={`bank-transaction-amount ${Number(tx.amount) < 0 ? 'is-outbound' : 'is-inbound'}`} fw={750} dir="ltr">{formatMoney(tx.amount, tx.currency_code)}</Text>
@@ -172,7 +172,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
               </div>
             </div>
 
-            <button type="button" className="bank-transaction-details-toggle" onClick={() => setExpandedId(expanded ? null : tx.id)} aria-expanded={expanded}>{expanded ? s.hideDetails : s.details}</button>
+            <button type="button" className="bank-transaction-row-details" onClick={() => setExpandedId(expanded ? null : tx.id)} aria-expanded={expanded} aria-label={expanded ? s.hideDetails : s.details}>{expanded ? s.hideDetails : s.details}</button>
             {expanded && <div className="bank-transaction-details">
               <dl>
                 <div><dt>{s.reference}</dt><dd dir="ltr">{tx.bank_reference || '—'}</dd></div>
