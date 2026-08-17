@@ -86,6 +86,31 @@ describe('real bank statement transaction-table detection',()=>{
     expect(table.rows[1]?.[0]).toBe('not-a-date');
   });
 
+  it('rejects a rich-looking candidate backed by only one transaction-like row',()=>{
+    const csv=Buffer.from([
+      'Account Statement',
+      'Date,Description,Amount,Balance,Reference',
+      '2026-08-01,Possible example,100.00,1000.00,R1',
+      'Customer Name,Example,,,',
+      'Closing Balance,,,1000.00,',
+    ].join('\n'));
+    expect(()=>parseBankFile('csv',csv)).toThrow(/detect bank transaction table/);
+  });
+
+  it('still accepts a genuinely small statement with two consistent transactions',()=>{
+    const csv=Buffer.from([
+      'Statement',
+      'Date,Description,Amount,Balance',
+      '2026-08-01,Sale,100.00,1100.00',
+      '2026-08-02,Fee,-5.00,1095.00',
+      'Closing Balance,,,1095.00',
+    ].join('\n'));
+    const table=parseBankFile('csv',csv);
+    expect(table.headers).toEqual(['Date','Description','Amount','Balance']);
+    expect(table.sourceRowNumbers).toEqual([3,4]);
+    expect(table.rows).toHaveLength(2);
+  });
+
   it('fails closed when no credible transaction table can be found',()=>{
     const csv=Buffer.from('Account Statement\nCustomer,Example\nOpening Balance,1000\nClosing Balance,900\n');
     expect(()=>parseBankFile('csv',csv)).toThrow(/detect bank transaction table/);
