@@ -22,6 +22,18 @@ function ShellIcon({ name }: { name: IconName }) {
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
+function EqfalMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className={`eqfal-mark${compact ? ' eqfal-mark--compact' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 40 40" fill="none">
+        <path d="M10 9h20v22H10z" />
+        <path d="M15 15h10M15 21h10" />
+        <path d="m15 27 3 3 7-7" />
+      </svg>
+    </span>
+  );
+}
+
 const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations' };
 
 export function AppShell({ page, setPage, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
@@ -55,7 +67,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
       <MantineAppShell.Header className="topbar">
         <Group h="100%" wrap="nowrap" gap="md">
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
-          <Text className="mobile-brand" fw={800}>{t('app.shortTitle')}</Text>
+          <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalMark compact /></span>
           <Stack gap={0} className="page-context">
             <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
             <Text className="page-context-title" fw={750}>{t(`nav.${page}`)}</Text>
@@ -95,8 +107,8 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
 
       <MantineAppShell.Navbar className="sidebar" p="lg">
         <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
-          <span className="brand-symbol" aria-hidden="true"><span /><span /><span /></span>
-          <span className="brand-copy"><Text fw={850} size="lg">{t('app.shortTitle')}</Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span>
+          <EqfalMark />
+          <span className="brand-copy"><Text fw={850} size="lg" className="brand-wordmark"><span lang="ar">إقفال</span><span aria-hidden="true"> | </span><span lang="en">EQFAL</span></Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span>
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>

@@ -2,9 +2,7 @@
 .eqfal-workspace {
   min-width: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(23, 55, 94, .035), transparent 28rem),
-    var(--app-bg);
+  background: var(--app-bg);
 }
 
 .workspace-content {
@@ -90,7 +88,7 @@
 .sidebar {
   display: block;
   padding: 24px 18px !important;
-  background: linear-gradient(180deg, #163858 0%, #102d49 58%, #0d2842 100%);
+  background: var(--brand-navy);
   border: 0;
   color: #fff;
 }
@@ -111,30 +109,23 @@
   color: #fff;
   text-align: start;
 }
-.brand-symbol {
-  position: relative;
+.eqfal-mark {
   display: grid;
   width: 40px;
   height: 40px;
   flex: 0 0 40px;
-  align-content: center;
-  gap: 4px;
-  padding: 10px 9px;
-  border: 1px solid rgba(255,255,255,.18);
-  border-radius: 11px;
-  background: rgba(255,255,255,.08);
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(255,255,255,.06);
 }
-.brand-symbol span {
-  display: block;
-  height: 2px;
-  border-radius: 999px;
-  background: #fff;
-}
-.brand-symbol span:nth-child(1) { width: 100%; }
-.brand-symbol span:nth-child(2) { width: 72%; }
-.brand-symbol span:nth-child(3) { width: 46%; }
+.eqfal-mark svg { width: 32px; height: 32px; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.eqfal-mark--compact { width: 34px; height: 34px; flex-basis: 34px; border-color: var(--border); color: var(--brand-navy); background: #fff; }
+.eqfal-mark--compact svg { width: 28px; height: 28px; }
 .brand-copy { min-width: 0; }
-.brand-copy p:first-child { letter-spacing: .01em; }
+.brand-wordmark { direction: ltr; unicode-bidi: isolate; letter-spacing: .01em; white-space: nowrap; }
+.brand-wordmark [lang="ar"] { direction: rtl; unicode-bidi: isolate; }
 .brand-subtitle { color: #aec0d2; }
 .sidebar-divider { border-color: rgba(255,255,255,.10); }
 .nav-caption {
@@ -159,8 +150,8 @@
 }
 .eqfal-nav-link[data-active] {
   color: #fff;
-  border-color: rgba(255,255,255,.09);
-  background: rgba(255,255,255,.105);
+  border-color: rgba(0,184,148,.34);
+  background: rgba(0,184,148,.16);
 }
 .nav-icon {
   display: grid;
@@ -172,8 +163,8 @@
   background: rgba(255,255,255,.045);
 }
 .eqfal-nav-link[data-active] .nav-icon {
-  color: #12324f;
-  background: #fff;
+  color: #fff;
+  background: var(--brand-teal);
 }
 .shell-icon { width: 18px; height: 18px; }
 
@@ -493,7 +484,7 @@
 }
 
 @media (max-width: 34em) {
-  .mobile-brand { display: none; }
+  .mobile-brand { display: block; }
   .topbar { padding-inline: 6px; }
   .topbar [class*="mantine-Group-root"] { gap: 4px; }
   .company-switcher { min-width: 105px; max-width: 145px; }
@@ -502,6 +493,7 @@
 }
 
 @media (max-width: 22em) {
+  .mobile-brand { display: none; }
   .company-switcher { min-width: 98px; max-width: 124px; }
   .logout-action { min-width: 42px; }
   .workspace-content { padding-inline: 10px; }

@@ -10,6 +10,10 @@ describe('authenticated application shell', () => {
     render(<AuthProvider><App/></AuthProvider>);
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: 'Main navigation' });
+    const brand = screen.getAllByRole('button', { name: 'Home' }).find((button) => button.classList.contains('sidebar-brand'))!;
+    expect(within(brand).getByText('إقفال')).toBeInTheDocument();
+    expect(within(brand).getByText('EQFAL')).toBeInTheDocument();
+    expect(brand.querySelector('.eqfal-mark svg')).toBeInTheDocument();
     const fiscal = within(navigation).getByRole('button', { name: 'Fiscal Years' });
     const documents = within(navigation).getByRole('button', { name: 'Documents' });
     fireEvent.click(fiscal); expect(fiscal).toHaveAttribute('aria-current', 'page');
