@@ -36,9 +36,9 @@ export function MantineDirectionSync() {
   return null;
 }
 
-function LoginBrand() {
+function LoginBrand({ inverse = false }: { inverse?: boolean }) {
   const { t } = useTranslation();
-  return <div className="login-brand" aria-hidden="true"><EqfalBrandLockup subtitle={t('app.subtitle')} /></div>;
+  return <div className="login-brand" aria-hidden="true"><EqfalBrandLockup subtitle={t('app.subtitle')} inverse={inverse} /></div>;
 }
 
 function LoginForm() {
@@ -56,7 +56,7 @@ function LoginForm() {
     <div className="login-language"><LanguageButton /></div>
     <section className="login-layout" aria-labelledby="login-title">
       <aside className="login-identity">
-        <LoginBrand />
+        <LoginBrand inverse />
         <div className="login-identity-copy">
           <p className="eyebrow">EQFAL</p>
           <h1>{t('app.title')}</h1>
