@@ -60,22 +60,26 @@ The detailed lifecycle and failure-stop policy is defined in `docs/WORKFLOW_GOVE
 
 ### B. Mandatory Delivery Preflight Gate
 
-Before any programming task, verify through actual GitHub operations in the same conversation:
+Before any programming task, verify through actual GitHub operations in the same managing conversation and the Codex checkout used for implementation:
 
 - repository access;
 - latest `main` and its exact HEAD SHA;
 - readable `AGENTS.md` from that `main`;
-- the repository/environment identity used by Codex for the task;
-- PR read/create/update capability through either the GitHub connector available to the managing conversation or Codex's native `Create PR` / `Create draft PR` result-screen delivery UI;
+- readable `docs/WORKFLOW_GOVERNANCE.md` from that `main`;
 - active GitHub connector/session/tool health through successful live reads;
-- no known blocker in the delivery path from the Codex result to a reviewable GitHub PR.
+- PR read capability through the GitHub connector available to the managing conversation;
+- the repository/environment identity used by Codex for the task;
+- the Codex checkout is clean and its HEAD matches the recorded approved `main` baseline before implementation begins.
 
-A GitHub integration merely appearing as “Connected” in product settings is not sufficient evidence that this gate passed. However, the absence of a sandbox `git remote`, `make_pr`, or equivalent in-task command is **not by itself a delivery failure** when Codex is attached to the correct repository/environment and its native PR delivery UI is available.
+PR **delivery** capability is intentionally evaluated later at the Delivery Gate, after implementation and required tests. Native `Create PR` / `Create draft PR` availability is not a precondition for starting implementation when the managing conversation has completed the live GitHub baseline checks and the Codex checkout is verified against that same baseline.
+
+A GitHub integration merely appearing as “Connected” in product settings is not sufficient evidence that this gate passed. The absence of a sandbox `git remote`, authenticated `gh`, `make_pr`, or equivalent in-task command is **not by itself a failed preflight** when the checkout identity, baseline SHA, and cleanliness are verified as required above.
 
 ### C. Connector Session Health Rule
 
-- The conversation that will manage a programming task must perform at least one successful real GitHub read before implementation begins.
-- If the GitHub tool/connector is disabled, inaccessible, unhealthy, or cannot perform the required repository/PR operations in that session, implementation must not begin unless the approved Codex native PR delivery path has separately been verified available for the task.
+- The conversation that will manage a programming task must perform successful real GitHub reads before implementation begins, including the current `main`, `AGENTS.md`, and `docs/WORKFLOW_GOVERNANCE.md`.
+- If the managing GitHub tool/connector is disabled, inaccessible, unhealthy, or cannot perform the required baseline/review reads in that session, implementation must not begin.
+- Lack of PR delivery capability inside the Codex sandbox does not block implementation at preflight; it is evaluated after implementation at the Delivery Gate.
 - Opening a new conversation is allowed when this is a genuine technical session-health reason. The full Delivery Preflight must then be repeated in the new conversation before implementation starts.
 
 ### D. User Burden Rule
@@ -92,11 +96,11 @@ After Design Approval, the standard programming delivery path is:
 
 `Design → One-Shot Codex implementation → tests → Codex result diff → native Create PR/Create draft PR (or equivalent healthy GitHub connector delivery) → GitHub review → CI → merge approval`
 
-- Codex must implement and test the approved change in the repository/environment attached to the task.
+- Codex must implement and test the approved change in the verified checkout/repository environment for the task.
 - Codex Cloud may expose PR delivery in the task result screen rather than through a sandbox `git remote` or `make_pr` action; this native `Create PR` / `Create draft PR` flow is an approved normal delivery path.
-- A missing sandbox remote or missing in-task PR command must not trigger a failure-stop when the repository checkout is correct and the native PR delivery UI is available.
+- A missing sandbox remote, unauthenticated sandbox `gh`, or missing in-task PR command must not trigger a pre-implementation failure-stop when the checkout passed the Mandatory Delivery Preflight Gate.
 - Delivery succeeds only when the resulting GitHub branch/PR is actually created and can be independently reviewed from GitHub.
-- If neither the native Codex PR delivery UI nor another approved GitHub branch/PR path is available, stop the task at that failure point.
+- At the Delivery Gate, if neither the native Codex PR delivery UI nor another approved GitHub branch/PR path is available, stop the task at that failure point.
 - Do not complete the delivery through Replit, manual patch handoff, `git apply`, force-push recovery, or user-mediated transfer of code/logs.
 - `Copy patch` and `Copy git apply` actions remain prohibited as normal or recovery delivery paths.
 - Delivery failure is a workflow/tooling incident, not permission to improvise a different code-delivery architecture.
