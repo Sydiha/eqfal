@@ -64,6 +64,28 @@ describe('Banking',()=>{
     expect(await screen.findByText('Validation account')).toBeInTheDocument();
   });
 
+  it('resumes preview-ready imports from history and hides the action for non-resumable batches',async()=>{
+    const previewReady={id:'batch-preview',bank_account_id:'a1',original_filename:'phase4c-settlement-test.csv',status:'preview_ready',total_rows:2,valid_rows:2,duplicate_rows:0,invalid_rows:0,created_at:'2026-08-18T00:00:00.000Z'};
+    const confirmed={...previewReady,id:'batch-confirmed',original_filename:'confirmed.csv',status:'confirmed'};
+    const fetchMock=vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({accounts:[{id:'a1',display_name:'Main',bank_name:'Bank',currency_code:'SAR',is_active:true}]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({batches:[previewReady,confirmed]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({transactions:[]}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({batch:previewReady,columns:['Date','Amount']}),{status:200}));
+    vi.stubGlobal('fetch',fetchMock);
+    Object.defineProperty(window.HTMLElement.prototype,'scrollIntoView',{configurable:true,value:vi.fn()});
+    renderBanking({ canView:true, canImport:true, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+
+    expect(await screen.findByText('phase4c-settlement-test.csv')).toBeInTheDocument();
+    expect(screen.getAllByRole('button',{name:'Resume'})).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'Resume'}));
+
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('/api/bank-import-batches/batch-preview/resume');
+    expect(fetchMock.mock.calls[3]?.[1]).toBeUndefined();
+    expect(await screen.findByText('Column mapping')).toBeInTheDocument();
+  });
+
   it('shows matching action only when bank.match is granted',async()=>{
     const transaction={id:'11111111-1111-4111-8111-111111111111',transaction_date:'2026-08-01',description:'Vendor',bank_reference:'R1',amount:'-100.00',running_balance:'900.00',currency_code:'SAR',reconciliation_status:'unmatched'};
     const responses=[{accounts:[]},{batches:[]},{transactions:[transaction]}];
