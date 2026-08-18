@@ -1,6 +1,10 @@
 export function EqfalBrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <span className={`eqfal-brand-mark${compact ? ' eqfal-brand-mark--compact' : ''}`} aria-hidden="true">
+    <span
+      className={`eqfal-brand-mark eqfal-mark${compact ? ' eqfal-brand-mark--compact' : ''}`}
+      style={{ border: 0, borderRadius: 0, background: 'transparent', color: 'inherit' }}
+      aria-hidden="true"
+    >
       <svg viewBox="0 0 64 64" fill="none" role="img" focusable="false">
         <circle cx="25" cy="8" r="4" fill="#0E8F7A" />
         <circle cx="39" cy="8" r="4" fill="#0E8F7A" />
