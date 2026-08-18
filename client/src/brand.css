@@ -49,7 +49,7 @@
 }
 
 .eqfal-brand-subtitle {
-  color: #A9B8C9;
+  color: rgba(255, 255, 255, .68);
   font-size: .68rem;
   font-weight: 500;
   line-height: 1.35;
@@ -64,6 +64,152 @@
   font-size: .9rem;
 }
 
+.sidebar-brand .eqfal-brand-mark {
+  width: 46px;
+  height: 46px;
+  flex-basis: 46px;
+}
+
+.sidebar-brand .eqfal-brand-wordmark {
+  font-size: 1.08rem;
+}
+
+.sidebar-brand .eqfal-brand-subtitle {
+  max-width: 145px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+/* Sidebar uses a slightly lifted navy derived from the primary brand navy so the mark stays legible. */
+.sidebar {
+  --sidebar-bg: #102A4C;
+  background: var(--sidebar-bg) !important;
+}
+
+.sidebar-brand,
+.sidebar-brand:hover,
+.sidebar-brand:active,
+.sidebar-brand:focus {
+  color: #fff;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.sidebar-brand:focus-visible {
+  outline: 3px solid rgba(14, 143, 122, .28);
+  outline-offset: 3px;
+}
+
+/* Shared EQFAL visual roles: brand colors come from App.css tokens. */
+.eqfal-workspace,
+.workspace-content {
+  background: var(--app-bg);
+}
+
+.topbar,
+.panel,
+.home-hero,
+.action-card,
+.documents-page,
+.document-detail,
+.detail-header,
+.fiscal-years-page,
+.fiscal-year-card,
+.banking-workspace__hero,
+.banking-workspace__tabs,
+.banking-feature-pane > .mantine-Card-root,
+.banking-core .mantine-Card-root,
+.bank-transactions-list {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.topbar,
+.panel,
+.home-hero,
+.action-card,
+.documents-page,
+.document-detail,
+.fiscal-years-page,
+.fiscal-year-card {
+  color: var(--text);
+}
+
+.company-switcher input,
+.eqfal-workspace input,
+.eqfal-workspace select,
+.eqfal-workspace textarea,
+.modal input,
+.modal select,
+.modal textarea {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.header-action,
+.home-intro,
+.home-section-heading p,
+.home-context-item span,
+.action-card-copy > span,
+.document-row-main span,
+.document-row small,
+.metadata dt,
+.shared-workspace-state,
+.eqfal-workspace .shared-state,
+.bank-transaction-date,
+.banking-metrics-grid span,
+.bank-transaction-head,
+.bank-transaction-details dt {
+  color: var(--muted);
+}
+
+.header-action:hover {
+  color: var(--brand-navy) !important;
+  background: var(--app-bg) !important;
+}
+
+.user-avatar,
+.action-card-icon,
+.home-company-context,
+.eqfal-workspace .state-card,
+.eqfal-workspace .empty,
+.eqfal-workspace .message,
+.eqfal-workspace .shared-state,
+.shared-workspace-state {
+  border-color: var(--border);
+}
+
+.user-avatar,
+.action-card-icon,
+.eqfal-workspace .state-card,
+.eqfal-workspace .empty,
+.eqfal-workspace .message,
+.eqfal-workspace .shared-state,
+.shared-workspace-state {
+  background: var(--app-bg);
+}
+
+.home-context-separator,
+.sidebar-divider,
+.documents-page > .page-heading,
+.shared-page-heading,
+.detail-header,
+.metadata > div,
+.fiscal-years-heading,
+.bank-transaction-head,
+.bank-transaction-row,
+.bank-transaction-details {
+  border-color: var(--border);
+}
+
+.documents-page > .page-heading,
+.fiscal-years-heading,
+.shared-page-heading {
+  background: var(--surface);
+}
+
 .eqfal-nav-link[data-active] {
   border-color: rgba(14, 143, 122, .38);
   background: rgba(14, 143, 122, .18);
@@ -72,6 +218,20 @@
 .home-company-context {
   border-color: rgba(14, 143, 122, .25);
   background: rgba(14, 143, 122, .06);
+}
+
+.home-eyebrow::before,
+.banking-workspace__eyebrow::before,
+.shared-page-heading .eyebrow::before,
+.fiscal-years-heading .eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 2px;
+  margin-inline-end: 7px;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: var(--brand-gold);
 }
 
 .action-card:hover {
@@ -84,7 +244,74 @@
 
 .action-card-featured {
   border-color: rgba(14, 143, 122, .4);
-  background: #FBFDFC;
+  background: var(--surface);
+}
+
+.document-list,
+.detail-section,
+.fiscal-year-dates > div,
+.banking-operation-card,
+.banking-subsection,
+.banking-empty-guidance,
+.banking-metrics-grid > div,
+.banking-core--accounts form,
+#bank-import-workspace > .mantine-Stack-root > .mantine-Group-root,
+.bank-transactions-view__summary .mantine-Badge-root,
+.bank-match-summary,
+.bank-transaction-head,
+.bank-transaction-details {
+  background: var(--app-bg);
+  border-color: var(--border);
+}
+
+.document-row:hover,
+.document-row.selected,
+.banking-selected-operation,
+.bank-match-candidate,
+.bank-transaction-details dl div {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+.bank-match-candidate:hover {
+  background: var(--app-bg) !important;
+  border-color: rgba(14, 143, 122, .38) !important;
+}
+
+.bank-match-candidate.is-selected {
+  background: rgba(14, 143, 122, .06) !important;
+  border-color: var(--brand-teal) !important;
+  box-shadow: inset 3px 0 var(--brand-teal);
+}
+
+[dir=rtl] .bank-match-candidate.is-selected {
+  box-shadow: inset -3px 0 var(--brand-teal);
+}
+
+.document-row.selected {
+  box-shadow: inset 3px 0 var(--brand-teal), 0 5px 14px rgba(11, 29, 58, .05);
+}
+
+[dir=rtl] .document-row.selected {
+  box-shadow: inset -3px 0 var(--brand-teal), 0 5px 14px rgba(11, 29, 58, .05);
+}
+
+.document-row-main strong,
+.detail-header h3,
+.metadata dd,
+.detail-section h4,
+.fiscal-year-card h3,
+.banking-workspace__hero h1,
+.banking-metrics-grid strong,
+.bank-transaction-description p {
+  color: var(--text);
+}
+
+.banking-workspace__eyebrow,
+.shared-page-heading .eyebrow,
+.fiscal-years-heading .eyebrow,
+.home-eyebrow {
+  color: var(--brand-teal) !important;
 }
 
 .login-brand .eqfal-brand-subtitle {
@@ -92,9 +319,52 @@
   opacity: .72;
 }
 
+@media (min-width: 62.01em) {
+  .home-modern { max-width: 1040px; }
+  .home-hero { padding: 22px 26px 20px; }
+  .home-context { margin-top: 16px; padding-top: 14px; }
+  .home-actions { margin-top: 20px; }
+  .action-card-grid { gap: 10px; }
+  .action-card { min-height: 154px; padding: 16px 17px; }
+  .action-card-copy { margin-top: 11px; }
+  .action-card-cta { padding-top: 10px; }
+}
+
 @media (max-width: 48em) {
   .mobile-brand .eqfal-brand-mark {
-    width: 30px;
-    height: 30px;
+    width: 27px;
+    height: 27px;
   }
+
+  .topbar [class*="mantine-Group-root"] { gap: 4px; }
+  .company-switcher { min-width: 104px; max-width: 148px; }
+  .header-action { padding-inline: 6px !important; font-size: .73rem !important; }
+  .language-action { min-width: 31px; }
+  .logout-action { min-width: 40px; }
+
+  .sidebar {
+    max-height: 100dvh;
+    overflow-y: auto;
+    scrollbar-width: none;
+    overscroll-behavior: contain;
+  }
+  .sidebar::-webkit-scrollbar { width: 0; height: 0; }
+  .sidebar-brand .eqfal-brand-mark { width: 42px; height: 42px; flex-basis: 42px; }
+
+  .home-hero { padding: 20px 18px 18px; }
+  .home-hero h1 { font-size: 1.55rem; }
+  .home-intro { margin-top: 8px; line-height: 1.6; }
+  .home-context { gap: 10px; margin-top: 17px; padding-top: 14px; }
+  .home-company-context { padding: 8px 10px; }
+  .home-actions { margin-top: 22px; }
+  .home-section-heading { margin-bottom: 11px; }
+  .action-card-grid { gap: 9px; }
+  .action-card { min-height: 164px; padding: 17px; }
+  .action-card-copy { margin-top: 12px; }
+  .action-card-cta { padding-top: 10px; }
+}
+
+@media (max-width: 25em) {
+  .mobile-brand { display: none; }
+  .company-switcher { max-width: 142px; }
 }
