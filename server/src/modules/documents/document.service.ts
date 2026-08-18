@@ -5,6 +5,7 @@ import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { DocumentRepository } from './document.repository';
 import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision } from './document.types';
+import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 
 export interface UploadDocumentInput {
   companyId: string;
@@ -112,6 +113,7 @@ export class DocumentService {
     return this.withTransaction(async (client) => {
       const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
       if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.document_date) await assertAccountingDateWritable(input.companyId, current.document_date, client);
       if (current.status !== 'uploaded') {
         throw new DocumentReviewConflictError('Document cannot be submitted from its current status');
       }
@@ -133,6 +135,9 @@ export class DocumentService {
     return this.withTransaction(async (client) => {
       const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
       if (!current) throw new DocumentNotFoundError('Document not found');
+      const accountingDate = input.intake.document_date === undefined ? current.document_date : input.intake.document_date;
+      if (accountingDate) await assertAccountingDateWritable(input.companyId, accountingDate, client);
+      if (current.document_date && current.document_date !== accountingDate) await assertAccountingDateWritable(input.companyId, current.document_date, client);
       if (current.status !== 'uploaded') throw new DocumentReviewConflictError('Document intake cannot be updated');
       const changed = (Object.keys(input.intake) as (keyof DocumentIntake)[])
         .filter((field) => field === 'total_amount'
@@ -160,6 +165,7 @@ export class DocumentService {
     return this.withTransaction(async (client) => {
       const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
       if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.document_date) await assertAccountingDateWritable(input.companyId, current.document_date, client);
       if (current.status !== 'needs_review') {
         throw new DocumentReviewConflictError('Document cannot be reviewed from its current status');
       }

@@ -14,6 +14,7 @@ import { AuthSessionContext } from '../auth/session.service';
 import { DocumentRepository } from './document.repository';
 import { DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
 import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType } from './document.types';
+import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 
 export const documentRouter = Router();
 
@@ -216,6 +217,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict' });
         return;
       }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
       throw err;
     }
   }),
@@ -240,6 +242,7 @@ documentRouter.patch(
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
       if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict' }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
       throw err;
     }
   }),
@@ -294,6 +297,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict' });
         return;
       }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
       throw err;
     }
   }),

@@ -10,6 +10,7 @@ import { documentSettlementRouter } from './modules/banking/document-settlement.
 import { custodyRouter } from './modules/banking/custody.router';
 import { partnerRouter } from './modules/partners/partner.router';
 import { obligationRouter } from './modules/obligations/obligation.router';
+import { monthlyCloseRouter } from './modules/monthly-close/monthly-close.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api', documentSettlementRouter);
 app.use('/api', custodyRouter);
 app.use('/api', partnerRouter);
 app.use('/api', obligationRouter);
+app.use('/api', monthlyCloseRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {

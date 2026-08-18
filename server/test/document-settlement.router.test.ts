@@ -13,6 +13,7 @@ const mocks=vi.hoisted(()=>({
 }));
 
 vi.mock('../src/db/pool',()=>({default:{query:mocks.query,connect:mocks.connect}}));
+vi.mock('../src/modules/monthly-close/accounting-period.guard',()=>({AccountingPeriodClosedError:class extends Error{},assertAccountingDateWritable:vi.fn().mockResolvedValue(undefined),lockAccountingRange:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../src/modules/audit-log/audit-log.repository',()=>({AuditLogRepository:class{logEvent=mocks.auditLogEvent;}}));
 vi.mock('../src/modules/auth/auth.middleware',()=>({
   getAuthenticatedContext:vi.fn(()=>mocks.context),
@@ -118,6 +119,7 @@ describe('Document settlement rules',()=>{
       if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[approved]};
       if(sql.includes('SELECT * FROM document_settlements'))return{rows:[settlement]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:'40'}]};
       return{rows:[]};
     });

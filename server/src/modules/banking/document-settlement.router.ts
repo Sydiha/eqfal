@@ -4,6 +4,7 @@ import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
+import { AccountingPeriodClosedError, assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { AuthSessionContext } from '../auth/session.service';
 
 export const documentSettlementRouter = Router();
@@ -15,7 +16,7 @@ const AMOUNT_RE = /^\d{1,16}(?:\.\d{1,2})?$/;
 
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
 type DocumentRow = { id: string; company_id: string; status: string; total_amount: string | null; original_filename: string };
-type TransactionRow = { id: string; company_id: string };
+type TransactionRow = { id: string; company_id: string; transaction_date: string };
 type MatchRow = { bank_transaction_id: string; company_id: string; document_id: string };
 type SettlementRow = {
   id: string;
@@ -113,7 +114,7 @@ class DocumentSettlementRepository {
 
   async transaction(id: string, companyId: string, client: PoolClient, lock = false): Promise<TransactionRow | null> {
     const { rows } = await client.query<TransactionRow>(
-      `SELECT id,company_id FROM bank_transactions WHERE id=$1 AND company_id=$2${lock ? ' FOR UPDATE' : ''}`,
+      `SELECT id,company_id,transaction_date::text FROM bank_transactions WHERE id=$1 AND company_id=$2${lock ? ' FOR UPDATE' : ''}`,
       [id, companyId],
     );
     return rows[0] ?? null;
@@ -222,6 +223,7 @@ export class DocumentSettlementService {
 
       const transaction = await this.repo.transaction(transactionId, companyId, client, true);
       if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
+      await assertAccountingDateWritable(companyId, transaction.transaction_date, client);
       if ((await client.query('SELECT 1 FROM obligation_settlements WHERE bank_transaction_id=$1', [transactionId])).rowCount) {
         throw new DocumentSettlementConflictError('Bank transaction already has an obligation settlement');
       }
@@ -258,6 +260,9 @@ export class DocumentSettlementService {
       if (!document) throw new DocumentSettlementNotFoundError('Document not found');
       const settlement = await this.repo.settlement(settlementId, documentId, companyId, client, true);
       if (!settlement) throw new DocumentSettlementNotFoundError('Settlement not found');
+      const transaction = await this.repo.transaction(settlement.bank_transaction_id, companyId, client, true);
+      if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
+      await assertAccountingDateWritable(companyId, transaction.transaction_date, client);
       const before = moneyToCents(await this.repo.settledTotal(documentId, companyId, client));
       await this.repo.delete(settlementId, documentId, companyId, client);
       const settlementAmount = moneyToCents(settlement.amount);
@@ -279,6 +284,7 @@ export class DocumentSettlementService {
 function handleError(error: unknown, res: Response): boolean {
   if (error instanceof DocumentSettlementValidationError) { res.status(400).json({ error: error.message }); return true; }
   if (error instanceof DocumentSettlementNotFoundError) { res.status(404).json({ error: error.message }); return true; }
+  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message }); return true; }
   if (error instanceof DocumentSettlementConflictError) { res.status(409).json({ error: error.message }); return true; }
   return false;
 }
