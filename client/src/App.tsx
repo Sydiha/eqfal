@@ -15,6 +15,7 @@ import { EqfalBrandLockup } from './components/EqfalBrand';
 import { Home } from './components/Home';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
+import { MonthlyClose } from './components/MonthlyClose';
 import { eqfalTheme } from './theme';
 
 function LanguageButton({ className = '' }: { className?: string }) {
@@ -109,6 +110,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'monthlyClose' && <MonthlyClose canView={c.includes('fiscal_year.view')} canClose={c.includes('monthly_close.close')} canReopen={c.includes('monthly_close.reopen')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
 

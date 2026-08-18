@@ -10,6 +10,7 @@ import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
+import { AccountingPeriodClosedError, assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { AuthSessionContext } from '../auth/session.service';
 import { isSafeXlsxArchive } from './xlsx-security';
 
@@ -566,7 +567,7 @@ export class BankService {
   private readonly repo: BankRepository;
   private readonly audit = new AuditLogRepository();
   constructor(private readonly db: Pool, private readonly files: StorageAdapter) { this.repo = new BankRepository(db); }
-  private async tx<T>(fn:(client:PoolClient)=>Promise<T>): Promise<T> { const client=await this.db.connect(); try { await client.query('BEGIN'); const result=await fn(client); await client.query('COMMIT'); return result; } catch(err){ await client.query('ROLLBACK'); throw err; } finally { client.release(); } }
+  private async tx<T>(fn:(client:PoolClient)=>Promise<T>): Promise<T> { const client=await this.db.connect(); try { await client.query('BEGIN'); const result=await fn(client); await client.query('COMMIT'); return result; } catch(err){ await client.query('ROLLBACK'); if(err instanceof AccountingPeriodClosedError) throw new BankConflictError(err.message); throw err; } finally { client.release(); } }
 
   listAccounts(companyId:string){ return this.repo.accounts(companyId); }
   listBatches(companyId:string){ return this.repo.batches(companyId); }
@@ -645,7 +646,7 @@ export class BankService {
       const accountResult=await client.query<BankAccount>('SELECT * FROM bank_accounts WHERE id=$1 AND company_id=$2',[batch.bank_account_id,companyId]); const account=accountResult.rows[0]; if(!account) throw new BankNotFoundError('Bank account not found'); if(!account.is_active) throw new BankConflictError('Bank account is inactive');
       const table=parseBankFile(batch.source_format,await this.files.get(batch.storage_key)); const provisional=this.normalize(table,batch.column_mapping,account,new Set()); const existing=await this.repo.fingerprintsTx(companyId,account.id,provisional.rows.map((r)=>r.fingerprint),client); const preview=this.normalize(table,batch.column_mapping,account,existing); if(preview.invalidRows>0) throw new BankConflictError('Bank import contains invalid rows');
       let imported=0; let duplicates=0;
-      for(const row of preview.rows){ if(row.status==='duplicate'){duplicates++;continue;} const inserted=await this.repo.insertTransaction({...row,companyId,accountId:account.id,batchId:batch.id,currency:account.currency_code},client); if(inserted) imported++; else duplicates++; }
+      for(const row of preview.rows){ if(row.status==='duplicate'){duplicates++;continue;} await assertAccountingDateWritable(companyId,row.transaction_date,client); const inserted=await this.repo.insertTransaction({...row,companyId,accountId:account.id,batchId:batch.id,currency:account.currency_code},client); if(inserted) imported++; else duplicates++; }
       const confirmed=await this.repo.confirmBatch(batch.id,companyId,actor,{valid:imported,duplicates},client); await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'bank_import.confirm',entity_type:'bank_import_batch',entity_id:batch.id,before_data:{status:batch.status},after_data:{status:'confirmed',bank_account_id:account.id,file_sha256:batch.file_sha256,total_rows:preview.totalRows,imported_rows:imported,duplicate_rows:duplicates}},client); return {batch:confirmed,importedRows:imported,duplicateRows:duplicates,idempotent:false};
     });
   }
