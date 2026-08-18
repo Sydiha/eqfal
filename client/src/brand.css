@@ -74,6 +74,26 @@
   font-size: 1.08rem;
 }
 
+/* Sidebar uses a slightly lifted navy derived from the primary brand navy so the mark stays legible. */
+.sidebar {
+  --sidebar-bg: #102A4C;
+  background: var(--sidebar-bg) !important;
+}
+
+.sidebar-brand,
+.sidebar-brand:hover,
+.sidebar-brand:active,
+.sidebar-brand:focus {
+  color: #fff;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.sidebar-brand:focus-visible {
+  outline: 3px solid rgba(14, 143, 122, .28);
+  outline-offset: 3px;
+}
+
 /* Shared EQFAL visual roles: brand colors come from App.css tokens. */
 .eqfal-workspace,
 .workspace-content {
