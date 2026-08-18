@@ -32,7 +32,7 @@ export function Home({ email, canDocuments, canUpload, canFiscalYears, navigate 
           <p className="home-intro">{t('home.context')}</p>
         </div>
         <div className="home-context" aria-label={t('home.workspace')}>
-          <div className="home-context-item">
+          <div className="home-context-item home-company-context">
             <span>{t('company.label')}</span>
             <strong>{activeCompany?.name ?? '—'}</strong>
           </div>

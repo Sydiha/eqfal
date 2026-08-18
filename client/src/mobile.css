@@ -178,10 +178,11 @@
   position: relative;
   overflow: hidden;
   padding: 34px 36px 30px;
-  border: 1px solid #e1e7ee;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--brand-teal);
   border-radius: 18px;
-  background: rgba(255,255,255,.92);
-  box-shadow: 0 12px 32px rgba(24, 45, 72, .045);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(11, 29, 51, .055);
 }
 .home-hero::after {
   content: '';
@@ -191,20 +192,20 @@
   width: 270px;
   height: 270px;
   border-radius: 50%;
-  border: 52px solid rgba(23,55,94,.025);
+  border: 52px solid rgba(11, 29, 51, .025);
   pointer-events: none;
 }
 .home-hero-copy { position: relative; z-index: 1; max-width: 720px; }
 .home-eyebrow {
   margin: 0 0 9px;
-  color: #60758c;
+  color: var(--primary-hover);
   font-size: .74rem;
   font-weight: 800;
   letter-spacing: .025em;
 }
 .home-hero h1 {
   margin: 0;
-  color: #142238;
+  color: var(--brand-navy);
   font-size: clamp(1.85rem, 3vw, 2.35rem);
   line-height: 1.18;
   letter-spacing: -.025em;
@@ -225,7 +226,7 @@
   gap: 18px;
   margin-top: 28px;
   padding-top: 22px;
-  border-top: 1px solid #edf0f4;
+  border-top: 1px solid var(--border);
 }
 .home-context-item {
   display: grid;
@@ -240,11 +241,27 @@
 .home-context-item strong {
   max-width: 320px;
   overflow: hidden;
-  color: #25354a;
+  color: var(--brand-navy);
   font-size: .9rem;
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.home-company-context {
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 184, 148, .22);
+  border-radius: 10px;
+  background: rgba(0, 184, 148, .055);
+}
+.home-company-context span { color: #53706c; }
+.home-company-context strong {
+  color: var(--brand-navy);
+  font-size: .98rem;
+}
+.home-user-context strong {
+  color: #536174;
+  font-size: .84rem;
+  font-weight: 650;
 }
 .home-context-separator {
   width: 1px;
@@ -262,7 +279,7 @@
 }
 .home-section-heading h2 {
   margin: 0;
-  color: #1e2d42;
+  color: var(--brand-navy);
   font-size: 1.15rem;
   line-height: 1.4;
 }
@@ -286,23 +303,35 @@
   justify-content: flex-start;
   padding: 22px;
   text-align: start;
-  border: 1px solid #e0e6ed;
+  border: 1px solid var(--border);
   border-radius: 15px;
   background: #fff;
-  color: #1d2c40;
+  color: var(--brand-navy);
   box-shadow: 0 7px 18px rgba(25, 43, 67, .025);
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
 .action-card:hover {
   transform: translateY(-2px);
-  border-color: #cbd6e2;
+  border-color: rgba(0, 184, 148, .45);
   background: #fff;
   box-shadow: 0 13px 30px rgba(25, 43, 67, .07);
 }
-.action-card:focus-visible { border-color: #7e9dbd; }
+.action-card:focus-visible {
+  border-color: var(--brand-teal);
+  outline: 3px solid rgba(0, 184, 148, .22);
+  outline-offset: 3px;
+}
 .action-card-featured {
-  border-color: #d5e0eb;
-  background: linear-gradient(145deg, #fbfdff 0%, #f5f8fb 100%);
+  border-color: rgba(0, 184, 148, .42);
+  background: #fbfefd;
+}
+.action-card-featured::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  border-radius: 15px 15px 0 0;
+  background: var(--brand-teal);
 }
 .action-card-icon {
   display: grid;
@@ -312,11 +341,11 @@
   border: 1px solid #dce5ed;
   border-radius: 11px;
   background: #f3f7fa;
-  color: #244f77;
+  color: var(--brand-navy);
 }
 .action-card-featured .action-card-icon {
-  border-color: #244f77;
-  background: #173f65;
+  border-color: var(--brand-teal);
+  background: var(--brand-teal);
   color: #fff;
 }
 .action-icon-svg { width: 21px; height: 21px; }
@@ -326,7 +355,7 @@
   margin-top: 18px;
 }
 .action-card-copy strong {
-  color: #1d2b3d;
+  color: var(--brand-navy);
   font-size: 1rem;
   font-weight: 780;
 }
@@ -342,7 +371,7 @@
   gap: 7px;
   margin-top: auto;
   padding-top: 18px;
-  color: #244f77;
+  color: var(--primary-hover);
   font-size: .79rem;
   font-weight: 800;
 }
@@ -419,8 +448,9 @@
     padding-top: 18px;
   }
   .home-context-separator { display: none; }
-  .home-context-item strong { max-width: min(78vw, 380px); }
-  .home-user-context { display: none; }
+  .home-context-item { width: 100%; }
+  .home-context-item strong { max-width: 100%; }
+  .home-company-context { padding: 10px 12px; }
   .home-actions { margin-top: 27px; }
   .home-section-heading { align-items: flex-start; }
   .action-card-grid { grid-template-columns: 1fr; gap: 10px; }

@@ -48,6 +48,14 @@
     font-size: .88rem;
   }
 
+  .home-company-context strong {
+    font-size: .98rem;
+  }
+
+  .home-user-context strong {
+    font-size: .82rem;
+  }
+
   .home-actions {
     margin-top: 24px;
   }
