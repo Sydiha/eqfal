@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
+import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import '../mobile.css';
 import '../visual-polish.css';
+import '../brand.css';
 
 export type Page = 'home' | 'fiscalYears' | 'documents' | 'banks' | 'partners' | 'obligations';
 
@@ -20,18 +22,6 @@ function ShellIcon({ name }: { name: IconName }) {
     obligations: <><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/></>,
   };
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
-}
-
-function EqfalMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className={`eqfal-mark${compact ? ' eqfal-mark--compact' : ''}`} aria-hidden="true">
-      <svg viewBox="0 0 40 40" fill="none">
-        <path d="M10 9h20v22H10z" />
-        <path d="M15 15h10M15 21h10" />
-        <path d="m15 27 3 3 7-7" />
-      </svg>
-    </span>
-  );
 }
 
 const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations' };
@@ -67,7 +57,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
       <MantineAppShell.Header className="topbar">
         <Group h="100%" wrap="nowrap" gap="md">
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
-          <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalMark compact /></span>
+          <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
           <Stack gap={0} className="page-context">
             <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
             <Text className="page-context-title" fw={750}>{t(`nav.${page}`)}</Text>
@@ -107,8 +97,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
 
       <MantineAppShell.Navbar className="sidebar" p="lg">
         <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
-          <EqfalMark />
-          <span className="brand-copy"><Text fw={850} size="lg" className="brand-wordmark"><span lang="ar">إقفال</span><span aria-hidden="true"> | </span><span lang="en">EQFAL</span></Text><Text size="xs" className="brand-subtitle">{t('app.subtitle')}</Text></span>
+          <EqfalBrandLockup subtitle={t('app.subtitle')} inverse />
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
