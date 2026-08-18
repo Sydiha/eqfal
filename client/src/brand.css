@@ -92,7 +92,8 @@
 .banking-workspace__hero,
 .banking-workspace__tabs,
 .banking-feature-pane > .mantine-Card-root,
-.banking-core .mantine-Card-root {
+.banking-core .mantine-Card-root,
+.bank-transactions-list {
   background: var(--surface);
   border-color: var(--border);
 }
@@ -129,7 +130,11 @@
 .document-row small,
 .metadata dt,
 .shared-workspace-state,
-.eqfal-workspace .shared-state {
+.eqfal-workspace .shared-state,
+.bank-transaction-date,
+.banking-metrics-grid span,
+.bank-transaction-head,
+.bank-transaction-details dt {
   color: var(--muted);
 }
 
@@ -164,8 +169,18 @@
 .documents-page > .page-heading,
 .shared-page-heading,
 .detail-header,
-.metadata > div {
+.metadata > div,
+.fiscal-years-heading,
+.bank-transaction-head,
+.bank-transaction-row,
+.bank-transaction-details {
   border-color: var(--border);
+}
+
+.documents-page > .page-heading,
+.fiscal-years-heading,
+.shared-page-heading {
+  background: var(--surface);
 }
 
 .eqfal-nav-link[data-active] {
@@ -215,7 +230,9 @@
 .banking-core--accounts form,
 #bank-import-workspace > .mantine-Stack-root > .mantine-Group-root,
 .bank-transactions-view__summary .mantine-Badge-root,
-.bank-match-summary {
+.bank-match-summary,
+.bank-transaction-head,
+.bank-transaction-details {
   background: var(--app-bg);
   border-color: var(--border);
 }
@@ -227,6 +244,21 @@
 .bank-transaction-details dl div {
   background: var(--surface) !important;
   border-color: var(--border) !important;
+}
+
+.bank-match-candidate:hover {
+  background: var(--app-bg) !important;
+  border-color: rgba(14, 143, 122, .38) !important;
+}
+
+.bank-match-candidate.is-selected {
+  background: rgba(14, 143, 122, .06) !important;
+  border-color: var(--brand-teal) !important;
+  box-shadow: inset 3px 0 var(--brand-teal);
+}
+
+[dir=rtl] .bank-match-candidate.is-selected {
+  box-shadow: inset -3px 0 var(--brand-teal);
 }
 
 .document-row.selected {
@@ -246,6 +278,13 @@
 .banking-metrics-grid strong,
 .bank-transaction-description p {
   color: var(--text);
+}
+
+.banking-workspace__eyebrow,
+.shared-page-heading .eyebrow,
+.fiscal-years-heading .eyebrow,
+.home-eyebrow {
+  color: var(--brand-teal) !important;
 }
 
 .login-brand .eqfal-brand-subtitle {
