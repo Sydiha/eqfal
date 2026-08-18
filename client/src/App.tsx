@@ -11,6 +11,7 @@ import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { BankingWorkspace } from './components/BankingWorkspace';
 import { AppShell, Page } from './components/AppShell';
+import { EqfalBrandLockup } from './components/EqfalBrand';
 import { Home } from './components/Home';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
@@ -37,13 +38,7 @@ export function MantineDirectionSync() {
 
 function LoginBrand() {
   const { t } = useTranslation();
-  return <div className="login-brand" aria-hidden="true">
-    <div className="login-brand-mark">إ</div>
-    <div>
-      <p className="login-brand-name">{t('app.shortTitle')} <span>EQFAL</span></p>
-      <p className="login-brand-subtitle">{t('app.subtitle')}</p>
-    </div>
-  </div>;
+  return <div className="login-brand" aria-hidden="true"><EqfalBrandLockup subtitle={t('app.subtitle')} /></div>;
 }
 
 function LoginForm() {
