@@ -20,6 +20,7 @@ const context=(req:Request)=>getAuthenticatedContext(req)! as ReturnType<typeof 
 function validDate(value:unknown): value is string { return typeof value==='string'&&DATE.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`)); }
 function parseCreate(body:unknown){if(!body||typeof body!=='object'||Array.isArray(body))return null;const x=body as Record<string,unknown>;if(Object.keys(x).some(k=>!['fiscal_year_id','period_start','period_end'].includes(k))||typeof x.fiscal_year_id!=='string'||!UUID.test(x.fiscal_year_id)||!validDate(x.period_start)||!validDate(x.period_end)||x.period_end<x.period_start)return null;return{fiscalYearId:x.fiscal_year_id,start:x.period_start,end:x.period_end};}
 function parseReason(body:unknown){if(!body||typeof body!=='object'||Array.isArray(body))return null;const x=body as Record<string,unknown>;if(Object.keys(x).length!==1||typeof x.reason!=='string')return null;const reason=x.reason.trim();return reason&&reason.length<=500?reason:null;}
+function expectedMonthlyBounds(start:string,fiscalStart:string,fiscalEnd:string){const date=new Date(`${start}T00:00:00Z`);const monthStart=`${start.slice(0,7)}-01`;date.setUTCMonth(date.getUTCMonth()+1,0);const monthEnd=date.toISOString().slice(0,10);return{start:fiscalStart>monthStart?fiscalStart:monthStart,end:fiscalEnd<monthEnd?fiscalEnd:monthEnd};}
 
 export class MonthlyCloseService {
   private audit=new AuditLogRepository();
@@ -46,7 +47,7 @@ export class MonthlyCloseService {
   async create(companyId:string,actor:string,fiscalYearId:string,start:string,end:string){return this.tx(async client=>{
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`monthly-close-periods:${companyId}`]);
     const fy=(await client.query<{start_date:string;end_date:string}>('SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',[fiscalYearId,companyId])).rows[0];
-    if(!fy)throw new MonthlyCloseNotFoundError();if(start<fy.start_date||end>fy.end_date)throw new MonthlyCloseValidationError('Period must be within its fiscal year');
+    if(!fy)throw new MonthlyCloseNotFoundError();if(start<fy.start_date||end>fy.end_date)throw new MonthlyCloseValidationError('Period must be within its fiscal year');const expected=expectedMonthlyBounds(start,fy.start_date,fy.end_date);if(start!==expected.start||end!==expected.end)throw new MonthlyCloseValidationError('Period must represent one calendar month');
     if((await client.query('SELECT 1 FROM monthly_close_periods WHERE company_id=$1 AND period_start<=$3 AND period_end>=$2',[companyId,start,end])).rowCount)throw new MonthlyCloseConflictError('Monthly close period overlaps an existing period');
     const period=(await client.query<Period>("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'open') RETURNING *,period_start::text,period_end::text",[companyId,fiscalYearId,start,end])).rows[0]!;
     await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.create',entity_type:'monthly_close_period',entity_id:period.id,before_data:null,after_data:period as never},client);return period;
