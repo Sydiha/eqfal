@@ -38,7 +38,7 @@ export class MonthlyCloseService {
     return{documents,obligations,bank_transactions,total:documents+obligations+bank_transactions};
   }
   async list(companyId:string){
-    const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY period_start DESC',[companyId]);
+    const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY monthly_close_periods.period_start DESC',[companyId]);
     return {periods:await Promise.all(rows.map(async period=>{
       const blockers=await this.blockers(companyId,period.period_start,period.period_end);
       return {...period,blockers,ready:blockers.total===0};
