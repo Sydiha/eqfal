@@ -1,18 +1,3 @@
-:root {
-  --app-bg: #F4F6F7;
-  --surface: #FFFFFF;
-  --border: #E6ECEE;
-  --primary: #0E8F7A;
-  --primary-hover: #0A7464;
-  --primary-soft: #E8F5F2;
-  --brand-navy: #0B1D3A;
-  --brand-teal: #0E8F7A;
-  --brand-gold: #C8A66A;
-  --text: #0B1D3A;
-  --muted: #667483;
-  --shadow: 0 5px 18px rgba(11, 29, 58, .06);
-}
-
 .eqfal-brand-mark {
   display: inline-grid;
   width: 42px;
