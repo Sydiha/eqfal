@@ -49,7 +49,7 @@
 }
 
 .eqfal-brand-subtitle {
-  color: #A9B8C9;
+  color: rgba(255, 255, 255, .68);
   font-size: .68rem;
   font-weight: 500;
   line-height: 1.35;
@@ -74,6 +74,100 @@
   font-size: 1.08rem;
 }
 
+/* Shared EQFAL visual roles: brand colors come from App.css tokens. */
+.eqfal-workspace,
+.workspace-content {
+  background: var(--app-bg);
+}
+
+.topbar,
+.panel,
+.home-hero,
+.action-card,
+.documents-page,
+.document-detail,
+.detail-header,
+.fiscal-years-page,
+.fiscal-year-card,
+.banking-workspace__hero,
+.banking-workspace__tabs,
+.banking-feature-pane > .mantine-Card-root,
+.banking-core .mantine-Card-root {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.topbar,
+.panel,
+.home-hero,
+.action-card,
+.documents-page,
+.document-detail,
+.fiscal-years-page,
+.fiscal-year-card {
+  color: var(--text);
+}
+
+.company-switcher input,
+.eqfal-workspace input,
+.eqfal-workspace select,
+.eqfal-workspace textarea,
+.modal input,
+.modal select,
+.modal textarea {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.header-action,
+.home-intro,
+.home-section-heading p,
+.home-context-item span,
+.action-card-copy > span,
+.document-row-main span,
+.document-row small,
+.metadata dt,
+.shared-workspace-state,
+.eqfal-workspace .shared-state {
+  color: var(--muted);
+}
+
+.header-action:hover {
+  color: var(--brand-navy) !important;
+  background: var(--app-bg) !important;
+}
+
+.user-avatar,
+.action-card-icon,
+.home-company-context,
+.eqfal-workspace .state-card,
+.eqfal-workspace .empty,
+.eqfal-workspace .message,
+.eqfal-workspace .shared-state,
+.shared-workspace-state {
+  border-color: var(--border);
+}
+
+.user-avatar,
+.action-card-icon,
+.eqfal-workspace .state-card,
+.eqfal-workspace .empty,
+.eqfal-workspace .message,
+.eqfal-workspace .shared-state,
+.shared-workspace-state {
+  background: var(--app-bg);
+}
+
+.home-context-separator,
+.sidebar-divider,
+.documents-page > .page-heading,
+.shared-page-heading,
+.detail-header,
+.metadata > div {
+  border-color: var(--border);
+}
+
 .eqfal-nav-link[data-active] {
   border-color: rgba(14, 143, 122, .38);
   background: rgba(14, 143, 122, .18);
@@ -84,7 +178,10 @@
   background: rgba(14, 143, 122, .06);
 }
 
-.home-eyebrow::before {
+.home-eyebrow::before,
+.banking-workspace__eyebrow::before,
+.shared-page-heading .eyebrow::before,
+.fiscal-years-heading .eyebrow::before {
   content: '';
   display: inline-block;
   width: 20px;
@@ -105,7 +202,50 @@
 
 .action-card-featured {
   border-color: rgba(14, 143, 122, .4);
-  background: #FBFDFC;
+  background: var(--surface);
+}
+
+.document-list,
+.detail-section,
+.fiscal-year-dates > div,
+.banking-operation-card,
+.banking-subsection,
+.banking-empty-guidance,
+.banking-metrics-grid > div,
+.banking-core--accounts form,
+#bank-import-workspace > .mantine-Stack-root > .mantine-Group-root,
+.bank-transactions-view__summary .mantine-Badge-root,
+.bank-match-summary {
+  background: var(--app-bg);
+  border-color: var(--border);
+}
+
+.document-row:hover,
+.document-row.selected,
+.banking-selected-operation,
+.bank-match-candidate,
+.bank-transaction-details dl div {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+.document-row.selected {
+  box-shadow: inset 3px 0 var(--brand-teal), 0 5px 14px rgba(11, 29, 58, .05);
+}
+
+[dir=rtl] .document-row.selected {
+  box-shadow: inset -3px 0 var(--brand-teal), 0 5px 14px rgba(11, 29, 58, .05);
+}
+
+.document-row-main strong,
+.detail-header h3,
+.metadata dd,
+.detail-section h4,
+.fiscal-year-card h3,
+.banking-workspace__hero h1,
+.banking-metrics-grid strong,
+.bank-transaction-description p {
+  color: var(--text);
 }
 
 .login-brand .eqfal-brand-subtitle {
