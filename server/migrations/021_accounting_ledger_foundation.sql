@@ -84,11 +84,25 @@ CREATE TRIGGER journal_entries_posted_immutable BEFORE UPDATE OR DELETE ON journ
 CREATE FUNCTION protect_posted_journal_lines() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE entry_status TEXT;
 BEGIN
-  SELECT status INTO entry_status FROM journal_entries
-    WHERE id=COALESCE(OLD.journal_entry_id, NEW.journal_entry_id)
-      AND company_id=COALESCE(OLD.company_id, NEW.company_id);
-  IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
-  RETURN COALESCE(NEW, OLD);
+  IF TG_OP='INSERT' THEN
+    SELECT status INTO entry_status FROM journal_entries
+      WHERE id=NEW.journal_entry_id AND company_id=NEW.company_id;
+    IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
+    RETURN NEW;
+  ELSIF TG_OP='DELETE' THEN
+    SELECT status INTO entry_status FROM journal_entries
+      WHERE id=OLD.journal_entry_id AND company_id=OLD.company_id;
+    IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
+    RETURN OLD;
+  ELSIF TG_OP='UPDATE' THEN
+    SELECT status INTO entry_status FROM journal_entries
+      WHERE id=OLD.journal_entry_id AND company_id=OLD.company_id;
+    IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
+    SELECT status INTO entry_status FROM journal_entries
+      WHERE id=NEW.journal_entry_id AND company_id=NEW.company_id;
+    IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
+    RETURN NEW;
+  END IF;
 END $$;
 CREATE TRIGGER journal_lines_posted_immutable BEFORE INSERT OR UPDATE OR DELETE ON journal_lines
   FOR EACH ROW EXECUTE FUNCTION protect_posted_journal_lines();
