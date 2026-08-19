@@ -93,12 +93,20 @@ function zipStore(files: Array<{name:string;data:Buffer}>): Buffer {
   return Buffer.concat([...locals,...centrals,end]);
 }
 
+const typeLabel: Record<VatDocumentType,string> = {
+  purchase:'شراء / Purchase', expense:'مصروف / Expense', sale:'بيع / Sale',
+};
+const treatmentLabel: Record<VatTreatment,string> = {
+  standard:'النسبة الأساسية / Standard', zero_rated:'نسبة صفر / Zero rated', exempt:'معفى / Exempt', out_of_scope:'خارج النطاق / Out of scope',
+};
+
 export function buildVatWorkingPaperXlsx(report: VatClosingReport): Buffer {
-  const headers=['Document','Customer / Supplier','Type','Document Date','Tax Date','Total','Treatment','Taxable Amount','VAT Amount'];
+  const headers=['المستند / Document','العميل / المورد / Customer / Supplier','النوع / Type','تاريخ المستند / Document Date','التاريخ الضريبي / Tax Date','الإجمالي / Total','المعالجة / Treatment','المبلغ الخاضع / Taxable Amount','مبلغ الضريبة / VAT Amount'];
   const rows: Array<Array<string|number>>=[
-    ['VAT Working Paper'],['Company',report.company.name],['Period',`${report.period.period_start} — ${report.period.period_end}`],
-    ['Output VAT',report.totals.output_vat],['Input VAT',report.totals.input_vat],['Net VAT',report.totals.net_vat],[],headers,
-    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',d.document_type,d.document_date??'',d.tax_date,Number(d.total_amount??0),d.treatment,Number(d.taxable_amount),Number(d.vat_amount)]),
+    ['ورقة عمل ضريبة القيمة المضافة / VAT Working Paper'],['الشركة / Company',report.company.name],['الفترة / Period',`${report.period.period_start} — ${report.period.period_end}`],
+    ['الحالة / Status','مقفلة / Closed'],['تاريخ الإنشاء / Generated At',new Date().toISOString()],
+    ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT',report.totals.net_vat],[],headers,
+    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount)]),
   ];
   const sheetRows=rows.map((row,r)=>`<row r="${r+1}">${row.map((v,c)=>typeof v==='number'?`<c r="${colName(c)}${r+1}"><v>${Number.isFinite(v)?v:0}</v></c>`:`<c r="${colName(c)}${r+1}" t="inlineStr"><is><t>${xml(v)}</t></is></c>`).join('')}</row>`).join('');
   const files=[
