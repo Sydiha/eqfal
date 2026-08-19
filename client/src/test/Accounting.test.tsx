@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import '../i18n';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n';
 import { Accounting } from '../components/Accounting';
 
 describe('Accounting workspace',()=>{
+ beforeEach(async()=>{await i18n.changeLanguage('en')});
  it('enforces view capability before loading or rendering accounting data',()=>{render(<Accounting canView={false} canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={()=>undefined}/>);expect(screen.getByRole('status')).toBeInTheDocument();expect(screen.queryByRole('tab')).not.toBeInTheDocument()});
+ it.each([false,true])('shows operational sources while capability-gating draft creation (manage=%s)',async canManage=>{const source={source_type:'obligation',source_id:'source-1',accounting_date:'2026-08-01',amount:'42.00',description:'Obligation: Acme',reference:null};const fetchMock=vi.fn(async(url:string,options?:RequestInit)=>{if(options?.method==='POST')return new Response(JSON.stringify({id:'journal-1',fiscal_year_id:'year-1',accounting_date:'2026-08-01',description:source.description,reference:null,entry_type:'standard',status:'draft'}),{status:201});if(url==='/api/accounts')return new Response(JSON.stringify({accounts:[]}));if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[{id:'year-1',name:'2026',start_date:'2026-01-01',end_date:'2026-12-31'}]}));if(url==='/api/journals')return new Response(JSON.stringify({journals:[]}));return new Response(JSON.stringify({sources:[source]}));});vi.stubGlobal('fetch',fetchMock);render(<Accounting canView canManageChart={false} canManageJournals={canManage} canPost={false} onUnauthorized={vi.fn()}/>);fireEvent.click(await screen.findByRole('tab',{name:'Operational Sources'}));expect(await screen.findByText('Obligation: Acme')).toBeInTheDocument();const create=screen.queryByRole('button',{name:'Create draft journal'});expect(!!create).toBe(canManage);if(create){fireEvent.click(create);await waitFor(()=>expect(fetchMock.mock.calls.some(call=>call[1]?.method==='POST')).toBe(true));const call=fetchMock.mock.calls.find(call=>call[1]?.method==='POST')!;const body=JSON.parse(String(call[1]?.body));expect(body).toMatchObject({source_type:'obligation',source_id:'source-1',accounting_date:'2026-08-01',entry_type:'standard'});expect(body).not.toHaveProperty('lines');expect(fetchMock.mock.calls.some(call=>String(call[0]).includes('/post'))).toBe(false);}});
 });
