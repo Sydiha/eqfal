@@ -82,13 +82,24 @@ CREATE TRIGGER journal_entries_posted_immutable BEFORE UPDATE OR DELETE ON journ
   FOR EACH ROW EXECUTE FUNCTION protect_posted_journal();
 
 CREATE FUNCTION protect_posted_journal_lines() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE entry_status TEXT;
+DECLARE
+  entry_status TEXT;
+  entry_id UUID;
+  entry_company_id UUID;
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    entry_id := NEW.journal_entry_id;
+    entry_company_id := NEW.company_id;
+  ELSE
+    entry_id := OLD.journal_entry_id;
+    entry_company_id := OLD.company_id;
+  END IF;
+
   SELECT status INTO entry_status FROM journal_entries
-    WHERE id=COALESCE(OLD.journal_entry_id, NEW.journal_entry_id)
-      AND company_id=COALESCE(OLD.company_id, NEW.company_id);
+    WHERE id=entry_id AND company_id=entry_company_id;
   IF entry_status='posted' THEN RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE='55000'; END IF;
-  RETURN COALESCE(NEW, OLD);
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
 END $$;
 CREATE TRIGGER journal_lines_posted_immutable BEFORE INSERT OR UPDATE OR DELETE ON journal_lines
   FOR EACH ROW EXECUTE FUNCTION protect_posted_journal_lines();
