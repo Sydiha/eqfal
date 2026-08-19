@@ -233,3 +233,40 @@ After an approved merge:
 - [ ] Confirm no new paid service or operating cost was introduced unless separately approved.
 - [ ] Update project recap/decision documentation only when the repository's documentation policy requires it.
 - [ ] Close the current task technically before opening the next task unless a genuine blocker justifies otherwise.
+
+## 16. Computer Use — Optional Practical/UI Validation Tool
+
+ChatGPT Computer Use may be used for EQFAL only as an optional, replaceable UI/practical-validation aid. It is not part of the application architecture, delivery path, or source of truth, and removing or disabling it must not affect the project workflow.
+
+Approved uses are intentionally narrow:
+
+- short read-only or explicitly scoped practical validation in the running EQFAL UI;
+- navigation through browser/application screens to verify visible state, permissions, controls, messages, and flows;
+- reproducing a UI-visible issue through a defined scenario;
+- checking responsive or visual behavior when direct UI interaction materially reduces user effort.
+
+Computer Use must **not** be used for:
+
+- source-code implementation or architecture decisions;
+- Git operations, PowerShell, terminal automation, migrations, or database administration;
+- broad research or reading that Chat/Codex can perform more efficiently;
+- open-ended autonomous exploration of the system;
+- Production changes or other sensitive actions without separate explicit approval;
+- replacing Codex, GitHub, CI, or the approved delivery workflow.
+
+Usage-efficiency rule:
+
+- Treat Computer Use allowance/credits as a constrained resource.
+- Prefer Chat, direct GitHub reads, Codex, or manual execution when they accomplish the task with lower expected usage.
+- Give Computer Use short, explicit, bounded instructions; default to read-only when mutation is unnecessary.
+- Do not repeat a scenario without a concrete verification reason.
+- If Computer Use begins consuming the user's included allowance or credits at a noticeable or unjustified rate, stop using it immediately and fall back to the normal workflow.
+- The Lead PM should proactively tell the user when a future EQFAL task has a clear, material Computer Use benefit rather than invoking it by default.
+
+The expected tool split is:
+
+- **ChatGPT:** task framing, Design Review, decisions, review, and governance.
+- **Codex:** code, repository-local implementation, Git-aware work, and technical tests.
+- **GitHub:** authoritative source of truth and PR/merge history.
+- **Computer Use:** optional visual/UI practical validation only.
+- **User:** approval of sensitive actions, merge, Production, and exceptions.
