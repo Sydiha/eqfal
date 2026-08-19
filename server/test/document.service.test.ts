@@ -89,6 +89,44 @@ describe('DocumentService upload consistency', () => {
 });
 
 describe('DocumentService review workflow', () => {
+  it.each([
+    ['document_date', { document_date: null, total_amount: '100.00' }],
+    ['total_amount', { document_date: '2026-08-01', total_amount: null }],
+  ] as const)('does not approve a VAT-eligible document without a valid %s', async (_field, intake) => {
+    const needsReview = { ...record, status: 'needs_review' as const, document_type: 'purchase' as const, ...intake };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
+    const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview');
+
+    await expect(new DocumentService(pool, storage).review({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
+    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+
+    expect(updateReview).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+
+  it('approves a VAT-eligible document with a valid document date and total amount', async () => {
+    const needsReview = { ...record, status: 'needs_review' as const, document_type: 'sale' as const, document_date: '2026-08-01', total_amount: '100.00' };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
+    const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview').mockResolvedValue({ ...needsReview, status: 'approved' });
+
+    await expect(new DocumentService(pool, storage).review({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
+    })).resolves.toMatchObject({ status: 'approved' });
+
+    expect(updateReview).toHaveBeenCalledOnce();
+  });
+
+  it('does not impose VAT fields on a non-VAT-eligible document', async () => {
+    const needsReview = { ...record, status: 'needs_review' as const, document_type: 'other' as const };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
+    vi.spyOn(DocumentRepository.prototype, 'updateReview').mockResolvedValue({ ...needsReview, status: 'approved' });
+
+    await expect(new DocumentService(pool, storage).review({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
+    })).resolves.toMatchObject({ status: 'approved' });
+  });
+
   it('submits an uploaded document with the dedicated audit action without review metadata', async () => {
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
     const submitForReview = vi.spyOn(DocumentRepository.prototype, 'submitForReview').mockResolvedValue({ ...record, status: 'needs_review' });
@@ -165,3 +203,4 @@ describe('DocumentService intake', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
   });
 });
+

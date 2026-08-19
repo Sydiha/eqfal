@@ -4,7 +4,7 @@ import logger from '../../shared/logger';
 import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { DocumentRepository } from './document.repository';
-import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision } from './document.types';
+import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 
 export interface UploadDocumentInput {
@@ -169,6 +169,10 @@ export class DocumentService {
       if (current.status !== 'needs_review') {
         throw new DocumentReviewConflictError('Document cannot be reviewed from its current status');
       }
+      if (input.decision === 'approved' && ['purchase', 'expense', 'sale'].includes(current.document_type ?? '')
+        && (!isValidDocumentDate(current.document_date) || !isValidDocumentTotalAmount(current.total_amount))) {
+        throw new DocumentReviewConflictError('VAT-eligible document requires a valid document date and total amount');
+      }
       const document = await this.documents.updateReview(input.documentId, input.companyId, input.decision, input.actorUserId, input.note, client);
       await this.audit.logEvent({
         company_id: input.companyId,
@@ -183,3 +187,4 @@ export class DocumentService {
     });
   }
 }
+

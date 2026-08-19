@@ -13,7 +13,7 @@ import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
 import { DocumentRepository } from './document.repository';
 import { DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
-import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType } from './document.types';
+import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 
 export const documentRouter = Router();
@@ -131,12 +131,12 @@ function parseIntake(value: unknown): DocumentIntakeUpdate | null {
   }
   if ('document_date' in body) {
     const date = body.document_date;
-    if (date !== null && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date)) return null;
+    if (date !== null && !isValidDocumentDate(date)) return null;
     result.document_date = date as string | null;
   }
   if ('total_amount' in body) {
     const amount = body.total_amount;
-    if (amount !== null && (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || amount >= 1e16 || !/^\d+(\.\d{1,2})?$/.test(String(amount)))) return null;
+    if (amount !== null && (typeof amount !== 'number' || !isValidDocumentTotalAmount(amount))) return null;
     result.total_amount = amount as number | null;
   }
   return result;
@@ -337,3 +337,4 @@ documentRouter.get(
     res.status(200).send(data);
   }),
 );
+

@@ -33,6 +33,21 @@ export type DocumentIntakeUpdate = Partial<{
 
 export type DocumentReviewDecision = Extract<DocumentStatus, 'approved' | 'incomplete' | 'rejected'>;
 
+export function isValidDocumentDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+export function isValidDocumentTotalAmount(value: unknown): boolean {
+  const amount = typeof value === 'number' ? String(value) : value;
+  return typeof amount === 'string'
+    && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(amount)
+    && Number.isFinite(Number(amount))
+    && Number(amount) > 0
+    && Number(amount) < 1e16;
+}
+
 export interface CreateDocumentInput {
   company_id: string;
   uploaded_by_user_id: string;
@@ -42,3 +57,4 @@ export interface CreateDocumentInput {
   storage_key: string;
   sha256: string;
 }
+

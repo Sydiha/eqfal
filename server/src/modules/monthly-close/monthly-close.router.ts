@@ -5,12 +5,13 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { lockAccountingRange } from './accounting-period.guard';
+import { VatService } from '../vat/vat.router';
 
 export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
-type Blockers = { documents:number; obligations:number; bank_transactions:number; total:number };
+type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; total:number };
 export class MonthlyCloseValidationError extends Error {}
 export class MonthlyCloseNotFoundError extends Error {}
 export class MonthlyCloseConflictError extends Error { constructor(message='Conflict'){super(message);} }
@@ -35,7 +36,9 @@ export class MonthlyCloseService {
         AND NOT EXISTS(SELECT 1 FROM document_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         AND NOT EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id))::text bank_transactions`,[companyId,start,end]);
     const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions);
-    return{documents,obligations,bank_transactions,total:documents+obligations+bank_transactions};
+    const vatReadiness=await new VatService(this.db).readiness(companyId,start,end,client);
+    const vat=vatReadiness.ready?0:1;
+    return{documents,obligations,bank_transactions,vat,total:documents+obligations+bank_transactions+vat};
   }
   async list(companyId:string){
     const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY monthly_close_periods.period_start DESC',[companyId]);
@@ -61,3 +64,4 @@ monthlyCloseRouter.get('/monthly-close-periods',requireAuth,requireActiveCompany
 monthlyCloseRouter.post('/monthly-close-periods',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.close'),route(async(req,res)=>{try{const body=parseCreate(req.body);if(!body)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.status(201).json(await value.create(context(req).activeCompanyId,context(req).user.id,body.fiscalYearId,body.start,body.end));}catch(error){handle(error,res);}}));
 monthlyCloseRouter.post('/monthly-close-periods/:id/close',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.close'),route(async(req,res)=>{try{if(!UUID.test(req.params.id)||Object.keys(req.body??{}).length)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.json(await value.close(context(req).activeCompanyId,context(req).user.id,req.params.id));}catch(error){handle(error,res);}}));
 monthlyCloseRouter.post('/monthly-close-periods/:id/reopen',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.reopen'),route(async(req,res)=>{try{const reason=parseReason(req.body);if(!UUID.test(req.params.id)||!reason)throw new MonthlyCloseValidationError('Reason is required');const value=service(res);if(value)res.json(await value.reopen(context(req).activeCompanyId,context(req).user.id,req.params.id,reason));}catch(error){handle(error,res);}}));
+
