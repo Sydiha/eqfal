@@ -14,6 +14,7 @@ export interface Role {
   id: string;
   company_id: string;
   name: string;
+  is_full_access: boolean;
   created_at: Date;
 }
 

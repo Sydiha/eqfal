@@ -78,6 +78,18 @@ describe('SessionService', () => {
     }));
   });
 
+  it('returns centrally resolved Full Access capabilities at login', async () => {
+    vi.spyOn(AuthService.prototype, 'authenticate').mockResolvedValue(user);
+    vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(memberships);
+    vi.spyOn(SessionRepository.prototype, 'create').mockResolvedValue(activeSession);
+    vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities')
+      .mockResolvedValue(['report.view', 'future.capability']);
+
+    const result = await new SessionService(pool).login(user.email, 'secret');
+
+    expect(result?.capabilities).toEqual(['report.view', 'future.capability']);
+  });
+
   it('allows identity login with no active company membership', async () => {
     vi.spyOn(AuthService.prototype, 'authenticate').mockResolvedValue(user);
     vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue([]);
@@ -108,6 +120,18 @@ describe('SessionService', () => {
 
     expect(result?.activeCompanyId).toBe('company-a');
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('getContext reloads updated effective capabilities from the database', async () => {
+    vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(activeSession);
+    vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(memberships);
+    const capabilities = vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities')
+      .mockResolvedValue(['newly.inserted.capability']);
+
+    const result = await new SessionService(pool).getContext('token');
+
+    expect(result?.capabilities).toEqual(['newly.inserted.capability']);
+    expect(capabilities).toHaveBeenCalledWith(user.id, 'company-a');
   });
 
   it('reconciles a removed/disabled active membership to another allowed company', async () => {
@@ -163,6 +187,22 @@ describe('SessionService', () => {
       expect(result.capabilities).toEqual(['invoice.create']);
     }
     expect(caps).toHaveBeenCalledWith(user.id, 'company-b');
+  });
+
+  it('company switch uses only the target company effective capabilities', async () => {
+    vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(activeSession);
+    vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(memberships);
+    vi.spyOn(SessionRepository.prototype, 'updateActiveCompany').mockResolvedValue();
+    const capabilities = vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities')
+      .mockImplementation(async (_userId, companyId) => (
+        companyId === 'company-b' ? ['company-b.explicit'] : ['company-a.full-access']
+      ));
+
+    const result = await new SessionService(pool).switchCompany('token', 'company-b');
+
+    expect(result && result !== 'forbidden' ? result.capabilities : null)
+      .toEqual(['company-b.explicit']);
+    expect(capabilities).toHaveBeenCalledWith(user.id, 'company-b');
   });
 
   it('returns unauthenticated when switching with an invalid session', async () => {

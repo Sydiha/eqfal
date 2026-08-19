@@ -99,7 +99,19 @@ export class MembershipService {
       );
     }
 
-    // ── Check 2: capability ceiling ────────────────────────────────────────
+    // ── Check 2: Full Access assignment authority ─────────────────────────
+    // Holding every explicit capability is not equivalent to Full Access.
+    // Authority is checked in the DB-derived target company context.
+    if (
+      role.is_full_access &&
+      !(await this.repo.hasActiveFullAccessRole(granterUserId, membership.company_id))
+    ) {
+      throw new Error(
+        'Full Access violation: granter must hold Full Access in the target company',
+      );
+    }
+
+    // ── Check 3: capability ceiling ────────────────────────────────────────
     // Company context is derived from membership.company_id (DB-sourced),
     // not from any caller-supplied value, to prevent cross-company ceiling bypass.
     const [granterCaps, roleCaps] = await Promise.all([
