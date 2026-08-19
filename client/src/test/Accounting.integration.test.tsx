@@ -96,4 +96,35 @@ describe('Accounting integration contracts',()=>{
   expect(await screen.findByRole('button',{name:/Created once/})).toBeInTheDocument();
   expect(fetchMock.mock.calls.filter(([url,options])=>url==='/api/journals'&&options?.method==='POST')).toHaveLength(1);
  });
+
+ it('does not restore stale success feedback after a later mutation fails and load is retried',async()=>{
+  let writes=0;
+  const fetchMock=vi.fn(async(url:string,options?:RequestInit)=>{
+   if(url==='/api/accounts'&&options?.method==='POST'){
+    writes++;
+    return writes===1?new Response(JSON.stringify(account),{status:201}):new Response(JSON.stringify({error:'failed'}),{status:500});
+   }
+   return new Response(JSON.stringify(emptyResponses(url)));
+  });
+  vi.stubGlobal('fetch',fetchMock);
+  render(<Accounting canView canManageChart canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  let code=await screen.findByRole('textbox',{name:'Code'});
+  let name=screen.getByRole('textbox',{name:'Name'});
+  fireEvent.change(code,{target:{value:'1000'}});fireEvent.change(name,{target:{value:'Cash'}});
+  fireEvent.click(screen.getByRole('button',{name:'Add account'}));
+  expect(await screen.findByText('Saved successfully.')).toBeInTheDocument();
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Add account'})).toBeEnabled());
+  code=screen.getByRole('textbox',{name:'Code'});name=screen.getByRole('textbox',{name:'Name'});
+  fireEvent.change(code,{target:{value:'2000'}});fireEvent.change(name,{target:{value:'Receivable'}});
+  fireEvent.submit(code.closest('form')!);
+  await waitFor(()=>expect(writes).toBe(2));
+  expect(await screen.findByText('Unable to load or update accounting.')).toBeInTheDocument();
+  expect(screen.queryByText('Saved successfully.')).not.toBeInTheDocument();
+  const getsBeforeRetry=fetchMock.mock.calls.filter(([,options])=>(options?.method??'GET')==='GET').length;
+  fireEvent.click(screen.getByRole('button',{name:'Try again'}));
+  await waitFor(()=>expect(screen.queryByText('Unable to load or update accounting.')).not.toBeInTheDocument());
+  expect(screen.queryByText('Saved successfully.')).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.filter(([url,options])=>url==='/api/accounts'&&options?.method==='POST')).toHaveLength(2);
+  expect(fetchMock.mock.calls.filter(([,options])=>(options?.method??'GET')==='GET')).toHaveLength(getsBeforeRetry+4);
+ });
 });
