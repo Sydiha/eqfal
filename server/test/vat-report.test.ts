@@ -36,13 +36,16 @@ describe('VAT closing report',()=>{
     expect(report.documents.map(d=>d.counterparty_name)).toEqual(['Customer A','Supplier B']);
   });
 
-  it('creates a real xlsx zip package',async()=>{
+  it('creates a real xlsx zip package with readable labels',async()=>{
     const {db}=dbWith('closed');
     const report=await loadVatClosingReport(db,companyId,periodId);
     const xlsx=buildVatWorkingPaperXlsx(report);
     expect(xlsx.subarray(0,4).toString('hex')).toBe('504b0304');
     expect(xlsx.includes(Buffer.from('VAT Working Paper'))).toBe(true);
     expect(xlsx.includes(Buffer.from('Customer A'))).toBe(true);
+    expect(xlsx.includes(Buffer.from('Purchase'))).toBe(true);
+    expect(xlsx.includes(Buffer.from('Standard'))).toBe(true);
+    expect(xlsx.includes(Buffer.from('Closed'))).toBe(true);
     expect(xlsx.includes(Buffer.from('[Content_Types].xml'))).toBe(true);
     expect(xlsx.includes(Buffer.from('xl/worksheets/sheet1.xml'))).toBe(true);
   });
