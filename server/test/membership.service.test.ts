@@ -54,6 +54,7 @@ function makeRole(overrides: Partial<Role> = {}): Role {
     id: ROLE_A,
     company_id: COMPANY_A,
     name: 'accountant',
+    is_full_access: false,
     created_at: new Date('2024-01-01'),
     ...overrides,
   };
@@ -252,6 +253,45 @@ describe('MembershipService — capability ceiling', () => {
 
     const result = await service.assignRole(MEM_1, ROLE_A, USER_2);
     expect(result.role_id).toBe(ROLE_A);
+  });
+});
+
+describe('MembershipService — Full Access assignment authority', () => {
+  let service: MembershipService;
+  let repo: MembershipRepository;
+
+  beforeEach(() => {
+    service = new MembershipService(makePool());
+    repo = (service as any).repo as MembershipRepository;
+    vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership());
+    vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole({ is_full_access: true }));
+  });
+
+  it('rejects a non-Full-Access granter assigning a Full Access role', async () => {
+    vi.spyOn(repo, 'hasActiveFullAccessRole').mockResolvedValue(false);
+    const write = vi.spyOn(repo, 'assignRoleToMembership');
+
+    await expect(service.assignRole(MEM_1, ROLE_A, USER_2)).rejects.toThrow(/Full Access violation/);
+    expect(repo.hasActiveFullAccessRole).toHaveBeenCalledWith(USER_2, COMPANY_A);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('allows a Full Access granter to assign Full Access in the same company', async () => {
+    const updated = makeMembership({ role_id: ROLE_A });
+    vi.spyOn(repo, 'hasActiveFullAccessRole').mockResolvedValue(true);
+    vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['future.capability']);
+    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue([]);
+    vi.spyOn(repo, 'assignRoleToMembership').mockResolvedValue(updated);
+
+    await expect(service.assignRole(MEM_1, ROLE_A, USER_2)).resolves.toEqual(updated);
+    expect(repo.hasActiveFullAccessRole).toHaveBeenCalledWith(USER_2, COMPANY_A);
+  });
+
+  it('rejects non-Full-Access self-escalation into Full Access', async () => {
+    vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership({ user_id: USER_1 }));
+    vi.spyOn(repo, 'hasActiveFullAccessRole').mockResolvedValue(false);
+
+    await expect(service.assignRole(MEM_1, ROLE_A, USER_1)).rejects.toThrow(/Full Access violation/);
   });
 });
 

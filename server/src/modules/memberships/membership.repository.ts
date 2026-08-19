@@ -149,6 +149,24 @@ export class MembershipRepository {
     return rows.map((r) => r.capability_id);
   }
 
+  /** Whether the user currently holds an active Full Access role in this company. */
+  async hasActiveFullAccessRole(userId: string, companyId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ has_full_access: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM memberships m
+         JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
+         JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+         WHERE m.user_id = $1
+           AND m.company_id = $2
+           AND m.is_active = TRUE
+           AND r.is_full_access = TRUE
+       ) AS has_full_access`,
+      [userId, companyId],
+    );
+    return rows[0]?.has_full_access === true;
+  }
+
   /**
    * Returns active capabilities only when membership, company, and role scope
    * all agree. The explicit roles/company join is defense-in-depth against a
@@ -156,11 +174,17 @@ export class MembershipRepository {
    */
   async getActiveCapabilities(userId: string, companyId: string): Promise<string[]> {
     const { rows } = await this.pool.query<{ capability_id: string }>(
-      `SELECT rc.capability_id
+      `SELECT cap.id AS capability_id
        FROM memberships m
        JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN role_capabilities rc ON rc.role_id = r.id
+       JOIN capabilities cap ON r.is_full_access = TRUE
+         OR EXISTS (
+           SELECT 1
+           FROM role_capabilities rc
+           WHERE rc.role_id = r.id
+             AND rc.capability_id = cap.id
+         )
        WHERE m.user_id    = $1
          AND m.company_id = $2
          AND m.is_active  = TRUE`,
