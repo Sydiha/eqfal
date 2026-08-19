@@ -13,6 +13,7 @@ import { obligationRouter } from './modules/obligations/obligation.router';
 import { monthlyCloseRouter } from './modules/monthly-close/monthly-close.router';
 import { vatRouter } from './modules/vat/vat.router';
 import { vatReportRouter } from './modules/vat/vat-report.router';
+import { accountingRouter } from './modules/accounting/accounting.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api', obligationRouter);
 app.use('/api', monthlyCloseRouter);
 app.use('/api', vatRouter);
 app.use('/api', vatReportRouter);
+app.use('/api', accountingRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
