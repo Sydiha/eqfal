@@ -26,9 +26,29 @@ vi.mock('../src/modules/auth/auth.middleware', () => ({
 import { accountingRouter } from '../src/modules/accounting/accounting.router';
 
 const app = express();
+app.use(express.json());
 app.use('/api', accountingRouter);
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: error instanceof Error ? error.message : 'error' });
+});
+
+describe('PUT /api/journals/:id/lines', () => {
+  beforeEach(() => {
+    mocks.query.mockReset();
+  });
+
+  it.each(['id', 'company_id', 'journal_entry_id', 'sequence'])(
+    'rejects the server-owned %s field instead of weakening the write allowlist',
+    async (serverField) => {
+      const response = await request(app)
+        .put('/api/journals/22222222-2222-4222-8222-222222222222/lines')
+        .send({ lines: [{ account_id: '11111111-1111-4111-8111-111111111111', debit: '10.00', credit: '0.00', memo: null, [serverField]: 'server-value' }] });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid request' });
+      expect(mocks.query).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('GET /api/journals', () => {
