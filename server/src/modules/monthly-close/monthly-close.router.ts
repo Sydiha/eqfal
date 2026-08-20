@@ -6,12 +6,13 @@ import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapa
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { lockAccountingRange } from './accounting-period.guard';
 import { VatService } from '../vat/vat.router';
+import { loadOperationalSources } from '../accounting/operational-sources';
 
 export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
-type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; total:number };
+type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; total:number };
 export class MonthlyCloseValidationError extends Error {}
 export class MonthlyCloseNotFoundError extends Error {}
 export class MonthlyCloseConflictError extends Error { constructor(message='Conflict'){super(message);} }
@@ -38,7 +39,14 @@ export class MonthlyCloseService {
     const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions);
     const vatReadiness=await new VatService(this.db).readiness(companyId,start,end,client);
     const vat=vatReadiness.ready?0:1;
-    return{documents,obligations,bank_transactions,vat,total:documents+obligations+bank_transactions+vat};
+    const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
+    let unpostedSources=0;
+    for(const source of sources){if(!(await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type=$2 AND source_id=$3 AND status='posted'",[companyId,source.source_type,source.source_id])).rowCount)unpostedSources++;}
+    const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
+    const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
+    const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
+    const ledger=unpostedSources+independentDrafts;
+    return{documents,obligations,bank_transactions,vat,ledger,total:documents+obligations+bank_transactions+vat+ledger};
   }
   async list(companyId:string){
     const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY monthly_close_periods.period_start DESC',[companyId]);
