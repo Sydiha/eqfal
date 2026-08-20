@@ -24,7 +24,7 @@ const tx = (amount: string, status: 'unmatched' | 'matched' | 'reconciled' = 'un
   id: TX, company_id: COMPANY, amount, currency_code: 'SAR', transaction_date: '2026-08-16',
   description: 'bank movement', bank_reference: null, reconciliation_status: status,
 });
-const approvedDoc = (total = '40.00', status = 'approved') => ({ id: DOC, status, total_amount: total, original_filename: 'invoice.pdf' });
+const approvedDoc = (total = '40.00', status = 'approved') => ({ id: DOC, status, document_type: 'expense', total_amount: total, original_filename: 'invoice.pdf' });
 
 type Handler = (sql: string, params?: unknown[]) => { rows: unknown[] } | Promise<{ rows: unknown[] }>;
 function makePool(handler: Handler) {
@@ -126,7 +126,7 @@ describe('CustodyService behavioural rules', () => {
 
   it('rejects non-approved, partial, existing-funded, and over-remaining document allocations', async () => {
     const cases = [
-      { name: 'non-approved', doc: approvedDoc('40.00', 'needs_review'), existing: false, amount: '40.00', funding: '-100.00', message: 'approved with a total amount' },
+      { name: 'non-approved', doc: approvedDoc('40.00', 'needs_review'), existing: false, amount: '40.00', funding: '-100.00', message: 'approved expense with a total amount' },
       { name: 'partial', doc: approvedDoc('40.00'), existing: false, amount: '20.00', funding: '-100.00', message: 'must equal document total' },
       { name: 'existing', doc: approvedDoc('40.00'), existing: true, amount: '40.00', funding: '-100.00', message: 'already has a funding source' },
       { name: 'over remaining', doc: approvedDoc('40.00'), existing: false, amount: '40.00', funding: '-30.00', message: 'exceeds custody remaining amount' },
