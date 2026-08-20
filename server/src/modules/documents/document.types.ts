@@ -3,6 +3,7 @@ export type DocumentType = 'purchase' | 'expense' | 'sale' | 'other';
 
 export interface DocumentIntake {
   document_type: DocumentType | null;
+  counterparty_id: string | null;
   counterparty_name: string | null;
   document_date: string | null;
   reference_number: string | null;
@@ -11,6 +12,7 @@ export interface DocumentIntake {
 }
 
 export interface DocumentRecord extends DocumentIntake {
+  relational_counterparty_name?: string | null;
   id: string;
   company_id: string;
   uploaded_by_user_id: string;
@@ -25,6 +27,12 @@ export interface DocumentRecord extends DocumentIntake {
   review_note: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface DocumentCounterparty {
+  id: string;
+  name: string;
+  is_active: boolean;
 }
 
 export type DocumentIntakeUpdate = Partial<{
