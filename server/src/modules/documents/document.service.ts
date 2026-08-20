@@ -58,6 +58,22 @@ export class DocumentService {
     }
   }
 
+  private async hasCompanyCounterparty(companyId: string, counterpartyId: string | null, client: PoolClient, activeOnly = false): Promise<boolean> {
+    if (!counterpartyId) return false;
+    const result = await client.query(
+      `SELECT 1 FROM counterparties WHERE id = $1 AND company_id = $2${activeOnly ? ' AND is_active = TRUE' : ''}`,
+      [counterpartyId, companyId],
+    );
+    return Boolean(result.rowCount);
+  }
+
+  private async assertOperationalCounterparty(document: DocumentRecord, companyId: string, client: PoolClient): Promise<void> {
+    if (['purchase', 'expense', 'sale'].includes(document.document_type ?? '')
+      && !await this.hasCompanyCounterparty(companyId, document.counterparty_id, client)) {
+      throw new DocumentReviewConflictError('Operational document requires a valid company counterparty');
+    }
+  }
+
   async upload(input: UploadDocumentInput): Promise<DocumentRecord> {
     const sha256 = crypto.createHash('sha256').update(input.data).digest('hex');
     const storageKey = `${input.companyId}/${crypto.randomUUID()}`;
@@ -117,6 +133,7 @@ export class DocumentService {
       if (current.status !== 'uploaded') {
         throw new DocumentReviewConflictError('Document cannot be submitted from its current status');
       }
+      await this.assertOperationalCounterparty(current, input.companyId, client);
       const document = await this.documents.submitForReview(input.documentId, input.companyId, client);
       await this.audit.logEvent({
         company_id: input.companyId,
@@ -139,6 +156,11 @@ export class DocumentService {
       if (accountingDate) await assertAccountingDateWritable(input.companyId, accountingDate, client);
       if (current.document_date && current.document_date !== accountingDate) await assertAccountingDateWritable(input.companyId, current.document_date, client);
       if (current.status !== 'uploaded') throw new DocumentReviewConflictError('Document intake cannot be updated');
+      if (input.intake.counterparty_id !== undefined && input.intake.counterparty_id !== current.counterparty_id
+        && input.intake.counterparty_id !== null
+        && !await this.hasCompanyCounterparty(input.companyId, input.intake.counterparty_id, client, true)) {
+        throw new DocumentReviewConflictError('Counterparty must be active and belong to the company');
+      }
       const changed = (Object.keys(input.intake) as (keyof DocumentIntake)[])
         .filter((field) => field === 'total_amount'
           ? Number(current[field]) !== Number(input.intake[field]) || (current[field] === null) !== (input.intake[field] === null)
@@ -173,6 +195,7 @@ export class DocumentService {
         && (!isValidDocumentDate(current.document_date) || !isValidDocumentTotalAmount(current.total_amount))) {
         throw new DocumentReviewConflictError('VAT-eligible document requires a valid document date and total amount');
       }
+      if (input.decision === 'approved') await this.assertOperationalCounterparty(current, input.companyId, client);
       const document = await this.documents.updateReview(input.documentId, input.companyId, input.decision, input.actorUserId, input.note, client);
       await this.audit.logEvent({
         company_id: input.companyId,

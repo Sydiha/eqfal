@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     capabilities: string[];
   },
   findByCompany: vi.fn(),
+  findCounterpartiesByCompany: vi.fn(),
   findById: vi.fn(),
   upload: vi.fn(),
   review: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../src/modules/auth/auth.middleware', () => ({
 vi.mock('../src/modules/documents/document.repository', () => ({
   DocumentRepository: class {
     findByCompany = mocks.findByCompany;
+    findCounterpartiesByCompany = mocks.findCounterpartiesByCompany;
     findById = mocks.findById;
   },
 }));
@@ -57,7 +59,7 @@ const document = {
   original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: pdf.length,
   storage_key: 'co-a/file-1', sha256: 'a'.repeat(64), reviewed_by_user_id: null, reviewed_at: null, review_note: null,
   created_at: new Date(), updated_at: new Date(),
-  document_type: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null,
+  document_type: null, counterparty_id: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null,
 };
 
 function setContext(capabilities: string[], companyId: string | null = 'co-a') {
@@ -82,6 +84,7 @@ describe('Document API security boundary', () => {
     vi.restoreAllMocks();
     mocks.context = null;
     mocks.findByCompany.mockReset();
+    mocks.findCounterpartiesByCompany.mockReset().mockResolvedValue([]);
     mocks.findById.mockReset();
     mocks.upload.mockReset();
     mocks.review.mockReset();
@@ -108,6 +111,7 @@ describe('Document API security boundary', () => {
     const res = await request(app).get('/api/documents');
     expect(res.status).toBe(200);
     expect(mocks.findByCompany).toHaveBeenCalledWith('co-a');
+    expect(mocks.findCounterpartiesByCompany).toHaveBeenCalledWith('co-a');
   });
 
   it('rejects cross-origin uploads before writing', async () => {
@@ -190,9 +194,9 @@ describe('Document API security boundary', () => {
     setContext(['document.upload']); mocks.updateIntake.mockResolvedValue({ ...document, document_type: 'purchase' });
     const res = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', company_id: 'co-other' });
     expect(res.status).toBe(400);
-    const valid = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', total_amount: 12.25 });
+    const valid = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 });
     expect(valid.status).toBe(200);
-    expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', total_amount: 12.25 } });
+    expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 } });
   });
 
   it('enforces intake capability, same origin, validation, 404, and conflict', async () => {

@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { CreateDocumentInput, DocumentIntakeUpdate, DocumentRecord, DocumentStatus } from './document.types';
+import { CreateDocumentInput, DocumentCounterparty, DocumentIntakeUpdate, DocumentRecord, DocumentStatus } from './document.types';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -28,9 +28,21 @@ export class DocumentRepository {
 
   async findByCompany(companyId: string): Promise<DocumentRecord[]> {
     const { rows } = await this.pool.query<DocumentRecord>(
-      `SELECT *, document_date::text FROM documents
+      `SELECT d.*, d.document_date::text, c.name AS relational_counterparty_name
+       FROM documents d
+       LEFT JOIN counterparties c ON c.id = d.counterparty_id AND c.company_id = d.company_id
+       WHERE d.company_id = $1
+       ORDER BY d.created_at DESC`,
+      [companyId],
+    );
+    return rows;
+  }
+
+  async findCounterpartiesByCompany(companyId: string): Promise<DocumentCounterparty[]> {
+    const { rows } = await this.pool.query<DocumentCounterparty>(
+      `SELECT id, name, is_active FROM counterparties
        WHERE company_id = $1
-       ORDER BY created_at DESC`,
+       ORDER BY is_active DESC, name`,
       [companyId],
     );
     return rows;
@@ -38,8 +50,10 @@ export class DocumentRepository {
 
   async findById(id: string, companyId: string): Promise<DocumentRecord | null> {
     const { rows } = await this.pool.query<DocumentRecord>(
-      `SELECT *, document_date::text FROM documents
-       WHERE id = $1 AND company_id = $2`,
+      `SELECT d.*, d.document_date::text, c.name AS relational_counterparty_name
+       FROM documents d
+       LEFT JOIN counterparties c ON c.id = d.counterparty_id AND c.company_id = d.company_id
+       WHERE d.id = $1 AND d.company_id = $2`,
       [id, companyId],
     );
     return rows[0] ?? null;

@@ -111,7 +111,7 @@ function isValidUpload(filename: string, mimeType: string, data: Buffer): boolea
   return matchesMagic(mimeType, data);
 }
 
-const INTAKE_FIELDS = ['document_type', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
+const INTAKE_FIELDS = ['document_type', 'counterparty_id', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
 
 function parseIntake(value: unknown): DocumentIntakeUpdate | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -122,6 +122,10 @@ function parseIntake(value: unknown): DocumentIntakeUpdate | null {
   if ('document_type' in body) {
     if (body.document_type !== null && (typeof body.document_type !== 'string' || !types.includes(body.document_type as DocumentType))) return null;
     result.document_type = body.document_type as DocumentType | null;
+  }
+  if ('counterparty_id' in body) {
+    if (body.counterparty_id !== null && (typeof body.counterparty_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.counterparty_id))) return null;
+    result.counterparty_id = body.counterparty_id as string | null;
   }
   for (const [field, max] of [['counterparty_name', 200], ['reference_number', 100], ['intake_note', 500]] as const) {
     if (field in body) {
@@ -152,8 +156,11 @@ documentRouter.get(
     if (!context) return;
     const repository = repositoryOr503(res);
     if (!repository) return;
-    const documents = await repository.findByCompany(context.activeCompanyId);
-    res.status(200).json({ documents });
+    const [documents, counterparties] = await Promise.all([
+      repository.findByCompany(context.activeCompanyId),
+      repository.findCounterpartiesByCompany(context.activeCompanyId),
+    ]);
+    res.status(200).json({ documents, counterparties });
   }),
 );
 
