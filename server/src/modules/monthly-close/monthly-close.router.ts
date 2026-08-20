@@ -42,8 +42,10 @@ export class MonthlyCloseService {
     const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
     let unpostedSources=0;
     for(const source of sources){if(!(await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type=$2 AND source_id=$3 AND status='posted'",[companyId,source.source_type,source.source_id])).rowCount)unpostedSources++;}
-    const draftJournals=Number((await client.query<{count:string}>("SELECT COUNT(*)::text count FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows[0]!.count);
-    const ledger=unpostedSources+draftJournals;
+    const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
+    const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
+    const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
+    const ledger=unpostedSources+independentDrafts;
     return{documents,obligations,bank_transactions,vat,ledger,total:documents+obligations+bank_transactions+vat+ledger};
   }
   async list(companyId:string){
