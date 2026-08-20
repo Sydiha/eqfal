@@ -28,24 +28,59 @@ export class MonthlyCloseService {
   private audit=new AuditLogRepository();
   constructor(private db:Pool){}
   private async tx<T>(fn:(client:PoolClient)=>Promise<T>){const client=await this.db.connect();try{await client.query('BEGIN');const result=await fn(client);await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');if((error as {code?:string}).code==='23505')throw new MonthlyCloseConflictError('Monthly close period overlaps an existing period');throw error;}finally{client.release();}}
+  private async incompleteMaterialDocuments(companyId:string,start:string,end:string,client:PoolClient|Pool){
+    const {rows}=await client.query<{id:string}>(`WITH material AS (
+      SELECT d.id,d.document_type,d.document_date,d.total_amount,r.review_status,r.vat_amount
+      FROM documents d LEFT JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
+      WHERE d.company_id=$1 AND d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND d.document_date BETWEEN $2 AND $3
+    ), obligation_path AS (
+      SELECT m.id document_id,o.id source_id,EXISTS(SELECT 1 FROM journal_entries j WHERE j.company_id=$1 AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted') posted
+      FROM material m JOIN obligations o ON o.document_id=m.id AND o.company_id=$1 AND o.source_type='document' AND o.verification_status='confirmed' AND NOT o.is_cancelled
+       AND o.direction=CASE WHEN m.document_type='sale' THEN 'receivable' ELSE 'payable' END AND o.recognized_on=m.document_date AND o.original_amount=m.total_amount
+    ), custody_path AS (
+      SELECT m.id document_id,SUM(a.amount)=m.total_amount amount_ok,BOOL_AND(j.id IS NOT NULL) posted
+      FROM material m JOIN custody_document_allocations a ON a.document_id=m.id AND a.company_id=$1
+      LEFT JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted'
+      WHERE m.document_type='expense' GROUP BY m.id,m.total_amount
+    ), recognition AS (
+      SELECT m.id,m.document_type,m.review_status,m.vat_amount,
+       CASE WHEN m.document_type='expense' THEN ((op.document_id IS NOT NULL)::int+(cp.document_id IS NOT NULL)::int)=1 AND COALESCE(op.posted,cp.amount_ok AND cp.posted,FALSE)
+            ELSE op.document_id IS NOT NULL AND op.posted END recognition_ok
+      FROM material m LEFT JOIN obligation_path op ON op.document_id=m.id LEFT JOIN custody_path cp ON cp.document_id=m.id
+    ), recognition_journals AS (
+      SELECT o.document_id,j.id journal_id FROM obligations o JOIN journal_entries j ON j.company_id=o.company_id AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted' WHERE o.company_id=$1
+      UNION ALL
+      SELECT a.document_id,j.id FROM custody_document_allocations a JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted' WHERE a.company_id=$1
+    ), vat_lines AS (
+      SELECT r.id document_id,
+       COALESCE(SUM(CASE WHEN r.document_type='sale' AND l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0 THEN l.credit WHEN r.document_type<>'sale' AND l.memo='VAT_INPUT' AND a.account_type='asset' AND l.credit=0 THEN l.debit ELSE 0 END),0) vat_covered,
+       COUNT(*) FILTER(WHERE l.memo IN ('VAT_INPUT','VAT_OUTPUT') AND NOT ((r.document_type='sale' AND l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0) OR (r.document_type<>'sale' AND l.memo='VAT_INPUT' AND a.account_type='asset' AND l.credit=0))) invalid_lines
+      FROM recognition r LEFT JOIN recognition_journals rj ON rj.document_id=r.id LEFT JOIN journal_lines l ON l.journal_entry_id=rj.journal_id AND l.company_id=$1 LEFT JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id GROUP BY r.id
+    )
+    SELECT r.id FROM recognition r LEFT JOIN vat_lines v ON v.document_id=r.id
+    WHERE NOT r.recognition_ok OR (r.review_status='reviewed' AND r.vat_amount>0 AND (v.vat_covered<>r.vat_amount OR v.invalid_lines<>0))`,[companyId,start,end]);
+    return new Set(rows.map(row=>row.id));
+  }
   private async blockers(companyId:string,start:string,end:string,client:PoolClient|Pool=this.db):Promise<Blockers>{
     const {rows}=await client.query<{documents:string;obligations:string;bank_transactions:string}>(`SELECT
       (SELECT COUNT(*) FROM documents WHERE company_id=$1 AND document_date BETWEEN $2 AND $3 AND status IN ('uploaded','needs_review','incomplete'))::text documents,
       (SELECT COUNT(*) FROM obligations WHERE company_id=$1 AND recognized_on BETWEEN $2 AND $3 AND NOT is_cancelled AND verification_status='unconfirmed')::text obligations,
-      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3
-        AND NOT EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id)
-        AND NOT EXISTS(SELECT 1 FROM document_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
-        AND NOT EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id))::text bank_transactions`,[companyId,start,end]);
+      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND NOT (
+        EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
+        OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
+        OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
+      ))::text bank_transactions`,[companyId,start,end]);
     const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions);
     const vatReadiness=await new VatService(this.db).readiness(companyId,start,end,client);
     const vat=vatReadiness.ready?0:1;
+    const incompleteDocuments=await this.incompleteMaterialDocuments(companyId,start,end,client);
     const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
     let unpostedSources=0;
-    for(const source of sources){if(!(await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type=$2 AND source_id=$3 AND status='posted'",[companyId,source.source_type,source.source_id])).rowCount)unpostedSources++;}
+    for(const source of sources){const documentId=typeof source.context.document_id==='string'?source.context.document_id:null;if(documentId&&incompleteDocuments.has(documentId)&&(source.source_type==='obligation'||source.source_type==='custody_allocation'))continue;if(!(await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type=$2 AND source_id=$3 AND status='posted'",[companyId,source.source_type,source.source_id])).rowCount)unpostedSources++;}
     const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
     const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
     const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
-    const ledger=unpostedSources+independentDrafts;
+    const ledger=incompleteDocuments.size+unpostedSources+independentDrafts;
     return{documents,obligations,bank_transactions,vat,ledger,total:documents+obligations+bank_transactions+vat+ledger};
   }
   async list(companyId:string){
