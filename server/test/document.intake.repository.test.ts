@@ -7,5 +7,6 @@ describe('DocumentRepository intake locking', () => {
     const client = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as PoolClient;
     await new DocumentRepository({} as Pool).findByIdForUpdate('doc-1', 'co-a', client);
     expect(client.query).toHaveBeenCalledWith(expect.stringMatching(/WHERE id = \$1 AND company_id = \$2 FOR UPDATE/), ['doc-1', 'co-a']);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('document_date::text'), ['doc-1', 'co-a']);
   });
 });
