@@ -124,6 +124,38 @@ describe('CustodyService behavioural rules', () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'custody.document.allocate' }), expect.anything());
   });
 
+  it('blocks custody only for a confirmed non-cancelled document obligation', async () => {
+    for (const obligation of ['confirmed', 'cancelled', 'unconfirmed'] as const) {
+      const { pool, query } = makePool((sql) => {
+        if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
+        if (sql.includes('FROM custody_advances')) return { rows: [custody()] };
+        if (sql.includes('FROM documents') && sql.includes('FOR UPDATE')) return { rows: [approvedDoc('40.00')] };
+        if (sql.includes('FROM obligations')) {
+          expect(sql).toContain("verification_status='confirmed'");
+          expect(sql).toContain('is_cancelled=false');
+          return { rows: obligation === 'confirmed' ? [{ id: 'o' }] : [] };
+        }
+        if (sql.includes('FROM document_settlements')) return { rows: [] };
+        if (sql.includes('FROM custody_document_allocations WHERE document_id')) return { rows: [] };
+        if (sql.includes("m.match_type='custody_funding'")) return { rows: [{ ...tx('-100.00', 'matched'), amount: '-100.00' }] };
+        if (sql.includes("m.match_type='custody_return'") && sql.includes('SUM(t.amount)')) return { rows: [{ total: '0' }] };
+        if (sql.includes("m.match_type='custody_return'")) return { rows: [] };
+        if (sql.includes('SUM(amount)')) return { rows: [{ total: '0' }] };
+        if (sql.includes('FROM custody_document_allocations a')) return { rows: [] };
+        if (sql.startsWith('INSERT INTO custody_document_allocations')) return { rows: [{ id: '55555555-5555-4555-8555-555555555555', company_id: COMPANY, custody_id: CUSTODY, document_id: DOC, amount: '40.00', created_by_user_id: ACTOR, created_at: new Date(), note: null }] };
+        return { rows: [] };
+      });
+
+      const allocation = new CustodyService(pool).allocate(CUSTODY, COMPANY, ACTOR, DOC, '40.00', null);
+      if (obligation === 'confirmed') {
+        await expect(allocation).rejects.toThrow('Document already has an obligation recognition path');
+      } else {
+        await expect(allocation).resolves.toBeTruthy();
+        expect(query).toHaveBeenCalledWith(expect.stringContaining("source_type='document'"), [DOC, COMPANY]);
+      }
+    }
+  });
+
   it('rejects non-approved, partial, existing-funded, and over-remaining document allocations', async () => {
     const cases = [
       { name: 'non-approved', doc: approvedDoc('40.00', 'needs_review'), existing: false, amount: '40.00', funding: '-100.00', message: 'approved expense with a total amount' },
