@@ -8,7 +8,7 @@ import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
 
-export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting';
+export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'sales';
 
 type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
 
@@ -24,9 +24,9 @@ function ShellIcon({ name }: { name: IconName }) {
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',sales:'document' };
 
-export function AppShell({ page, setPage, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
+export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   useEffect(close, [page, close]);
@@ -101,7 +101,7 @@ export function AppShell({ page, setPage, email, onSwitch, onLogout, children }:
         </UnstyledButton>
         <Divider my="xl" className="sidebar-divider" />
         <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
-        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('monthlyClose')}{nav('accounting')}{nav('vat')}{nav('documents')}{nav('banks')}{nav('partners')}{nav('obligations')}</Stack>
+        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('monthlyClose')}{nav('accounting')}{nav('vat')}{nav('documents')}{capabilities.includes('document.view')&&capabilities.includes('obligation.view')&&nav('sales')}{nav('banks')}{nav('partners')}{nav('obligations')}</Stack>
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main className="eqfal-workspace">
