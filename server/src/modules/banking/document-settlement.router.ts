@@ -18,6 +18,7 @@ type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
 type DocumentRow = { id: string; company_id: string; status: string; total_amount: string | null; original_filename: string };
 type TransactionRow = { id: string; company_id: string; transaction_date: string };
 type MatchRow = { bank_transaction_id: string; company_id: string; document_id: string };
+type DocumentObligationRow = { id: string; original_amount: string };
 type SettlementRow = {
   id: string;
   company_id: string;
@@ -137,6 +138,14 @@ class DocumentSettlementRepository {
     return rows[0]?.total ?? '0';
   }
 
+  async linkedObligation(documentId: string, companyId: string, client: PoolClient): Promise<DocumentObligationRow | null> {
+    const { rows } = await client.query<DocumentObligationRow>(
+      "SELECT id,original_amount::text FROM obligations WHERE document_id=$1 AND company_id=$2 AND source_type='document' FOR UPDATE",
+      [documentId, companyId],
+    );
+    return rows[0] ?? null;
+  }
+
   async list(documentId: string, companyId: string): Promise<SettlementView[]> {
     const { rows } = await this.db.query<SettlementView>(
       `SELECT s.*, t.transaction_date::text, t.description AS transaction_description, t.bank_reference, t.amount::text AS transaction_amount
@@ -234,6 +243,10 @@ export class DocumentSettlementService {
       const requested = moneyToCents(amount);
       const total = moneyToCents(document.total_amount);
       if (before + requested > total) throw new DocumentSettlementConflictError('Settlement amount exceeds document remaining amount');
+      const obligation = await this.repo.linkedObligation(documentId, companyId, client);
+      if (obligation && requested > moneyToCents(obligation.original_amount) - before) {
+        throw new DocumentSettlementConflictError('Settlement amount exceeds linked obligation remaining amount');
+      }
 
       const settlement = await this.repo.create({ companyId, documentId, transactionId, amount, actor, note }, client);
       const after = before + requested;

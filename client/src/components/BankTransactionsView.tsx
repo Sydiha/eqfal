@@ -15,6 +15,15 @@ type Transaction = {
   reconciliation_status: ReconciliationStatus;
 };
 type Match = { id: string; document_id: string; note: string | null };
+type LinkedObligation = {
+  id: string;
+  direction: 'receivable' | 'payable';
+  counterparty: string;
+  original_amount: string;
+  settled_amount: string;
+  remaining_amount: string;
+  state: 'open' | 'partial' | 'settled' | 'cancelled';
+};
 type CandidateDocument = {
   id: string;
   status: 'needs_review' | 'approved';
@@ -24,6 +33,7 @@ type CandidateDocument = {
   reference_number: string | null;
   total_amount: string | null;
   original_filename: string;
+  linked_obligation: LinkedObligation | null;
 };
 type CandidateResponse = { transaction: { id: string; reconciliation_status: ReconciliationStatus }; match: Match | null; documents: CandidateDocument[] };
 
@@ -56,6 +66,7 @@ const local = {
     date: 'التاريخ', descriptionLabel: 'البيان', amount: 'المبلغ', status: 'الحالة', action: 'الإجراء',
     reference: 'المرجع البنكي', balance: 'الرصيد الجاري', details: 'التفاصيل', hideDetails: 'إخفاء التفاصيل',
     refresh: 'تحديث', empty: 'لا توجد حركات بنكية', error: 'تعذر تحميل الحركات البنكية',
+    documentType: 'نوع المستند', counterparty: 'الطرف المقابل', total: 'المبلغ الإجمالي', obligation: 'الذمة المرتبطة', remaining: 'المبلغ المتبقي', noObligation: 'لا توجد',
   },
   en: {
     title: 'Bank transactions',
@@ -63,6 +74,7 @@ const local = {
     date: 'Date', descriptionLabel: 'Description', amount: 'Amount', status: 'Status', action: 'Action',
     reference: 'Bank reference', balance: 'Running balance', details: 'Details', hideDetails: 'Hide details',
     refresh: 'Refresh', empty: 'No bank transactions', error: 'Unable to load bank transactions',
+    documentType: 'Document type', counterparty: 'Counterparty', total: 'Total amount', obligation: 'Linked obligation', remaining: 'Remaining amount', noObligation: 'None',
   },
 };
 
@@ -198,10 +210,10 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       {candidateData?.match && <Alert>{t('banks.currentMatch')}: {candidateData.match.document_id}</Alert>}
       <div className="bank-match-candidates">
         {(candidateData?.documents ?? []).map(doc => <button type="button" key={doc.id} className={`bank-match-candidate ${selectedDocument === doc.id ? 'is-selected' : ''}`} onClick={() => !candidateData?.match && setSelectedDocument(doc.id)} disabled={Boolean(candidateData?.match)}>
-          <strong dir="auto">{doc.original_filename}</strong>
-          <span dir="auto">{doc.counterparty_name || '—'}</span>
-          <span dir="ltr">{doc.total_amount || '—'}</span>
-          <Badge size="sm" variant="light">{t(`documents.statuses.${doc.status}`)}</Badge>
+          <span><small>{s.documentType}</small><strong>{doc.document_type ? t(`documents.intake.types.${doc.document_type}`) : '—'}</strong><small dir="auto">{doc.reference_number || doc.original_filename}</small></span>
+          <span><small>{s.counterparty}</small><strong dir="auto">{doc.counterparty_name || '—'}</strong></span>
+          <span><small>{s.total}</small><strong dir="ltr">{doc.total_amount || '—'}</strong></span>
+          <span><small>{s.obligation}</small>{doc.linked_obligation ? <><Badge size="sm" variant="light">{doc.linked_obligation.state}</Badge><small>{s.remaining}: <b dir="ltr">{doc.linked_obligation.remaining_amount}</b></small></> : <strong>{s.noObligation}</strong>}</span>
         </button>)}
       </div>
       <TextInput label={t('banks.matchNote')} value={matchNote} onChange={e => setMatchNote(e.currentTarget.value)} maxLength={500} disabled={Boolean(candidateData?.match)}/>
