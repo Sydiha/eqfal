@@ -3,7 +3,7 @@ import pool from '../../db/pool';
 import config from '../../config';
 import { LocalStorageAdapter } from '../../storage/local.storage';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
-import { parseBankFile } from './bank.router';
+import { BankColumnMapping, BankService, parseBankFile } from './bank.router';
 
 export const bankImportResumeRouter = Router();
 
@@ -16,7 +16,12 @@ type ResumeBatch = {
   original_filename: string;
   source_format: 'csv' | 'xlsx';
   storage_key: string;
-  status: string;
+  status: 'mapping_required' | 'preview_ready' | 'confirmed';
+  column_mapping: BankColumnMapping | null;
+  total_rows: number;
+  valid_rows: number;
+  duplicate_rows: number;
+  invalid_rows: number;
 };
 
 function asyncRoute(handler:(req:Request,res:Response,next:NextFunction)=>Promise<void>):RequestHandler {
@@ -28,7 +33,24 @@ bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requi
   if(!context?.activeCompanyId){res.status(403).json({error:'No active company'});return;}
   if(!pool){res.status(503).json({error:'Database unavailable'});return;}
 
-  const { rows }=await pool.query<ResumeBatch>('SELECT id,company_id,bank_account_id,original_filename,source_format,storage_key,status FROM bank_import_batches WHERE id=$1 AND company_id=$2',[req.params.id,context.activeCompanyId]);
+  const { rows }=await pool.query<ResumeBatch>(
+    `SELECT
+      id,
+      company_id,
+      bank_account_id,
+      original_filename,
+      source_format,
+      storage_key,
+      status,
+      column_mapping,
+      total_rows,
+      valid_rows,
+      duplicate_rows,
+      invalid_rows
+    FROM bank_import_batches
+    WHERE id=$1 AND company_id=$2`,
+    [req.params.id,context.activeCompanyId],
+  );
   const batch=rows[0];
   if(!batch){res.status(404).json({error:'Bank import not found'});return;}
   if(batch.status==='confirmed'){res.status(409).json({error:'Confirmed bank import cannot be resumed'});return;}
@@ -37,7 +59,20 @@ bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requi
   try {
     const files=new LocalStorageAdapter(config.bankStorageDir);
     const table=parseBankFile(batch.source_format,await files.get(batch.storage_key));
-    res.json({batch,columns:table.headers});
+
+    let preview=null;
+    if(batch.status==='preview_ready'&&batch.column_mapping){
+      const service=new BankService(pool,files);
+      const result=await service.preview(batch.id,context.activeCompanyId);
+      preview={...result,rows:result.rows.slice(0,50)};
+    }
+
+    res.json({
+      batch,
+      columns:table.headers,
+      mapping:batch.column_mapping,
+      preview,
+    });
   } catch {
     res.status(409).json({error:'Stored bank import cannot be resumed'});
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBankFile } from '../src/modules/banking/bank.router';
+import { inferBankColumnMapping, parseBankFile } from '../src/modules/banking/bank.router';
 
 function zip(entries:Record<string,string>):Buffer{
   const locals:Buffer[]=[]; const centrals:Buffer[]=[]; let offset=0;
@@ -26,6 +26,34 @@ function workbook(sheets:{name:string;xml:string}[]):Buffer{
 
 function sheet(rows:string[]):string{return `<worksheet><sheetData>${rows.join('')}</sheetData></worksheet>`;}
 function row(number:number,cells:string[]):string{return `<row r="${number}">${cells.join('')}</row>`;}
+
+
+describe('bank import auto-mapping inference',()=>{
+  it('infers the supplied one-row CSV without manual mapping',()=>{
+    const table=parseBankFile('csv',Buffer.from([
+      'date,description,reference,amount',
+      '8/21/2026,EQFAL sales E2E test,E2E-SALE-1150-001,1150',
+    ].join('\n')));
+
+    expect(inferBankColumnMapping(table)).toEqual({
+      amount_mode:'signed',
+      date_format:'MM/DD/YYYY',
+      transaction_date:{index:0,label:'date'},
+      amount:{index:3,label:'amount'},
+      description:{index:1,label:'description'},
+      bank_reference:{index:2,label:'reference'},
+    });
+  });
+
+  it('falls back instead of guessing an ambiguous slash date',()=>{
+    const table=parseBankFile('csv',Buffer.from([
+      'date,description,reference,amount',
+      '8/9/2026,Ambiguous date,R1,100',
+    ].join('\n')));
+
+    expect(inferBankColumnMapping(table)).toBeNull();
+  });
+});
 
 describe('real bank statement transaction-table detection',()=>{
   it('detects an Arabic debit/credit table after statement metadata and excludes the footer',()=>{

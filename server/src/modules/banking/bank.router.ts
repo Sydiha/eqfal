@@ -30,7 +30,7 @@ const rawParser = express.raw({ type: () => true, limit: MAX_FILE_SIZE });
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
 type SourceFormat = 'csv' | 'xlsx';
 type AmountMode = 'signed' | 'debit_credit';
-type DateFormat = 'YYYY-MM-DD' | 'DD/MM/YYYY' | 'DD-MM-YYYY';
+type DateFormat = 'YYYY-MM-DD' | 'DD/MM/YYYY' | 'DD-MM-YYYY' | 'MM/DD/YYYY';
 type Cell = string | number | null;
 type PhysicalRow = { sourceRowNumber: number; cells: Cell[] };
 type ParsedTable = { headers: string[]; rows: Cell[][]; sourceRowNumbers: number[]; formulaCells: Set<string> };
@@ -157,7 +157,7 @@ function parseMapping(body: unknown): BankColumnMapping | null {
   const allowed = new Set(['amount_mode','date_format','transaction_date','amount','debit','credit','value_date','description','bank_reference','running_balance']);
   if (Object.keys(x).some((k) => !allowed.has(k))) return null;
   if (x.amount_mode !== 'signed' && x.amount_mode !== 'debit_credit') return null;
-  if (!['YYYY-MM-DD','DD/MM/YYYY','DD-MM-YYYY'].includes(String(x.date_format))) return null;
+  if (!['YYYY-MM-DD','DD/MM/YYYY','DD-MM-YYYY','MM/DD/YYYY'].includes(String(x.date_format))) return null;
   const ref = (v: unknown): ColumnRef | null => {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     const r = v as Record<string, unknown>;
@@ -472,6 +472,185 @@ export function parseBankFile(format: SourceFormat, data: Buffer): ParsedTable {
   return table;
 }
 
+
+function inferDateFormat(rows: Cell[][], dateIndex: number): DateFormat | null {
+  let inferred: DateFormat | null = null;
+  let sawValue = false;
+  let sawString = false;
+
+  for (const row of rows.slice(0, 25)) {
+    const value = row[dateIndex];
+    if (value === null || value === undefined || String(value).trim() === '') continue;
+
+    sawValue = true;
+
+    // Excel serial dates do not depend on a textual date format.
+    if (typeof value === 'number') continue;
+
+    sawString = true;
+    const text = String(value).trim();
+    let candidate: DateFormat | null = null;
+
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
+      candidate = 'YYYY-MM-DD';
+    } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(text)) {
+      candidate = 'DD-MM-YYYY';
+    } else {
+      const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!slash) return null;
+
+      const first = Number(slash[1]);
+      const second = Number(slash[2]);
+
+      if (first > 12 && second >= 1 && second <= 12) {
+        candidate = 'DD/MM/YYYY';
+      } else if (second > 12 && first >= 1 && first <= 12) {
+        candidate = 'MM/DD/YYYY';
+      } else if (
+        first >= 1 && first <= 12 &&
+        second >= 1 && second <= 12
+      ) {
+        // Ambiguous by itself. A decisive row elsewhere may resolve it.
+        continue;
+      } else {
+        return null;
+      }
+    }
+
+    if (inferred && inferred !== candidate) return null;
+    inferred = candidate;
+  }
+
+  if (!sawValue) return null;
+
+  // Numeric XLSX dates need no textual interpretation.
+  if (!sawString) return 'YYYY-MM-DD';
+
+  // All slash dates were ambiguous: do not guess.
+  if (!inferred) return null;
+
+  // Validate every nonblank date against the inferred format.
+  for (const row of rows.slice(0, 25)) {
+    const value = row[dateIndex];
+    if (value === null || value === undefined || String(value).trim() === '') continue;
+    if (normalizeDate(value, inferred) === null) return null;
+  }
+
+  return inferred;
+}
+
+function uniqueHeaderIndex(
+  headers: string[],
+  kind: Exclude<ReturnType<typeof headerKind>, null>,
+): number | null {
+  const matches = headers
+    .map((header, index) => ({ index, kind: headerKind(header) }))
+    .filter((entry) => entry.kind === kind)
+    .map((entry) => entry.index);
+
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+export function inferBankColumnMapping(table: ParsedTable): BankColumnMapping | null {
+  const dateHeaders = table.headers
+    .map((header, index) => ({
+      index,
+      text: canonicalHeader(header),
+      kind: headerKind(header),
+    }))
+    .filter((entry) => entry.kind === 'date');
+
+  const transactionDateHeaders = dateHeaders.filter(
+    (entry) =>
+      !entry.text.includes('value date') &&
+      !entry.text.includes('تاريخ القيمة'),
+  );
+
+  // Multiple plausible transaction dates => manual fallback.
+  if (transactionDateHeaders.length !== 1) return null;
+
+  const transactionDateIndex = transactionDateHeaders[0]!.index;
+  const dateFormat = inferDateFormat(table.rows, transactionDateIndex);
+  if (!dateFormat) return null;
+
+  const amountIndex = uniqueHeaderIndex(table.headers, 'amount');
+  const debitIndex = uniqueHeaderIndex(table.headers, 'debit');
+  const creditIndex = uniqueHeaderIndex(table.headers, 'credit');
+
+  let mapping: BankColumnMapping;
+
+  if (amountIndex !== null && debitIndex === null && creditIndex === null) {
+    mapping = {
+      amount_mode: 'signed',
+      date_format: dateFormat,
+      transaction_date: {
+        index: transactionDateIndex,
+        label: table.headers[transactionDateIndex],
+      },
+      amount: {
+        index: amountIndex,
+        label: table.headers[amountIndex],
+      },
+    };
+  } else if (
+    amountIndex === null &&
+    debitIndex !== null &&
+    creditIndex !== null
+  ) {
+    mapping = {
+      amount_mode: 'debit_credit',
+      date_format: dateFormat,
+      transaction_date: {
+        index: transactionDateIndex,
+        label: table.headers[transactionDateIndex],
+      },
+      debit: {
+        index: debitIndex,
+        label: table.headers[debitIndex],
+      },
+      credit: {
+        index: creditIndex,
+        label: table.headers[creditIndex],
+      },
+    };
+  } else {
+    // Conflicting or incomplete amount structures => manual fallback.
+    return null;
+  }
+
+  const optional = [
+    ['description', 'description'],
+    ['bank_reference', 'reference'],
+    ['running_balance', 'balance'],
+  ] as const;
+
+  for (const [field, kind] of optional) {
+    const index = uniqueHeaderIndex(table.headers, kind);
+    if (index !== null) {
+      mapping[field] = {
+        index,
+        label: table.headers[index],
+      };
+    }
+  }
+
+  const valueDateHeaders = dateHeaders.filter(
+    (entry) =>
+      entry.text.includes('value date') ||
+      entry.text.includes('تاريخ القيمة'),
+  );
+
+  if (valueDateHeaders.length === 1) {
+    const index = valueDateHeaders[0]!.index;
+    mapping.value_date = {
+      index,
+      label: table.headers[index],
+    };
+  }
+
+  return mapping;
+}
+
 function normalizeText(value: Cell): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim().replace(/\s+/g, ' ');
@@ -504,14 +683,40 @@ function excelSerialDate(value: number): string | null {
 function normalizeDate(value: Cell, format: DateFormat): string | null {
   if (typeof value === 'number') return excelSerialDate(value);
   if (value === null || value === undefined) return null;
+
   const text = String(value).trim();
-  let y: string, m: string, d: string;
+  let y: string;
+  let m: string;
+  let d: string;
   let match: RegExpMatchArray | null;
-  if (format === 'YYYY-MM-DD') { match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!match) return null; [,y,m,d] = match as [string,string,string,string]; }
-  else if (format === 'DD/MM/YYYY') { match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (!match) return null; [,d,m,y] = match as [string,string,string,string]; }
-  else { match = text.match(/^(\d{2})-(\d{2})-(\d{4})$/); if (!match) return null; [,d,m,y] = match as [string,string,string,string]; }
-  const iso = `${y!}-${m!}-${d!}`; const date = new Date(`${iso}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0,10) === iso ? iso : null;
+
+  if (format === 'YYYY-MM-DD') {
+    match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!match) return null;
+    [, y, m, d] = match as [string,string,string,string];
+  } else if (format === 'DD/MM/YYYY') {
+    match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+    [, d, m, y] = match as [string,string,string,string];
+  } else if (format === 'MM/DD/YYYY') {
+    match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+    [, m, d, y] = match as [string,string,string,string];
+  } else {
+    match = text.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (!match) return null;
+    [, d, m, y] = match as [string,string,string,string];
+  }
+
+  m = m!.padStart(2, '0');
+  d = d!.padStart(2, '0');
+
+  const iso = `${y!}-${m}-${d}`;
+  const date = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === iso
+      ? iso
+      : null;
 }
 
 function hashParts(parts: (string | null)[]): string {
@@ -578,13 +783,98 @@ export class BankService {
   }
 
   async upload(input:{companyId:string;actor:string;accountId:string;filename:string;mime:string;format:SourceFormat;data:Buffer}) {
-    const account=await this.repo.account(input.accountId,input.companyId); if(!account) throw new BankNotFoundError('Bank account not found'); if(!account.is_active) throw new BankConflictError('Bank account is inactive');
+    const account=await this.repo.account(input.accountId,input.companyId);
+    if(!account) throw new BankNotFoundError('Bank account not found');
+    if(!account.is_active) throw new BankConflictError('Bank account is inactive');
+
     const table=parseBankFile(input.format,input.data);
     const hash=crypto.createHash('sha256').update(input.data).digest('hex');
-    const existing=await this.repo.batchByHash(input.companyId,hash); if(existing) throw new DuplicateBankImportError(existing);
-    const storageKey=`${input.companyId}/${crypto.randomUUID()}`; await this.files.put(storageKey,input.data);
-    try { const batch=await this.tx((client)=>this.repo.createBatch({companyId:input.companyId,accountId:input.accountId,actor:input.actor,filename:input.filename,mime:input.mime,format:input.format,storageKey,hash},client)); return {batch,columns:table.headers,sample:table.rows.slice(0,5)}; }
-    catch(err){ await this.files.delete(storageKey).catch(()=>undefined); if((err as {code?:string}).code==='23505'){ const duplicate=await this.repo.batchByHash(input.companyId,hash); if(duplicate) throw new DuplicateBankImportError(duplicate); } throw err; }
+    const existing=await this.repo.batchByHash(input.companyId,hash);
+    if(existing) throw new DuplicateBankImportError(existing);
+
+    const storageKey=`${input.companyId}/${crypto.randomUUID()}`;
+    await this.files.put(storageKey,input.data);
+
+    let batchCreated=false;
+
+    try {
+      const batch=await this.tx((client)=>this.repo.createBatch({
+        companyId:input.companyId,
+        accountId:input.accountId,
+        actor:input.actor,
+        filename:input.filename,
+        mime:input.mime,
+        format:input.format,
+        storageKey,
+        hash,
+      },client));
+
+      batchCreated=true;
+
+      const inferredMapping=inferBankColumnMapping(table);
+
+      if(!inferredMapping){
+        return {
+          batch,
+          columns:table.headers,
+          sample:table.rows.slice(0,5),
+          mapping:null,
+          preview:null,
+          autoMapped:false,
+        };
+      }
+
+      const preview=await this.preview(batch.id,input.companyId,inferredMapping);
+
+      const saved=await this.tx(async(client)=>{
+        const updated=await this.repo.savePreview(
+          batch.id,
+          input.companyId,
+          inferredMapping,
+          preview,
+          client,
+        );
+
+        await this.audit.logEvent({
+          company_id:input.companyId,
+          actor_user_id:input.actor,
+          action:'bank_import.preview',
+          entity_type:'bank_import_batch',
+          entity_id:updated.id,
+          before_data:{status:batch.status},
+          after_data:{
+            status:updated.status,
+            auto_mapping:true,
+            total_rows:preview.totalRows,
+            valid_rows:preview.validRows,
+            duplicate_rows:preview.duplicateRows,
+            invalid_rows:preview.invalidRows,
+          },
+        },client);
+
+        return updated;
+      });
+
+      return {
+        batch:saved,
+        columns:table.headers,
+        sample:table.rows.slice(0,5),
+        mapping:inferredMapping,
+        preview:{...preview,rows:preview.rows.slice(0,MAX_PREVIEW_ROWS)},
+        autoMapped:true,
+      };
+    } catch(err) {
+      if(!batchCreated){
+        await this.files.delete(storageKey).catch(()=>undefined);
+      }
+
+      if((err as {code?:string}).code==='23505'){
+        const duplicate=await this.repo.batchByHash(input.companyId,hash);
+        if(duplicate) throw new DuplicateBankImportError(duplicate);
+      }
+
+      throw err;
+    }
   }
 
   private normalize(table:ParsedTable,mapping:BankColumnMapping,account:BankAccount,existing:Set<string>): PreviewResult {
