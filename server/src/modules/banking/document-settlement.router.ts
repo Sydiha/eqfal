@@ -224,7 +224,14 @@ export class DocumentSettlementService {
   }
 
   async create(documentId: string, companyId: string, actor: string, transactionId: string, amount: string, note: string | null) {
-    return this.tx(async (client) => {
+    return this.tx((client) => this.createInTransaction(documentId, companyId, actor, transactionId, amount, note, client)).catch((error) => {
+      if ((error as { code?: string }).code === '23505') throw new DocumentSettlementConflictError('Bank transaction already has a settlement');
+      if ((error as { code?: string }).code === '23503') throw new DocumentSettlementConflictError('Settlement relationship is no longer valid');
+      throw error;
+    });
+  }
+
+  async createInTransaction(documentId: string, companyId: string, actor: string, transactionId: string, amount: string, note: string | null, client: PoolClient) {
       const document = await this.repo.document(documentId, companyId, client, true);
       if (!document) throw new DocumentSettlementNotFoundError('Document not found');
       if (document.status !== 'approved') throw new DocumentSettlementConflictError('Document must be approved before settlement');
@@ -260,11 +267,6 @@ export class DocumentSettlementService {
         after_data: { document_id: documentId, bank_transaction_id: transactionId, amount, settled_amount: centsToMoney(after), note },
       }, client);
       return { settlement, settled_amount: centsToMoney(after), remaining_amount: centsToMoney(total - after) };
-    }).catch((error) => {
-      if ((error as { code?: string }).code === '23505') throw new DocumentSettlementConflictError('Bank transaction already has a settlement');
-      if ((error as { code?: string }).code === '23503') throw new DocumentSettlementConflictError('Settlement relationship is no longer valid');
-      throw error;
-    });
   }
 
   async delete(documentId: string, settlementId: string, companyId: string, actor: string, reason: string) {
