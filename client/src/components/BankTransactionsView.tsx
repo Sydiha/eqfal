@@ -209,12 +209,17 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       <Group align="end"><TextInput label={t('banks.searchDocuments')} value={candidateSearch} onChange={e => setCandidateSearch(e.currentTarget.value)}/><Button variant="light" loading={matchBusy} onClick={() => void loadCandidates(matchTransaction, candidateSearch)}>{t('banks.search')}</Button></Group>
       {candidateData?.match && <Alert>{t('banks.currentMatch')}: {candidateData.match.document_id}</Alert>}
       <div className="bank-match-candidates">
-        {(candidateData?.documents ?? []).map(doc => <button type="button" key={doc.id} className={`bank-match-candidate ${selectedDocument === doc.id ? 'is-selected' : ''}`} onClick={() => !candidateData?.match && setSelectedDocument(doc.id)} disabled={Boolean(candidateData?.match)}>
-          <span><small>{s.documentType}</small><strong>{doc.document_type ? t(`documents.intake.types.${doc.document_type}`) : '—'}</strong><small dir="auto">{doc.reference_number || doc.original_filename}</small></span>
-          <span><small>{s.counterparty}</small><strong dir="auto">{doc.counterparty_name || '—'}</strong></span>
-          <span><small>{s.total}</small><strong dir="ltr">{doc.total_amount || '—'}</strong></span>
-          <span><small>{s.obligation}</small>{doc.linked_obligation ? <><Badge size="sm" variant="light">{doc.linked_obligation.state}</Badge><small>{s.remaining}: <b dir="ltr">{doc.linked_obligation.remaining_amount}</b></small></> : <strong>{s.noObligation}</strong>}</span>
-        </button>)}
+        {(candidateData?.documents ?? []).map(doc => {
+          const selected = selectedDocument === doc.id;
+          return <button type="button" key={doc.id} className={`bank-match-candidate ${selected ? 'is-selected' : ''}`} aria-pressed={selected} onClick={() => !candidateData?.match && setSelectedDocument(doc.id)} disabled={Boolean(candidateData?.match)}>
+            <span className="bank-match-candidate__type"><small>{s.documentType}</small><strong>{doc.document_type ? t(`documents.intake.types.${doc.document_type}`) : '—'}</strong></span>
+            <span className="bank-match-candidate__counterparty"><small>{s.counterparty}</small><strong dir="auto">{doc.counterparty_name || '—'}</strong></span>
+            <span className="bank-match-candidate__total"><small>{s.total}</small><strong dir="ltr">{doc.total_amount || '—'}</strong></span>
+            <span className="bank-match-candidate__reference" dir="auto">{doc.reference_number || doc.original_filename}</span>
+            <span className="bank-match-candidate__obligation"><small>{s.obligation}</small>{doc.linked_obligation ? <><Badge size="sm" variant="light">{doc.linked_obligation.state}</Badge><small>{s.remaining}: <b dir="ltr">{doc.linked_obligation.remaining_amount}</b></small></> : <strong>{s.noObligation}</strong>}</span>
+            <span className="bank-match-candidate__check" aria-hidden="true">✓</span>
+          </button>;
+        })}
       </div>
       <TextInput label={t('banks.matchNote')} value={matchNote} onChange={e => setMatchNote(e.currentTarget.value)} maxLength={500} disabled={Boolean(candidateData?.match)}/>
       <Group justify="flex-end"><Button variant="default" onClick={closeMatch} disabled={matchBusy}>{t('common.close')}</Button>{canMatch && !candidateData?.match && <Button onClick={() => void createMatch()} loading={matchBusy} disabled={!selectedDocument}>{t('banks.confirmMatch')}</Button>}</Group>
