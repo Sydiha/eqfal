@@ -112,6 +112,34 @@ describe('Document settlement rules',()=>{
     expect((await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'30.00'})).status).toBe(409);
   });
 
+  it('settles only the obligation linked by document id when equal-value documents coexist',async()=>{
+    setContext(['payment.settle']);
+    const obligations=new Map([['obligation-a',{id:'obligation-a',original_amount:'1150.00',settled:'0.00'}],['obligation-b',{id:'obligation-b',original_amount:'1150.00',settled:'0.00'}]]);
+    const client=makeClient((sql,params)=>{
+      if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
+      if(sql.includes('FROM documents'))return{rows:[{...approved,total_amount:'1150.00'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};
+      if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
+      if(sql.includes('SUM(amount)'))return{rows:[{total:obligations.get('obligation-a')!.settled}]};
+      if(sql.includes("FROM obligations WHERE document_id=$1")){expect(params).toEqual([DOC,'co-a']);return{rows:[obligations.get('obligation-a')]};}
+      if(sql.includes('INSERT INTO document_settlements')){obligations.get('obligation-a')!.settled='1150.00';return{rows:[{...settlement,amount:'1150.00'}]};}
+      return{rows:[]};
+    });
+    mocks.connect.mockResolvedValue(client);
+    const res=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'1150.00'});
+    expect(res.status).toBe(201);
+    expect(obligations.get('obligation-a')!.settled).toBe('1150.00');
+    expect(obligations.get('obligation-b')!.settled).toBe('0.00');
+  });
+
+  it('rejects settlement above a linked document obligation remaining amount',async()=>{
+    setContext(['payment.settle']);
+    const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[approved]};if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};if(sql.includes('SUM(amount)'))return{rows:[{total:'40.00'}]};if(sql.includes("FROM obligations WHERE document_id=$1"))return{rows:[{id:'ob-a',original_amount:'50.00'}]};return{rows:[]};});
+    mocks.connect.mockResolvedValue(client);
+    const res=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'20.00'});
+    expect(res.status).toBe(409);expect(res.body.error).toMatch(/obligation remaining/i);
+  });
+
   it('requires a bounded deletion reason and audits deletion',async()=>{
     setContext(['payment.settle']);
     expect((await request(app).delete(`/api/documents/${DOC}/settlements/${SETTLEMENT}`).send({})).status).toBe(400);
