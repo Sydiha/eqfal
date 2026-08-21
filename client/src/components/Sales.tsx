@@ -30,7 +30,7 @@ export function Sales({canView,canManage,onUnauthorized}:{canView:boolean;canMan
    <div><dt>{t('sales.due')}</dt><dd>{formatDisplayDate(sale.due_on,i18n.language)}</dd></div>
    <div><dt>{t('sales.reviewState')}</dt><dd>{t(`documents.statuses.${sale.status}`)}</dd></div>
    <div><dt>{t('sales.receivable')}</dt><dd>{t(`sales.${sale.receivable_relationship}`)}</dd></div>
-   <div><dt>{t('sales.verificationStatus')}</dt><dd>{sale.verification_status??'—'}</dd></div>
+   <div><dt>{t('sales.verificationStatus')}</dt><dd>{sale.verification_status?t(`obligations.${sale.verification_status}`):'—'}</dd></div>
    {sale.receivable_original_amount!=null&&<div><dt>{t('sales.original')}</dt><dd className="sales-amount">{sale.receivable_original_amount}</dd></div>}
    <div><dt>{t('sales.originalFilename')}</dt><dd>{sale.original_filename}</dd></div>
   </dl>
