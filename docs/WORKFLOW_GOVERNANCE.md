@@ -18,11 +18,15 @@ GitHub is the permanent delivery system of record. `main` is the only authoritat
 
 ### Replit
 
-Replit Agent is prohibited. Manual Replit Shell/Runtime/Preview may be used only for execution, Preview, or practical validation when needed. Replit is not a Git delivery bridge, branch reconstruction tool, patch relay, or PR rescue path.
+Replit is outside the normal development workflow, and Replit Agent is prohibited. Manual Replit Runtime/Preview may be used only for exceptional practical or visual validation that automated tests and CI cannot reasonably cover. Replit must not be used for routine Git, delivery, testing, log relay, or PR handling, and is not a Git delivery bridge, branch reconstruction tool, patch relay, or PR rescue path.
 
 ## 2. Standard Task Lifecycle
 
 The standard lifecycle for a programming task is:
+
+`ChatGPT Design/Decision → Codex implementation → GitHub PR → GitHub Actions CI → GitHub diff review → explicit merge approval`
+
+GitHub PRs, changed-file diffs, reviews, and CI are the normal mechanism for transferring implementation state between tools.
 
 1. Task definition and scope.
 2. Mandatory Delivery Preflight in the managing conversation and verified Codex checkout.
@@ -116,11 +120,13 @@ The following are not valid substitutes for a failed Delivery Gate:
 Before merge approval:
 
 - Review the actual GitHub diff, not only an implementation summary or only the Codex result diff.
+- For a normal PR review, read the changed diff/files and directly relevant material only; do not reload broad repository history or unrelated project documents.
 - Verify that only approved files/scope changed.
 - Verify Design Check compliance.
 - Verify security, tenancy, capability, audit, cost, and architecture boundaries when applicable.
-- Verify the required test and build evidence from GitHub/CI or another explicitly approved verification source.
+- Prefer and verify required GitHub Actions CI/test evidence rather than user-copied logs; use another explicitly approved verification source only when genuinely required.
 - Treat passing tests as necessary but not sufficient when the implementation violates the approved design.
+- Context minimization does not override genuine security, governance, tenancy, verification, or approved-scope requirements.
 
 If review reveals a genuine implementation blocker, one corrective programming pass is allowed. A second corrective programming pass requires stopping the programming task under the Zero-Loop Rule.
 
@@ -163,7 +169,7 @@ The following are prohibited as normal or emergency shortcuts unless a separatel
 - Recreating Codex branches in Replit to rescue delivery.
 - Rewriting or force-pushing branch history to repair routine delivery failures.
 - Repeatedly asking the user to run Git commands to move work between tools.
-- Repeatedly asking the user to copy logs, SHAs, commits, diffs, or terminal output between tools.
+- Asking the user to transfer terminal/test logs, commit SHAs, patches/diffs, Git command output, or copied source code when the information is directly accessible through GitHub or Codex tooling.
 - Continuing delivery attempts after the actual Delivery Gate is known to be broken.
 
 ## 11. User Burden Protections
@@ -175,6 +181,7 @@ Accordingly:
 - Routine delivery must be handled by connected product/GitHub tooling.
 - A single native Codex `Create PR` / `Create draft PR` action by the user after reviewing the result is an approved part of the normal product workflow.
 - The user should not be asked to transfer patches, commits, logs, or SHAs between ChatGPT, Codex, GitHub, and Replit.
+- The user should not be asked to relay terminal/test logs, Git command output, diffs, or copied source code that GitHub or Codex tooling can provide directly.
 - The user should not be asked to perform routine Git delivery commands on behalf of the workflow.
 - If manual action beyond the native product delivery UI is genuinely unavoidable, explain the blocker, why no compliant direct path exists, the exact minimal action requested, and the risk. Proceed only after the user's explicit agreement.
 
@@ -203,7 +210,12 @@ Exceptions must be rare and explicit.
 - An exception to a workflow step must never silently weaken security, tenant isolation, auditability, cost controls, or Design Check compliance.
 - If an exception is approved, record what changed, why it was necessary, who approved it, and how normal workflow will be restored.
 
-## 14. Workflow Lesson Learned — Phase 4B
+## 14. Optional Planning and Review Aids
+
+- GitHub Issues are optional and reserved for large tasks. When used, each issue should be a compact execution contract containing the goal, scope, out-of-scope items, acceptance criteria, and required tests.
+- Codex Review is optional and risk-based. It is especially appropriate for authentication/permissions, tenancy, accounting integrity, schema/migrations, and security-sensitive boundaries.
+
+## 15. Workflow Lesson Learned — Phase 4B
 
 Phase 4B produced a technically successful result but exposed a delivery-process failure that must not be repeated.
 
@@ -219,7 +231,7 @@ The rules in `AGENTS.md` and this document therefore distinguish between **basel
 
 This lesson is process-focused and assigns no blame to any person or tool.
 
-## 15. Post-Merge Closeout Checklist
+## 16. Post-Merge Closeout Checklist
 
 After an approved merge:
 
