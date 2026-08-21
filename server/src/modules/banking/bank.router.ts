@@ -354,7 +354,7 @@ function detectTransactionTable(rows: PhysicalRow[], physicalFormulaCells: Set<s
       if (looksLikeTransaction(cells, profile)) valid++;
     }
     const evidenceRatio = inspected > 0 ? valid / inspected : 0;
-    if (valid >= 2 && evidenceRatio >= 0.5) candidates.push({ rowIndex: i, profile, score: profile.score * 100 + Math.min(valid, 25) });
+    if ((valid === 1 && inspected === 1) || (valid >= 2 && evidenceRatio >= 0.5)) candidates.push({ rowIndex: i, profile, score: profile.score * 100 + Math.min(valid, 25) });
   }
   if (!candidates.length) throw new BankValidationError('Could not confidently detect bank transaction table');
   candidates.sort((a,b) => b.score - a.score || a.rowIndex - b.rowIndex);
