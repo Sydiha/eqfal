@@ -21,4 +21,12 @@ describe('authenticated application shell', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: 'Home' }));
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
   });
+  it('shows Sales navigation only with both required read capabilities', async () => {
+    render(<AuthProvider><App/></AuthProvider>);
+    const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+    expect(within(navigation).queryByRole('button', { name: 'Sales' })).not.toBeInTheDocument();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [{ id: 'co-1', name: 'Company One', name_ar: null }], activeCompanyId: 'co-1', capabilities: ['document.view', 'obligation.view'] }), { status: 200 })));
+    render(<AuthProvider><App/></AuthProvider>);
+    expect((await screen.findAllByRole('button', { name: 'Sales' })).length).toBeGreaterThan(0);
+  });
 });
