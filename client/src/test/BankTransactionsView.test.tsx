@@ -13,12 +13,26 @@ beforeEach(async () => {
 describe('BankTransactionsView', () => {
   it('shows document identity and linked obligation integrity context in the match dialog', async () => {
     const transaction={id:'11111111-1111-4111-8111-111111111111',transaction_date:'2026-08-16',description:'Customer receipt',bank_reference:null,amount:'1150.00',running_balance:null,currency_code:'SAR',reconciliation_status:'unmatched'};
-    const candidate={id:'doc-a',status:'approved',document_type:'sale',counterparty_name:'Customer A',document_date:'2026-08-01',reference_number:'SALE-A',total_amount:'1150.00',original_filename:'same.pdf',linked_obligation:{id:'obligation-a',direction:'receivable',counterparty:'Customer A',original_amount:'1150.00',settled_amount:'150.00',remaining_amount:'1000.00',state:'partial'}};
-    const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url.includes('match-candidates')?{transaction,match:null,documents:[candidate]}:{transactions:[transaction]}),{status:200}));vi.stubGlobal('fetch',fetchMock);
+    const candidate={id:'doc-a',status:'approved',document_type:'sale',counterparty_name:'Customer A with a complete counterparty name',document_date:'2026-08-01',reference_number:'SALE-A',total_amount:'1234567890.00',original_filename:'same.pdf',linked_obligation:{id:'obligation-a',direction:'receivable',counterparty:'Customer A',original_amount:'1150.00',settled_amount:'150.00',remaining_amount:'1000.00',state:'partial'}};
+    const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>new Response(JSON.stringify(init?.method==='POST'?{}:url.includes('match-candidates')?{transaction,match:null,documents:[candidate]}:{transactions:[transaction]}),{status:200}));vi.stubGlobal('fetch',fetchMock);
     render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'Match'}));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Sale')).toBeInTheDocument();expect(screen.getByText('Customer A')).toBeInTheDocument();expect(screen.getAllByText('1150.00').length).toBeGreaterThan(0);expect(screen.getByText('partial')).toBeInTheDocument();expect(screen.getByText(/Remaining amount:/)).toHaveTextContent('1000.00');expect(screen.getByText('SALE-A')).toBeInTheDocument();
+    expect(screen.getByText('Sale')).toBeInTheDocument();expect(screen.getByText('Customer A with a complete counterparty name')).toBeInTheDocument();expect(screen.getByText('1234567890.00')).toBeInTheDocument();expect(screen.getByText('partial')).toBeInTheDocument();expect(screen.getByText(/Remaining amount:/)).toHaveTextContent('1000.00');expect(screen.getByText('SALE-A')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox',{name:'Search documents'}),{target:{value:'SALE-A'}});
+    fireEvent.click(screen.getByRole('button',{name:'Search'}));
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledWith(`/api/bank-transactions/${transaction.id}/match-candidates?search=SALE-A`,undefined));
+
+    const confirm=screen.getByRole('button',{name:'Confirm match'});
+    expect(confirm).toBeDisabled();
+    const documentRow=screen.getByRole('button',{name:/Sale.*Customer A with a complete counterparty name.*1234567890\.00/s});
+    expect(documentRow).toHaveAttribute('aria-pressed','false');
+    fireEvent.click(documentRow);
+    expect(documentRow).toHaveAttribute('aria-pressed','true');
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledWith(`/api/bank-transactions/${transaction.id}/match`,expect.objectContaining({method:'POST',body:JSON.stringify({document_id:'doc-a'})})));
   });
   it('renders a focused five-column operating view with bank metadata kept secondary', async () => {
     const transaction = {
