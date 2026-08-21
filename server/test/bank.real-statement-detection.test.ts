@@ -86,6 +86,18 @@ describe('real bank statement transaction-table detection',()=>{
     expect(table.rows[1]?.[0]).toBe('not-a-date');
   });
 
+  it('accepts a valid CSV containing exactly one transaction row',()=>{
+    const csv=Buffer.from([
+      'date,description,reference,amount',
+      '8/21/2026,EQFAL sales E2E test,E2E-SALE-1150-001,1150',
+    ].join('\n'));
+    const table=parseBankFile('csv',csv);
+    expect(table.headers).toEqual(['date','description','reference','amount']);
+    expect(table.sourceRowNumbers).toEqual([2]);
+    expect(table.rows).toHaveLength(1);
+    expect(table.rows[0]).toEqual(['8/21/2026','EQFAL sales E2E test','E2E-SALE-1150-001','1150']);
+  });
+
   it('rejects a rich-looking candidate backed by only one transaction-like row',()=>{
     const csv=Buffer.from([
       'Account Statement',
