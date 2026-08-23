@@ -19,6 +19,7 @@ import { MonthlyClose } from './components/MonthlyClose';
 import { Vat } from './components/Vat';
 import { Accounting } from './components/Accounting';
 import { Sales } from './components/Sales';
+import { Purchases } from './components/Purchases';
 import { eqfalTheme } from './theme';
 
 function LanguageButton({ className = '' }: { className?: string }) {
@@ -114,6 +115,7 @@ function CompanyContentForPage({ page, setPage }: { page: Page; setPage: (page: 
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
     {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'monthlyClose' && <MonthlyClose canView={c.includes('fiscal_year.view')} canClose={c.includes('monthly_close.close')} canReopen={c.includes('monthly_close.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'vat' && <Vat canView={c.includes('vat.view')} canReview={c.includes('vat.review')} canClose={c.includes('vat.close')} canReopen={c.includes('vat.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
