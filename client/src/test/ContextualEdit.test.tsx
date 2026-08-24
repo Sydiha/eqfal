@@ -44,23 +44,22 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   expect(screen.queryByRole('button',{name:'Edit'})).not.toBeInTheDocument();
  });
 
- it('opens the requested existing document in Intake, saves it through the existing PATCH, and returns to Purchases',async()=>{
+ it('opens the requested existing document in Intake, saves it through the existing PATCH, and returns to Purchases without waiting on a refresh',async()=>{
   const first=document('doc-1','FIRST');
   const target=document('purchase-doc','TARGET');
   const fetchMock=vi.fn()
    .mockResolvedValueOnce(new Response(JSON.stringify({documents:[first,target],counterparties:[{id:'supplier-1',name:'Supplier',type:'supplier',is_active:true}]})))
-   .mockResolvedValueOnce(new Response(JSON.stringify({document:target})))
-   .mockResolvedValueOnce(new Response(JSON.stringify({documents:[first,target],counterparties:[{id:'supplier-1',name:'Supplier',type:'supplier',is_active:true}]})));
+   .mockResolvedValueOnce(new Response(JSON.stringify({document:target})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryComplete=vi.fn(),onEntryCancel=vi.fn();
   render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByDisplayValue('TARGET')).toBeInTheDocument();
   expect(screen.queryByLabelText(/Choose document/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
-  await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(3));
+  await waitFor(()=>expect(onEntryComplete).toHaveBeenCalledOnce());
+  expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls[1][0]).toBe('/api/documents/purchase-doc/intake');
   expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({method:'PATCH'}));
-  expect(onEntryComplete).toHaveBeenCalledOnce();
  });
 
  it('returns from existing-document edit context without writing when the contextual return action is used',async()=>{
