@@ -70,7 +70,8 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   vi.stubGlobal('fetch',fetchMock);
   const onEntryComplete=vi.fn();
   render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onUnauthorized={vi.fn()}/>);
-  expect(await screen.findByRole('combobox',{name:'Counterparty'})).toHaveValue('customer-1');
+  const counterpartySelect=await screen.findByDisplayValue('Customer');
+  expect(counterpartySelect).toHaveValue('customer-1');
   fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
   await waitFor(()=>expect(onEntryComplete).toHaveBeenCalledOnce());
   const body=JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
