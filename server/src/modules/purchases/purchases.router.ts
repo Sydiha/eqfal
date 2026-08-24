@@ -7,7 +7,8 @@ export const purchasesRouter = Router();
 
 type PurchaseRow = {
   id:string; document_type:'purchase'|'expense'; original_filename:string; status:string; document_date:string|null; reference_number:string|null;
-  total_amount:string|null; counterparty_id:string|null; supplier_name:string|null; payable_id:string|null;
+  total_amount:string|null; intake_note:string|null; counterparty_id:string|null; supplier_name:string|null;
+  counterparty_type:'customer'|'supplier'|'government'|'other'|null; payable_id:string|null;
   payable_original_amount:string|null; due_on:string|null; verification_status:string|null; is_cancelled:boolean|null;
   vat_review_status:'pending'|'reviewed'|null; tax_date:string|null; vat_treatment:string|null;
   taxable_amount:string|null; vat_amount:string|null;
@@ -19,8 +20,8 @@ const money=(value:bigint)=>`${value/100n}.${String(value%100n).padStart(2,'0')}
 export class PurchasesService {
   constructor(private readonly db:Pool){}
   async list(companyId:string){
-    const {rows}=await this.db.query<PurchaseRow>(`SELECT d.id,d.document_type,d.original_filename,d.status,d.document_date::text,d.reference_number,d.total_amount::text,
-      d.counterparty_id,c.name supplier_name,o.id payable_id,o.original_amount::text payable_original_amount,o.due_on::text,
+    const {rows}=await this.db.query<PurchaseRow>(`SELECT d.id,d.document_type,d.original_filename,d.status,d.document_date::text,d.reference_number,d.total_amount::text,d.intake_note,
+      d.counterparty_id,c.name supplier_name,c.type counterparty_type,o.id payable_id,o.original_amount::text payable_original_amount,o.due_on::text,
       o.verification_status,o.is_cancelled,v.review_status vat_review_status,v.tax_date::text,v.treatment vat_treatment,
       v.taxable_amount::text,v.vat_amount::text
       FROM documents d

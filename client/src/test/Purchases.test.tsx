@@ -3,7 +3,7 @@ import{beforeEach,describe,expect,it,vi}from'vitest';
 import{Purchases}from'../components/Purchases';
 import i18n from'../i18n';
 
-const base={id:'d1',document_type:'purchase' as const,original_filename:'purchase.pdf',status:'approved',document_date:'2026-08-01',reference_number:'INV-1',total_amount:'100.00',counterparty_id:'c1',supplier_name:'Supplier',payable_id:'o1',payable_original_amount:'100.00',due_on:null,verification_status:'confirmed',payable_cancelled:true,payable_relationship:'linked_cancelled' as const,paid_amount:'20.00',remaining_amount:null,financial_state:null,vat_review_status:'reviewed' as const,tax_date:'2026-08-01',vat_treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',settlement_history:[{id:'s1',amount:'20.00',transaction_date:'2026-08-02',description:'Transfer',bank_reference:null}]};
+const base={id:'d1',document_type:'purchase' as const,original_filename:'purchase.pdf',status:'approved',document_date:'2026-08-01',reference_number:'INV-1',total_amount:'100.00',intake_note:null,counterparty_id:'c1',supplier_name:'Supplier',counterparty_type:'supplier' as const,payable_id:'o1',payable_original_amount:'100.00',due_on:null,verification_status:'confirmed',payable_cancelled:true,payable_relationship:'linked_cancelled' as const,paid_amount:'20.00',remaining_amount:null,financial_state:null,vat_review_status:'reviewed' as const,tax_date:'2026-08-01',vat_treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',settlement_history:[{id:'s1',amount:'20.00',transaction_date:'2026-08-02',description:'Transfer',bank_reference:null}]};
 const active={...base,id:'d2',document_type:'expense' as const,reference_number:'INV-2',payable_cancelled:false,payable_relationship:'linked_active' as const,financial_state:'partial' as const,due_on:'2026-08-15',remaining_amount:'80.00'};
 const mockPurchases=(purchases:object[])=>vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({purchases}))));
 const summaryRow=(reference:string|HTMLElement)=>(typeof reference==='string'?screen.getByText(reference):reference).closest('tr')!;
@@ -43,10 +43,15 @@ describe('Purchases workspace',()=>{
  it.each([
   ['cannot manage',{canManage:false}],
   ['missing counterparty',{counterparty_id:null}],
+  ['wrong counterparty role',{counterparty_type:'customer'}],
   ['missing document date',{document_date:null}],
   ['missing total',{total_amount:null}],
  ])('does not offer creation when %s',async(_label,change)=>{
   const purchase={...base,payable_cancelled:false,payable_relationship:'not_created' as const,...change};mockPurchases([purchase]);render(<Purchases canView canManage={'canManage' in change?change.canManage:true} onUnauthorized={vi.fn()}/>);fireEvent.click(summaryRow(await screen.findByText('INV-1')));expect(screen.queryByRole('button',{name:'Create payable'})).not.toBeInTheDocument();
+ });
+
+ it('shows intake note and identifies a legacy customer-linked purchase instead of presenting it as a supplier',async()=>{
+  mockPurchases([{...base,intake_note:'Legacy note',counterparty_type:'customer',supplier_name:'Legacy customer'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Customer/)).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('Legacy note')).toBeInTheDocument();expect(screen.getByText(/Data integrity warning/)).toBeInTheDocument();expect(screen.getAllByText('Customer').length).toBeGreaterThan(0);
  });
 
  it('keeps search and financial filtering behavior',async()=>{
