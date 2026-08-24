@@ -57,7 +57,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   expect(screen.queryByText('doc-1.pdf')).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Upload Document'})).not.toBeInTheDocument();
   expect(screen.queryByRole('navigation',{name:'Documents'})).not.toBeInTheDocument();
-  const typeField=screen.getByLabelText('Document type');
+  const typeField=screen.getByLabelText('Document Type');
   expect(typeField).toHaveValue('Purchase');
   expect(typeField).toHaveAttribute('readonly');
   fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
@@ -73,7 +73,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[{id:'customer-1',name:'Customer',type:'customer',is_active:true}]}))));
   render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
   await screen.findByDisplayValue('SALE-TARGET');
-  const typeField=screen.getByLabelText('Document type');
+  const typeField=screen.getByLabelText('Document Type');
   expect(typeField).toHaveValue('Sale');
   expect(typeField).toHaveAttribute('readonly');
  });
