@@ -7,7 +7,7 @@ import i18n from '../i18n';
 
 const sale=(status='uploaded')=>({id:'sale-doc',original_filename:'sale.pdf',status,document_date:'2026-08-01',reference_number:'SALE-1',total_amount:'100.00',counterparty_id:'customer-1',customer_name:'Customer',receivable_id:null,receivable_original_amount:null,due_on:null,verification_status:null,receivable_cancelled:false,receivable_relationship:'not_created' as const,collected_amount:'0.00',remaining_amount:'100.00',financial_state:'open' as const,settlement_history:[]});
 const purchase=(status='uploaded')=>({id:'purchase-doc',document_type:'purchase' as const,original_filename:'purchase.pdf',status,document_date:'2026-08-02',reference_number:'PUR-1',total_amount:'50.00',counterparty_id:'supplier-1',supplier_name:'Supplier',payable_id:null,payable_original_amount:null,due_on:null,verification_status:null,payable_cancelled:false,payable_relationship:'not_created' as const,paid_amount:'0.00',remaining_amount:'50.00',financial_state:'open' as const,settlement_history:[],vat_review_status:'missing' as const,tax_date:null,vat_treatment:null,taxable_amount:null,vat_amount:null});
-const document=(id:string,reference:string)=>({id,original_filename:`${id}.pdf`,mime_type:'application/pdf',size_bytes:2048,status:'uploaded',review_note:null,reviewed_at:null,created_at:'2026-08-01T00:00:00Z',document_type:'purchase' as const,counterparty_id:'supplier-1',counterparty_name:'Supplier',relational_counterparty_name:'Supplier',document_date:'2026-08-02',reference_number:reference,total_amount:'50.00',intake_note:null});
+const document=(id:string,reference:string,type:'purchase'|'expense'|'sale'='purchase')=>({id,original_filename:`${id}.pdf`,mime_type:'application/pdf',size_bytes:2048,status:'uploaded',review_note:null,reviewed_at:null,created_at:'2026-08-01T00:00:00Z',document_type:type,counterparty_id:type==='sale'?'customer-1':'supplier-1',counterparty_name:type==='sale'?'Customer':'Supplier',relational_counterparty_name:type==='sale'?'Customer':'Supplier',document_date:'2026-08-02',reference_number:reference,total_amount:'50.00',intake_note:null});
 
 describe('Sales and Purchases contextual edit entry points',()=>{
  beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
@@ -44,7 +44,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   expect(screen.queryByRole('button',{name:'Edit'})).not.toBeInTheDocument();
  });
 
- it('opens the requested existing document in Intake, saves it through the existing PATCH, and returns to Purchases without waiting on a refresh',async()=>{
+ it('isolates the requested purchase document, hides upload and navigation, locks its type, saves the same type, and returns',async()=>{
   const first=document('doc-1','FIRST');
   const target=document('purchase-doc','TARGET');
   const fetchMock=vi.fn()
@@ -54,12 +54,43 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   const onEntryComplete=vi.fn(),onEntryCancel=vi.fn();
   render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByDisplayValue('TARGET')).toBeInTheDocument();
-  expect(screen.queryByLabelText(/Choose document/)).not.toBeInTheDocument();
+  expect(screen.queryByText('doc-1.pdf')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Upload Document'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('navigation',{name:'Documents'})).not.toBeInTheDocument();
+  const typeField=screen.getByLabelText('Document Type');
+  expect(typeField).toHaveValue('Purchase');
+  expect(typeField).toHaveAttribute('readonly');
   fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
   await waitFor(()=>expect(onEntryComplete).toHaveBeenCalledOnce());
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls[1][0]).toBe('/api/documents/purchase-doc/intake');
   expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({method:'PATCH'}));
+  expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).document_type).toBe('purchase');
+ });
+
+ it('locks a contextual sales edit to the original sale type',async()=>{
+  const target=document('sale-doc','SALE-TARGET','sale');
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[{id:'customer-1',name:'Customer',type:'customer',is_active:true}]}))));
+  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
+  await screen.findByDisplayValue('SALE-TARGET');
+  const typeField=screen.getByLabelText('Document Type');
+  expect(typeField).toHaveValue('Sale');
+  expect(typeField).toHaveAttribute('readonly');
+ });
+
+ it('does not fall back to another document when the requested contextual document is missing',async()=>{
+  const first=document('doc-1','FIRST');
+  const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[first],counterparties:[]})));
+  vi.stubGlobal('fetch',fetchMock);
+  const onEntryCancel=vi.fn();
+  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="missing-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
+  await waitFor(()=>expect(screen.queryByText('Loading documents...')).not.toBeInTheDocument());
+  expect(screen.queryByText('doc-1.pdf')).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue('FIRST')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Upload Document'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Purchases'}));
+  expect(onEntryCancel).toHaveBeenCalledOnce();
+  expect(fetchMock).toHaveBeenCalledOnce();
  });
 
  it('preserves the current linked counterparty even when its type does not match the contextual supplier filter',async()=>{
@@ -76,10 +107,11 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   await waitFor(()=>expect(onEntryComplete).toHaveBeenCalledOnce());
   const body=JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
   expect(body.counterparty_id).toBe('customer-1');
+  expect(body.document_type).toBe('purchase');
  });
 
  it('returns from existing-document edit context without writing when the contextual return action is used',async()=>{
-  const target=document('sale-doc','SALE-TARGET');
+  const target=document('sale-doc','SALE-TARGET','sale');
   const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[]})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryCancel=vi.fn();
