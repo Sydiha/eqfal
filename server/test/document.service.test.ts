@@ -97,6 +97,30 @@ describe('DocumentService review workflow', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['purchase', 'supplier'],
+    ['expense', 'supplier'],
+    ['sale', 'customer'],
+  ] as const)('does not submit %s unless its counterparty is a %s', async (document_type, expectedType) => {
+    const uploaded = { ...record, document_type, counterparty_id: 'cp-1' };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(uploaded);
+    const submit = vi.spyOn(DocumentRepository.prototype, 'submitForReview');
+    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-1', 'co-a', expectedType]);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('submits a purchase linked to a supplier', async () => {
+    const uploaded = { ...record, document_type: 'purchase' as const, counterparty_id: 'cp-supplier' };
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(uploaded);
+    vi.spyOn(DocumentRepository.prototype, 'submitForReview').mockResolvedValue({ ...uploaded, status: 'needs_review' });
+    vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+    vi.mocked(client.query).mockImplementation(async sql => String(sql).startsWith('SELECT 1 FROM counterparties') ? { rows: [{ one: 1 }], rowCount: 1 } as never : { rows: [], rowCount: 0 } as never);
+
+    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).resolves.toMatchObject({ status: 'needs_review' });
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-supplier', 'co-a', 'supplier']);
+  });
+
   it('allows other documents to submit without a counterparty', async () => {
     const uploaded = { ...record, document_type: 'other' as const, counterparty_id: null };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(uploaded);
@@ -120,7 +144,7 @@ describe('DocumentService review workflow', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
   });
 
-  it('approves a VAT-eligible document with a valid document date and total amount', async () => {
+  it('approves a VAT-eligible document with a valid document date, total amount, and counterparty role', async () => {
     const needsReview = { ...record, status: 'needs_review' as const, document_type: 'sale' as const, counterparty_id: 'cp-1', document_date: '2026-08-01', total_amount: '100.00' };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
     const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview').mockResolvedValue({ ...needsReview, status: 'approved' });
@@ -130,6 +154,7 @@ describe('DocumentService review workflow', () => {
       documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
     })).resolves.toMatchObject({ status: 'approved' });
 
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-1', 'co-a', 'customer']);
     expect(updateReview).toHaveBeenCalledOnce();
   });
 
@@ -143,12 +168,12 @@ describe('DocumentService review workflow', () => {
     })).resolves.toMatchObject({ status: 'approved' });
   });
 
-  it('independently rejects approval when an operational counterparty is missing or outside the company', async () => {
+  it('independently rejects approval when an operational counterparty has the wrong role or is outside the company', async () => {
     const needsReview = { ...record, status: 'needs_review' as const, document_type: 'purchase' as const, counterparty_id: 'cp-other', document_date: '2026-08-01', total_amount: '100.00' };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
     const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview');
     await expect(new DocumentService(pool, storage).review({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null })).rejects.toBeInstanceOf(DocumentReviewConflictError);
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('company_id = $2'), ['cp-other', 'co-a']);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-other', 'co-a', 'supplier']);
     expect(updateReview).not.toHaveBeenCalled();
   });
 
@@ -227,6 +252,37 @@ describe('DocumentService intake', () => {
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('company_id = $2'), ['cp-other', 'co-a']);
     expect(update).not.toHaveBeenCalled();
   });
+
+  it('rejects a purchase/customer or sale/supplier mismatch during Intake', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
+    const update = vi.spyOn(DocumentRepository.prototype, 'updateIntake');
+    vi.mocked(client.query).mockImplementation(async (sql, params) => {
+      if (String(sql).includes('is_active = TRUE')) return { rows: [{ one: 1 }], rowCount: 1 } as never;
+      if (String(sql).includes('type = $3')) return { rows: [], rowCount: 0 } as never;
+      return { rows: [], rowCount: 0 } as never;
+    });
+
+    await expect(new DocumentService(pool, storage).updateIntake({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { document_type: 'purchase', counterparty_id: 'cp-customer' },
+    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-customer', 'co-a', 'supplier']);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('accepts an Intake purchase linked to an active supplier', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
+    vi.spyOn(DocumentRepository.prototype, 'updateIntake').mockResolvedValue({ ...record, document_type: 'purchase', counterparty_id: 'cp-supplier' });
+    vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+    vi.mocked(client.query).mockImplementation(async sql => String(sql).startsWith('SELECT 1 FROM counterparties') ? { rows: [{ one: 1 }], rowCount: 1 } as never : { rows: [], rowCount: 0 } as never);
+
+    await expect(new DocumentService(pool, storage).updateIntake({
+      documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { document_type: 'purchase', counterparty_id: 'cp-supplier' },
+    })).resolves.toMatchObject({ document_type: 'purchase', counterparty_id: 'cp-supplier' });
+
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-supplier', 'co-a', 'supplier']);
+  });
+
   it('locks, updates, audits changed values, and commits in one transaction', async () => {
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
     vi.spyOn(DocumentRepository.prototype, 'updateIntake').mockResolvedValue({ ...record, document_type: 'purchase', total_amount: '12.25' });
@@ -244,4 +300,3 @@ describe('DocumentService intake', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
   });
 });
-
