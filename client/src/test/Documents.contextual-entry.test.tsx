@@ -43,12 +43,12 @@ describe('Documents contextual purchase entry',()=>{
   expect(onEntryCancel).toHaveBeenCalledTimes(1);
  });
 
- it('quick-adds a supplier through the existing counterparty endpoint only when management is allowed',async()=>{
+ it('quick-adds a supplier through the existing counterparty endpoint in contextual entry when management is allowed',async()=>{
   const fetchMock=vi.fn()
    .mockResolvedValueOnce(new Response(JSON.stringify({documents:[uploaded],counterparties:[]})))
    .mockResolvedValueOnce(new Response(JSON.stringify({id:'cp-new',name:'New Supplier',is_active:true,type:'supplier',version:1}),{status:201}));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Documents canView canUpload canReview={false} canApprove={false} canManageCounterparties onUnauthorized={vi.fn()}/>);
+  render(<Documents canView canUpload canReview={false} canApprove={false} canManageCounterparties entryDocumentType="purchase" onUnauthorized={vi.fn()}/>);
   await screen.findAllByText('invoice.pdf');
   fireEvent.click(screen.getByRole('button',{name:'Create counterparty'}));
   fireEvent.change(screen.getByRole('textbox',{name:'Counterparty'}),{target:{value:'New Supplier'}});
@@ -57,5 +57,12 @@ describe('Documents contextual purchase entry',()=>{
   expect(fetchMock.mock.calls[1][0]).toBe('/api/counterparties');
   expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({name:'New Supplier',type:'supplier'});
   await waitFor(()=>expect(screen.getByRole('combobox',{name:/Counterparty/})).toHaveValue('cp-new'));
+ });
+
+ it('does not expose supplier quick-add in ordinary Documents usage',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[uploaded],counterparties:[]}))));
+  render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);
+  await screen.findAllByText('invoice.pdf');
+  expect(screen.queryByRole('button',{name:'Create counterparty'})).not.toBeInTheDocument();
  });
 });
