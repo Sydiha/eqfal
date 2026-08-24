@@ -62,6 +62,10 @@ describe('Purchases workspace',()=>{
  });
 
  it('renders required Arabic labels and localized Purchases dates',async()=>{
-  await i18n.changeLanguage('ar');mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'الدفع'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(screen.getByText('حالة التحقق')).toBeInTheDocument();expect(screen.getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+  await i18n.changeLanguage('ar');mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('مدفوعة').length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'الدفع'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('المدفوع')).toBeInTheDocument();expect(screen.getByText('حالة التحقق')).toBeInTheDocument();expect(screen.getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+ });
+
+ it('keeps the English paid amount label in expanded details',async()=>{
+  mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Paid').length).toBeGreaterThan(0);fireEvent.click(row);expect(within(screen.getByRole('region',{name:'Purchase details'})).getAllByText('Paid')).toHaveLength(2);
  });
 });
