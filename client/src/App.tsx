@@ -1,18 +1,18 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
+import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
 import './shared-ui.css';
 import './login.css';
-import { useAuth } from './context/AuthContext';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
-import { AppShell, Page } from './components/AppShell';
-import { EqfalBrandLockup } from './components/EqfalBrand';
-import { Home } from './components/Home';
+import { useAuth } from './context/AuthContext';
 import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { BankingWorkspace } from './components/BankingWorkspace';
+import { AppShell, Page } from './components/AppShell';
+import { EqfalBrandLockup } from './components/EqfalBrand';
+import { Home } from './components/Home';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
 import { MonthlyClose } from './components/MonthlyClose';
@@ -115,7 +115,18 @@ function CompanyContentForPage({ page, setPage, documentEntry, startPurchaseEntr
     {page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>}
     {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('obligation.manage')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
-    {page === 'banks' && <BankingWorkspace canView={c.includes('bank.view')} canImport={c.includes('bank.import')} canManage={c.includes('bank.account.manage')} canMatch={c.includes('bank.match')} canReconcile={c.includes('bank.reconcile')} canSettle={c.includes('payment.settle')} canViewCustody={c.includes('custody.view')} canManageCustody={c.includes('custody.manage')} canCloseCustody={c.includes('custody.close')} onUnauthorized={handleUnauthorized}/>} 
+    {page === 'banks' && <BankingWorkspace
+      canView={c.includes('bank.view')}
+      canImport={c.includes('bank.import')}
+      canManage={c.includes('bank.account.manage')}
+      canMatch={c.includes('bank.match')}
+      canReconcile={c.includes('bank.reconcile')}
+      canSettle={c.includes('payment.settle')}
+      canViewCustody={c.includes('custody.view')}
+      canManageCustody={c.includes('custody.manage')}
+      canCloseCustody={c.includes('custody.close')}
+      onUnauthorized={handleUnauthorized}
+    />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
     {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startSalesEntry} onEditDocument={editSalesEntry} onUnauthorized={handleUnauthorized}/>}
