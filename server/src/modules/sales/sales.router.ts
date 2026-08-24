@@ -7,7 +7,8 @@ export const salesRouter = Router();
 
 type SaleRow = {
   id:string; original_filename:string; status:string; document_date:string|null; reference_number:string|null;
-  total_amount:string|null; counterparty_id:string|null; customer_name:string|null; receivable_id:string|null;
+  total_amount:string|null; intake_note:string|null; counterparty_id:string|null; customer_name:string|null;
+  counterparty_type:'customer'|'supplier'|'government'|'other'|null; receivable_id:string|null;
   receivable_original_amount:string|null; due_on:string|null; verification_status:string|null; is_cancelled:boolean|null;
 };
 
@@ -17,8 +18,8 @@ const money=(value:bigint)=>`${value/100n}.${String(value%100n).padStart(2,'0')}
 export class SalesService {
   constructor(private readonly db:Pool){}
   async list(companyId:string){
-    const {rows}=await this.db.query<SaleRow>(`SELECT d.id,d.original_filename,d.status,d.document_date::text,d.reference_number,d.total_amount::text,
-      d.counterparty_id,c.name customer_name,o.id receivable_id,o.original_amount::text receivable_original_amount,o.due_on::text,
+    const {rows}=await this.db.query<SaleRow>(`SELECT d.id,d.original_filename,d.status,d.document_date::text,d.reference_number,d.total_amount::text,d.intake_note,
+      d.counterparty_id,c.name customer_name,c.type counterparty_type,o.id receivable_id,o.original_amount::text receivable_original_amount,o.due_on::text,
       o.verification_status,o.is_cancelled
       FROM documents d
       LEFT JOIN counterparties c ON c.id=d.counterparty_id AND c.company_id=d.company_id
