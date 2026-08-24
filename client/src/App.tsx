@@ -1,18 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
-import './i18n';
-import './App.css';
-import './shared-ui.css';
-import './login.css';
-import { CompanyProvider, useCompany } from './context/CompanyContext';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './context/AuthContext';
-import { FiscalYears } from './components/FiscalYears';
-import { Documents } from './components/Documents';
-import { BankingWorkspace } from './components/BankingWorkspace';
+import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { AppShell, Page } from './components/AppShell';
 import { EqfalBrandLockup } from './components/EqfalBrand';
 import { Home } from './components/Home';
+import { FiscalYears } from './components/FiscalYears';
+import { Documents } from './components/Documents';
+import { BankingWorkspace } from './components/BankingWorkspace';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
 import { MonthlyClose } from './components/MonthlyClose';
@@ -24,7 +20,8 @@ import { eqfalTheme } from './theme';
 
 type DocumentEntryType = 'purchase' | 'expense' | 'sale';
 type DocumentEntryContext = {
-  documentType: DocumentEntryType;
+  documentType?: DocumentEntryType;
+  documentId?: string;
   returnPage: 'purchases' | 'sales';
   counterpartyType: 'supplier' | 'customer';
 };
@@ -99,11 +96,13 @@ function AuthenticatedShell() {
   const navigate = (next: Page) => { setDocumentEntry(null); setPageState(next); };
   const startPurchaseEntry = (documentType: 'purchase' | 'expense') => { setDocumentEntry({ documentType, returnPage: 'purchases', counterpartyType: 'supplier' }); setPageState('documents'); };
   const startSalesEntry = () => { setDocumentEntry({ documentType: 'sale', returnPage: 'sales', counterpartyType: 'customer' }); setPageState('documents'); };
+  const editPurchaseEntry = (documentId: string) => { setDocumentEntry({ documentId, returnPage: 'purchases', counterpartyType: 'supplier' }); setPageState('documents'); };
+  const editSalesEntry = (documentId: string) => { setDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' }); setPageState('documents'); };
   const handleSwitch = async (id: string) => { setDocumentEntry(null); return switchCompany(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry}/></AppShell>;
+  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry}/></AppShell>;
 }
 
-function CompanyContentForPage({ page, setPage, documentEntry, startPurchaseEntry, startSalesEntry }: { page: Page; setPage: (page: Page) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void }) {
+function CompanyContentForPage({ page, setPage, documentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry }: { page: Page; setPage: (page: Page) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized } = useAuth();
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
@@ -111,23 +110,12 @@ function CompanyContentForPage({ page, setPage, documentEntry, startPurchaseEntr
   return <div key={companyKey}>
     {page === 'home' && <Home email={session.user.email} canDocuments={c.includes('document.view')} canUpload={c.includes('document.upload')} canFiscalYears={c.includes('fiscal_year.view')} navigate={setPage}/>}
     {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canManage={c.includes('fiscal_year.manage')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('obligation.manage')} entryDocumentType={documentEntry?.documentType} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
-    {page === 'banks' && <BankingWorkspace
-      canView={c.includes('bank.view')}
-      canImport={c.includes('bank.import')}
-      canManage={c.includes('bank.account.manage')}
-      canMatch={c.includes('bank.match')}
-      canReconcile={c.includes('bank.reconcile')}
-      canSettle={c.includes('payment.settle')}
-      canViewCustody={c.includes('custody.view')}
-      canManageCustody={c.includes('custody.manage')}
-      canCloseCustody={c.includes('custody.close')}
-      onUnauthorized={handleUnauthorized}
-    />}
+    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('obligation.manage')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
+    {page === 'banks' && <BankingWorkspace canView={c.includes('bank.view')} canImport={c.includes('bank.import')} canManage={c.includes('bank.account.manage')} canMatch={c.includes('bank.match')} canReconcile={c.includes('bank.reconcile')} canSettle={c.includes('payment.settle')} canViewCustody={c.includes('custody.view')} canManageCustody={c.includes('custody.manage')} canCloseCustody={c.includes('custody.close')} onUnauthorized={handleUnauthorized}/>} 
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} onCreateDocument={startSalesEntry} onUnauthorized={handleUnauthorized}/>}
-    {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} onCreateDocument={startPurchaseEntry} onUnauthorized={handleUnauthorized}/>}
+    {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startSalesEntry} onEditDocument={editSalesEntry} onUnauthorized={handleUnauthorized}/>}
+    {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startPurchaseEntry} onEditDocument={editPurchaseEntry} onUnauthorized={handleUnauthorized}/>}
     {page === 'monthlyClose' && <MonthlyClose canView={c.includes('fiscal_year.view')} canClose={c.includes('monthly_close.close')} canReopen={c.includes('monthly_close.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'vat' && <Vat canView={c.includes('vat.view')} canReview={c.includes('vat.review')} canClose={c.includes('vat.close')} canReopen={c.includes('vat.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
