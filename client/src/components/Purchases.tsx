@@ -26,7 +26,7 @@ export function Purchases({canView,canManage,onUnauthorized}:{canView:boolean;ca
    <div><dt>{t('purchases.reference')}</dt><dd>{purchase.reference_number??purchase.original_filename}</dd></div>
    <div><dt>{t('purchases.financialState')}</dt><dd>{financialStatus(purchase)}</dd></div>
    <div><dt>{t('purchases.total')}</dt><dd className="purchases-amount">{purchase.total_amount??'—'}</dd></div>
-   <div><dt>{t('purchases.paid')}</dt><dd className="purchases-amount">{purchase.paid_amount}</dd></div>
+   <div><dt>{t('purchases.paidAmount')}</dt><dd className="purchases-amount">{purchase.paid_amount}</dd></div>
    <div><dt>{t('purchases.remaining')}</dt><dd className="purchases-amount">{purchase.remaining_amount??'—'}</dd></div>
    <div><dt>{t('purchases.due')}</dt><dd>{formatDisplayDate(purchase.due_on,i18n.language)}</dd></div>
    <div><dt>{t('purchases.reviewState')}</dt><dd>{t(`documents.statuses.${purchase.status}`)}</dd></div>
