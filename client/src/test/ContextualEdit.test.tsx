@@ -62,6 +62,21 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({method:'PATCH'}));
  });
 
+ it('preserves the current linked counterparty even when its type does not match the contextual supplier filter',async()=>{
+  const target={...document('purchase-doc','TARGET'),counterparty_id:'customer-1',counterparty_name:'Customer',relational_counterparty_name:'Customer'};
+  const fetchMock=vi.fn()
+   .mockResolvedValueOnce(new Response(JSON.stringify({documents:[target],counterparties:[{id:'customer-1',name:'Customer',type:'customer',is_active:true},{id:'supplier-1',name:'Supplier',type:'supplier',is_active:true}]})))
+   .mockResolvedValueOnce(new Response(JSON.stringify({document:target})));
+  vi.stubGlobal('fetch',fetchMock);
+  const onEntryComplete=vi.fn();
+  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByRole('combobox',{name:'Counterparty'})).toHaveValue('customer-1');
+  fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
+  await waitFor(()=>expect(onEntryComplete).toHaveBeenCalledOnce());
+  const body=JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+  expect(body.counterparty_id).toBe('customer-1');
+ });
+
  it('returns from existing-document edit context without writing when the contextual return action is used',async()=>{
   const target=document('sale-doc','SALE-TARGET');
   const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[]})));
