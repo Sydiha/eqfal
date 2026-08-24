@@ -40,7 +40,7 @@ export class DocumentRepository {
 
   async findCounterpartiesByCompany(companyId: string): Promise<DocumentCounterparty[]> {
     const { rows } = await this.pool.query<DocumentCounterparty>(
-      `SELECT id, name, is_active FROM counterparties
+      `SELECT id, name, type, is_active FROM counterparties
        WHERE company_id = $1
        ORDER BY is_active DESC, name`,
       [companyId],

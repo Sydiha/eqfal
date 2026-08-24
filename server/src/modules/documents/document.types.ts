@@ -1,5 +1,6 @@
 export type DocumentStatus = 'uploaded' | 'needs_review' | 'approved' | 'incomplete' | 'rejected';
 export type DocumentType = 'purchase' | 'expense' | 'sale' | 'other';
+export type DocumentCounterpartyType = 'customer' | 'supplier' | 'government' | 'other';
 
 export interface DocumentIntake {
   document_type: DocumentType | null;
@@ -32,6 +33,7 @@ export interface DocumentRecord extends DocumentIntake {
 export interface DocumentCounterparty {
   id: string;
   name: string;
+  type: DocumentCounterpartyType;
   is_active: boolean;
 }
 
