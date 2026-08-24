@@ -58,19 +58,41 @@ export class DocumentService {
     }
   }
 
-  private async hasCompanyCounterparty(companyId: string, counterpartyId: string | null, client: PoolClient, activeOnly = false): Promise<boolean> {
+  private expectedCounterpartyType(documentType: DocumentRecord['document_type']): 'customer' | 'supplier' | null {
+    if (documentType === 'sale') return 'customer';
+    if (documentType === 'purchase' || documentType === 'expense') return 'supplier';
+    return null;
+  }
+
+  private async hasCompanyCounterparty(
+    companyId: string,
+    counterpartyId: string | null,
+    client: PoolClient,
+    activeOnly = false,
+    expectedType: 'customer' | 'supplier' | null = null,
+  ): Promise<boolean> {
     if (!counterpartyId) return false;
+    const params: string[] = [counterpartyId, companyId];
+    const typeClause = expectedType ? ` AND type = $${params.push(expectedType)}` : '';
     const result = await client.query(
-      `SELECT 1 FROM counterparties WHERE id = $1 AND company_id = $2${activeOnly ? ' AND is_active = TRUE' : ''}`,
-      [counterpartyId, companyId],
+      `SELECT 1 FROM counterparties WHERE id = $1 AND company_id = $2${activeOnly ? ' AND is_active = TRUE' : ''}${typeClause}`,
+      params,
     );
     return Boolean(result.rowCount);
   }
 
+  private async assertCounterpartyRole(document: DocumentRecord, companyId: string, client: PoolClient): Promise<void> {
+    const expectedType = this.expectedCounterpartyType(document.document_type);
+    if (!expectedType || !document.counterparty_id) return;
+    if (!await this.hasCompanyCounterparty(companyId, document.counterparty_id, client, false, expectedType)) {
+      throw new DocumentReviewConflictError(`Document counterparty must be a ${expectedType}`);
+    }
+  }
+
   private async assertOperationalCounterparty(document: DocumentRecord, companyId: string, client: PoolClient): Promise<void> {
-    if (['purchase', 'expense', 'sale'].includes(document.document_type ?? '')
-      && !await this.hasCompanyCounterparty(companyId, document.counterparty_id, client)) {
-      throw new DocumentReviewConflictError('Operational document requires a valid company counterparty');
+    const expectedType = this.expectedCounterpartyType(document.document_type);
+    if (expectedType && !await this.hasCompanyCounterparty(companyId, document.counterparty_id, client, false, expectedType)) {
+      throw new DocumentReviewConflictError(`Operational document requires a valid company ${expectedType}`);
     }
   }
 
@@ -161,6 +183,8 @@ export class DocumentService {
         && !await this.hasCompanyCounterparty(input.companyId, input.intake.counterparty_id, client, true)) {
         throw new DocumentReviewConflictError('Counterparty must be active and belong to the company');
       }
+      const resultingDocument = { ...current, ...input.intake } as DocumentRecord;
+      await this.assertCounterpartyRole(resultingDocument, input.companyId, client);
       const changed = (Object.keys(input.intake) as (keyof DocumentIntake)[])
         .filter((field) => field === 'total_amount'
           ? Number(current[field]) !== Number(input.intake[field]) || (current[field] === null) !== (input.intake[field] === null)
@@ -210,4 +234,3 @@ export class DocumentService {
     });
   }
 }
-
