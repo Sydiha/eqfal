@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
+import './i18n';
+import './App.css';
+import './shared-ui.css';
+import './login.css';
 import { useAuth } from './context/AuthContext';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { AppShell, Page } from './components/AppShell';
