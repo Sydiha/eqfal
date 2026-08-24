@@ -3,7 +3,7 @@ import{beforeEach,describe,expect,it,vi}from'vitest';
 import{Sales}from'../components/Sales';
 import i18n from'../i18n';
 
-const base={id:'d1',original_filename:'sale.pdf',status:'approved',document_date:'2026-08-01',reference_number:'INV-1',total_amount:'100.00',counterparty_id:'c1',customer_name:'Customer',receivable_id:'o1',receivable_original_amount:'100.00',due_on:null,verification_status:'confirmed',receivable_cancelled:true,receivable_relationship:'linked_cancelled' as const,collected_amount:'20.00',remaining_amount:null,financial_state:null,settlement_history:[{id:'s1',amount:'20.00',transaction_date:'2026-08-02',description:'Transfer',bank_reference:null}]};
+const base={id:'d1',original_filename:'sale.pdf',status:'approved',document_date:'2026-08-01',reference_number:'INV-1',total_amount:'100.00',intake_note:null,counterparty_id:'c1',customer_name:'Customer',counterparty_type:'customer' as const,receivable_id:'o1',receivable_original_amount:'100.00',due_on:null,verification_status:'confirmed',receivable_cancelled:true,receivable_relationship:'linked_cancelled' as const,collected_amount:'20.00',remaining_amount:null,financial_state:null,settlement_history:[{id:'s1',amount:'20.00',transaction_date:'2026-08-02',description:'Transfer',bank_reference:null}]};
 const active={...base,id:'d2',reference_number:'INV-2',receivable_cancelled:false,receivable_relationship:'linked_active' as const,financial_state:'partial' as const,due_on:'2026-08-15',remaining_amount:'80.00'};
 const mockSales=(sales:object[])=>vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({sales}))));
 const summaryRow=(reference:string|HTMLElement)=>(typeof reference==='string'?screen.getByText(reference):reference).closest('tr')!;
@@ -43,10 +43,15 @@ describe('Sales workspace',()=>{
  it.each([
   ['cannot manage',{canManage:false}],
   ['missing counterparty',{counterparty_id:null}],
+  ['wrong counterparty role',{counterparty_type:'supplier'}],
   ['missing document date',{document_date:null}],
   ['missing total',{total_amount:null}],
  ])('does not offer creation when %s',async(_label,change)=>{
   const sale={...base,receivable_cancelled:false,receivable_relationship:'not_created' as const,...change};mockSales([sale]);render(<Sales canView canManage={'canManage' in change?change.canManage:true} onUnauthorized={vi.fn()}/>);fireEvent.click(summaryRow(await screen.findByText('INV-1')));expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
+ });
+
+ it('shows intake note and identifies a legacy supplier-linked sale instead of presenting it as a customer',async()=>{
+  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('Legacy note')).toBeInTheDocument();expect(screen.getByText(/Data integrity warning/)).toBeInTheDocument();expect(screen.getAllByText('Supplier').length).toBeGreaterThan(0);
  });
 
  it('keeps search and financial filtering behavior',async()=>{
