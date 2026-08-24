@@ -1,6 +1,7 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import { Pool } from 'pg';
 import pool from '../../db/pool';
+import { operationalDate } from '../../operational-date';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 
 export const salesRouter = Router();
@@ -29,7 +30,7 @@ export class SalesService {
       t.transaction_date::text,t.description,t.bank_reference
       FROM document_settlements s JOIN bank_transactions t ON t.id=s.bank_transaction_id AND t.company_id=s.company_id
       WHERE s.company_id=$1 ORDER BY s.created_at DESC`,[companyId]);
-    const today=new Date().toISOString().slice(0,10);
+    const today=operationalDate();
     return {sales:rows.map(row=>{
       const history=settlements.filter(item=>item.document_id===row.id);
       const collected=history.reduce((sum,item)=>sum+cents(String(item.amount)),0n);
