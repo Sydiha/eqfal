@@ -19,19 +19,20 @@ export function StatusBadge({ status, children }: { status: string; children: Re
   return <span className={`badge shared-status-badge ${status}`}>{children}</span>;
 }
 
-export function WorkspaceState({ children, tone = 'neutral', action }: { children: ReactNode; tone?: 'neutral' | 'error'; action?: ReactNode }) {
+export function WorkspaceState({ children, tone = 'neutral', action, kind }: { children: ReactNode; tone?: 'neutral' | 'error'; action?: ReactNode; kind?: 'empty' | 'no-results' }) {
   const role = tone === 'error' ? 'alert' : 'status';
-  return <div role={role} className={`shared-workspace-state${tone === 'error' ? ' is-error' : ''}`}>
+  return <div role={role} data-state={kind} className={`shared-workspace-state${tone === 'error' ? ' is-error' : ''}`}>
     <span>{children}</span>
     {action && <div className="shared-workspace-state__action">{action}</div>}
   </div>;
 }
 
-export function WorkspaceToolbar({ search, filters, clearAction, resultCount, className = '' }: { search?: ReactNode; filters?: ReactNode; clearAction?: ReactNode; resultCount?: ReactNode; className?: string }) {
-  return <div className={`shared-workspace-toolbar ${className}`.trim()}>
-    {search && <div className="shared-workspace-toolbar__search">{search}</div>}
+export function WorkspaceToolbar({ search, filters, clearAction, resultCount, className = '', ariaLabel }: { search?: ReactNode; filters?: ReactNode; clearAction?: ReactNode; resultCount?: ReactNode; className?: string; ariaLabel?: string }) {
+  const hasResultCount = resultCount !== undefined && resultCount !== null;
+  return <div className={`shared-workspace-toolbar ${className}`.trim()} aria-label={ariaLabel}>
+    {search && <div className="shared-workspace-toolbar__search" role="search">{search}</div>}
     {filters && <div className="shared-workspace-toolbar__filters">{filters}</div>}
-    {(clearAction || resultCount) && <div className="shared-workspace-toolbar__meta">{resultCount}{clearAction}</div>}
+    {(clearAction || hasResultCount) && <div className="shared-workspace-toolbar__meta">{hasResultCount && <span role="status" aria-live="polite">{resultCount}</span>}{clearAction}</div>}
   </div>;
 }
 

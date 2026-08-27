@@ -21,6 +21,7 @@ import { Accounting } from './components/Accounting';
 import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
 import { eqfalTheme } from './theme';
+import { clearContextualQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 
 type DocumentEntryType = 'purchase' | 'expense' | 'sale';
 type DocumentEntryContext = {
@@ -29,6 +30,12 @@ type DocumentEntryContext = {
   returnPage: 'purchases' | 'sales';
   counterpartyType: 'supplier' | 'customer';
 };
+
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases'];
+
+function pageFromUrl(): Page {
+  return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
+}
 
 function LanguageButton({ className = '' }: { className?: string }) {
   const { t, i18n } = useTranslation();
@@ -95,14 +102,30 @@ function LoginForm() {
 
 function AuthenticatedShell() {
   const { logout, switchCompany, session } = useAuth();
-  const [page, setPageState] = useState<Page>('home');
+  const [page, setPageState] = useState<Page>(pageFromUrl);
   const [documentEntry, setDocumentEntry] = useState<DocumentEntryContext | null>(null);
-  const navigate = (next: Page) => { setDocumentEntry(null); setPageState(next); };
-  const startPurchaseEntry = (documentType: 'purchase' | 'expense') => { setDocumentEntry({ documentType, returnPage: 'purchases', counterpartyType: 'supplier' }); setPageState('documents'); };
-  const startSalesEntry = () => { setDocumentEntry({ documentType: 'sale', returnPage: 'sales', counterpartyType: 'customer' }); setPageState('documents'); };
-  const editPurchaseEntry = (documentId: string) => { setDocumentEntry({ documentId, returnPage: 'purchases', counterpartyType: 'supplier' }); setPageState('documents'); };
-  const editSalesEntry = (documentId: string) => { setDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' }); setPageState('documents'); };
-  const handleSwitch = async (id: string) => { setDocumentEntry(null); return switchCompany(id); };
+  useEffect(() => {
+    const handleHistoryNavigation = () => { setDocumentEntry(null); setPageState(pageFromUrl()); };
+    window.addEventListener('popstate', handleHistoryNavigation);
+    return () => window.removeEventListener('popstate', handleHistoryNavigation);
+  }, []);
+  const navigate = (next: Page) => {
+    setDocumentEntry(null);
+    setPageState(next);
+    clearContextualQueryState('replace');
+    writeQueryParameters({ page: next === 'home' ? null : next });
+  };
+  const openDocumentEntry = (entry: DocumentEntryContext) => {
+    setDocumentEntry(entry);
+    setPageState('documents');
+    clearContextualQueryState('replace');
+    writeQueryParameters({ page: 'documents' });
+  };
+  const startPurchaseEntry = (documentType: 'purchase' | 'expense') => openDocumentEntry({ documentType, returnPage: 'purchases', counterpartyType: 'supplier' });
+  const startSalesEntry = () => openDocumentEntry({ documentType: 'sale', returnPage: 'sales', counterpartyType: 'customer' });
+  const editPurchaseEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'purchases', counterpartyType: 'supplier' });
+  const editSalesEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' });
+  const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
   return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry}/></AppShell>;
 }
 
