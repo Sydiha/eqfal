@@ -1,0 +1,29 @@
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Documents } from '../components/Documents';
+import i18n from '../i18n';
+
+const documents = [
+  { id:'d1', original_filename:'Acme Invoice.pdf', mime_type:'application/pdf', size_bytes:1000, status:'approved', review_note:'Ready for close', reviewed_at:null, created_at:'2026-03-02T00:00:00Z', document_type:'purchase', counterparty_id:'c1', counterparty_name:'Legacy Acme', relational_counterparty_name:'Acme Trading', document_date:'2026-03-01', reference_number:'REF-100', total_amount:'10.00', intake_note:'March stock' },
+  { id:'d2', original_filename:'مصروف.png', mime_type:'image/png', size_bytes:1000, status:'needs_review', review_note:null, reviewed_at:null, created_at:'2026-02-16T00:00:00Z', document_type:'expense', counterparty_id:'c2', counterparty_name:'المورد العربي', relational_counterparty_name:null, document_date:'2026-02-15', reference_number:'EXP-2', total_amount:'20.00', intake_note:'Office' },
+  { id:'d3', original_filename:'sale.pdf', mime_type:'application/pdf', size_bytes:1000, status:'uploaded', review_note:null, reviewed_at:null, created_at:'2026-04-01T00:00:00Z', document_type:'sale', counterparty_id:null, counterparty_name:null, relational_counterparty_name:null, document_date:null, reference_number:'SALE-3', total_amount:'30.00', intake_note:null },
+];
+const counterparties=[{id:'c1',name:'Acme Trading',type:'supplier',is_active:true},{id:'c2',name:'المورد العربي',type:'supplier',is_active:true}];
+const renderDocuments=(items=documents)=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:items,counterparties}))));return render(<Documents canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>)};
+const list=()=>screen.getByLabelText(i18n.language==='ar'?'قائمة المستندات':'Document list');
+
+describe('Documents operational discovery',()=>{
+ beforeEach(async()=>{vi.restoreAllMocks();window.history.replaceState(null,'','/?page=documents');await i18n.changeLanguage('en')});
+
+ it.each([['Acme Invoice','Acme Invoice.pdf'],['ref-100','Acme Invoice.pdf'],['acme trading','Acme Invoice.pdf'],['المورد','مصروف.png']])('searches filename, reference, and counterparties with English and Arabic text',async(term,filename)=>{renderDocuments();await screen.findByRole('searchbox',{name:'Search documents'});fireEvent.change(screen.getByRole('searchbox'),{target:{value:term}});expect(within(list()).getByText(filename)).toBeInTheDocument();expect(within(list()).getAllByRole('button')).toHaveLength(1)});
+
+ it('applies status, type, counterparty, and inclusive date filters together',async()=>{renderDocuments();await screen.findByRole('searchbox');fireEvent.change(screen.getByLabelText('Filter by status'),{target:{value:'approved'}});fireEvent.change(screen.getByLabelText('Filter by document type'),{target:{value:'purchase'}});fireEvent.change(screen.getByLabelText('Filter by counterparty'),{target:{value:'c1'}});fireEvent.change(screen.getByLabelText('From document date'),{target:{value:'2026-03-01'}});fireEvent.change(screen.getByLabelText('To document date'),{target:{value:'2026-03-01'}});expect(within(list()).getByText('Acme Invoice.pdf')).toBeInTheDocument();expect(within(list()).getAllByRole('button')).toHaveLength(1);expect(window.location.search).toContain('counterparty=c1')});
+
+ it('reports zero, distinguishes filtered no-results, and clears only discovery state',async()=>{window.history.replaceState(null,'','/?page=documents&safe=keep');renderDocuments();await screen.findByRole('searchbox');fireEvent.change(screen.getByRole('searchbox'),{target:{value:'missing'}});expect(screen.getByText('0 documents')).toBeInTheDocument();expect(screen.getByText('No documents match the current search and filters.').closest('[data-state]')).toHaveAttribute('data-state','no-results');fireEvent.click(screen.getAllByRole('button',{name:'Clear filters'})[0]);expect(window.location.search).toBe('?page=documents&safe=keep');expect(await screen.findByText('3 documents')).toBeInTheDocument()});
+
+ it('preserves the genuine empty state',async()=>{renderDocuments([]);const empty=(await screen.findByText('No documents uploaded yet.')).closest('[data-state]');expect(empty).toHaveAttribute('role','status');expect(empty).toHaveAttribute('data-state','empty')});
+
+ it('initializes from valid URL state, restores history, and ignores invalid values',async()=>{window.history.replaceState(null,'','/?page=documents&status=approved&type=purchase&from=2026-03-01&to=2026-03-01');renderDocuments();expect(await screen.findByLabelText('Filter by status')).toHaveValue('approved');expect(within(list()).getAllByRole('button')).toHaveLength(1);act(()=>{window.history.pushState(null,'','/?page=documents&status=needs_review');window.dispatchEvent(new PopStateEvent('popstate'))});expect(screen.getByLabelText('Filter by status')).toHaveValue('needs_review');expect(within(list()).getByText('مصروف.png')).toBeInTheDocument();act(()=>{window.history.pushState(null,'','/?page=documents&status=future&type=bad&counterparty=missing&from=2026-02-31');window.dispatchEvent(new PopStateEvent('popstate'))});expect(screen.getByLabelText('Filter by status')).toHaveValue('');expect(screen.getByLabelText('Filter by document type')).toHaveValue('');expect(screen.getByText('3 documents')).toBeInTheDocument()});
+
+ it('provides accessible RTL discovery controls and deterministic date ordering',async()=>{await i18n.changeLanguage('ar');renderDocuments();expect(await screen.findByRole('searchbox',{name:'البحث في المستندات'})).toBeInTheDocument();expect(screen.getByRole('combobox',{name:'تصفية حسب الحالة'})).toBeEnabled();const rows=within(list()).getAllByRole('button');expect(rows[0]).toHaveTextContent('Acme Invoice.pdf');expect(rows[2]).toHaveTextContent('sale.pdf')});
+});

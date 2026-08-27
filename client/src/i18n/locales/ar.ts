@@ -76,6 +76,7 @@ const ar = {
     reviewReason: 'السبب',
     reviewNote: 'ملاحظة المراجعة',
     reviewedAt: 'وقت المراجعة',
+    discovery: { toolbar: 'استكشاف المستندات', search: 'البحث في المستندات', searchPlaceholder: 'اسم الملف أو المرجع أو الطرف المقابل أو الملاحظة', status: 'تصفية حسب الحالة', type: 'تصفية حسب نوع المستند', counterparty: 'تصفية حسب الطرف المقابل', from: 'من تاريخ المستند', to: 'إلى تاريخ المستند', allStatuses: 'كل الحالات', allTypes: 'كل أنواع المستندات', allCounterparties: 'كل الأطراف المقابلة', resultCount: '{{count}} مستندات', clear: 'مسح عوامل التصفية', noResults: 'لا توجد مستندات تطابق البحث وعوامل التصفية الحالية.' },
     intake: {
       title: 'بيانات الإدخال', readOnly: 'بيانات الإدخال للقراءة فقط لهذا المستند.', documentType: 'نوع المستند', document_type: 'نوع المستند', counterparty: 'اسم الطرف المقابل / المورد / الجهة', counterparty_name: 'اسم الطرف المقابل / المورد / الجهة',
       documentDate: 'تاريخ المستند', document_date: 'تاريخ المستند', reference: 'رقم الفاتورة / المرجع', reference_number: 'رقم الفاتورة / المرجع',
