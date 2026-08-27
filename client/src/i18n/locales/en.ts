@@ -76,6 +76,7 @@ const en = {
     reviewReason: 'Reason',
     reviewNote: 'Review note',
     reviewedAt: 'Reviewed at',
+    discovery: { toolbar: 'Document discovery', search: 'Search documents', searchPlaceholder: 'Filename, reference, counterparty, or note', status: 'Filter by status', type: 'Filter by document type', counterparty: 'Filter by counterparty', from: 'From document date', to: 'To document date', allStatuses: 'All statuses', allTypes: 'All document types', allCounterparties: 'All counterparties', resultCount: '{{count}} documents', clear: 'Clear filters', noResults: 'No documents match the current search and filters.' },
     intake: {
       title: 'Intake information', readOnly: 'Intake information is read-only for this document.', documentType: 'Document Type', document_type: 'Document Type', counterparty: 'Counterparty / Supplier / Entity name', counterparty_name: 'Counterparty / Supplier / Entity name',
       documentDate: 'Document Date', document_date: 'Document Date', reference: 'Invoice / Reference Number', reference_number: 'Invoice / Reference Number',
