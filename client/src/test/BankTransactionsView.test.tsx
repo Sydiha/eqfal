@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n';
@@ -8,7 +8,19 @@ import { BankTransactionsView } from '../components/BankTransactionsView';
 beforeEach(async () => {
   await i18n.changeLanguage('en');
   vi.restoreAllMocks();
+  window.history.replaceState(null, '', '/?page=banks&section=transactions');
 });
+
+const transactions = [
+  {id:'tx-old',transaction_date:'2026-08-01',description:'Vendor payment بيان',bank_reference:'BANK-NEG',amount:'-350.00',running_balance:'12500.00',currency_code:'SAR',reconciliation_status:'unmatched'},
+  {id:'tx-new',transaction_date:'2026-08-20',description:'Customer receipt',bank_reference:'BANK-POS',amount:'1150.00',running_balance:null,currency_code:'SAR',reconciliation_status:'matched'},
+  {id:'tx-mid',transaction_date:'2026-08-16',description:'Monthly fee',bank_reference:null,amount:'-20.00',running_balance:'13650.00',currency_code:'SAR',reconciliation_status:'reconciled'},
+] as const;
+
+function renderTransactions(data: readonly object[] = transactions) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ transactions: data }), { status: 200 })));
+  return render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
+}
 
 describe('BankTransactionsView', () => {
   it('shows document identity and linked obligation integrity context in the match dialog', async () => {
@@ -58,5 +70,72 @@ describe('BankTransactionsView', () => {
     expect(screen.getByText('BANK-REF-001')).toBeInTheDocument();
     expect(screen.queryByText('12500.00 SAR')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/bank-transactions', undefined));
+  });
+
+  it('searches description, reference, amount, and running balance with trimmed multilingual text', async () => {
+    renderTransactions();
+    const search = await screen.findByRole('searchbox', { name: 'Search transactions' });
+    fireEvent.change(search, { target: { value: '  بيان  ' } });
+    expect(screen.getByText('Vendor payment بيان')).toBeInTheDocument();
+    expect(screen.queryByText('Customer receipt')).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'bank-pos' } });
+    expect(screen.getByText('Customer receipt')).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: '13650' } });
+    expect(screen.getByText('Monthly fee')).toBeInTheDocument();
+  });
+
+  it('applies reconciliation, inclusive dates, signed amount ranges, and combined filters', async () => {
+    renderTransactions();
+    await screen.findByText('Customer receipt');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reconciliation status' }), { target: { value: 'unmatched' } });
+    expect(screen.getByText('Vendor payment بيان')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('Minimum amount'), { target: { value: '-350' } });
+    fireEvent.change(screen.getByLabelText('Maximum amount'), { target: { value: '-350' } });
+    expect(screen.getByText('Vendor payment بيان')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('1 results');
+  });
+
+  it('initializes safely from URL, restores history, clears only discovery state, and reports zero results', async () => {
+    window.history.replaceState(null, '', '/?page=banks&section=transactions&search=receipt&reconciliation=bad&from=not-a-date&amountMin=nope&safe=keep');
+    renderTransactions();
+    expect(await screen.findByText('Customer receipt')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Reconciliation status' })).toHaveValue('');
+    expect(screen.getByLabelText('From date')).toHaveValue('');
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search transactions' }), { target: { value: 'missing' } });
+    expect(screen.getByText('0 results')).toBeInTheDocument();
+    expect(screen.getByText('No transactions match the filters.').closest('[data-state]')).toHaveAttribute('data-state', 'no-results');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
+    expect(window.location.search).toContain('page=banks');
+    expect(window.location.search).toContain('section=transactions');
+    expect(window.location.search).toContain('safe=keep');
+    expect(window.location.search).not.toContain('search=');
+    act(() => { window.history.pushState(null, '', '/?page=banks&section=transactions&reconciliation=reconciled'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(screen.getByText('Monthly fee')).toBeInTheDocument();
+    expect(screen.queryByText('Customer receipt')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes genuine empty data and preserves deterministic date-descending stable ordering', async () => {
+    const { unmount } = renderTransactions([]);
+    expect((await screen.findByText('No bank transactions')).closest('[data-state]')).toHaveAttribute('data-state', 'empty');
+    unmount();
+    renderTransactions([transactions[0], { ...transactions[2], id: 'same-a', transaction_date: '2026-08-20', description: 'Stable first' }, { ...transactions[2], id: 'same-b', transaction_date: '2026-08-20', description: 'Stable second' }, transactions[1]]);
+    const rows = await screen.findAllByRole('article');
+    expect(rows.map(row => within(row).getByText(/Customer receipt|Stable first|Stable second|Vendor payment/).textContent)).toEqual(['Stable first', 'Stable second', 'Customer receipt', 'Vendor payment بيان']);
+  });
+
+  it('keeps the match dialog operational while the list is filtered and returns to that filter', async () => {
+    const transaction = transactions[0];
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('match-candidates') ? { transaction, match: null, documents: [] } : { transactions }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
+    fireEvent.change(await screen.findByRole('searchbox', { name: 'Search transactions' }), { target: { value: 'BANK-NEG' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Match' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search transactions' })).toHaveValue('BANK-NEG');
+    expect(screen.getByText('Vendor payment بيان')).toBeInTheDocument();
   });
 });
