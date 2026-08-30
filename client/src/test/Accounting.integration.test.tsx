@@ -10,7 +10,7 @@ const account={id:accountId,code:'1000',name:'Cash',account_type:'asset' as cons
 const emptyResponses=(url:string)=>url==='/api/accounts'?{accounts:[account]}:url==='/api/fiscal-years'?{fiscalYears:[year]}:url==='/api/journals'?{journals:[]}:{sources:[]};
 
 describe('Accounting integration contracts',()=>{
- beforeEach(async()=>{await i18n.changeLanguage('en')});
+ beforeEach(async()=>{await i18n.changeLanguage('en');window.history.replaceState(null,'','/?page=accounting')});
 
  it('serializes loaded lines through the write DTO allowlist',()=>{
   const loaded={id:'line-1',company_id:'company-1',journal_entry_id:'journal-1',account_id:accountId,debit:'10.00',credit:'0.00',memo:null,sequence:1};
@@ -68,7 +68,7 @@ describe('Accounting integration contracts',()=>{
   }
   expect(fetchMock.mock.calls.filter(([url,options])=>url==='/api/journals'&&options?.method==='POST')).toHaveLength(1);
   expect(writes[1]).toEqual({lines:[{account_id:accountId,debit:'40.00',credit:'0.00',memo:null},{account_id:accountId,debit:'0.00',credit:'40.00',memo:'Offset'}]});
-  expect(screen.getByText('Draft')).toBeInTheDocument();
+  expect(screen.getByText('Draft',{selector:'.badge'})).toBeInTheDocument();
   expect(screen.queryByText('Unable to load or update accounting.')).not.toBeInTheDocument();
  });
 
