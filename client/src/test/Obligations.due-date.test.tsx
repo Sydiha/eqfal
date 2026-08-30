@@ -8,7 +8,7 @@ const obligation={id:'o1',direction:'receivable' as const,counterparty_id:'c1',c
 const data={obligations:[obligation],eligible_documents:[],summary:{open_receivables:'0.00',open_payables:'0.00',unconfirmed_receivables:'150.00',unconfirmed_payables:'0.00',unconfirmed_count:1,partially_settled_count:0,overdue_count:1}};
 const parties={counterparties:[{id:'c1',name:'Acme',type:'customer',is_active:true,version:1}]};
 
-beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(data),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(parties),{status:200})))});
+beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();window.history.replaceState(null,'','/?page=obligations');vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(data),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(parties),{status:200})))});
 
 describe('obligation due-date edit guard',()=>{
  it('does not allow an edited due date before the obligation recognized date',async()=>{
