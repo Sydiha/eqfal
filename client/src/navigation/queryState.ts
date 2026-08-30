@@ -44,3 +44,15 @@ export function clearContextualQueryState(mode: HistoryMode = 'replace'): void {
   if (page) url.searchParams.set('page', page);
   window.history[mode === 'replace' ? 'replaceState' : 'pushState'](null, '', url);
 }
+
+/** Navigates to a collision-free workspace context while preserving browser Back. */
+export function navigateToQueryState(
+  parameters: Readonly<Record<string, string | null | undefined>>,
+): void {
+  const url = new URL(window.location.href);
+  url.search = '';
+  for (const [name, value] of Object.entries(parameters)) {
+    if (value) url.searchParams.set(name, value);
+  }
+  window.history.pushState(null, '', url);
+}
