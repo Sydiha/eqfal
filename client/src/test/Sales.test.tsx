@@ -1,5 +1,5 @@
-import{fireEvent,render,screen,waitFor,within}from'@testing-library/react';
-import{beforeEach,describe,expect,it,vi}from'vitest';
+import{act,fireEvent,render,screen,waitFor,within}from'@testing-library/react';
+import{afterEach,beforeEach,describe,expect,it,vi}from'vitest';
 import{Sales}from'../components/Sales';
 import i18n from'../i18n';
 
@@ -9,12 +9,13 @@ const mockSales=(sales:object[])=>vi.stubGlobal('fetch',vi.fn().mockResolvedValu
 const summaryRow=(reference:string|HTMLElement)=>(typeof reference==='string'?screen.getByText(reference):reference).closest('tr')!;
 
 describe('Sales workspace',()=>{
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ beforeEach(async()=>{vi.restoreAllMocks();window.history.replaceState(null,'','/?page=sales');await i18n.changeLanguage('en')})
+ afterEach(()=>window.history.replaceState(null,'','/'));
 
  it('keeps a cancelled receivable historical, including settlement history, without replacement creation',async()=>{
   mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);
   const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getByText('—')).toBeInTheDocument();
-  fireEvent.click(row);expect(screen.getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
+  fireEvent.click(row);expect(within(screen.getByRole('region',{name:'Sale details'})).getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
  });
 
  it('opens and closes inline details by click and exposes selection and expansion state',async()=>{
@@ -59,6 +60,30 @@ describe('Sales workspace',()=>{
  });
 
  it('renders required Arabic labels and localized Sales dates',async()=>{
-  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'التحصيل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(screen.getByText('حالة التحقق')).toBeInTheDocument();expect(screen.getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'التحصيل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(within(screen.getByRole('region',{name:'تفاصيل البيع'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('region',{name:'تفاصيل البيع'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
  });
+ it('restores validated URL filters, applies inclusive dates and all loaded relationship fields',async()=>{
+  const open={...base,id:'d3',reference_number:'OPEN',document_date:'2026-08-02',receivable_cancelled:false,receivable_relationship:'not_created' as const,financial_state:'open' as const,verification_status:'unconfirmed',status:'uploaded'};
+  window.history.replaceState(null,'','/?page=sales&salesSearch=inv&salesCustomer=c1&salesFinancial=partial&salesReview=approved&salesFrom=2026-08-01&salesTo=2026-08-15&salesReceivable=linked_active&salesVerification=confirmed&purchaseType=expense');
+  mockSales([base,active,open]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByRole('searchbox',{name:'Search sales'})).toHaveValue('inv');expect(screen.getByLabelText('Customer')).toHaveValue('c1');expect(screen.getByLabelText('Financial state')).toHaveValue('partial');expect(screen.getByLabelText('Document review state')).toHaveValue('approved');expect(screen.getByLabelText('From document date')).toHaveValue('2026-08-01');expect(screen.getByLabelText('To document date')).toHaveValue('2026-08-15');expect(screen.getByLabelText('Receivable relationship')).toHaveValue('linked_active');expect(screen.getByLabelText('Verification status')).toHaveValue('confirmed');expect(screen.getByText('INV-2')).toBeInTheDocument();expect(screen.queryByText('INV-1')).not.toBeInTheDocument();expect(window.location.search).toContain('purchaseType=expense');
+ });
+
+ it('supports every discovery control, combined zero results, and clear preserves page and unrelated state',async()=>{
+  const unlinked={...base,id:'d3',reference_number:'NOTE-3',customer_name:'Other',counterparty_id:'c2',document_date:null,status:'uploaded',receivable_relationship:'not_created' as const,verification_status:'unconfirmed',financial_state:'open' as const};
+  window.history.replaceState(null,'','/?page=sales&safe=keep');mockSales([base,active,unlinked]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);await screen.findByText('INV-1');
+  fireEvent.change(screen.getByLabelText('Customer'),{target:{value:'c2'}});expect(screen.getByText('NOTE-3')).toBeInTheDocument();fireEvent.change(screen.getByLabelText('Financial state'),{target:{value:'partial'}});expect(screen.getByText('0 sales')).toBeInTheDocument();expect(screen.getByText('No sales match the current filters.').closest('[data-state]')).toHaveAttribute('data-state','no-results');
+  fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.change(screen.getByLabelText('Document review state'),{target:{value:'uploaded'}});fireEvent.change(screen.getByLabelText('Receivable relationship'),{target:{value:'not_created'}});fireEvent.change(screen.getByLabelText('Verification status'),{target:{value:'unconfirmed'}});expect(screen.getByText('NOTE-3')).toBeInTheDocument();fireEvent.change(screen.getByLabelText('From document date'),{target:{value:'2026-08-01'}});expect(screen.getByText('0 sales')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));expect(window.location.search).toBe('?page=sales&safe=keep');
+ });
+
+ it('ignores invalid URL values and unknown customers, restores popstate, and isolates purchase parameters',async()=>{
+  window.history.replaceState(null,'','/?page=sales&salesCustomer=missing&salesFinancial=bad&salesReview=bad&salesFrom=2026-02-31&salesReceivable=bad&salesVerification=bad&purchaseSearch=INV-2');mockSales([base,active]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect(await screen.findByText('2 sales')).toBeInTheDocument();await waitFor(()=>expect(screen.getByLabelText('Customer')).toHaveValue(''));expect(screen.getByLabelText('Financial state')).toHaveValue('');expect(screen.getByLabelText('From document date')).toHaveValue('');expect(screen.getByRole('searchbox',{name:'Search sales'})).toHaveValue('');
+  act(()=>{window.history.pushState(null,'','/?page=sales&salesSearch=INV-2');window.dispatchEvent(new PopStateEvent('popstate'))});expect(screen.getByRole('searchbox',{name:'Search sales'})).toHaveValue('INV-2');expect(screen.queryByText('INV-1')).not.toBeInTheDocument();
+ });
+
+ it('distinguishes a genuinely empty sales dataset from filtered no-results and keeps entry actions compatible',async()=>{
+  mockSales([]);const create=vi.fn();const {unmount}=render(<Sales canView canManage canCreate onCreateDocument={create} onUnauthorized={vi.fn()}/>);expect((await screen.findByText('No sales yet.')).closest('[data-state]')).toHaveAttribute('data-state','empty');fireEvent.click(screen.getAllByRole('button',{name:/Sale/})[0]);expect(create).toHaveBeenCalled();unmount();
+  const edit=vi.fn();mockSales([{...base,status:'uploaded'}]);render(<Sales canView canManage canEdit onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.change(await screen.findByRole('searchbox',{name:'Search sales'}),{target:{value:'missing'}});expect(screen.getByText('0 sales')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
+ });
+
 });

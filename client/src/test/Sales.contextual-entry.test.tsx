@@ -22,7 +22,7 @@ describe('Sales contextual entry point',()=>{
  it('hides sale entry when document upload capability is absent',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({sales:[]}))));
   render(<Sales canView canManage canCreate={false} onCreateDocument={vi.fn()} onUnauthorized={vi.fn()}/>);
-  await screen.findByText('No sales match the current filters.');
+  await screen.findByText('No sales yet.');
   expect(screen.queryByRole('button',{name:'+ Sale'})).not.toBeInTheDocument();
  });
 
