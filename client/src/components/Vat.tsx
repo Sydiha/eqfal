@@ -4,6 +4,7 @@ import { formatDisplayDate } from '../date-format';
 import { Dialog } from './Dialog';
 import { DataWorkspace, DetailPane, Metric, MetricStrip, PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState, WorkspaceToolbar } from './SharedUI';
 import { VatReportActions } from './VatReportActions';
+import { readQueryParameter } from '../navigation/queryState';
 
 type Blockers={unapproved_documents:number;missing_reviews:number;pending_reviews:number;total:number};
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Blockers};
@@ -15,7 +16,7 @@ async function api(url:string,options:RequestInit,onUnauthorized:()=>void){const
 export function Vat({canView,canReview,canClose,canReopen,onUnauthorized}:Props){
  const {t,i18n}=useTranslation();const [periods,setPeriods]=useState<Period[]>([]);const [years,setYears]=useState<FiscalYear[]>([]);const [selectedId,setSelectedId]=useState<string|null>(null);const [documents,setDocuments]=useState<VatDocument[]>([]);const [selectedDocument,setSelectedDocument]=useState<VatDocument|null>(null);const [search,setSearch]=useState('');const [reviewFilter,setReviewFilter]=useState('');const [typeFilter,setTypeFilter]=useState('');const [treatmentFilter,setTreatmentFilter]=useState('');const [loading,setLoading]=useState(canView);const [error,setError]=useState(false);const [creating,setCreating]=useState(false);const [editing,setEditing]=useState<VatDocument|null>(null);const [reopen,setReopen]=useState<Period|null>(null);const [saving,setSaving]=useState(false);
  const selected=periods.find(p=>p.id===selectedId)??null;
- const loadPeriods=async()=>{setLoading(true);setError(false);try{const [p,y]=await Promise.all([api('/api/vat-periods',{},onUnauthorized),api('/api/fiscal-years',{},onUnauthorized)]);const next=((await p.json()) as {periods:Period[]}).periods;setPeriods(next);setYears(((await y.json()) as {fiscalYears:FiscalYear[]}).fiscalYears);setSelectedId(current=>current&&next.some(x=>x.id===current)?current:(next[0]?.id??null));}catch{setError(true)}finally{setLoading(false)}};
+ const loadPeriods=async()=>{setLoading(true);setError(false);try{const [p,y]=await Promise.all([api('/api/vat-periods',{},onUnauthorized),api('/api/fiscal-years',{},onUnauthorized)]);const next=((await p.json()) as {periods:Period[]}).periods;const from=readQueryParameter('vatFrom'),to=readQueryParameter('vatTo');const requested=from&&to?next.find(period=>period.period_start===from&&period.period_end===to):null;setPeriods(next);setYears(((await y.json()) as {fiscalYears:FiscalYear[]}).fiscalYears);setSelectedId(current=>requested?.id??(current&&next.some(x=>x.id===current)?current:(next[0]?.id??null)));}catch{setError(true)}finally{setLoading(false)}};
  const loadDetail=async(id:string)=>{try{const response=await api(`/api/vat-periods/${id}`,{},onUnauthorized);const data=await response.json() as {period:Period;documents:VatDocument[]};setPeriods(current=>current.map(p=>p.id===id?data.period:p));setDocuments(data.documents);setSelectedDocument(current=>current?data.documents.find(document=>document.id===current.id)??null:null);}catch{setError(true)}};
  useEffect(()=>{if(canView)void loadPeriods();// eslint-disable-next-line react-hooks/exhaustive-deps
  },[canView]);

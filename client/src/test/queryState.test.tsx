@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { WorkspaceState, WorkspaceToolbar } from '../components/SharedUI';
 import { AuthProvider } from '../context/AuthContext';
-import { clearContextualQueryState, clearQueryParameters, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
+import { clearContextualQueryState, clearQueryParameters, navigateToQueryState, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 import i18n from '../i18n';
 
 describe('query state foundation', () => {
@@ -23,6 +23,12 @@ describe('query state foundation', () => {
     window.history.replaceState(null, '', '/?page=banks&section=transactions&reconciliation=unmatched');
     clearContextualQueryState();
     expect(window.location.search).toBe('?page=banks');
+  });
+
+  it('pushes a collision-free discovery destination and preserves the source history entry', () => {
+    window.history.replaceState(null, '', '/?page=monthlyClose&closeYear=fy&closePeriod=period');
+    navigateToQueryState({ page: 'banks', section: 'transactions', from: '2026-01-01', to: '2026-01-31' });
+    expect(window.location.search).toBe('?page=banks&section=transactions&from=2026-01-01&to=2026-01-31');
   });
 });
 
