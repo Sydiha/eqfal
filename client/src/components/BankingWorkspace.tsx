@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, Group, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Banking } from './Banking';
@@ -6,6 +6,7 @@ import { BankTransactionsView } from './BankTransactionsView';
 import { SettlementPanel } from './SettlementPanel';
 import { CustodyPanel } from './CustodyPanel';
 import './banking-workspace.css';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 
 type Props = {
   canView: boolean;
@@ -22,6 +23,8 @@ type Props = {
 
 type BankingSection = 'transactions' | 'import' | 'accounts' | 'settlements' | 'custody';
 type CoreSection = 'import' | 'accounts';
+const bankingSections = ['transactions', 'import', 'accounts', 'settlements', 'custody'] as const;
+const readSection = (): BankingSection => (readQueryParameter('section', { allowedValues: bankingSections }) as BankingSection | null) ?? 'transactions';
 
 const copy = {
   ar: {
@@ -53,8 +56,18 @@ const copy = {
 export function BankingWorkspace(props: Props) {
   const { i18n } = useTranslation();
   const s = i18n.language === 'ar' ? copy.ar : copy.en;
-  const [section, setSection] = useState<BankingSection>('transactions');
+  const [section, setSection] = useState<BankingSection>(readSection);
   const coreSection: CoreSection | null = section === 'import' || section === 'accounts' ? section : null;
+  useEffect(() => {
+    const restore = () => setSection(readSection());
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
+  const changeSection = (value: string | null) => {
+    if (!value || !bankingSections.includes(value as BankingSection)) return;
+    setSection(value as BankingSection);
+    writeQueryParameters({ section: value });
+  };
 
   return <Stack gap="lg" className="banking-workspace">
     <section className="banking-workspace__hero">
@@ -69,7 +82,7 @@ export function BankingWorkspace(props: Props) {
       </Group>
     </section>
 
-    <Tabs value={section} onChange={(value) => value && setSection(value as BankingSection)} variant="pills" className="banking-workspace__tabs">
+    <Tabs value={section} onChange={changeSection} variant="pills" className="banking-workspace__tabs">
       <Tabs.List grow>
         <Tabs.Tab value="transactions">{s.transactions}</Tabs.Tab>
         {props.canImport && <Tabs.Tab value="import">{s.import}</Tabs.Tab>}

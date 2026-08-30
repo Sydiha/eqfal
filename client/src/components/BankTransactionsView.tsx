@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
+import { clearQueryParameters, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
+import { WorkspaceState, WorkspaceToolbar } from './SharedUI';
 
 type ReconciliationStatus = 'unmatched' | 'matched' | 'reconciled';
 type Transaction = {
@@ -67,6 +69,7 @@ const local = {
     reference: 'المرجع البنكي', balance: 'الرصيد الجاري', details: 'التفاصيل', hideDetails: 'إخفاء التفاصيل',
     refresh: 'تحديث', empty: 'لا توجد حركات بنكية', error: 'تعذر تحميل الحركات البنكية',
     documentType: 'نوع المستند', counterparty: 'الطرف المقابل', total: 'المبلغ الإجمالي', obligation: 'الذمة المرتبطة', remaining: 'المبلغ المتبقي', noObligation: 'لا توجد',
+    toolbar: 'البحث وتصفية الحركات البنكية', searchTransactions: 'البحث في الحركات', searchPlaceholder: 'البيان أو المرجع أو المبلغ', reconciliation: 'حالة التسوية', allStatuses: 'كل الحالات', from: 'من تاريخ', to: 'إلى تاريخ', amountMin: 'الحد الأدنى للمبلغ', amountMax: 'الحد الأعلى للمبلغ', resultCount: (count: number) => `عدد النتائج: ${count}`, clearFilters: 'مسح عوامل التصفية', noResults: 'لا توجد حركات تطابق عوامل التصفية.',
   },
   en: {
     title: 'Bank transactions',
@@ -75,8 +78,24 @@ const local = {
     reference: 'Bank reference', balance: 'Running balance', details: 'Details', hideDetails: 'Hide details',
     refresh: 'Refresh', empty: 'No bank transactions', error: 'Unable to load bank transactions',
     documentType: 'Document type', counterparty: 'Counterparty', total: 'Total amount', obligation: 'Linked obligation', remaining: 'Remaining amount', noObligation: 'None',
+    toolbar: 'Search and filter bank transactions', searchTransactions: 'Search transactions', searchPlaceholder: 'Description, reference, or amount', reconciliation: 'Reconciliation status', allStatuses: 'All statuses', from: 'From date', to: 'To date', amountMin: 'Minimum amount', amountMax: 'Maximum amount', resultCount: (count: number) => `${count} results`, clearFilters: 'Clear filters', noResults: 'No transactions match the filters.',
   },
 };
+
+const reconciliationStatuses = ['unmatched', 'matched', 'reconciled'] as const;
+const discoveryParameters = ['search', 'reconciliation', 'from', 'to', 'amountMin', 'amountMax'] as const;
+const datePattern = /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/;
+type Filters = { search: string; reconciliation: string; from: string; to: string; amountMin: string; amountMax: string };
+const validDate = (value: string | null) => value && datePattern.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value ? value : '';
+const validAmount = (value: string | null) => value != null && value.trim() !== '' && Number.isFinite(Number(value)) ? value : '';
+const readFilters = (): Filters => ({
+  search: readQueryParameter('search') ?? '',
+  reconciliation: readQueryParameter('reconciliation', { allowedValues: reconciliationStatuses }) ?? '',
+  from: validDate(readQueryParameter('from')),
+  to: validDate(readQueryParameter('to')),
+  amountMin: validAmount(readQueryParameter('amountMin')),
+  amountMax: validAmount(readQueryParameter('amountMax')),
+});
 
 export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
@@ -91,6 +110,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [matchNote, setMatchNote] = useState('');
   const [matchBusy, setMatchBusy] = useState(false);
+  const [filters, setFilters] = useState<Filters>(readFilters);
 
   const counts = useMemo(() => transactions.reduce((acc, tx) => {
     acc[tx.reconciliation_status] += 1;
@@ -107,6 +127,36 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, [canView]);
+  useEffect(() => {
+    const restore = () => setFilters(readFilters());
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
+
+  const updateFilter = (name: keyof Filters, value: string) => {
+    setFilters(current => ({ ...current, [name]: value }));
+    writeQueryParameters({ [name]: value || null }, name === 'search' ? 'replace' : 'push');
+  };
+  const clearFilters = () => {
+    setFilters({ search: '', reconciliation: '', from: '', to: '', amountMin: '', amountMax: '' });
+    clearQueryParameters(discoveryParameters);
+  };
+  const filteredTransactions = useMemo(() => {
+    const needle = filters.search.trim().toLocaleLowerCase();
+    const minimum = validAmount(filters.amountMin) ? Number(filters.amountMin) : null;
+    const maximum = validAmount(filters.amountMax) ? Number(filters.amountMax) : null;
+    return transactions.map((transaction, index) => ({ transaction, index })).filter(({ transaction }) => {
+      const amount = Number(transaction.amount);
+      const date = transaction.transaction_date.slice(0, 10);
+      const searchable = [transaction.description, transaction.bank_reference, transaction.amount, formatMoney(transaction.amount, transaction.currency_code), transaction.running_balance];
+      return (!needle || searchable.some(value => value?.toLocaleLowerCase().includes(needle)))
+        && (!filters.reconciliation || transaction.reconciliation_status === filters.reconciliation)
+        && (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to)
+        && (minimum == null || (Number.isFinite(amount) && amount >= minimum))
+        && (maximum == null || (Number.isFinite(amount) && amount <= maximum));
+    }).sort((a, b) => b.transaction.transaction_date.localeCompare(a.transaction.transaction_date) || a.index - b.index).map(({ transaction }) => transaction);
+  }, [filters, transactions]);
+  const filtersActive = Object.values(filters).some(Boolean);
 
   const loadCandidates = async (transaction: Transaction, search = '') => {
     setMatchTransaction(transaction); setMatchBusy(true); setError('');
@@ -158,15 +208,18 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
         <Badge variant="light" color="green">{t('banks.reconciliation.reconciled')}: {counts.reconciled}</Badge>
       </Group>
 
+      {!loading && <WorkspaceToolbar ariaLabel={s.toolbar} search={<label>{s.searchTransactions}<input type="search" value={filters.search} placeholder={s.searchPlaceholder} onChange={event => updateFilter('search', event.target.value)}/></label>} filters={<><label>{s.reconciliation}<select value={filters.reconciliation} onChange={event => updateFilter('reconciliation', event.target.value)}><option value="">{s.allStatuses}</option>{reconciliationStatuses.map(status => <option key={status} value={status}>{t(`banks.reconciliation.${status}`)}</option>)}</select></label><label>{s.from}<input type="date" value={filters.from} onChange={event => updateFilter('from', event.target.value)}/></label><label>{s.to}<input type="date" value={filters.to} onChange={event => updateFilter('to', event.target.value)}/></label><label>{s.amountMin}<input type="number" step="any" value={filters.amountMin} onChange={event => updateFilter('amountMin', event.target.value)}/></label><label>{s.amountMax}<input type="number" step="any" value={filters.amountMax} onChange={event => updateFilter('amountMax', event.target.value)}/></label></>} resultCount={s.resultCount(filteredTransactions.length)} clearAction={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}/>}
+
       {error && <Alert color="red" role="alert">{error}</Alert>}
       {loading && transactions.length === 0 && <Group justify="center" py="xl"><Loader size="sm"/></Group>}
-      {!loading && transactions.length === 0 && <Text c="dimmed">{s.empty}</Text>}
+      {!loading && transactions.length === 0 && <WorkspaceState kind="empty">{s.empty}</WorkspaceState>}
+      {!loading && transactions.length > 0 && filteredTransactions.length === 0 && <WorkspaceState kind="no-results" action={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}>{s.noResults}</WorkspaceState>}
 
-      {transactions.length > 0 && <div className="bank-transactions-list">
+      {filteredTransactions.length > 0 && <div className="bank-transactions-list">
         <div className="bank-transaction-head" aria-hidden="true">
           <span>{s.date}</span><span>{s.descriptionLabel}</span><span>{s.amount}</span><span>{s.status}</span><span>{s.action}</span>
         </div>
-        {transactions.map((tx) => {
+        {filteredTransactions.map((tx) => {
           const expanded = expandedId === tx.id;
           return <article className={`bank-transaction-row bank-transaction-row--${tx.reconciliation_status}`} key={tx.id}>
             <div className="bank-transaction-main">
