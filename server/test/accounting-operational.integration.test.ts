@@ -25,6 +25,7 @@ class AccountingPool{
   if(sql.includes("SELECT id FROM obligations"))return values[0]===company?{rows:[{id:sourceId}],rowCount:1}:{rows:[],rowCount:0};
   if(sql.includes('SELECT id FROM document_settlements')||sql.includes('SELECT id FROM obligation_settlements')||sql.includes('SELECT a.id FROM custody_document_allocations')||sql.includes('SELECT id FROM bank_transaction_matches'))return{rows:[],rowCount:0};
   if(sql.includes("FROM obligations o JOIN counterparties"))return values[0]===sourceId&&values[1]===company?{rows:[this.source],rowCount:1}:{rows:[],rowCount:0};
+  if(sql.includes('SELECT d.id document_id')&&sql.includes('FROM obligations o'))return{rows:[],rowCount:0};
   if(sql.includes('SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type=$2 AND source_id=$3')){
    const found=this.journal?.company_id===values[0]&&this.journal.source_type===values[1]&&this.journal.source_id===values[2];
    return{rows:found?[{one:1}]:[],rowCount:found?1:0};
