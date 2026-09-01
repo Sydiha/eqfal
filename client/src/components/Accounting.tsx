@@ -125,6 +125,16 @@ interface Props {
   canPost: boolean;
   onUnauthorized: () => void;
 }
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | null,
+  ) {
+    super(String(status));
+  }
+}
+const VAT_RECOGNITION_ERROR =
+  "لا يمكن ترحيل القيد. ضريبة القيمة المضافة المعتمدة للمستند لم يتم إثباتها بشكل صحيح في القيد. / The journal cannot be posted. The reviewed VAT is not correctly recognized in the journal.";
 async function api(
   url: string,
   options: RequestInit,
@@ -132,7 +142,16 @@ async function api(
 ) {
   const response = await fetch(url, { credentials: "same-origin", ...options });
   if (response.status === 401) onUnauthorized();
-  if (!response.ok) throw new Error(String(response.status));
+  if (!response.ok) {
+    let code: string | null = null;
+    try {
+      const payload = (await response.clone().json()) as { code?: unknown };
+      if (typeof payload.code === "string") code = payload.code;
+    } catch {
+      // Preserve the existing generic error behavior for non-JSON responses.
+    }
+    throw new ApiError(response.status, code);
+  }
   return response;
 }
 const json = (method: string, body: unknown): RequestInit => ({
@@ -168,6 +187,7 @@ export function Accounting({
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
+  const [vatRecognitionError, setVatRecognitionError] = useState(false);
   const [refreshError, setRefreshError] = useState<
     "workspace" | "journal" | null
   >(null);
@@ -324,10 +344,12 @@ export function Accounting({
     );
   const mutationStarted = () => {
     setSaved(false);
+    setVatRecognitionError(false);
     setRefreshError(null);
   };
   const mutationSucceeded = () => {
     setError(false);
+    setVatRecognitionError(false);
     setSaved(true);
   };
   const createAccount = async (e: FormEvent<HTMLFormElement>) => {
@@ -488,8 +510,15 @@ export function Accounting({
       setSelected(null);
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (postError) {
+      if (
+        postError instanceof ApiError &&
+        postError.code === "VAT_RECOGNITION_INCOMPLETE"
+      ) {
+        setVatRecognitionError(true);
+      } else {
+        setError(true);
+      }
     } finally {
       setSaving(false);
     }
@@ -543,6 +572,9 @@ export function Accounting({
           </button>
         ))}
       </div>
+      {vatRecognitionError && (
+        <WorkspaceState tone="error">{VAT_RECOGNITION_ERROR}</WorkspaceState>
+      )}
       {error && (
         <WorkspaceState
           tone="error"
@@ -571,7 +603,7 @@ export function Accounting({
           {t("accounting.refreshError")}
         </WorkspaceState>
       )}
-      {saved && !error && (
+      {saved && !error && !vatRecognitionError && (
         <WorkspaceState>{t("accounting.saved")}</WorkspaceState>
       )}
       {loading && <WorkspaceState>{t("accounting.loading")}</WorkspaceState>}
