@@ -31,7 +31,7 @@ describe('Accounting VAT posting feedback',()=>{
   render(<Accounting canView canManageChart={false} canManageJournals canPost onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Journals'}));
   fireEvent.click(await screen.findByRole('button',{name:/VAT purchase recognition/}));
-  const post=await screen.findByRole('button',{name:'Post'});
+  const post=await screen.findByRole('button',{name:'Post journal'});
   expect(post).toBeEnabled();
   fireEvent.click(post);
   expect(await screen.findByText(/لا يمكن ترحيل القيد/)).toHaveTextContent('The journal cannot be posted. The reviewed VAT is not correctly recognized in the journal.');
