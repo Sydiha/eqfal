@@ -24,7 +24,10 @@ async function requirementForSource(
   sourceId: string,
   client: QueryRunner,
 ): Promise<VatRequirement | null> {
-  if (sourceType !== 'obligation' && sourceType !== 'custody_allocation') return null;
+  // Obligation recognition has a one-to-one gross document amount, so its VAT
+  // amount can be derived safely. Split custody allocations can span one
+  // document, so assigning the full document VAT to one allocation would be unsafe.
+  if (sourceType !== 'obligation') return null;
 
   const { rows } = await client.query<{
     document_id: string;
@@ -32,17 +35,14 @@ async function requirementForSource(
     review_status: 'pending' | 'reviewed' | null;
     vat_amount: string | null;
   }>(
-    `WITH source_document AS (
-      SELECT document_id FROM obligations WHERE $3='obligation' AND company_id=$1 AND id=$2 AND source_type='document'
-      UNION ALL
-      SELECT document_id FROM custody_document_allocations WHERE $3='custody_allocation' AND company_id=$1 AND id=$2
-    )
-    SELECT d.id document_id,d.document_type,r.review_status,r.vat_amount::numeric(18,2)::text vat_amount
-    FROM source_document s
-    JOIN documents d ON d.id=s.document_id AND d.company_id=$1 AND d.status='approved' AND d.document_type IN ('sale','purchase','expense')
-    LEFT JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
-    LIMIT 1`,
-    [companyId, sourceId, sourceType],
+    `SELECT d.id document_id,d.document_type,r.review_status,r.vat_amount::numeric(18,2)::text vat_amount
+     FROM obligations o
+     JOIN documents d ON d.id=o.document_id AND d.company_id=o.company_id
+       AND d.status='approved' AND d.document_type IN ('sale','purchase','expense')
+     LEFT JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
+     WHERE o.company_id=$1 AND o.id=$2 AND o.source_type='document'
+     LIMIT 1`,
+    [companyId, sourceId],
   );
   const row = rows[0];
   if (!row || row.review_status !== 'reviewed' || row.vat_amount === null || Number(row.vat_amount) <= 0) return null;
