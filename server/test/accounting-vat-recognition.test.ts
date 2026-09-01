@@ -14,7 +14,7 @@ function clientFor(row:RequirementRow|null,candidates:string[]=[line],reserved=f
  const updates:unknown[][]=[];
  const query=vi.fn(async(sql:string,args:unknown[]=[])=>{
   const normalized=sql.replace(/\s+/g,' ');
-  if(normalized.startsWith('WITH source_document AS'))return{rows:row?[row]:[],rowCount:row?1:0};
+  if(normalized.startsWith('SELECT d.id document_id'))return{rows:row?[row]:[],rowCount:row?1:0};
   if(normalized.startsWith('SELECT l.id FROM journal_lines'))return{rows:candidates.map(id=>({id})),rowCount:candidates.length};
   if(normalized.startsWith('SELECT 1 FROM journal_lines'))return{rows:reserved?[{one:1}]:[],rowCount:reserved?1:0};
   if(normalized.startsWith('UPDATE journal_lines SET memo=')){updates.push(args);return{rows:[],rowCount:1};}
@@ -25,12 +25,12 @@ function clientFor(row:RequirementRow|null,candidates:string[]=[line],reserved=f
 
 describe('VAT recognition journal semantics',()=>{
  it.each([
-  ['purchase','obligation','VAT_INPUT','asset','150.00','0.00'],
-  ['expense','custody_allocation','VAT_INPUT','asset','150.00','0.00'],
-  ['sale','obligation','VAT_OUTPUT','liability','0.00','150.00'],
- ] as const)('auto-tags reviewed %s VAT when exactly one safe candidate exists',async(documentType,sourceType,memo,accountType,debit,credit)=>{
+  ['purchase','VAT_INPUT','asset','150.00','0.00'],
+  ['expense','VAT_INPUT','asset','150.00','0.00'],
+  ['sale','VAT_OUTPUT','liability','0.00','150.00'],
+ ] as const)('auto-tags reviewed %s obligation VAT when exactly one safe candidate exists',async(documentType,memo,accountType,debit,credit)=>{
   const built=clientFor({document_id:document,document_type:documentType,review_status:'reviewed',vat_amount:'150.00'});
-  await expect(enforceVatRecognition(company,journal,sourceType,source,built.client)).resolves.toEqual({documentId:document,memo,accountType,debit,credit});
+  await expect(enforceVatRecognition(company,journal,'obligation',source,built.client)).resolves.toEqual({documentId:document,memo,accountType,debit,credit});
   expect(built.query.mock.calls.find(([sql])=>String(sql).includes('SELECT l.id'))?.[1]).toEqual([company,journal,accountType,debit,credit]);
   expect(built.updates).toEqual([[line,company,memo]]);
  });
@@ -56,9 +56,11 @@ describe('VAT recognition journal semantics',()=>{
   expect(built.updates).toEqual([]);
  });
 
- it('does not inspect settlement or funding sources as recognition journals',async()=>{
-  const built=clientFor({document_id:document,document_type:'purchase',review_status:'reviewed',vat_amount:'150.00'});
-  await expect(enforceVatRecognition(company,journal,'obligation_settlement',source,built.client)).resolves.toBeNull();
-  expect(built.query).not.toHaveBeenCalled();
- });
+ it.each(['custody_allocation','obligation_settlement','document_settlement','custody_funding'])(
+  'does not guess VAT allocation for %s sources',async(sourceType)=>{
+   const built=clientFor({document_id:document,document_type:'purchase',review_status:'reviewed',vat_amount:'150.00'});
+   await expect(enforceVatRecognition(company,journal,sourceType,source,built.client)).resolves.toBeNull();
+   expect(built.query).not.toHaveBeenCalled();
+  },
+ );
 });
