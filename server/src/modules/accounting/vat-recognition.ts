@@ -33,16 +33,16 @@ async function requirementForSource(
     vat_amount: string | null;
   }>(
     `WITH source_document AS (
-      SELECT document_id FROM obligations WHERE company_id=$1 AND id=$2 AND source_type='document'
+      SELECT document_id FROM obligations WHERE $3='obligation' AND company_id=$1 AND id=$2 AND source_type='document'
       UNION ALL
-      SELECT document_id FROM custody_document_allocations WHERE company_id=$1 AND id=$2
+      SELECT document_id FROM custody_document_allocations WHERE $3='custody_allocation' AND company_id=$1 AND id=$2
     )
     SELECT d.id document_id,d.document_type,r.review_status,r.vat_amount::numeric(18,2)::text vat_amount
     FROM source_document s
     JOIN documents d ON d.id=s.document_id AND d.company_id=$1 AND d.status='approved' AND d.document_type IN ('sale','purchase','expense')
     LEFT JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
     LIMIT 1`,
-    [companyId, sourceId],
+    [companyId, sourceId, sourceType],
   );
   const row = rows[0];
   if (!row || row.review_status !== 'reviewed' || row.vat_amount === null || Number(row.vat_amount) <= 0) return null;
