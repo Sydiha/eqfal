@@ -40,6 +40,8 @@ type Props = {
   onUnauthorized: () => void;
 };
 
+const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
+
 export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('fiscal_year.view');
@@ -153,9 +155,11 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
     : '';
 
   const periodRange = selected ? (
-    <bdi dir="ltr">
-      {formatDisplayDate(selected.period_start, i18n.language)} — {formatDisplayDate(selected.period_end, i18n.language)}
-    </bdi>
+    <span dir="ltr" style={{ unicodeBidi: 'isolate', whiteSpace: 'nowrap' }}>
+      <span>{stripDirectionalMarks(formatDisplayDate(selected.period_start, i18n.language))}</span>
+      <span aria-hidden="true"> — </span>
+      <span>{stripDirectionalMarks(formatDisplayDate(selected.period_end, i18n.language))}</span>
+    </span>
   ) : null;
 
   return (
