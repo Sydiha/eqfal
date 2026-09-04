@@ -62,6 +62,7 @@ export function Documents({canView,canUpload,canReview,canApprove,canManageCount
  const closeUpload=()=>{setUploadOpen(false);setFile(null);if(entryDocumentType)onEntryCancel?.()};
  if(!canView&&!canUpload&&!canReview&&!canApprove)return null;
  return <WorkspacePage size="operational" className="documents-page documents-v21" labelledBy="documents-title">
+  <style>{`.documents-v21.shared-workspace-page--operational{max-width:none}.documents-v21__workspace.has-detail{grid-template-columns:minmax(300px,.72fr) minmax(0,1.28fr)}@media(max-width:48em){.documents-v21__workspace.has-detail{grid-template-columns:1fr}}`}</style>
   <PageHeader titleId="documents-title" eyebrow={t('documents.workspace')} title={t('documents.title')} description={t('documents.description')} action={canUpload&&!contextualEdit?<button className="primary" onClick={()=>setUploadOpen(true)}>{t('documents.upload')}</button>:undefined}/>
   {hasEntryContext&&<WorkspaceState action={onEntryCancel&&returnLabel?<button onClick={onEntryCancel}>{returnLabel}</button>:undefined}>{entryLabel?`${entryLabel} · `:''}{t('documents.intake.title')}</WorkspaceState>}
   {error&&<WorkspaceState tone="error" action={canView?<button onClick={()=>void load(entryDocumentId)}>{t('common.retry')}</button>:undefined}>{error}</WorkspaceState>}
