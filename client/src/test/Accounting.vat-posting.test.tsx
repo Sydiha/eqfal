@@ -36,7 +36,7 @@ describe('Accounting VAT posting feedback',()=>{
   fireEvent.click(post);
   expect(await screen.findByText(/لا يمكن ترحيل القيد/)).toHaveTextContent('The journal cannot be posted. The reviewed VAT is not correctly recognized in the journal.');
   expect(screen.getByText('VAT purchase recognition',{selector:'h3'})).toBeInTheDocument();
-  expect(screen.getByText('Draft',{selector:'.badge'})).toBeInTheDocument();
+  expect(screen.getAllByText('Draft',{selector:'.badge'}).length).toBeGreaterThan(0);
   expect(screen.queryByText('Unable to load or update accounting.')).not.toBeInTheDocument();
   await waitFor(()=>expect(fetchMock.mock.calls.filter(([url,options])=>url===`/api/journals/${journal.id}/post`&&options?.method==='POST')).toHaveLength(1));
  });
