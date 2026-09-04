@@ -76,10 +76,11 @@ describe('Home v2.1', () => {
     ]);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/monthly-close-periods', { credentials: 'same-origin' }));
-    const table = await screen.findByRole('table');
-    expect(within(table).getByText('2 blocking items')).toBeInTheDocument();
-    expect(within(table).getByText('1 blocking items')).toBeInTheDocument();
-    expect(within(table).getAllByText('Ready to close')).toHaveLength(3);
+    expect(await screen.findByRole('heading', { name: 'Close blockers' })).toBeInTheDocument();
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('Blockers: 2')).toBeInTheDocument();
+    expect(within(table).getByText('Blockers: 1')).toBeInTheDocument();
+    expect(within(table).getAllByText('No blockers')).toHaveLength(3);
 
     within(table).getByRole('button', { name: 'Documents' }).click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('documents', {
@@ -93,7 +94,7 @@ describe('Home v2.1', () => {
     renderHome(['fiscal_year.view']);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load or update monthly close.');
-    expect(screen.queryByText('0 blocking items')).not.toBeInTheDocument();
+    expect(screen.queryByText('Blockers: 0')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });
