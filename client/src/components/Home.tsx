@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCompany } from '../context/CompanyContext';
 import { formatDisplayDate } from '../date-format';
 
 type HomePage =
@@ -43,11 +42,34 @@ type Props = {
 
 export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
-  const { activeCompany } = useCompany();
   const canViewClose = capabilities.includes('fiscal_year.view');
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
+  const isArabic = i18n.language.startsWith('ar');
+  const homeLabels = isArabic
+    ? {
+        closeBlockers: 'معوقات الإقفال',
+        area: 'المجال',
+        blockerState: 'حالة المعوقات',
+        noBlockers: 'لا توجد معوقات',
+        blockers: (count: number) => `المعوقات: ${count}`,
+        readiness: 'جاهزية الإقفال',
+        periodState: 'حالة الفترة',
+        workspaces: 'مساحات العمل',
+        workspacesDescription: 'انتقل مباشرة إلى مساحة العمل التي تحتاجها.',
+      }
+    : {
+        closeBlockers: 'Close blockers',
+        area: 'Area',
+        blockerState: 'Blocker status',
+        noBlockers: 'No blockers',
+        blockers: (count: number) => `Blockers: ${count}`,
+        readiness: 'Close readiness',
+        periodState: 'Period status',
+        workspaces: 'Workspaces',
+        workspacesDescription: 'Open the workspace you need directly.',
+      };
 
   const load = async () => {
     if (!canViewClose) return;
@@ -127,16 +149,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
     : [];
 
   const launcherCandidates: Array<{ key: HomePage; label: string; visible: boolean }> = [
-    {
-      key: 'sales',
-      label: t('nav.sales'),
-      visible: can('document.view') && can('obligation.view'),
-    },
-    {
-      key: 'purchases',
-      label: t('nav.purchases'),
-      visible: can('document.view') && can('obligation.view'),
-    },
+    { key: 'sales', label: t('nav.sales'), visible: can('document.view') && can('obligation.view') },
+    { key: 'purchases', label: t('nav.purchases'), visible: can('document.view') && can('obligation.view') },
     { key: 'documents', label: t('nav.documents'), visible: can('document.view') },
     { key: 'banks', label: t('nav.banks'), visible: can('bank.view') },
     { key: 'obligations', label: t('nav.obligations'), visible: can('obligation.view') },
@@ -149,16 +163,12 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
   const launchers = launcherCandidates.filter((item) => item.visible);
 
   return (
-    <section className="home-modern home-v21" aria-labelledby="home-title">
+    <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
       <header className="home-hero home-v21__hero">
         <div className="home-hero-copy">
           <p className="home-eyebrow">{t('home.workspace')}</p>
           <h1 id="home-title">{t('home.welcome')}</h1>
           <p className="home-intro">{t('home.context')}</p>
-        </div>
-        <div className="home-v21__company" aria-label={t('company.label')}>
-          <span>{t('company.label')}</span>
-          <strong>{activeCompany?.name ?? '—'}</strong>
         </div>
       </header>
 
@@ -183,9 +193,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 {t(`monthlyClose.${selected.status}`)}
               </span>
               <span className={`home-status-pill ${selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {selected.ready
-                  ? t('monthlyClose.ready')
-                  : t('monthlyClose.blocked', { count: selected.blockers.total })}
+                {selected.ready ? t('monthlyClose.ready') : homeLabels.blockers(selected.blockers.total)}
               </span>
             </>
           ) : (
@@ -195,25 +203,23 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       )}
 
       {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid">
+        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
           <section className="home-exceptions" aria-labelledby="home-exceptions-title">
             <div className="home-v21__section-heading">
               <div>
-                <p className="home-eyebrow">{t('home.workspace')}</p>
-                <h2 id="home-exceptions-title">{t('monthlyClose.title')}</h2>
+                <p className="home-eyebrow">{t('monthlyClose.title')}</p>
+                <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
               </div>
               <span className={`home-status-pill ${selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {selected.ready
-                  ? t('monthlyClose.ready')
-                  : t('monthlyClose.blocked', { count: selected.blockers.total })}
+                {selected.ready ? homeLabels.noBlockers : homeLabels.blockers(selected.blockers.total)}
               </span>
             </div>
             <div className="home-exceptions__table-wrap">
               <table className="home-exceptions__table">
                 <thead>
                   <tr>
-                    <th>{t('monthlyClose.title')}</th>
-                    <th>{t('documents.status')}</th>
+                    <th>{homeLabels.area}</th>
+                    <th>{homeLabels.blockerState}</th>
                     <th aria-label={t('accounting.action')} />
                   </tr>
                 </thead>
@@ -223,19 +229,12 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                       <td><strong>{item.label}</strong></td>
                       <td>
                         <span className={`home-exception-count ${item.count > 0 ? 'is-blocked' : 'is-clear'}`}>
-                          {item.count > 0
-                            ? t('monthlyClose.blocked', { count: item.count })
-                            : t('monthlyClose.ready')}
+                          {item.count > 0 ? homeLabels.blockers(item.count) : homeLabels.noBlockers}
                         </span>
                       </td>
                       <td>
                         {item.canOpen && (
-                          <button
-                            type="button"
-                            className="home-exception-open"
-                            aria-label={item.label}
-                            onClick={item.open}
-                          >
+                          <button type="button" className="home-exception-open" aria-label={item.label} onClick={item.open}>
                             <span aria-hidden="true">↗</span>
                           </button>
                         )}
@@ -247,18 +246,20 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             </div>
           </section>
 
-          <aside className="home-readiness" aria-labelledby="home-readiness-title">
-            <p className="home-eyebrow">{t('monthlyClose.title')}</p>
+          <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+            <p className="home-eyebrow">{homeLabels.readiness}</p>
             <h2 id="home-readiness-title">
-              {selected.ready
-                ? t('monthlyClose.ready')
-                : t('monthlyClose.blocked', { count: selected.blockers.total })}
+              {selected.ready ? t('monthlyClose.ready') : homeLabels.blockers(selected.blockers.total)}
             </h2>
             <p className="home-readiness__period">
               {formatDisplayDate(selected.period_start, i18n.language)} — {formatDisplayDate(selected.period_end, i18n.language)}
             </p>
-            <div className="home-readiness__summary">
-              <span>{t(`monthlyClose.${selected.status}`)}</span>
+            <div className="home-readiness__summary" style={{ marginTop: 0 }}>
+              <span>{homeLabels.periodState}</span>
+              <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
+            </div>
+            <div className="home-readiness__summary" style={{ marginTop: 0, borderTop: 0 }}>
+              <span>{homeLabels.closeBlockers}</span>
               <strong>{selected.blockers.total}</strong>
             </div>
             <button type="button" className="home-readiness__open" onClick={() => navigate('monthlyClose')}>
@@ -272,8 +273,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         <section className="home-launcher" aria-labelledby="home-launcher-title">
           <div className="home-v21__section-heading">
             <div>
-              <h2 id="home-launcher-title">{t('home.quickActions')}</h2>
-              <p>{t('home.quickActionsDescription')}</p>
+              <h2 id="home-launcher-title">{homeLabels.workspaces}</h2>
+              <p>{homeLabels.workspacesDescription}</p>
             </div>
           </div>
           <div className="home-launcher__grid">
