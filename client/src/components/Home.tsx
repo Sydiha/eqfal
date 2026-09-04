@@ -56,8 +56,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
-        workspaces: 'مساحات العمل',
-        workspacesDescription: 'انتقل مباشرة إلى مساحة العمل التي تحتاجها.',
       }
     : {
         closeBlockers: 'Close blockers',
@@ -67,8 +65,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: 'Close readiness',
         periodState: 'Period status',
-        workspaces: 'Workspaces',
-        workspacesDescription: 'Open the workspace you need directly.',
       };
 
   const load = async () => {
@@ -148,19 +144,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       ]
     : [];
 
-  const launcherCandidates: Array<{ key: HomePage; label: string; visible: boolean }> = [
-    { key: 'sales', label: t('nav.sales'), visible: can('document.view') && can('obligation.view') },
-    { key: 'purchases', label: t('nav.purchases'), visible: can('document.view') && can('obligation.view') },
-    { key: 'documents', label: t('nav.documents'), visible: can('document.view') },
-    { key: 'banks', label: t('nav.banks'), visible: can('bank.view') },
-    { key: 'obligations', label: t('nav.obligations'), visible: can('obligation.view') },
-    { key: 'accounting', label: t('nav.accounting'), visible: can('accounting.view') },
-    { key: 'vat', label: t('nav.vat'), visible: can('vat.view') },
-    { key: 'monthlyClose', label: t('nav.monthlyClose'), visible: canViewClose },
-    { key: 'fiscalYears', label: t('nav.fiscalYears'), visible: canViewClose },
-    { key: 'partners', label: t('nav.partners'), visible: can('partner.view') },
-  ];
-  const launchers = launcherCandidates.filter((item) => item.visible);
+  const closeSummary = selected
+    ? selected.status === 'closed'
+      ? homeLabels.noBlockers
+      : selected.ready
+        ? t('monthlyClose.ready')
+        : homeLabels.blockers(selected.blockers.total)
+    : '';
+
+  const periodRange = selected ? (
+    <bdi dir="ltr">
+      {formatDisplayDate(selected.period_start, i18n.language)} — {formatDisplayDate(selected.period_end, i18n.language)}
+    </bdi>
+  ) : null;
 
   return (
     <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
@@ -185,15 +181,13 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             <>
               <div className="home-status-strip__period">
                 <span>{t('monthlyClose.title')}</span>
-                <strong>
-                  {formatDisplayDate(selected.period_start, i18n.language)} — {formatDisplayDate(selected.period_end, i18n.language)}
-                </strong>
+                <strong>{periodRange}</strong>
               </div>
               <span className={`home-status-pill home-status-pill--${selected.status}`}>
                 {t(`monthlyClose.${selected.status}`)}
               </span>
-              <span className={`home-status-pill ${selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {selected.ready ? t('monthlyClose.ready') : homeLabels.blockers(selected.blockers.total)}
+              <span className={`home-status-pill ${selected.blockers.total === 0 ? 'is-ready' : 'is-blocked'}`}>
+                {closeSummary}
               </span>
             </>
           ) : (
@@ -210,8 +204,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 <p className="home-eyebrow">{t('monthlyClose.title')}</p>
                 <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
               </div>
-              <span className={`home-status-pill ${selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {selected.ready ? homeLabels.noBlockers : homeLabels.blockers(selected.blockers.total)}
+              <span className={`home-status-pill ${selected.blockers.total === 0 ? 'is-ready' : 'is-blocked'}`}>
+                {selected.blockers.total === 0 ? homeLabels.noBlockers : homeLabels.blockers(selected.blockers.total)}
               </span>
             </div>
             <div className="home-exceptions__table-wrap">
@@ -248,12 +242,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
 
           <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
             <p className="home-eyebrow">{homeLabels.readiness}</p>
-            <h2 id="home-readiness-title">
-              {selected.ready ? t('monthlyClose.ready') : homeLabels.blockers(selected.blockers.total)}
-            </h2>
-            <p className="home-readiness__period">
-              {formatDisplayDate(selected.period_start, i18n.language)} — {formatDisplayDate(selected.period_end, i18n.language)}
-            </p>
+            <h2 id="home-readiness-title">{closeSummary}</h2>
+            <p className="home-readiness__period">{periodRange}</p>
             <div className="home-readiness__summary" style={{ marginTop: 0 }}>
               <span>{homeLabels.periodState}</span>
               <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
@@ -267,25 +257,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             </button>
           </aside>
         </div>
-      )}
-
-      {launchers.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-launcher-title">
-          <div className="home-v21__section-heading">
-            <div>
-              <h2 id="home-launcher-title">{homeLabels.workspaces}</h2>
-              <p>{homeLabels.workspacesDescription}</p>
-            </div>
-          </div>
-          <div className="home-launcher__grid">
-            {launchers.map((item) => (
-              <button key={item.key} type="button" onClick={() => navigate(item.key)}>
-                <span>{item.label}</span>
-                <span aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </section>
       )}
     </section>
   );
