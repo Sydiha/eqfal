@@ -193,7 +193,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         </section>
       )}
 
-      {canViewClose && selected && (
+      {canViewClose && !loading && !error && selected && (
         <div className="home-v21__workspace-grid">
           <section className="home-exceptions" aria-labelledby="home-exceptions-title">
             <div className="home-v21__section-heading">
