@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatDisplayDate } from "../date-format";
 import {
   PageHeader,
   StatusBadge,
@@ -19,6 +20,7 @@ import {
   readQueryParameter,
   writeQueryParameters,
 } from "../navigation/queryState";
+import "./accounting-ux.css";
 
 type Account = AccountResponse;
 type Year = { id: string; name: string; start_date: string; end_date: string };
@@ -173,7 +175,8 @@ export function Accounting({
   canPost,
   onUnauthorized,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const ar = i18n.language.startsWith("ar");
   const [tab, setTabState] = useState<Tab>(() => readTab() ?? "accounts");
   const [journalFilters, setJournalFilters] = useState(readJournalFilters);
   const [sourceFilters, setSourceFilters] = useState(readSourceFilters);
@@ -187,12 +190,51 @@ export function Accounting({
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
+  const [operationError, setOperationError] = useState<"closed" | null>(null);
   const [vatRecognitionError, setVatRecognitionError] = useState(false);
   const [refreshError, setRefreshError] = useState<
     "workspace" | "journal" | null
   >(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const copy = ar
+    ? {
+        difference: "الفرق",
+        journalLines: "سطور القيد",
+        sourceDetails: "تفاصيل المصدر",
+        closedPeriod: "لا يمكن إنشاء أو ترحيل قيد داخل فترة محاسبية مقفلة.",
+      }
+    : {
+        difference: "Difference",
+        journalLines: "Journal lines",
+        sourceDetails: "Source details",
+        closedPeriod: "A journal cannot be created or posted inside a closed accounting period.",
+      };
+  const sourceLabels: Record<string, string> = ar
+    ? {
+        obligation: "ذمة",
+        document_settlement: "تسوية مستند",
+        obligation_settlement: "تسوية ذمة",
+        custody_allocation: "تخصيص عهدة",
+        custody_funding: "تمويل عهدة",
+        custody_return: "إعادة عهدة",
+      }
+    : {
+        obligation: "Obligation",
+        document_settlement: "Document settlement",
+        obligation_settlement: "Obligation settlement",
+        custody_allocation: "Custody allocation",
+        custody_funding: "Custody funding",
+        custody_return: "Custody return",
+      };
+  const formatMoney = (value: string | number) =>
+    new Intl.NumberFormat(ar ? "ar-SA" : "en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true,
+    }).format(Number(value));
+  const sourceDescription = (source: OperationalSource) =>
+    source.description.replace(/^[^:]+:\s*/, "") || source.description;
   const setTab = (value: Tab) => {
     setTabState(value);
     writeQueryParameters({ accountingTab: value });
@@ -288,6 +330,7 @@ export function Accounting({
       ),
     [lines],
   );
+  const difference = Math.abs(totals.debit - totals.credit);
   const visibleJournals = useMemo(() => {
     const search = journalFilters.search.trim().toLocaleLowerCase();
     return journals.filter(
@@ -338,19 +381,30 @@ export function Accounting({
   }, [sources, sourceFilters, sourceTypes]);
   if (!canView)
     return (
-      <section className="panel">
+      <section className="panel accounting-workspace">
         <WorkspaceState>{t("accounting.noAccess")}</WorkspaceState>
       </section>
     );
   const mutationStarted = () => {
     setSaved(false);
+    setError(false);
+    setOperationError(null);
     setVatRecognitionError(false);
     setRefreshError(null);
   };
   const mutationSucceeded = () => {
     setError(false);
+    setOperationError(null);
     setVatRecognitionError(false);
     setSaved(true);
+  };
+  const mutationFailed = (cause: unknown) => {
+    if (cause instanceof ApiError && cause.code === "ACCOUNTING_PERIOD_CLOSED") {
+      setError(false);
+      setOperationError("closed");
+      return;
+    }
+    setError(true);
   };
   const createAccount = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -372,8 +426,8 @@ export function Accounting({
       form.reset();
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (cause) {
+      mutationFailed(cause);
     } finally {
       setSaving(false);
     }
@@ -389,8 +443,8 @@ export function Accounting({
       );
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (cause) {
+      mutationFailed(cause);
     } finally {
       setSaving(false);
     }
@@ -417,8 +471,8 @@ export function Accounting({
       setLines([emptyLine(), emptyLine()]);
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (cause) {
+      mutationFailed(cause);
     } finally {
       setSaving(false);
     }
@@ -454,8 +508,8 @@ export function Accounting({
       setTab("journals");
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (cause) {
+      mutationFailed(cause);
     } finally {
       setSaving(false);
     }
@@ -491,8 +545,8 @@ export function Accounting({
       );
       mutationSucceeded();
       await openJournal(selected, true);
-    } catch {
-      setError(true);
+    } catch (cause) {
+      mutationFailed(cause);
     } finally {
       setSaving(false);
     }
@@ -517,7 +571,7 @@ export function Accounting({
       ) {
         setVatRecognitionError(true);
       } else {
-        setError(true);
+        mutationFailed(postError);
       }
     } finally {
       setSaving(false);
@@ -552,14 +606,14 @@ export function Accounting({
     }
   };
   return (
-    <section className="panel" aria-labelledby="accounting-title">
+    <section className="panel accounting-workspace" aria-labelledby="accounting-title">
       <PageHeader
         titleId="accounting-title"
         eyebrow={t("accounting.title")}
         title={t("accounting.title")}
         description={t("accounting.description")}
       />
-      <div className="workspace-tabs" role="tablist">
+      <div className="workspace-tabs accounting-tabs" role="tablist">
         {tabs.map((x) => (
           <button
             role="tab"
@@ -574,6 +628,9 @@ export function Accounting({
       </div>
       {vatRecognitionError && (
         <WorkspaceState tone="error">{VAT_RECOGNITION_ERROR}</WorkspaceState>
+      )}
+      {operationError === "closed" && (
+        <WorkspaceState tone="error">{copy.closedPeriod}</WorkspaceState>
       )}
       {error && (
         <WorkspaceState
@@ -603,10 +660,11 @@ export function Accounting({
           {t("accounting.refreshError")}
         </WorkspaceState>
       )}
-      {saved && !error && !vatRecognitionError && (
+      {saved && !error && !operationError && !vatRecognitionError && (
         <WorkspaceState>{t("accounting.saved")}</WorkspaceState>
       )}
       {loading && <WorkspaceState>{t("accounting.loading")}</WorkspaceState>}
+      <div className="accounting-content">
       {!loading && tab === "accounts" && (
         <>
           <h2>{t("accounting.accounts")}</h2>
@@ -654,7 +712,7 @@ export function Accounting({
               </button>
             </form>
           )}
-          <div className="table-wrap">
+          <div className="table-wrap accounting-financial-table">
             <table>
               <thead>
                 <tr>
@@ -667,7 +725,7 @@ export function Accounting({
               <tbody>
                 {accounts.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.code}</td>
+                    <td><span className="accounting-reference">{a.code}</span></td>
                     <td>{a.name}</td>
                     <td>{t(`accounting.types.${a.account_type}`)}</td>
                     <td>
@@ -729,7 +787,7 @@ export function Accounting({
                     </option>
                     {sourceTypes.map((type) => (
                       <option key={type} value={type}>
-                        {type}
+                        {sourceLabels[type] ?? type}
                       </option>
                     ))}
                   </select>
@@ -753,7 +811,9 @@ export function Accounting({
                 <label>
                   {t("accounting.discovery.amountMin")}
                   <input
+                    className="accounting-money-input"
                     type="number"
+                    inputMode="decimal"
                     step="any"
                     value={sourceFilters.amountMin}
                     onChange={(e) =>
@@ -764,7 +824,9 @@ export function Accounting({
                 <label>
                   {t("accounting.discovery.amountMax")}
                   <input
+                    className="accounting-money-input"
                     type="number"
+                    inputMode="decimal"
                     step="any"
                     value={sourceFilters.amountMax}
                     onChange={(e) =>
@@ -801,13 +863,12 @@ export function Accounting({
               {t("accounting.discovery.noSourceResults")}
             </WorkspaceState>
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap accounting-source-table">
               <table>
                 <thead>
                   <tr>
+                    <th>{copy.sourceDetails}</th>
                     <th>{t("accounting.date")}</th>
-                    <th>{t("accounting.sourceType")}</th>
-                    <th>{t("accounting.descriptionLabel")}</th>
                     <th>{t("accounting.amount")}</th>
                     <th>{t("accounting.reference")}</th>
                     <th>{t("accounting.action")}</th>
@@ -816,11 +877,13 @@ export function Accounting({
                 <tbody>
                   {visibleSources.map((source) => (
                     <tr key={`${source.source_type}-${source.source_id}`}>
-                      <td>{source.accounting_date}</td>
-                      <td>{source.source_type}</td>
-                      <td>{source.description}</td>
-                      <td>{source.amount}</td>
-                      <td>{source.reference ?? "—"}</td>
+                      <td className="accounting-source-main">
+                        <strong>{sourceLabels[source.source_type] ?? source.source_type}</strong>
+                        <span>{sourceDescription(source)}</span>
+                      </td>
+                      <td><span className="accounting-date">{formatDisplayDate(source.accounting_date, i18n.language)}</span></td>
+                      <td><span className="accounting-money">{formatMoney(source.amount)}</span></td>
+                      <td><span className="accounting-reference">{source.reference ?? "—"}</span></td>
                       <td>
                         {canManageJournals && (
                           <button
@@ -844,7 +907,7 @@ export function Accounting({
         <>
           <h2>{t("accounting.journals")}</h2>
           {canManageJournals && (
-            <form className="form-grid compact-form" onSubmit={createJournal}>
+            <form className="form-grid compact-form accounting-journal-create" onSubmit={createJournal}>
               <label>
                 {t("accounting.fiscalYear")}
                 <select name="fiscal_year_id" required>
@@ -859,13 +922,13 @@ export function Accounting({
                 {t("accounting.date")}
                 <input name="accounting_date" type="date" required />
               </label>
-              <label>
+              <label className="accounting-create-description">
                 {t("accounting.descriptionLabel")}
                 <input name="description" required maxLength={500} />
               </label>
               <label>
                 {t("accounting.reference")}
-                <input name="reference" maxLength={200} />
+                <input className="accounting-reference-input" name="reference" maxLength={200} />
               </label>
               <label>
                 {t("accounting.entryType")}
@@ -978,9 +1041,14 @@ export function Accounting({
           ) : (
             <div className="accounting-journal-list">
               {visibleJournals.map((j) => (
-                <button key={j.id} onClick={() => void openJournal(j)}>
-                  <span>
-                    {j.accounting_date} · {j.description}
+                <button key={j.id} onClick={() => void openJournal(j)} aria-pressed={selected?.id === j.id}>
+                  <span className="accounting-journal-summary">
+                    <strong>{j.description}</strong>
+                    <span>
+                      <span className="accounting-date">{formatDisplayDate(j.accounting_date, i18n.language)}</span>
+                      {" · "}
+                      <span className="accounting-reference">{j.reference ?? j.id.slice(0, 8)}</span>
+                    </span>
                   </span>
                   <StatusBadge status={j.status}>
                     {t(`accounting.${j.status}`)}
@@ -991,10 +1059,23 @@ export function Accounting({
           )}
           {selected && (
             <div className="accounting-editor">
-              <h3>{selected.description}</h3>
+              <div className="accounting-editor-heading">
+                <div>
+                  <span className="accounting-editor-eyebrow">{copy.journalLines}</span>
+                  <h3>{selected.description}</h3>
+                </div>
+                <StatusBadge status={selected.status}>{t(`accounting.${selected.status}`)}</StatusBadge>
+              </div>
+              <div className="journal-line-header" aria-hidden="true">
+                <span>{t("accounting.account")}</span>
+                <span>{t("accounting.debit")}</span>
+                <span>{t("accounting.credit")}</span>
+              </div>
+              <div className="journal-lines">
               {lines.map((l, i) => (
                 <div className="journal-line" key={i}>
                   <select
+                    aria-label={`${t("accounting.account")} ${i + 1}`}
                     value={l.account_id}
                     disabled={selected.status === "posted"}
                     onChange={(e) =>
@@ -1013,8 +1094,10 @@ export function Accounting({
                     ))}
                   </select>
                   <input
+                    className="accounting-money-input"
                     aria-label={t("accounting.debit")}
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     value={l.debit}
@@ -1028,8 +1111,10 @@ export function Accounting({
                     }
                   />
                   <input
+                    className="accounting-money-input"
                     aria-label={t("accounting.credit")}
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     value={l.credit}
@@ -1044,31 +1129,32 @@ export function Accounting({
                   />
                 </div>
               ))}
-              <p
-                className={
+              </div>
+              <div
+                className={`accounting-totals ${
                   totals.debit === totals.credit && totals.debit > 0
-                    ? "balanced"
-                    : "unbalanced"
-                }
+                    ? "is-balanced"
+                    : "is-unbalanced"
+                }`}
               >
-                {t("accounting.totals", {
-                  debit: totals.debit.toFixed(2),
-                  credit: totals.credit.toFixed(2),
-                })}{" "}
-                ·{" "}
-                {t(
-                  totals.debit === totals.credit && totals.debit > 0
-                    ? "accounting.balanced"
-                    : "accounting.unbalanced",
-                )}
-              </p>
+                <div><span>{t("accounting.debit")}</span><strong className="accounting-money">{formatMoney(totals.debit)}</strong></div>
+                <div><span>{t("accounting.credit")}</span><strong className="accounting-money">{formatMoney(totals.credit)}</strong></div>
+                <div><span>{copy.difference}</span><strong className="accounting-money">{formatMoney(difference)}</strong></div>
+                <div className="accounting-balance-state">
+                  {t(
+                    totals.debit === totals.credit && totals.debit > 0
+                      ? "accounting.balanced"
+                      : "accounting.unbalanced",
+                  )}
+                </div>
+              </div>
+              <div className="accounting-editor-actions">
               {selected.status === "draft" && canManageJournals && (
                 <>
                   <button onClick={() => setLines((v) => [...v, emptyLine()])}>
                     {t("accounting.addLine")}
                   </button>
                   <button
-                    className="primary"
                     disabled={saving}
                     onClick={() => void saveLines()}
                   >
@@ -1090,6 +1176,7 @@ export function Accounting({
                   {t("accounting.post")}
                 </button>
               )}
+              </div>
             </div>
           )}
         </>
@@ -1097,7 +1184,7 @@ export function Accounting({
       {!loading && tab === "trial" && (
         <>
           <form
-            className="compact-form"
+            className="compact-form accounting-report-form"
             onSubmit={(e) => void report("trial", e)}
           >
             <select name="fiscal_year_id" required>
@@ -1109,7 +1196,7 @@ export function Accounting({
             </select>
             <button className="primary">{t("accounting.run")}</button>
           </form>
-          <div className="table-wrap">
+          <div className="table-wrap accounting-financial-table accounting-trial-table">
             <table>
               <thead>
                 <tr>
@@ -1123,14 +1210,16 @@ export function Accounting({
                 {trial.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      {r.code} — {r.name}
+                      <span className="accounting-reference">{r.code}</span> — {r.name}
                     </td>
-                    <td>{r.debit_movement}</td>
-                    <td>{r.credit_movement}</td>
+                    <td><span className="accounting-money">{formatMoney(r.debit_movement)}</span></td>
+                    <td><span className="accounting-money">{formatMoney(r.credit_movement)}</span></td>
                     <td>
+                      <span className="accounting-money">
                       {Number(r.debit_balance) > 0
-                        ? `${r.debit_balance} ${t("accounting.debit")}`
-                        : `${r.credit_balance} ${t("accounting.credit")}`}
+                        ? `${formatMoney(r.debit_balance)} ${t("accounting.debit")}`
+                        : `${formatMoney(r.credit_balance)} ${t("accounting.credit")}`}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -1142,7 +1231,7 @@ export function Accounting({
       {!loading && tab === "ledger" && (
         <>
           <form
-            className="compact-form"
+            className="compact-form accounting-report-form"
             onSubmit={(e) => void report("ledger", e)}
           >
             <select name="fiscal_year_id" required>
@@ -1161,7 +1250,7 @@ export function Accounting({
             </select>
             <button className="primary">{t("accounting.run")}</button>
           </form>
-          <div className="table-wrap">
+          <div className="table-wrap accounting-financial-table accounting-ledger-table">
             <table>
               <thead>
                 <tr>
@@ -1178,12 +1267,12 @@ export function Accounting({
                   <tr
                     key={`${r.journal_id}-${r.accounting_date}-${r.running_balance}`}
                   >
-                    <td>{r.accounting_date}</td>
-                    <td>{r.reference ?? r.journal_id.slice(0, 8)}</td>
+                    <td><span className="accounting-date">{formatDisplayDate(r.accounting_date, i18n.language)}</span></td>
+                    <td><span className="accounting-reference">{r.reference ?? r.journal_id.slice(0, 8)}</span></td>
                     <td>{r.description}</td>
-                    <td>{r.debit}</td>
-                    <td>{r.credit}</td>
-                    <td>{r.running_balance}</td>
+                    <td><span className="accounting-money">{formatMoney(r.debit)}</span></td>
+                    <td><span className="accounting-money">{formatMoney(r.credit)}</span></td>
+                    <td><span className="accounting-money">{formatMoney(r.running_balance)}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -1191,6 +1280,7 @@ export function Accounting({
           </div>
         </>
       )}
+      </div>
     </section>
   );
 }
