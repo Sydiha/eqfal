@@ -34,7 +34,7 @@ describe('Home v2.1', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Documents/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
     expect(screen.queryByText('Loading monthly close periods…')).not.toBeInTheDocument();
   });
 
@@ -87,6 +87,29 @@ describe('Home v2.1', () => {
       from: '2026-08-01',
       to: '2026-08-31',
     });
+  });
+
+  it('shows no blockers instead of ready-to-close wording for a closed period', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        periods: [
+          {
+            id: 'p1',
+            fiscal_year_id: 'fy1',
+            period_start: '2026-09-01',
+            period_end: '2026-09-30',
+            status: 'closed',
+            ready: true,
+            blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, total: 0 },
+          },
+        ],
+      }), { status: 200 }),
+    ));
+    renderHome(['fiscal_year.view']);
+
+    expect(await screen.findByRole('heading', { name: 'No blockers' })).toBeInTheDocument();
+    expect(screen.queryByText('Ready to close')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
   });
 
   it('shows an error state instead of treating a failed API request as zero blockers', async () => {
