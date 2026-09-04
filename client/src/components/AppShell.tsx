@@ -43,14 +43,25 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     />
   );
 
+  const navGroup = (label: string, items: ReactNode) => (
+    <Stack gap={4} className="eqfal-nav-group">
+      <Text className="nav-caption eqfal-nav-group__label" size="xs" fw={700}>{label}</Text>
+      <Stack gap={4}>{items}</Stack>
+    </Stack>
+  );
+
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
   const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
+  const canViewSalesPurchases = capabilities.includes('document.view') && capabilities.includes('obligation.view');
+  const groupLabels = i18n.language === 'ar'
+    ? { operations: 'التشغيل', accounting: 'المحاسبة', administration: 'الإدارة' }
+    : { operations: 'Operations', accounting: 'Accounting', administration: 'Administration' };
 
   return (
     <MantineAppShell
-      className="app-shell"
-      header={{ height: 72 }}
-      navbar={{ width: 256, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      className="app-shell app-shell--v2"
+      header={{ height: 60 }}
+      navbar={{ width: 232, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >
@@ -95,13 +106,17 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         </Group>
       </MantineAppShell.Header>
 
-      <MantineAppShell.Navbar className="sidebar" p="lg">
+      <MantineAppShell.Navbar className="sidebar" p="md">
         <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
           <EqfalBrandLockup subtitle={t('app.subtitle')} inverse />
         </UnstyledButton>
-        <Divider my="xl" className="sidebar-divider" />
-        <Text className="nav-caption" size="xs" fw={700}>{t('nav.main')}</Text>
-        <Stack component="nav" aria-label={t('nav.main')} gap={6} mt="sm">{nav('home')}{nav('fiscalYears')}{nav('monthlyClose')}{nav('accounting')}{nav('vat')}{nav('documents')}{capabilities.includes('document.view')&&capabilities.includes('obligation.view')&&<>{nav('sales')}{nav('purchases')}</>}{nav('banks')}{nav('partners')}{nav('obligations')}</Stack>
+        <Divider my="lg" className="sidebar-divider" />
+        <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
+          <Stack gap={4}>{nav('home')}</Stack>
+          {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{nav('documents')}{nav('banks')}{nav('obligations')}</>)}
+          {navGroup(groupLabels.accounting, <>{nav('accounting')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
+          {navGroup(groupLabels.administration, <>{nav('partners')}</>)}
+        </Stack>
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main className="eqfal-workspace">

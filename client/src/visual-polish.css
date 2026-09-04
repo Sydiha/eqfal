@@ -1,10 +1,5 @@
-/* Final visual acceptance pass: compact the shell and improve information balance. */
+/* Final visual acceptance pass: home/module polish only; shell/workspace sizing lives in UI v2 foundation. */
 @media (min-width: 62.01em) {
-  .workspace-content {
-    max-width: 1240px;
-    padding: 28px 34px 40px;
-  }
-
   .home-modern {
     max-width: 1080px;
   }
@@ -103,67 +98,9 @@
     padding-top: 12px;
     font-size: .77rem;
   }
-
-  .topbar {
-    padding-inline: 22px;
-  }
-
-  .page-context {
-    min-width: 108px;
-  }
-
-  .page-context-label {
-    display: none;
-  }
-
-  .page-context-title {
-    font-size: .95rem;
-  }
-
-  .company-switcher {
-    min-width: 190px;
-  }
-
-  .user-summary {
-    max-width: 205px;
-    gap: 8px !important;
-  }
-
-  .user-avatar {
-    width: 31px;
-    height: 31px;
-    flex-basis: 31px;
-  }
-
-  .user-copy p:first-child {
-    display: none;
-  }
-
-  .user-copy p:last-child {
-    max-width: 150px;
-    font-size: .8rem;
-  }
-
-  .top-divider {
-    height: 26px;
-  }
-
-  .header-action {
-    min-height: 32px !important;
-    padding-inline: 9px !important;
-    font-size: .78rem !important;
-  }
-
-  .logout-action {
-    color: #667487 !important;
-  }
 }
 
 @media (min-width: 48.01em) and (max-width: 74em) {
-  .workspace-content {
-    padding-inline: 24px;
-  }
-
   .home-modern {
     max-width: 100%;
   }
