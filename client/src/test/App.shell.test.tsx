@@ -14,6 +14,9 @@ describe('authenticated application shell', () => {
     expect(within(brand).getByText('إقفال')).toBeInTheDocument();
     expect(within(brand).getByText('EQFAL')).toBeInTheDocument();
     expect(brand.querySelector('.eqfal-mark svg')).toBeInTheDocument();
+    expect(within(navigation).getByText('Operations')).toBeInTheDocument();
+    expect(within(navigation).getByText('Accounting')).toBeInTheDocument();
+    expect(within(navigation).getByText('Administration')).toBeInTheDocument();
     const fiscal = within(navigation).getByRole('button', { name: 'Fiscal Years' });
     const documents = within(navigation).getByRole('button', { name: 'Documents' });
     fireEvent.click(fiscal); expect(fiscal).toHaveAttribute('aria-current', 'page');

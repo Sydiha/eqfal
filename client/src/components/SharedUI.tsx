@@ -1,7 +1,9 @@
 import { ReactNode } from 'react';
 
-export function WorkspacePage({ children, className = '', labelledBy }: { children: ReactNode; className?: string; labelledBy?: string }) {
-  return <section className={`panel shared-workspace-page ${className}`.trim()} aria-labelledby={labelledBy}>{children}</section>;
+export type WorkspaceSize = 'compact' | 'standard' | 'operational';
+
+export function WorkspacePage({ children, className = '', labelledBy, size = 'standard' }: { children: ReactNode; className?: string; labelledBy?: string; size?: WorkspaceSize }) {
+  return <section data-workspace-size={size} className={`panel shared-workspace-page shared-workspace-page--${size} ${className}`.trim()} aria-labelledby={labelledBy}>{children}</section>;
 }
 
 export function PageHeader({ eyebrow, title, description, action, className = '', titleId }: { eyebrow?: string; title: string; description?: string; action?: ReactNode; className?: string; titleId?: string }) {
@@ -34,6 +36,10 @@ export function WorkspaceToolbar({ search, filters, clearAction, resultCount, cl
     {filters && <div className="shared-workspace-toolbar__filters">{filters}</div>}
     {(clearAction || hasResultCount) && <div className="shared-workspace-toolbar__meta">{hasResultCount && <span role="status" aria-live="polite">{resultCount}</span>}{clearAction}</div>}
   </div>;
+}
+
+export function SubNavigation({ children, ariaLabel, className = '' }: { children: ReactNode; ariaLabel?: string; className?: string }) {
+  return <nav className={`shared-subnavigation ${className}`.trim()} aria-label={ariaLabel}>{children}</nav>;
 }
 
 export function MetricStrip({ children, className = '' }: { children: ReactNode; className?: string }) {
