@@ -126,7 +126,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       ]
     : [];
 
-  const launchers: Array<{ key: HomePage; label: string; visible: boolean }> = [
+  const launcherCandidates: Array<{ key: HomePage; label: string; visible: boolean }> = [
     {
       key: 'sales',
       label: t('nav.sales'),
@@ -145,7 +145,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
     { key: 'monthlyClose', label: t('nav.monthlyClose'), visible: canViewClose },
     { key: 'fiscalYears', label: t('nav.fiscalYears'), visible: canViewClose },
     { key: 'partners', label: t('nav.partners'), visible: can('partner.view') },
-  ].filter((item) => item.visible);
+  ];
+  const launchers = launcherCandidates.filter((item) => item.visible);
 
   return (
     <section className="home-modern home-v21" aria-labelledby="home-title">
