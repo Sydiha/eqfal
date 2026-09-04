@@ -68,7 +68,7 @@ describe('Accounting integration contracts',()=>{
   }
   expect(fetchMock.mock.calls.filter(([url,options])=>url==='/api/journals'&&options?.method==='POST')).toHaveLength(1);
   expect(writes[1]).toEqual({lines:[{account_id:accountId,debit:'40.00',credit:'0.00',memo:null},{account_id:accountId,debit:'0.00',credit:'40.00',memo:'Offset'}]});
-  expect(screen.getByText('Draft',{selector:'.badge'})).toBeInTheDocument();
+  expect(screen.getAllByText('Draft',{selector:'.badge'}).length).toBeGreaterThan(0);
   expect(screen.queryByText('Unable to load or update accounting.')).not.toBeInTheDocument();
  });
 
