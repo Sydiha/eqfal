@@ -64,7 +64,7 @@ describe('Purchases workspace',()=>{
  });
 
  it('shows read-only VAT context and responsive card hooks in the shared row truth',async()=>{
-  mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(row).toHaveClass('purchases-summary-row');expect(within(row).getByText('Purchase')).toHaveClass('purchases-type-badge');fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getByText('VAT review')).toBeInTheDocument();expect(screen.getByText('Input VAT')).toBeInTheDocument();expect(screen.getByText('15.00')).toBeInTheDocument();
+  mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(row).toHaveClass('purchases-summary-row');expect(within(row).getByText('Purchase')).toHaveClass('purchases-type-badge');fireEvent.click(row);const detail=screen.getByRole('complementary',{name:'Purchase details'});expect(within(detail).getByRole('heading',{name:'VAT review'})).toBeInTheDocument();expect(within(detail).getByText('Input VAT')).toBeInTheDocument();expect(within(detail).getByText('15.00')).toBeInTheDocument();
  });
 
  it('renders required Arabic labels and localized Purchases dates',async()=>{
