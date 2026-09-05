@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, TextInput, Titl
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { clearQueryParameters, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
-import { WorkspaceState, WorkspaceToolbar } from './SharedUI';
+import { DataWorkspace, DetailPane, WorkspaceState, WorkspaceToolbar } from './SharedUI';
 
 type ReconciliationStatus = 'unmatched' | 'matched' | 'reconciled';
 type Transaction = {
@@ -103,7 +103,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [matchTransaction, setMatchTransaction] = useState<Transaction | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateResponse | null>(null);
   const [candidateSearch, setCandidateSearch] = useState('');
@@ -156,6 +156,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
         && (maximum == null || (Number.isFinite(amount) && amount <= maximum));
     }).sort((a, b) => b.transaction.transaction_date.localeCompare(a.transaction.transaction_date) || a.index - b.index).map(({ transaction }) => transaction);
   }, [filters, transactions]);
+  const selectedTransaction = filteredTransactions.find(transaction => transaction.id === selectedId) ?? null;
   const filtersActive = Object.values(filters).some(Boolean);
 
   const loadCandidates = async (transaction: Transaction, search = '') => {
@@ -215,13 +216,13 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       {!loading && transactions.length === 0 && <WorkspaceState kind="empty">{s.empty}</WorkspaceState>}
       {!loading && transactions.length > 0 && filteredTransactions.length === 0 && <WorkspaceState kind="no-results" action={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}>{s.noResults}</WorkspaceState>}
 
-      {filteredTransactions.length > 0 && <div className="bank-transactions-list">
+      {filteredTransactions.length > 0 && <DataWorkspace withDetail={Boolean(selectedTransaction)} className="bank-transactions-workspace"><div className="bank-transactions-list">
         <div className="bank-transaction-head" aria-hidden="true">
           <span>{s.date}</span><span>{s.descriptionLabel}</span><span>{s.amount}</span><span>{s.status}</span><span>{s.action}</span>
         </div>
         {filteredTransactions.map((tx) => {
-          const expanded = expandedId === tx.id;
-          return <article className={`bank-transaction-row bank-transaction-row--${tx.reconciliation_status}`} key={tx.id}>
+          const selected = selectedId === tx.id;
+          return <article className={`bank-transaction-row bank-transaction-row--${tx.reconciliation_status}`} key={tx.id} tabIndex={0} aria-selected={selected} onClick={() => setSelectedId(tx.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(tx.id); } }}>
             <div className="bank-transaction-main">
               <time className="bank-transaction-date" dir="ltr">{displayDate(tx.transaction_date)}</time>
               <div className="bank-transaction-description">
@@ -231,27 +232,30 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
               <Text className={`bank-transaction-amount ${Number(tx.amount) < 0 ? 'is-outbound' : 'is-inbound'}`} fw={750} dir="ltr">{formatMoney(tx.amount, tx.currency_code)}</Text>
               <Badge className="bank-transaction-status" variant="light" color={tx.reconciliation_status === 'reconciled' ? 'green' : tx.reconciliation_status === 'matched' ? 'blue' : 'gray'}>{t(`banks.reconciliation.${tx.reconciliation_status}`)}</Badge>
               <div className="bank-transaction-primary-action">
-                {tx.reconciliation_status === 'unmatched' && canMatch && <Button size="xs" onClick={() => void loadCandidates(tx)}>{t('banks.match')}</Button>}
-                {tx.reconciliation_status === 'matched' && canReconcile && <Button size="xs" onClick={() => void setReconciliation(tx, 'reconciled')}>{t('banks.reconcile')}</Button>}
-                {(tx.reconciliation_status === 'reconciled' || (tx.reconciliation_status === 'matched' && !canReconcile) || (tx.reconciliation_status === 'unmatched' && !canMatch)) && <Button size="xs" variant="light" onClick={() => setExpandedId(expanded ? null : tx.id)}>{expanded ? s.hideDetails : s.details}</Button>}
+                {tx.reconciliation_status === 'unmatched' && canMatch && <Button size="xs" onClick={event => { event.stopPropagation(); void loadCandidates(tx); }}>{t('banks.match')}</Button>}
+                {tx.reconciliation_status === 'matched' && canReconcile && <Button size="xs" onClick={event => { event.stopPropagation(); void setReconciliation(tx, 'reconciled'); }}>{t('banks.reconcile')}</Button>}
+                {(tx.reconciliation_status === 'reconciled' || (tx.reconciliation_status === 'matched' && !canReconcile) || (tx.reconciliation_status === 'unmatched' && !canMatch)) && <Button size="xs" variant="light" onClick={event => { event.stopPropagation(); setSelectedId(tx.id); }}>{s.details}</Button>}
               </div>
             </div>
-
-            <button type="button" className="bank-transaction-row-details" onClick={() => setExpandedId(expanded ? null : tx.id)} aria-expanded={expanded} aria-label={expanded ? s.hideDetails : s.details}>{expanded ? s.hideDetails : s.details}</button>
-            {expanded && <div className="bank-transaction-details">
-              <dl>
-                <div><dt>{s.reference}</dt><dd dir="ltr">{tx.bank_reference || '—'}</dd></div>
-                <div><dt>{s.balance}</dt><dd dir="ltr">{tx.running_balance ?? '—'} {tx.currency_code}</dd></div>
-              </dl>
-              <Group gap="xs" justify="flex-end">
-                {tx.reconciliation_status === 'matched' && <Button size="xs" variant="light" onClick={() => void loadCandidates(tx)}>{t('banks.viewMatch')}</Button>}
-                {tx.reconciliation_status === 'matched' && canMatch && <Button size="xs" color="red" variant="subtle" onClick={() => void unmatch(tx)}>{t('banks.unmatch')}</Button>}
-                {tx.reconciliation_status === 'reconciled' && canReconcile && <Button size="xs" variant="light" onClick={() => void setReconciliation(tx, 'matched')}>{t('banks.reopen')}</Button>}
-              </Group>
-            </div>}
           </article>;
         })}
-      </div>}
+      </div>{selectedTransaction && <DetailPane label={s.details}>
+        <div className="shared-detail-pane__header bank-transaction-detail__header">
+          <div><Title order={3} size="h4" dir="auto">{selectedTransaction.description || '—'}</Title><Text size="sm" c="dimmed" dir="ltr">{displayDate(selectedTransaction.transaction_date)}</Text></div>
+          <Button size="compact-sm" variant="subtle" onClick={() => setSelectedId(null)} aria-label={t('common.close')}>×</Button>
+        </div>
+        <dl>
+          <dt>{s.amount}</dt><dd dir="ltr">{formatMoney(selectedTransaction.amount, selectedTransaction.currency_code)}</dd>
+          <dt>{s.status}</dt><dd><Badge variant="light" color={selectedTransaction.reconciliation_status === 'reconciled' ? 'green' : selectedTransaction.reconciliation_status === 'matched' ? 'blue' : 'gray'}>{t(`banks.reconciliation.${selectedTransaction.reconciliation_status}`)}</Badge></dd>
+          <dt>{s.reference}</dt><dd dir="ltr">{selectedTransaction.bank_reference || '—'}</dd>
+          <dt>{s.balance}</dt><dd dir="ltr">{selectedTransaction.running_balance ?? '—'} {selectedTransaction.currency_code}</dd>
+        </dl>
+        <div className="shared-detail-pane__actions">
+          {selectedTransaction.reconciliation_status === 'matched' && <Button size="xs" variant="light" onClick={() => void loadCandidates(selectedTransaction)}>{t('banks.viewMatch')}</Button>}
+          {selectedTransaction.reconciliation_status === 'matched' && canMatch && <Button size="xs" color="red" variant="subtle" onClick={() => void unmatch(selectedTransaction)}>{t('banks.unmatch')}</Button>}
+          {selectedTransaction.reconciliation_status === 'reconciled' && canReconcile && <Button size="xs" variant="light" onClick={() => void setReconciliation(selectedTransaction, 'matched')}>{t('banks.reopen')}</Button>}
+        </div>
+      </DetailPane>}</DataWorkspace>}
     </Stack>
 
     {matchTransaction && <Dialog title={t('banks.matchDialog')} busy={matchBusy} onClose={closeMatch}><Stack gap="md">

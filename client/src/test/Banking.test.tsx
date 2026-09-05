@@ -137,6 +137,9 @@ describe('Banking',()=>{
     expect(screen.getByText('E2E-SALE-1150-001')).toBeInTheDocument();
     expect(screen.getByText('1150.00')).toBeInTheDocument();
     expect(screen.getByRole('textbox',{name:/Date format/i})).toHaveValue('MM/DD/YYYY');
+    const steps=Array.from(document.querySelectorAll('.bank-import-steps li'));
+    expect(steps.map(step=>step.textContent)).toEqual(['1Upload','2Column mapping','3Preview import','4Confirm import']);
+    expect(steps[2]).toHaveAttribute('aria-current','step');
   });
 
   it('resumes preview-ready imports with saved mapping and preview restored',async()=>{
