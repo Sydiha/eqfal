@@ -83,7 +83,7 @@ export class MonthlyCloseService {
     const ledger=incompleteDocuments.size+unpostedSources+independentDrafts;
     const assetCounts=(await client.query<{pending:string;drafts:string}>(`SELECT
       (SELECT COUNT(*) FROM asset_depreciation_entries WHERE company_id=$1 AND status='pending' AND period_end BETWEEN $2 AND $3)::text pending,
-      (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
+      (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND source_type='document' AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
     const assets=Number(assetCounts.pending)+Number(assetCounts.drafts);
     return{documents,obligations,bank_transactions,vat,ledger,assets,total:documents+obligations+bank_transactions+vat+ledger+assets};
   }
