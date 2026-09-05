@@ -15,14 +15,14 @@ describe('Sales workspace',()=>{
  it('keeps a cancelled receivable historical, including settlement history, without replacement creation',async()=>{
   mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);
   const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getByText('—')).toBeInTheDocument();
-  fireEvent.click(row);expect(within(screen.getByRole('region',{name:'Sale details'})).getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
+  fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Sale details'})).getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
  });
 
  it('opens and closes inline details by click and exposes selection and expansion state',async()=>{
   mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));
   expect(row).toHaveAttribute('aria-expanded','false');expect(row).toHaveAttribute('aria-selected','false');
-  fireEvent.click(row);expect(row).toHaveAttribute('aria-expanded','true');expect(row).toHaveAttribute('aria-selected','true');expect(screen.getByRole('region',{name:'Sale details'})).toBeInTheDocument();
-  fireEvent.click(row);expect(row).toHaveAttribute('aria-expanded','false');expect(screen.queryByRole('region',{name:'Sale details'})).not.toBeInTheDocument();
+  fireEvent.click(row);expect(row).toHaveAttribute('aria-expanded','true');expect(row).toHaveAttribute('aria-selected','true');expect(screen.getByRole('complementary',{name:'Sale details'})).toBeInTheDocument();
+  fireEvent.click(row);expect(row).toHaveAttribute('aria-expanded','false');expect(screen.queryByRole('complementary',{name:'Sale details'})).not.toBeInTheDocument();
  });
 
  it.each(['Enter',' '])('opens inline details with the %s key',async key=>{
@@ -30,11 +30,11 @@ describe('Sales workspace',()=>{
  });
 
  it('closes the first row when a second row opens',async()=>{
-  mockSales([base,active]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));fireEvent.click(first);fireEvent.click(second);expect(first).toHaveAttribute('aria-expanded','false');expect(second).toHaveAttribute('aria-expanded','true');expect(screen.getAllByRole('region',{name:'Sale details'})).toHaveLength(1);
+  mockSales([base,active]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));fireEvent.click(first);fireEvent.click(second);expect(first).toHaveAttribute('aria-expanded','false');expect(second).toHaveAttribute('aria-expanded','true');expect(screen.getAllByRole('complementary',{name:'Sale details'})).toHaveLength(1);
  });
 
  it('shows active financial state and formatted document and due dates, while preserving null display',async()=>{
-  mockSales([base,active]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));expect(within(first).getByText('01/08/2026')).toBeInTheDocument();expect(within(second).getAllByText('Partial').length).toBeGreaterThan(0);expect(within(second).getByText(/15\/08\/2026/)).toBeInTheDocument();fireEvent.click(first);expect(within(screen.getByRole('region',{name:'Sale details'})).getAllByText('—').length).toBeGreaterThan(0);
+  mockSales([base,active]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));expect(within(first).getByText('01/08/2026')).toBeInTheDocument();expect(within(second).getAllByText('Partial').length).toBeGreaterThan(0);expect(within(second).getByText(/15\/08\/2026/)).toBeInTheDocument();fireEvent.click(first);expect(within(screen.getByRole('complementary',{name:'Sale details'})).getAllByText('—').length).toBeGreaterThan(0);
  });
 
  it('creates only an eligible approved complete unlinked sale through the obligation path',async()=>{
@@ -52,7 +52,7 @@ describe('Sales workspace',()=>{
  });
 
  it('shows intake note and identifies a legacy supplier-linked sale instead of presenting it as a customer',async()=>{
-  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('Legacy note')).toBeInTheDocument();expect(screen.getByText(/Data integrity warning/)).toBeInTheDocument();expect(screen.getAllByText('Supplier').length).toBeGreaterThan(0);
+  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);const detail=screen.getByRole('complementary',{name:'Sale details'});expect(within(detail).getByText('Legacy note')).toBeInTheDocument();expect(within(detail).getByText(/Data integrity warning/)).toBeInTheDocument();expect(within(detail).getByText(/Supplier/)).toBeInTheDocument();
  });
 
  it('keeps search and financial filtering behavior',async()=>{
@@ -60,7 +60,7 @@ describe('Sales workspace',()=>{
  });
 
  it('renders required Arabic labels and localized Sales dates',async()=>{
-  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'التحصيل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(within(screen.getByRole('region',{name:'تفاصيل البيع'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('region',{name:'تفاصيل البيع'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'التحصيل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
  });
  it('restores validated URL filters, applies inclusive dates and all loaded relationship fields',async()=>{
   const open={...base,id:'d3',reference_number:'OPEN',document_date:'2026-08-02',receivable_cancelled:false,receivable_relationship:'not_created' as const,financial_state:'open' as const,verification_status:'unconfirmed',status:'uploaded'};
