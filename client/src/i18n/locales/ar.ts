@@ -6,7 +6,7 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
-  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', monthlyClose:'الإقفال الشهري', vat:'ضريبة القيمة المضافة', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', obligations:'الذمم', sales:'المبيعات', purchases:'المشتريات', accounting:'المحاسبة', openMenu: 'فتح قائمة التنقل' },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', monthlyClose:'الإقفال الشهري', vat:'ضريبة القيمة المضافة', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', obligations:'الذمم', sales:'المبيعات', purchases:'المشتريات', accounting:'المحاسبة', assets:'الأصول الثابتة', openMenu: 'فتح قائمة التنقل' },
   home: {
     workspace: 'مساحة عمل الشركة',
     welcome: 'مرحبًا بعودتك',
@@ -93,6 +93,7 @@ const ar = {
       rejected: 'مرفوض',
     },
   },
+  assets:{title:'الأصول الثابتة',description:'رسملة أصول الشركة واعتمادها وإهلاكها والتصرف فيها.',noAccess:'ليست لديك صلاحية عرض الأصول الثابتة.',error:'تعذر تحديث الأصول الثابتة.',empty:'لا توجد أصول ثابتة بعد.',addManual:'إضافة أصل يدوي / افتتاحي',capitalise:'رسملة كأصل ثابت',sourceUnavailable:'مستند الشراء المصدر غير متاح.',category:'الفئة',name:'اسم الأصل',descriptionField:'الوصف',reference:'المرجع',reason:'السبب',cost:'تكلفة الاقتناء',acquisitionDate:'تاريخ الاقتناء',serviceDate:'تاريخ بدء الاستخدام',startDate:'تاريخ بدء الإهلاك',life:'العمر الإنتاجي (بالأشهر)',residual:'القيمة المتبقية',opening:'مجمع الإهلاك الافتتاحي',accumulated:'مجمع الإهلاك',nbv:'صافي القيمة الدفترية',status:'الحالة',detail:'تفاصيل الأصل',source:'المصدر',schedule:'جدول الإهلاك',period:'الفترة',depreciation:'الإهلاك',noSchedule:'لا يوجد جدول إهلاك.',approve:'اعتماد / تفعيل',cancelDraft:'إلغاء المسودة',dispose:'التصرف',statuses:{draft:'مسودة',active:'نشط',fully_depreciated:'مهلك بالكامل',disposed:'تم التصرف',cancelled:'ملغى'}},
   banks: {
     title: 'البنوك', description: 'استيراد كشوف الحسابات البنكية بأمان للشركة النشطة.', noAccess: 'ليس لديك صلاحية عرض بيانات البنوك.', error: 'تعذر تحميل أو تحديث بيانات البنوك.',
     accounts: 'الحسابات البنكية', account: 'الحساب البنكي', accountName: 'اسم الحساب', bankName: 'اسم البنك', currency: 'العملة', createAccount: 'إنشاء حساب', noAccounts: 'لا توجد حسابات بنكية بعد.', active: 'نشط', inactive: 'غير نشط', status: 'الحالة',

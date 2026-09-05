@@ -12,7 +12,7 @@ export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
-type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; total:number };
+type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; total:number };
 export class MonthlyCloseValidationError extends Error {}
 export class MonthlyCloseNotFoundError extends Error {}
 export class MonthlyCloseConflictError extends Error { constructor(message='Conflict'){super(message);} }
@@ -81,7 +81,11 @@ export class MonthlyCloseService {
     const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
     const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
     const ledger=incompleteDocuments.size+unpostedSources+independentDrafts;
-    return{documents,obligations,bank_transactions,vat,ledger,total:documents+obligations+bank_transactions+vat+ledger};
+    const assetCounts=(await client.query<{pending:string;drafts:string}>(`SELECT
+      (SELECT COUNT(*) FROM asset_depreciation_entries WHERE company_id=$1 AND status='pending' AND period_end BETWEEN $2 AND $3)::text pending,
+      (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
+    const assets=Number(assetCounts.pending)+Number(assetCounts.drafts);
+    return{documents,obligations,bank_transactions,vat,ledger,assets,total:documents+obligations+bank_transactions+vat+ledger+assets};
   }
   async list(companyId:string){
     const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY monthly_close_periods.period_start DESC',[companyId]);

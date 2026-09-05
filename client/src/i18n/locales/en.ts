@@ -6,7 +6,7 @@ const en = {
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },
-  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', monthlyClose:'Monthly Close', vat:'VAT', documents: 'Documents', banks: 'Banks', partners: 'Partners', obligations:'Obligations', sales:'Sales', purchases:'Purchases', accounting:'Accounting', openMenu: 'Open navigation menu' },
+  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', monthlyClose:'Monthly Close', vat:'VAT', documents: 'Documents', banks: 'Banks', partners: 'Partners', obligations:'Obligations', sales:'Sales', purchases:'Purchases', accounting:'Accounting', assets:'Fixed Assets', openMenu: 'Open navigation menu' },
   home: {
     workspace: 'Company workspace',
     welcome: 'Welcome back',
@@ -93,6 +93,7 @@ const en = {
       rejected: 'Rejected',
     },
   },
+  assets:{title:'Fixed Assets',description:'Capitalise, approve, depreciate and dispose company assets.',noAccess:'You do not have permission to view fixed assets.',error:'Unable to update fixed assets.',empty:'No fixed assets yet.',addManual:'Add Manual / Opening Asset',capitalise:'Capitalise as Fixed Asset',sourceUnavailable:'The purchase source is unavailable.',category:'Category',name:'Asset name',descriptionField:'Description',reference:'Reference',reason:'Reason',cost:'Acquisition cost',acquisitionDate:'Acquisition date',serviceDate:'Placed-in-service date',startDate:'Depreciation start date',life:'Useful life (months)',residual:'Residual value',opening:'Opening accumulated depreciation',accumulated:'Accumulated depreciation',nbv:'Net book value',status:'Status',detail:'Asset details',source:'Source',schedule:'Depreciation schedule',period:'Period',depreciation:'Depreciation',noSchedule:'No depreciation schedule.',approve:'Approve / Activate',cancelDraft:'Cancel Draft',dispose:'Dispose',statuses:{draft:'Draft',active:'Active',fully_depreciated:'Fully Depreciated',disposed:'Disposed',cancelled:'Cancelled'}},
   banks: {
     title: 'Banks', description: 'Import bank statements safely for the active company.', noAccess: 'You do not have permission to view banking data.', error: 'Unable to load or update banking data.',
     accounts: 'Bank accounts', account: 'Bank account', accountName: 'Account name', bankName: 'Bank name', currency: 'Currency', createAccount: 'Create account', noAccounts: 'No bank accounts yet.', active: 'Active', inactive: 'Inactive', status: 'Status',
