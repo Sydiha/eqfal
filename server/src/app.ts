@@ -16,6 +16,7 @@ import { vatReportRouter } from './modules/vat/vat-report.router';
 import { accountingRouter } from './modules/accounting/accounting.router';
 import { salesRouter } from './modules/sales/sales.router';
 import { purchasesRouter } from './modules/purchases/purchases.router';
+import { fixedAssetsRouter } from './modules/fixed-assets/fixed-assets.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api', vatReportRouter);
 app.use('/api', accountingRouter);
 app.use('/api', salesRouter);
 app.use('/api', purchasesRouter);
+app.use('/api', fixedAssetsRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {

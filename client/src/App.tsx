@@ -20,6 +20,7 @@ import { Vat } from './components/Vat';
 import { Accounting } from './components/Accounting';
 import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
+import { FixedAssets } from './components/FixedAssets';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 
@@ -31,7 +32,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases', 'assets'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -158,10 +159,11 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
     {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startSalesEntry} onEditDocument={editSalesEntry} onUnauthorized={handleUnauthorized}/>}
-    {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startPurchaseEntry} onEditDocument={editPurchaseEntry} onUnauthorized={handleUnauthorized}/>}
+    {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} canCapitalise={c.includes('asset.manage')} onCreateDocument={startPurchaseEntry} onEditDocument={editPurchaseEntry} onCapitalise={(id)=>{writeQueryParameters({page:'assets',assetDocument:id});setPage('assets')}} onUnauthorized={handleUnauthorized}/>}
     {page === 'monthlyClose' && <MonthlyClose canView={c.includes('fiscal_year.view')} canClose={c.includes('monthly_close.close')} canReopen={c.includes('monthly_close.reopen')} onNavigate={navigateToDiscovery} onUnauthorized={handleUnauthorized}/>}
     {page === 'vat' && <Vat canView={c.includes('vat.view')} canReview={c.includes('vat.review')} canClose={c.includes('vat.close')} canReopen={c.includes('vat.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'assets' && <FixedAssets canView={c.includes('asset.view')} canManage={c.includes('asset.manage')} canApprove={c.includes('asset.approve')} canDispose={c.includes('asset.dispose')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
 

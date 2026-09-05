@@ -22,6 +22,7 @@ class AccountingPool{
  query=async(sql:string,values:unknown[]=[]):Promise<{rows:any[];rowCount:number}>=>{
   if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||sql.includes('pg_advisory_xact_lock'))return{rows:[],rowCount:0};
   if(sql.includes('FROM monthly_close_periods'))return{rows:[],rowCount:0};
+  if(sql.includes('SELECT d.id FROM asset_depreciation_entries')||sql.includes('SELECT d.id FROM asset_disposals'))return{rows:[],rowCount:0};
   if(sql.includes("SELECT id FROM obligations"))return values[0]===company?{rows:[{id:sourceId}],rowCount:1}:{rows:[],rowCount:0};
   if(sql.includes('SELECT id FROM document_settlements')||sql.includes('SELECT id FROM obligation_settlements')||sql.includes('SELECT a.id FROM custody_document_allocations')||sql.includes('SELECT id FROM bank_transaction_matches'))return{rows:[],rowCount:0};
   if(sql.includes("FROM obligations o JOIN counterparties"))return values[0]===sourceId&&values[1]===company?{rows:[this.source],rowCount:1}:{rows:[],rowCount:0};

@@ -8,7 +8,7 @@ import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
 
-export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'sales' | 'purchases';
+export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'sales' | 'purchases' | 'assets';
 
 type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
 
@@ -24,7 +24,7 @@ function ShellIcon({ name }: { name: IconName }) {
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',sales:'document',purchases:'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',sales:'document',purchases:'document',assets:'document' };
 
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -114,7 +114,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
           <Stack gap={4}>{nav('home')}</Stack>
           {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{nav('documents')}{nav('banks')}{nav('obligations')}</>)}
-          {navGroup(groupLabels.accounting, <>{nav('accounting')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
+          {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
           {navGroup(groupLabels.administration, <>{nav('partners')}</>)}
         </Stack>
       </MantineAppShell.Navbar>
