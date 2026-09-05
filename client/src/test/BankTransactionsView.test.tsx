@@ -46,7 +46,7 @@ describe('BankTransactionsView', () => {
     fireEvent.click(confirm);
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledWith(`/api/bank-transactions/${transaction.id}/match`,expect.objectContaining({method:'POST',body:JSON.stringify({document_id:'doc-a'})})));
   });
-  it('renders a focused five-column operating view with bank metadata kept secondary', async () => {
+  it('uses a selected row and detail pane while keeping bank metadata secondary', async () => {
     const transaction = {
       id: '11111111-1111-4111-8111-111111111111',
       transaction_date: '2026-08-16T00:00:00.000Z',
@@ -62,13 +62,20 @@ describe('BankTransactionsView', () => {
 
     render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
 
-    expect(await screen.findByText('Vendor payment with mixed بيان عربي')).toBeInTheDocument();
+    const description = await screen.findByText('Vendor payment with mixed بيان عربي');
     expect(screen.getByText('16/08/2026')).toBeInTheDocument();
     expect(screen.getByText('-350.00 SAR')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Match' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
     expect(screen.getByText('BANK-REF-001')).toBeInTheDocument();
     expect(screen.queryByText('12500.00 SAR')).not.toBeInTheDocument();
+    const row = description.closest('article');
+    expect(row).toHaveAttribute('aria-selected', 'false');
+    fireEvent.click(row!);
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    const detail = screen.getByRole('complementary', { name: 'Details' });
+    expect(within(detail).getByText('12500.00 SAR')).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(row?.querySelector('.bank-transaction-details')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/bank-transactions', undefined));
   });
 
