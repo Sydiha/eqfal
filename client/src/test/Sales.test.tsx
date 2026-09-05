@@ -52,7 +52,7 @@ describe('Sales workspace',()=>{
  });
 
  it('shows intake note and identifies a legacy supplier-linked sale instead of presenting it as a customer',async()=>{
-  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('Legacy note')).toBeInTheDocument();expect(screen.getByText(/Data integrity warning/)).toBeInTheDocument();expect(screen.getAllByText('Supplier').length).toBeGreaterThan(0);
+  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);const detail=screen.getByRole('complementary',{name:'Sale details'});expect(within(detail).getByText('Legacy note')).toBeInTheDocument();expect(within(detail).getByText(/Data integrity warning/)).toBeInTheDocument();expect(within(detail).getByText(/Supplier/)).toBeInTheDocument();
  });
 
  it('keeps search and financial filtering behavior',async()=>{
