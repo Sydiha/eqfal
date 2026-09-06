@@ -38,8 +38,9 @@ Required company-scoped accounting profile, including at minimum:
 - income-tax applicability where relevant;
 - non-Saudi ownership / mixed ownership indicators where relevant;
 - withholding-tax applicability profile;
-- e-invoicing/Fatoora applicability when invoice issuance is within EQFAL scope;
 - effective dates and audit history for policy changes.
+
+E-invoicing/Fatoora is explicitly deferred from the current implementation roadmap and may be reconsidered later if EQFAL needs to issue invoices directly.
 
 The system must not assume every Saudi company has the same tax profile.
 
@@ -176,13 +177,13 @@ For relevant payments to non-residents, support a controlled WHT workflow includ
 
 Do not apply WHT automatically without a designed policy/rule basis.
 
-### P1 — E-Invoicing / Fatoora Readiness
+### Deferred — E-Invoicing / Fatoora
 
-This is conditional on EQFAL's product scope.
+E-invoicing/Fatoora is not part of the current implementation roadmap.
 
-If EQFAL issues tax invoices, the invoicing module must be designed against current ZATCA e-invoicing requirements before being considered production-ready.
+If EQFAL later needs to issue tax invoices directly, this area must receive a fresh design check against then-current ZATCA requirements, technical integration needs and cost impact before implementation.
 
-If EQFAL does not issue invoices, it should not be expanded into a full invoicing platform merely for completeness; instead it may retain/import invoice identifiers, evidence and validation data required for the close process.
+Until that need is explicitly approved, no Fatoora integration or invoice-issuance expansion should be introduced merely for completeness.
 
 ### P1/P2 — Inventory & Cost of Sales
 
@@ -237,9 +238,9 @@ Approved priority order:
 6. Financial Statement Mapping
 7. VAT reconciliation hardening
 8. Zakat / Income Tax / Withholding Tax profiles
-9. E-Invoicing only if invoice issuance is within EQFAL scope
-10. Inventory/COGS only for companies that require it
-11. Accounting Policies Register and year-end reporting pack
+9. Inventory/COGS only for companies that require it
+10. Accounting Policies Register and year-end reporting pack
+11. E-Invoicing/Fatoora only if explicitly approved as a future need
 
 ## Delivery governance
 
