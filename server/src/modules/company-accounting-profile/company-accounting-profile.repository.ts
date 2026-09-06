@@ -76,8 +76,9 @@ export class CompanyAccountingProfileRepository {
   }
 
   async transition(companyId:string,id:string,from:WorkflowStatus,to:WorkflowStatus,actor:string,runner:Runner):Promise<CompanyAccountingProfile|null>{
-    const extra=to==='reviewed'?',reviewed_by_user_id=$5,reviewed_at=NOW()':to==='approved'?',approved_by_user_id=$5,approved_at=NOW()':'';
-    const args=extra?[id,companyId,from,to,actor]:[id,companyId,from,to];
+    const recordsActor=to==='reviewed'||to==='approved';
+    const extra=to==='reviewed'?',reviewed_by_user_id=$5,reviewed_at=NOW()':to==='approved'?',approved_by_user_id=$5,approved_at=NOW()':from==='reviewed'&&to==='needs_review'?',reviewed_by_user_id=NULL,reviewed_at=NULL':'';
+    const args=recordsActor?[id,companyId,from,to,actor]:[id,companyId,from,to];
     const {rows}=await runner.query<Omit<CompanyAccountingProfile,'professional_review_required'>>(
       `UPDATE company_accounting_profiles SET workflow_status=$4${extra},updated_at=NOW() WHERE id=$1 AND company_id=$2 AND workflow_status=$3 RETURNING ${RETURNING}`,args);
     return this.decorate(rows[0]&&{...rows[0],closed_period_impact:false});
