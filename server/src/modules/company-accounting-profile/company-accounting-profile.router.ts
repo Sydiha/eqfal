@@ -1,0 +1,41 @@
+import { NextFunction, Request, Response, Router } from 'express';
+import pool from '../../db/pool';
+import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
+import { requireSameOrigin } from '../auth/origin.middleware';
+import { CompanyAccountingProfileService } from './company-accounting-profile.service';
+import { ACCOUNTING_FRAMEWORKS, CreateProfileInput, NON_RESIDENT_DEALINGS, OWNERSHIP_CONTEXTS, ProfileConflictError, ProfileNotFoundError, ProfileValidationError, TAX_TREATMENTS, UpdateProfileInput, VAT_FILING_FREQUENCIES, VAT_STATUSES, WHT_PROFILES } from './company-accounting-profile.types';
+
+export const companyAccountingProfileRouter=Router();
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
+const keys=['accounting_framework','accounting_framework_notes','functional_currency','reporting_currency','first_live_accounting_date','vat_status','vat_registration_number','vat_registered_from','vat_deregistered_from','vat_filing_frequency','tax_treatment','ownership_context','tax_effective_from','tax_notes','wht_profile','has_non_resident_dealings','effective_from','effective_to','change_reason'] as const;
+const required=['accounting_framework','functional_currency','reporting_currency','first_live_accounting_date','vat_status','tax_treatment','ownership_context','wht_profile','has_non_resident_dealings'] as const;
+const base=[requireAuth,requireActiveCompany];
+const route=(fn:(req:Request,res:Response,next:NextFunction)=>Promise<void>)=>(req:Request,res:Response,next:NextFunction)=>{void fn(req,res,next).catch(next);};
+const context=(req:Request)=>getAuthenticatedContext(req)! as NonNullable<ReturnType<typeof getAuthenticatedContext>> & {activeCompanyId:string};
+const service=(res:Response)=>{if(!pool){res.status(503).json({error:'Database unavailable'});return null;}return new CompanyAccountingProfileService(pool);};
+const plain=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
+const member=<T extends readonly string[]>(v:unknown,set:T):v is T[number]=>typeof v==='string'&&(set as readonly string[]).includes(v);
+const date=(v:unknown)=>{if(v===null)return true;if(typeof v!=='string'||!DATE.test(v))return false;const [y,m,d]=v.split('-').map(Number);const parsed=new Date(Date.UTC(y!,m!-1,d!));return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m!-1&&parsed.getUTCDate()===d;};
+function parse(body:unknown,partial:boolean):CreateProfileInput|UpdateProfileInput|null{if(!plain(body)||Object.keys(body).some(k=>!keys.includes(k as typeof keys[number])))return null;if(!partial&&required.some(k=>body[k]===undefined))return null;
+  if(body.accounting_framework!==undefined&&!member(body.accounting_framework,ACCOUNTING_FRAMEWORKS)||body.vat_status!==undefined&&!member(body.vat_status,VAT_STATUSES)||body.tax_treatment!==undefined&&!member(body.tax_treatment,TAX_TREATMENTS)||body.ownership_context!==undefined&&!member(body.ownership_context,OWNERSHIP_CONTEXTS)||body.wht_profile!==undefined&&!member(body.wht_profile,WHT_PROFILES)||body.has_non_resident_dealings!==undefined&&!member(body.has_non_resident_dealings,NON_RESIDENT_DEALINGS)||body.vat_filing_frequency!==undefined&&body.vat_filing_frequency!==null&&!member(body.vat_filing_frequency,VAT_FILING_FREQUENCIES))return null;
+  if(body.first_live_accounting_date!==undefined&&(body.first_live_accounting_date===null||!date(body.first_live_accounting_date)))return null;
+  for(const k of ['vat_registered_from','vat_deregistered_from','tax_effective_from','effective_from','effective_to'])if(body[k]!==undefined&&!date(body[k]))return null;
+  for(const k of ['accounting_framework_notes','vat_registration_number','tax_notes','change_reason'])if(body[k]!==undefined&&body[k]!==null&&typeof body[k]!=='string')return null;
+  for(const k of ['functional_currency','reporting_currency'])if(body[k]!==undefined&&(typeof body[k]!=='string'||!/^[A-Z]{3}$/.test(body[k])))return null;
+  const normalized:Record<string,unknown>={};for(const k of keys)if(body[k]!==undefined)normalized[k]=typeof body[k]==='string'&&!['accounting_framework','first_live_accounting_date','vat_registered_from','vat_deregistered_from','tax_effective_from','effective_from','effective_to'].includes(k)?body[k].trim():body[k];
+  for(const k of ['accounting_framework_notes','vat_registration_number','tax_notes','change_reason'])if(normalized[k]==='')normalized[k]=null;
+  if(!partial)for(const k of keys)if(normalized[k]===undefined)normalized[k]=null;return normalized as unknown as CreateProfileInput|UpdateProfileInput;}
+function handle(e:unknown,res:Response,next:NextFunction){if(e instanceof ProfileNotFoundError)res.status(404).json({error:'Profile not found'});else if(e instanceof ProfileValidationError)res.status(400).json({error:e.message});else if(e instanceof ProfileConflictError)res.status(409).json({error:e.message});else next(e);}
+function id(req:Request){if(!UUID.test(req.params.id))throw new ProfileNotFoundError();return req.params.id;}
+function write(method:'post'|'patch',path:string,cap:string,handler:(s:CompanyAccountingProfileService,req:Request)=>Promise<unknown>,status=200){companyAccountingProfileRouter[method](path,requireSameOrigin,...base,requireCapability(cap),route(async(req,res,next)=>{try{const s=service(res);if(s)res.status(status).json({profile:await handler(s,req)});}catch(e){handle(e,res,next);}}));}
+
+companyAccountingProfileRouter.get('/company-accounting-profiles/current',...base,requireCapability('company_accounting_profile.view'),route(async(req,res,next)=>{try{if(req.query.date!==undefined&&!date(req.query.date))throw new ProfileValidationError('Invalid date');const s=service(res);if(s)res.json({profile:await s.current(context(req).activeCompanyId,(req.query.date as string|undefined))});}catch(e){handle(e,res,next);}}));
+companyAccountingProfileRouter.get('/company-accounting-profiles/history',...base,requireCapability('company_accounting_profile.view'),route(async(req,res)=>{const s=service(res);if(s)res.json({profiles:await s.history(context(req).activeCompanyId)});}));
+companyAccountingProfileRouter.get('/company-accounting-profiles/:id',...base,requireCapability('company_accounting_profile.view'),route(async(req,res,next)=>{try{const s=service(res);if(s)res.json({profile:await s.get(context(req).activeCompanyId,id(req))});}catch(e){handle(e,res,next);}}));
+write('post','/company-accounting-profiles','company_accounting_profile.manage',async(s,r)=>{const v=parse(r.body,false);if(!v)throw new ProfileValidationError('Invalid request');return s.createInitial(context(r).activeCompanyId,context(r).user.id,v as CreateProfileInput);},201);
+write('post','/company-accounting-profiles/versions','company_accounting_profile.manage',async(s,r)=>{const v=parse(r.body,true);if(!v)throw new ProfileValidationError('Invalid request');return s.createVersion(context(r).activeCompanyId,context(r).user.id,v);},201);
+write('patch','/company-accounting-profiles/:id','company_accounting_profile.manage',async(s,r)=>{const v=parse(r.body,true);if(!v)throw new ProfileValidationError('Invalid request');return s.updateDraft(context(r).activeCompanyId,context(r).user.id,id(r),v);});
+write('post','/company-accounting-profiles/:id/submit-review','company_accounting_profile.manage',(s,r)=>{if(r.body!==undefined&&(!plain(r.body)||Object.keys(r.body).length))throw new ProfileValidationError('Invalid request');return s.submitReview(context(r).activeCompanyId,context(r).user.id,id(r));});
+write('post','/company-accounting-profiles/:id/review','company_accounting_profile.review',(s,r)=>{if(r.body!==undefined&&(!plain(r.body)||Object.keys(r.body).length))throw new ProfileValidationError('Invalid request');return s.review(context(r).activeCompanyId,context(r).user.id,id(r));});
+write('post','/company-accounting-profiles/:id/approve','company_accounting_profile.approve',(s,r)=>{if(r.body!==undefined&&(!plain(r.body)||Object.keys(r.body).length))throw new ProfileValidationError('Invalid request');return s.approve(context(r).activeCompanyId,context(r).user.id,id(r));});
