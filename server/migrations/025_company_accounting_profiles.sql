@@ -45,7 +45,7 @@ CREATE TABLE company_accounting_profiles (
   has_non_resident_dealings TEXT NOT NULL
     CHECK (has_non_resident_dealings IN ('yes', 'no', 'unknown')),
 
-  effective_from DATE NOT NULL,
+  effective_from DATE,
   effective_to DATE,
   prepared_by_user_id UUID NOT NULL REFERENCES users(id),
   reviewed_by_user_id UUID REFERENCES users(id),
@@ -58,7 +58,9 @@ CREATE TABLE company_accounting_profiles (
 
   UNIQUE (company_id, version_no),
   UNIQUE (id, company_id),
-  CHECK (effective_to IS NULL OR effective_to >= effective_from),
+  CHECK (effective_from IS NOT NULL OR effective_to IS NULL),
+  CHECK (effective_from IS NULL OR effective_to IS NULL OR effective_to >= effective_from),
+  CHECK (workflow_status <> 'approved' OR effective_from IS NOT NULL),
   CHECK (
     vat_deregistered_from IS NULL OR vat_registered_from IS NULL
     OR vat_deregistered_from >= vat_registered_from
@@ -68,6 +70,16 @@ CREATE TABLE company_accounting_profiles (
     OR (vat_registration_number IS NOT NULL
       AND vat_registered_from IS NOT NULL
       AND vat_filing_frequency IS NOT NULL)
+  ),
+  CHECK (
+    vat_status <> 'deregistered'
+    OR (vat_registration_number IS NOT NULL
+      AND btrim(vat_registration_number) <> ''
+      AND vat_registered_from IS NOT NULL
+      AND vat_deregistered_from IS NOT NULL)
+  ),
+  CHECK (
+    vat_registration_number IS NULL OR btrim(vat_registration_number) <> ''
   ),
   CHECK (
     vat_status <> 'not_registered'
