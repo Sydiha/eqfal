@@ -65,14 +65,22 @@ export class CompanyAccountingProfileRepository {
     return this.decorate({...rows[0]!,closed_period_impact:false})!;
   }
 
-  async updateDraft(companyId:string,id:string,input:UpdateProfileInput,runner:Runner):Promise<CompanyAccountingProfile|null>{
+  private async updateForStatus(companyId:string,id:string,input:UpdateProfileInput,status:WorkflowStatus,runner:Runner):Promise<CompanyAccountingProfile|null>{
     const keys=Object.keys(input) as (keyof UpdateProfileInput)[];
     const values=keys.map(key=>input[key]);
     const set=keys.map((key,i)=>`${key}=$${i+1}`);
     const {rows}=await runner.query<Omit<CompanyAccountingProfile,'professional_review_required'>>(
-      `UPDATE company_accounting_profiles SET ${set.join(',')},updated_at=NOW() WHERE id=$${keys.length+1} AND company_id=$${keys.length+2} AND workflow_status='draft' RETURNING ${RETURNING}`,
-      [...values,id,companyId]);
+      `UPDATE company_accounting_profiles SET ${set.join(',')},updated_at=NOW() WHERE id=$${keys.length+1} AND company_id=$${keys.length+2} AND workflow_status=$${keys.length+3} RETURNING ${RETURNING}`,
+      [...values,id,companyId,status]);
     return this.decorate(rows[0]&&{...rows[0],closed_period_impact:false});
+  }
+
+  updateDraft(companyId:string,id:string,input:UpdateProfileInput,runner:Runner):Promise<CompanyAccountingProfile|null>{
+    return this.updateForStatus(companyId,id,input,'draft',runner);
+  }
+
+  updateNeedsReview(companyId:string,id:string,input:UpdateProfileInput,runner:Runner):Promise<CompanyAccountingProfile|null>{
+    return this.updateForStatus(companyId,id,input,'needs_review',runner);
   }
 
   async transition(companyId:string,id:string,from:WorkflowStatus,to:WorkflowStatus,actor:string,runner:Runner):Promise<CompanyAccountingProfile|null>{
