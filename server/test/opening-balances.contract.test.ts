@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source=readFileSync(new URL('../src/modules/opening-balances/opening-balances.router.ts',import.meta.url),'utf8');
+const posting=readFileSync(new URL('../src/modules/accounting/journal-posting.ts',import.meta.url),'utf8');
 
 describe('Phase 1C opening balance server contract',()=>{
   it('exposes only the approved tenant-scoped API boundary with distinct capabilities',()=>{
@@ -38,18 +39,21 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain("review.status!=='in_review'");
   });
 
-  it('requires a balanced opening position and one canonical opening journal at fiscal-year start',()=>{
-    expect(source).toContain('Opening balance is not balanced');
-    expect(source).toContain("entry_type='opening_balance'");
+  it('delegates balance validation to one canonical opening journal at fiscal-year start',()=>{
+    expect(source).toContain("'opening_balance','draft'");
     expect(source).toContain('year.start_date');
     expect(source).toContain('journal_entry_id');
+    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
+    expect(posting).toContain('Journal is not balanced');
+    expect(posting).toContain('Opening balance date must equal fiscal year start');
   });
 
-  it('reuses the monthly-close guard and keeps approval atomic',()=>{
-    expect(source).toContain('assertAccountingDateWritable');
+  it('reuses the canonical monthly-close guard and keeps approval atomic',()=>{
+    expect(posting).toContain('assertAccountingDateWritable');
     expect(source).toContain("await c.query('BEGIN')");
     expect(source).toContain("await c.query('COMMIT')");
     expect(source).toContain("await c.query('ROLLBACK')");
+    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
   });
 
   it('keeps suggestions advisory and avoids inferring partner balances',()=>{
