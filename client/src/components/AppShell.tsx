@@ -8,7 +8,7 @@ import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
 
-export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'sales' | 'purchases' | 'assets';
+export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'sales' | 'purchases' | 'assets' | 'companyProfile';
 
 type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
 
@@ -24,12 +24,13 @@ function ShellIcon({ name }: { name: IconName }) {
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',sales:'document',purchases:'document',assets:'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',sales:'document',purchases:'document',assets:'document',companyProfile:'document' };
 
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   useEffect(close, [page, close]);
+  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
@@ -37,7 +38,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
       className="eqfal-nav-link"
       active={page === next}
       aria-current={page === next ? 'page' : undefined}
-      label={t(`nav.${next}`)}
+      label={pageLabel(next)}
       leftSection={<span aria-hidden="true" className="nav-icon"><ShellIcon name={navIcons[next]} /></span>}
       onClick={() => setPage(next)}
     />
@@ -71,7 +72,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
           <Stack gap={0} className="page-context">
             <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
-            <Text className="page-context-title" fw={750}>{t(`nav.${page}`)}</Text>
+            <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
           </Stack>
           <Box className="topbar-spacer" />
           <CompanySwitcher onSwitch={onSwitch} />
@@ -115,7 +116,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           <Stack gap={4}>{nav('home')}</Stack>
           {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{nav('documents')}{nav('banks')}{nav('obligations')}</>)}
           {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
-          {navGroup(groupLabels.administration, <>{nav('partners')}</>)}
+          {navGroup(groupLabels.administration, <>{nav('partners')}{capabilities.includes('company_accounting_profile.view')&&nav('companyProfile')}</>)}
         </Stack>
       </MantineAppShell.Navbar>
 

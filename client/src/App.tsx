@@ -21,6 +21,7 @@ import { Accounting } from './components/Accounting';
 import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
 import { FixedAssets } from './components/FixedAssets';
+import { CompanyAccountingProfile } from './components/CompanyAccountingProfile';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 
@@ -32,7 +33,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases', 'assets'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases', 'assets', 'companyProfile'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -157,6 +158,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canManage={c.includes('partner.manage')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'companyProfile' && <CompanyAccountingProfile canView={c.includes('company_accounting_profile.view')} canManage={c.includes('company_accounting_profile.manage')} canReview={c.includes('company_accounting_profile.review')} canApprove={c.includes('company_accounting_profile.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canSettle={c.includes('obligation.settle')} canConfirm={c.includes('obligation.confirm')} onUnauthorized={handleUnauthorized}/>}
     {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} onCreateDocument={startSalesEntry} onEditDocument={editSalesEntry} onUnauthorized={handleUnauthorized}/>}
     {page === 'purchases' && <Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.manage')} canCreate={c.includes('document.upload')} canEdit={c.includes('document.upload')} canCapitalise={c.includes('asset.manage')} onCreateDocument={startPurchaseEntry} onEditDocument={editPurchaseEntry} onCapitalise={(id)=>{writeQueryParameters({page:'assets',assetDocument:id});setPage('assets')}} onUnauthorized={handleUnauthorized}/>}
