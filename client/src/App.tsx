@@ -22,6 +22,7 @@ import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
 import { FixedAssets } from './components/FixedAssets';
 import { CompanyAccountingProfile } from './components/CompanyAccountingProfile';
+import { OpeningBalanceReview } from './components/OpeningBalanceReview';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 
@@ -33,7 +34,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'sales', 'purchases', 'assets', 'companyProfile'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'sales', 'purchases', 'assets', 'companyProfile'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -165,6 +166,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
     {page === 'monthlyClose' && <MonthlyClose canView={c.includes('fiscal_year.view')} canClose={c.includes('monthly_close.close')} canReopen={c.includes('monthly_close.reopen')} onNavigate={navigateToDiscovery} onUnauthorized={handleUnauthorized}/>}
     {page === 'vat' && <Vat canView={c.includes('vat.view')} canReview={c.includes('vat.review')} canClose={c.includes('vat.close')} canReopen={c.includes('vat.reopen')} onUnauthorized={handleUnauthorized}/>}
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'openingBalances' && <OpeningBalanceReview canView={c.includes('opening_balance.view')} canManage={c.includes('opening_balance.manage')} canReview={c.includes('opening_balance.review')} canApprove={c.includes('opening_balance.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'assets' && <FixedAssets canView={c.includes('asset.view')} canManage={c.includes('asset.manage')} canApprove={c.includes('asset.approve')} canDispose={c.includes('asset.dispose')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
