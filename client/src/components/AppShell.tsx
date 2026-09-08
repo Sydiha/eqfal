@@ -7,6 +7,7 @@ import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
+import '../shell-corrective.css';
 
 export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'openingBalances' | 'sales' | 'purchases' | 'assets' | 'companyProfile';
 

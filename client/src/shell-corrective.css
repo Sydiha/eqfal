@@ -1,0 +1,48 @@
+/* Practical shell corrections discovered during Phase 1C acceptance. */
+.sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .22) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .22);
+}
+
+.eqfal-nav-groups {
+  padding-block-end: 28px;
+}
+
+/* Keep the Opening Balance workspace as one continuous outer surface.
+   Internal sections use separators instead of repeatedly rounded side edges. */
+.shared-workspace-page[aria-labelledby="opening-balance-title"] > .shared-metric-strip {
+  border-inline: 0;
+  border-radius: 0;
+}
+
+.shared-workspace-page[aria-labelledby="opening-balance-title"] > .shared-section-card {
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+.shared-workspace-page[aria-labelledby="opening-balance-title"] > .shared-section-card:last-of-type {
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 48em) {
+  .eqfal-nav-groups {
+    padding-block-end: 20px;
+  }
+}
