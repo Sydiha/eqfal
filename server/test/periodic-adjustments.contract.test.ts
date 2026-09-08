@@ -14,20 +14,25 @@ describe('Phase 4 periodic adjustments accounting contract',()=>{
   expect(router).toContain("'periodic_adjustment'");
   expect(router).toContain('postJournalInTransaction(c,company,actor,journal.id)');
  });
- it('registers pending schedule lines as operational sources',()=>{
-  expect(sources).toContain("'periodic_adjustment'");
+ it('keeps periodic schedule posting workflow-owned while exposing its source to shared posting validation',()=>{
+  expect(sources).toContain("JournalOperationalSourceType=OperationalSourceType|'periodic_adjustment'");
+  expect(sources).toContain("periodic_adjustment:`SELECT 'periodic_adjustment'");
   expect(sources).toContain("s.status='pending'");
   expect(sources).toContain("a.workflow_status='approved'");
+  expect(sources).not.toContain("OPERATIONAL_SOURCE_TYPES=['obligation','document_settlement','obligation_settlement','custody_allocation','custody_funding','custody_return','asset_depreciation','asset_disposal','periodic_adjustment']");
  });
  it('enforces the configured account mapping before a periodic journal can post',()=>{
+  expect(posting).toContain("type !== 'periodic_adjustment'");
   expect(posting).toContain("journal.source_type === 'periodic_adjustment'");
   expect(posting).toContain('balance_account_id');
   expect(posting).toContain('pnl_account_id');
   expect(posting).toContain('Periodic adjustment journal must use the configured balance-sheet and P&L accounts');
  });
- it('feeds pending periodic sources into the existing monthly-close ledger blocker',()=>{
-  expect(close).toContain('loadOperationalSources(companyId,client)');
-  expect(close).toContain('unpostedSources++');
+ it('blocks monthly close for unresolved or due periodic adjustments',()=>{
+  expect(close).toContain("a.workflow_status IN ('draft','in_review')");
+  expect(close).toContain("a.workflow_status='approved' AND s.status='pending'");
+  expect(close).toContain('periodicAdjustments=Number(rows[0]!.periodic_adjustments??0)');
+  expect(close).toContain('independentDrafts+periodicAdjustments');
  });
  it('requires a reason to return an in-review adjustment to draft',()=>{
   expect(router).toContain("'/periodic-adjustments/:id/return-to-draft'");
