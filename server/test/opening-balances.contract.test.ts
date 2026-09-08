@@ -23,7 +23,14 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain('WHERE id=$1 AND company_id=$2');
     expect(source).toContain('WHERE company_id=$1 AND fiscal_year_id=$2');
     expect(source).toContain('Referenced entity does not belong to the active company');
-    for(const table of ['accounts','counterparties','partners','bank_accounts','fixed_assets','documents']) expect(source).toContain(`['${table}'`);
+    for(const table of ['accounts','counterparties','partners','bank_accounts','fixed_assets','obligations','custody_advances','documents']) expect(source).toContain(`['${table}'`);
+  });
+
+  it('supports the complete approved category and traceability contract',()=>{
+    expect(source).toContain("'inventory'");
+    expect(source).toContain("'obligation_id','obligationId'");
+    expect(source).toContain("'custody_id','custodyId'");
+    expect(source).toContain('obligation_id,custody_id');
   });
 
   it('keeps item writes draft-only and protects against stale item updates',()=>{
@@ -33,10 +40,12 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain('version=version+1');
   });
 
-  it('implements the explicit Draft to In Review workflow and blocks direct approval',()=>{
+  it('implements explicit review transitions and requires a reason when returning to draft',()=>{
     expect(source).toContain("to==='in_review'&&review.status!=='draft'");
     expect(source).toContain("to==='draft'&&review.status!=='in_review'");
-    expect(source).toContain("review.status!=='in_review'");
+    expect(source).toContain('Return reason is required');
+    expect(source).toContain('review_note=$3');
+    expect(source).toContain('parseReturnReason(req.body)');
   });
 
   it('delegates balance validation to one canonical opening journal at fiscal-year start',()=>{
@@ -48,6 +57,12 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(posting).toContain('Opening balance date must equal fiscal year start');
   });
 
+  it('nets opening items by account using PostgreSQL numeric arithmetic',()=>{
+    expect(source).toContain("SUM(CASE WHEN i.balance_side='debit' THEN i.amount ELSE -i.amount END) net");
+    expect(source).toContain('WHERE net<>0');
+    expect(source).not.toContain("const k=`${x.account_id}:${x.balance_side}`");
+  });
+
   it('reuses the canonical monthly-close guard and keeps approval atomic',()=>{
     expect(posting).toContain('assertAccountingDateWritable');
     expect(source).toContain("await c.query('BEGIN')");
@@ -56,10 +71,11 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
   });
 
-  it('keeps suggestions advisory and avoids inferring partner balances',()=>{
+  it('keeps suggestions advisory, sequential on one client and avoids inferred partner balances',()=>{
     expect(source).toContain("o.source_type='opening_balance'");
     expect(source).toContain("a.source_type='manual_opening'");
     expect(source).toContain('Start-date running balance is evidence only; confirm against bank statement');
+    expect(source).not.toContain('Promise.all([');
     expect(source).not.toMatch(/partner_ownership_periods.*amount|ownership_percentage.*partner_(?:capital|current|loan)/s);
   });
 
