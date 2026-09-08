@@ -19,6 +19,7 @@ import { purchasesRouter } from './modules/purchases/purchases.router';
 import { fixedAssetsRouter } from './modules/fixed-assets/fixed-assets.router';
 import { companyAccountingProfileRouter } from './modules/company-accounting-profile/company-accounting-profile.router';
 import { openingBalancesRouter } from './modules/opening-balances/opening-balances.router';
+import { periodicAdjustmentsRouter } from './modules/periodic-adjustments/periodic-adjustments.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api', purchasesRouter);
 app.use('/api', fixedAssetsRouter);
 app.use('/api', companyAccountingProfileRouter);
 app.use('/api', openingBalancesRouter);
+app.use('/api', periodicAdjustmentsRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {

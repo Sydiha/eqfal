@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
-import { isOperationalSourceType, operationalSourceQuery, OperationalSource } from './operational-sources';
+import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 
 export class JournalPostingValidationError extends Error {}
@@ -27,8 +27,12 @@ type Journal = {
 };
 
 async function source(companyId: string, type: string, id: string, client: PoolClient) {
-  if (!isOperationalSourceType(type)) throw new JournalPostingValidationError('Unsupported operational source type');
-  const row = (await client.query<OperationalSource>(operationalSourceQuery(type), [id, companyId])).rows[0];
+  if (type !== 'periodic_adjustment' && !isOperationalSourceType(type)) {
+    throw new JournalPostingValidationError('Unsupported operational source type');
+  }
+  const row = (
+    await client.query<OperationalSource>(operationalSourceQuery(type as JournalOperationalSourceType), [id, companyId])
+  ).rows[0];
   if (!row) throw new JournalPostingNotFoundError();
   return row;
 }
@@ -121,6 +125,33 @@ export async function postJournalInTransaction(
       if (!mapped) {
         throw new JournalPostingValidationError(
           'Depreciation journal must use the configured expense and accumulated depreciation accounts',
+        );
+      }
+    }
+
+    if (journal.source_type === 'periodic_adjustment') {
+      const adjustmentType = String(operationalSource.context.adjustment_type ?? '');
+      const expense = adjustmentType === 'accrued_expense' || adjustmentType === 'prepaid_expense';
+      const debitAccount = expense
+        ? operationalSource.context.pnl_account_id
+        : operationalSource.context.balance_account_id;
+      const creditAccount = expense
+        ? operationalSource.context.balance_account_id
+        : operationalSource.context.pnl_account_id;
+      const mapped = (
+        await client.query<{ valid: boolean }>(
+          `SELECT COUNT(*)=2 AND BOOL_AND(
+             (l.account_id=$2 AND l.debit=$4::numeric AND l.credit=0)
+             OR (l.account_id=$3 AND l.credit=$4::numeric AND l.debit=0)
+           ) valid
+           FROM journal_lines l
+           WHERE l.journal_entry_id=$1 AND l.company_id=$5`,
+          [id, debitAccount, creditAccount, operationalSource.amount, companyId],
+        )
+      ).rows[0]?.valid;
+      if (!mapped) {
+        throw new JournalPostingValidationError(
+          'Periodic adjustment journal must use the configured balance-sheet and P&L accounts',
         );
       }
     }

@@ -62,15 +62,27 @@ export class MonthlyCloseService {
     return new Set(rows.map(row=>row.id));
   }
   private async blockers(companyId:string,start:string,end:string,client:PoolClient|Pool=this.db):Promise<Blockers>{
-    const {rows}=await client.query<{documents:string;obligations:string;bank_transactions:string}>(`SELECT
+    const {rows}=await client.query<{documents:string;obligations:string;bank_transactions:string;periodic_adjustments?:string}>(`SELECT
       (SELECT COUNT(*) FROM documents WHERE company_id=$1 AND document_date BETWEEN $2 AND $3 AND status IN ('uploaded','needs_review','incomplete'))::text documents,
       (SELECT COUNT(*) FROM obligations WHERE company_id=$1 AND recognized_on BETWEEN $2 AND $3 AND NOT is_cancelled AND verification_status='unconfirmed')::text obligations,
+      (SELECT COUNT(DISTINCT adjustment_id) FROM (
+        SELECT a.id adjustment_id
+        FROM periodic_adjustments a
+        WHERE a.company_id=$1 AND a.workflow_status IN ('draft','in_review')
+          AND a.recognition_start <= $3 AND a.recognition_end >= $2
+        UNION ALL
+        SELECT s.adjustment_id
+        FROM periodic_adjustment_schedule s
+        JOIN periodic_adjustments a ON a.id=s.adjustment_id AND a.company_id=s.company_id
+        WHERE s.company_id=$1 AND a.workflow_status='approved' AND s.status='pending'
+          AND s.recognition_date BETWEEN $2 AND $3
+      ) pending_adjustments)::text periodic_adjustments,
       (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND NOT (
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
       ))::text bank_transactions`,[companyId,start,end]);
-    const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions);
+    const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions),periodicAdjustments=Number(rows[0]!.periodic_adjustments??0);
     const vatReadiness=await new VatService(this.db).readiness(companyId,start,end,client);
     const vat=vatReadiness.ready?0:1;
     const incompleteDocuments=await this.incompleteMaterialDocuments(companyId,start,end,client);
@@ -80,7 +92,7 @@ export class MonthlyCloseService {
     const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
     const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
     const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
-    const ledger=incompleteDocuments.size+unpostedSources+independentDrafts;
+    const ledger=incompleteDocuments.size+unpostedSources+independentDrafts+periodicAdjustments;
     const assetCounts=(await client.query<{pending:string;drafts:string}>(`SELECT
       (SELECT COUNT(*) FROM asset_depreciation_entries WHERE company_id=$1 AND status='pending' AND period_end BETWEEN $2 AND $3)::text pending,
       (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND source_type='document' AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
@@ -111,4 +123,3 @@ monthlyCloseRouter.get('/monthly-close-periods',requireAuth,requireActiveCompany
 monthlyCloseRouter.post('/monthly-close-periods',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.close'),route(async(req,res)=>{try{const body=parseCreate(req.body);if(!body)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.status(201).json(await value.create(context(req).activeCompanyId,context(req).user.id,body.fiscalYearId,body.start,body.end));}catch(error){handle(error,res);}}));
 monthlyCloseRouter.post('/monthly-close-periods/:id/close',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.close'),route(async(req,res)=>{try{if(!UUID.test(req.params.id)||Object.keys(req.body??{}).length)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.json(await value.close(context(req).activeCompanyId,context(req).user.id,req.params.id));}catch(error){handle(error,res);}}));
 monthlyCloseRouter.post('/monthly-close-periods/:id/reopen',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.reopen'),route(async(req,res)=>{try{const reason=parseReason(req.body);if(!UUID.test(req.params.id)||!reason)throw new MonthlyCloseValidationError('Reason is required');const value=service(res);if(value)res.json(await value.reopen(context(req).activeCompanyId,context(req).user.id,req.params.id,reason));}catch(error){handle(error,res);}}));
-
