@@ -40,6 +40,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
       aria-current={page === next ? 'page' : undefined}
       label={pageLabel(next)}
       leftSection={<span aria-hidden="true" className="nav-icon"><ShellIcon name={navIcons[next]} /></span>}
+      styles={{ label: { whiteSpace: 'normal', lineHeight: 1.35 } }}
       onClick={() => setPage(next)}
     />
   );
@@ -62,7 +63,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     <MantineAppShell
       className="app-shell app-shell--v2"
       header={{ height: 60 }}
-      navbar={{ width: 232, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >

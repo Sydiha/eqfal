@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDisplayDate } from '../date-format';
 import { Metric, MetricStrip, PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState } from './SharedUI';
 
 type FiscalYear={id:string;name:string;start_date:string;end_date:string;status:'open'|'closed'};
@@ -34,7 +35,7 @@ export function OpeningBalanceReview({canView,canManage,canReview,canApprove,onU
  const status=review?.status??'draft';const balanced=/^-?0+(?:\.0+)?$/.test(summary.difference)&&items.length>=2;
  return <WorkspacePage labelledBy="opening-balance-title" size="operational">
   <PageHeader titleId="opening-balance-title" eyebrow={l.title} title={l.title} description={l.description}/>
-  <div className="form-grid"><label>{l.fiscalYear}<select value={yearId} onChange={e=>setYearId(e.target.value)}>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label>{selectedYear&&<p><strong>{l.asOf}:</strong> {selectedYear.start_date}</p>}<p><strong>{l.status}:</strong> <StatusBadge status={status}>{l[status]}</StatusBadge></p></div>
+  <div className="form-grid"><label>{l.fiscalYear}<select value={yearId} onChange={e=>setYearId(e.target.value)}>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label>{selectedYear&&<p><strong>{l.asOf}:</strong> {formatDisplayDate(selectedYear.start_date,i18n.language)}</p>}<p><strong>{l.status}:</strong> <StatusBadge status={status}>{l[status]}</StatusBadge></p></div>
   <MetricStrip><Metric label={l.debit} value={summary.debit}/><Metric label={l.credit} value={summary.credit}/><Metric label={l.difference} value={summary.difference}/><Metric label={`${l.confidence} · ${l.high}/${l.medium}/${l.low}`} value={`${summary.confidence.high}/${summary.confidence.medium}/${summary.confidence.low}`}/></MetricStrip>
   {error&&<WorkspaceState tone="error" action={<button onClick={()=>void loadYear(yearId)}>{l.error}</button>}>{error}</WorkspaceState>}
   {loading?<WorkspaceState>{l.loading}</WorkspaceState>:<>
