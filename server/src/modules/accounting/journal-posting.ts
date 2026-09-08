@@ -125,6 +125,33 @@ export async function postJournalInTransaction(
       }
     }
 
+    if (journal.source_type === 'periodic_adjustment') {
+      const adjustmentType = String(operationalSource.context.adjustment_type ?? '');
+      const expense = adjustmentType === 'accrued_expense' || adjustmentType === 'prepaid_expense';
+      const debitAccount = expense
+        ? operationalSource.context.pnl_account_id
+        : operationalSource.context.balance_account_id;
+      const creditAccount = expense
+        ? operationalSource.context.balance_account_id
+        : operationalSource.context.pnl_account_id;
+      const mapped = (
+        await client.query<{ valid: boolean }>(
+          `SELECT COUNT(*)=2 AND BOOL_AND(
+             (l.account_id=$2 AND l.debit=$4::numeric AND l.credit=0)
+             OR (l.account_id=$3 AND l.credit=$4::numeric AND l.debit=0)
+           ) valid
+           FROM journal_lines l
+           WHERE l.journal_entry_id=$1 AND l.company_id=$5`,
+          [id, debitAccount, creditAccount, operationalSource.amount, companyId],
+        )
+      ).rows[0]?.valid;
+      if (!mapped) {
+        throw new JournalPostingValidationError(
+          'Periodic adjustment journal must use the configured balance-sheet and P&L accounts',
+        );
+      }
+    }
+
     await enforceVatRecognition(companyId, id, journal.source_type, journal.source_id, client);
   }
 
