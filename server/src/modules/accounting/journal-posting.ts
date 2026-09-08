@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
-import { isOperationalSourceType, operationalSourceQuery, OperationalSource } from './operational-sources';
+import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 
 export class JournalPostingValidationError extends Error {}
@@ -27,8 +27,12 @@ type Journal = {
 };
 
 async function source(companyId: string, type: string, id: string, client: PoolClient) {
-  if (!isOperationalSourceType(type)) throw new JournalPostingValidationError('Unsupported operational source type');
-  const row = (await client.query<OperationalSource>(operationalSourceQuery(type), [id, companyId])).rows[0];
+  if (type !== 'periodic_adjustment' && !isOperationalSourceType(type)) {
+    throw new JournalPostingValidationError('Unsupported operational source type');
+  }
+  const row = (
+    await client.query<OperationalSource>(operationalSourceQuery(type as JournalOperationalSourceType), [id, companyId])
+  ).rows[0];
   if (!row) throw new JournalPostingNotFoundError();
   return row;
 }
