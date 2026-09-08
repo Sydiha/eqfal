@@ -9,7 +9,7 @@ import '../visual-polish.css';
 import '../brand.css';
 import '../shell-corrective.css';
 
-export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'openingBalances' | 'sales' | 'purchases' | 'assets' | 'companyProfile';
+export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'sales' | 'purchases' | 'assets' | 'companyProfile';
 
 type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
 
@@ -25,13 +25,13 @@ function ShellIcon({ name }: { name: IconName }) {
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',openingBalances:'document',sales:'document',purchases:'document',assets:'document',companyProfile:'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',openingBalances:'document',periodicAdjustments:'document',sales:'document',purchases:'document',assets:'document',companyProfile:'document' };
 
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   useEffect(close, [page, close]);
-  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):t(`nav.${next}`);
+  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
@@ -117,7 +117,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
           <Stack gap={4}>{nav('home')}</Stack>
           {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{nav('documents')}{nav('banks')}{nav('obligations')}</>)}
-          {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('opening_balance.view')&&nav('openingBalances')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
+          {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('opening_balance.view')&&nav('openingBalances')}{capabilities.includes('periodic_adjustment.view')&&nav('periodicAdjustments')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
           {navGroup(groupLabels.administration, <>{nav('partners')}{capabilities.includes('company_accounting_profile.view')&&nav('companyProfile')}</>)}
         </Stack>
       </MantineAppShell.Navbar>
