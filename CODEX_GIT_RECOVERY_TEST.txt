@@ -1,0 +1,3 @@
+Codex Git recovery verification only.
+Safe to delete.
+No project code change.
