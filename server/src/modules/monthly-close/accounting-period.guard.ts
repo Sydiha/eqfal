@@ -49,3 +49,14 @@ export async function assertAccountingDateWritable(companyId: string, businessDa
   );
   if (result.rowCount) throw new AccountingPeriodClosedError();
 }
+
+export async function assertAccountingRangeWritable(companyId: string, start: AccountingDate, end: AccountingDate, client: PoolClient): Promise<void> {
+  const normalizedStart = normalizeAccountingDate(start);
+  const normalizedEnd = normalizeAccountingDate(end);
+  await lockAccountingRange(companyId, normalizedStart, normalizedEnd, client);
+  const result = await client.query(
+    `SELECT 1 FROM monthly_close_periods WHERE company_id=$1 AND status='closed' AND period_start <= $3::date AND period_end >= $2::date LIMIT 1`,
+    [companyId, normalizedStart, normalizedEnd],
+  );
+  if (result.rowCount) throw new AccountingPeriodClosedError();
+}
