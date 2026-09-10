@@ -16,6 +16,12 @@ export interface VatReportDocument {
   treatment: VatTreatment;
   taxable_amount: string;
   vat_amount: string;
+  recoverability_status: 'not_applicable'|'fully_recoverable'|'non_recoverable'|'partially_recoverable'|'needs_review';
+  recoverable_vat_amount: string|null;
+  non_recoverable_vat_amount: string|null;
+  recoverability_reason: string|null;
+  recoverability_reviewed_by_user_id: string|null;
+  recoverability_reviewed_at: string|null;
   obligation_id?: string;
   journal_entry_id?: string;
   expected_memo?: 'VAT_INPUT' | 'VAT_OUTPUT';
@@ -26,7 +32,7 @@ export interface VatReportDocument {
 export interface VatClosingReport {
   period: { id: string; period_start: string; period_end: string; status: 'closed' };
   company: { id: string; name: string };
-  totals: { output_vat: number; input_vat: number; net_vat: number; sales_total: number; purchase_expense_total: number };
+  totals: { output_vat:number;input_vat:number;net_vat:number;sales_total:number;purchase_expense_total:number;gross_reviewed_input_vat:number;recoverable_input_vat:number;non_recoverable_input_vat:number;recoverability_needs_review:number;fully_recoverable_documents:number;partially_recoverable_documents:number;non_recoverable_documents:number };
   treatments: Record<VatTreatment, { count: number; taxable_amount: number; vat_amount: number }>;
   documents: VatReportDocument[];
   reconciliation: VatReconciliation;
@@ -48,11 +54,13 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
   if (period.status !== 'closed') throw new VatReportOpenPeriodError();
 
   const documentResult = await db.query<VatReportDocument>(`SELECT d.id,d.original_filename,d.document_type,d.document_date::text,d.counterparty_name,d.total_amount::text,
-      r.tax_date::text,r.treatment,r.taxable_amount::text,r.vat_amount::text
+      r.tax_date::text,r.treatment,r.taxable_amount::text,r.vat_amount::text,r.recoverability_status,
+      r.recoverable_vat_amount::text,CASE WHEN d.document_type='sale' OR r.recoverable_vat_amount IS NULL THEN NULL ELSE (r.vat_amount-r.recoverable_vat_amount)::text END non_recoverable_vat_amount,
+      r.recoverability_reason,r.recoverability_reviewed_by_user_id,r.recoverability_reviewed_at::text
       FROM documents d JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
       WHERE d.company_id=$1 AND d.status='approved' AND d.document_type IN ('purchase','expense','sale')
         AND r.review_status='reviewed'
-        AND ((d.document_date BETWEEN $2 AND $3) OR (r.tax_date BETWEEN $2 AND $3))
+        AND r.tax_date BETWEEN $2 AND $3
       ORDER BY r.tax_date,d.created_at,d.id`, [companyId, period.period_start, period.period_end]);
   const reconciliation = await loadVatReconciliation(db, companyId, period.period_start, period.period_end);
   const reconciliationByDocument = new Map(reconciliation.documents.map(document => [document.document_id, document]));
@@ -64,7 +72,7 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
   });
 
   const treatmentTotals = Object.fromEntries(treatments.map(t => [t, { count: 0, taxable_amount: 0, vat_amount: 0 }])) as VatClosingReport['treatments'];
-  let output = 0, input = 0, salesTotal = 0, purchaseExpenseTotal = 0;
+  let output=0,input=0,recoverableInput=0,nonRecoverableInput=0,salesTotal=0,purchaseExpenseTotal=0,needsReview=0,fully=0,partially=0,nonRecoverable=0;
   for (const document of documentResult.rows) {
     const vat = Number(document.vat_amount || 0);
     const taxable = Number(document.taxable_amount || 0);
@@ -72,13 +80,13 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     const bucket = treatmentTotals[document.treatment];
     bucket.count += 1; bucket.taxable_amount += taxable; bucket.vat_amount += vat;
     if (document.document_type === 'sale') { output += vat; salesTotal += total; }
-    else { input += vat; purchaseExpenseTotal += total; }
+    else { input+=vat;recoverableInput+=Number(document.recoverable_vat_amount??0);nonRecoverableInput+=Number(document.non_recoverable_vat_amount??0);purchaseExpenseTotal+=total;if(document.recoverability_status==='needs_review')needsReview++;else if(document.recoverability_status==='fully_recoverable')fully++;else if(document.recoverability_status==='partially_recoverable')partially++;else if(document.recoverability_status==='non_recoverable')nonRecoverable++; }
   }
 
   return {
     period: { id: period.id, period_start: period.period_start, period_end: period.period_end, status: 'closed' },
     company: { id: companyId, name: period.company_name },
-    totals: { output_vat: output, input_vat: input, net_vat: output - input, sales_total: salesTotal, purchase_expense_total: purchaseExpenseTotal },
+    totals:{output_vat:output,input_vat:input,net_vat:output-input,sales_total:salesTotal,purchase_expense_total:purchaseExpenseTotal,gross_reviewed_input_vat:input,recoverable_input_vat:recoverableInput,non_recoverable_input_vat:nonRecoverableInput,recoverability_needs_review:needsReview,fully_recoverable_documents:fully,partially_recoverable_documents:partially,non_recoverable_documents:nonRecoverable},
     treatments: treatmentTotals,
     documents,
     reconciliation,
@@ -117,14 +125,14 @@ const treatmentLabel: Record<VatTreatment,string> = {
 };
 
 export function buildVatWorkingPaperXlsx(report: VatClosingReport): Buffer {
-  const headers=['المستند / Document','العميل / المورد / Customer / Supplier','النوع / Type','تاريخ المستند / Document Date','التاريخ الضريبي / Tax Date','الإجمالي / Total','المعالجة / Treatment','المبلغ الخاضع / Taxable Amount','مبلغ الضريبة / VAT Amount','Obligation ID','Journal Entry ID','Expected VAT Memo','Ledger VAT Amount','Reconciliation Status'];
+  const headers=['المستند / Document','العميل / المورد / Customer / Supplier','النوع / Type','تاريخ المستند / Document Date','التاريخ الضريبي / Tax Date','الإجمالي / Total','المعالجة / Treatment','المبلغ الخاضع / Taxable Amount','مبلغ الضريبة / VAT Amount','Recoverability Status','Recoverable VAT Amount','Non-Recoverable VAT Amount','Recoverability Reason','Recoverability Reviewed By','Recoverability Reviewed At','Obligation ID','Journal Entry ID','Expected VAT Memo','Ledger VAT Amount','Reconciliation Status'];
   const reconciliation=report.reconciliation;
   const rows: Array<Array<string|number>>=[
     ['ورقة عمل ضريبة القيمة المضافة / VAT Working Paper'],['الشركة / Company',report.company.name],['الفترة / Period',`${report.period.period_start} — ${report.period.period_end}`],
     ['الحالة / Status','مقفلة / Closed'],['تاريخ الإنشاء / Generated At',new Date().toISOString()],
-    ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT',report.totals.net_vat],[],
+    ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT',report.totals.net_vat],['Gross Reviewed Input VAT',report.totals.gross_reviewed_input_vat],['Recoverable Input VAT',report.totals.recoverable_input_vat],['Non-Recoverable Input VAT',report.totals.non_recoverable_input_vat],['Fully Recoverable Documents',report.totals.fully_recoverable_documents],['Partially Recoverable Documents',report.totals.partially_recoverable_documents],['Non-Recoverable Documents',report.totals.non_recoverable_documents],['Recoverability Review Pending',report.totals.recoverability_needs_review],[],
     ['VAT Reconciliation Summary'],['Reviewed Output VAT',reconciliation.totals.reviewed_output_vat],['Ledger Output VAT',reconciliation.totals.ledger_output_vat],['Output Difference',reconciliation.totals.output_difference],['Reviewed Input VAT',reconciliation.totals.reviewed_input_vat],['Ledger Input VAT',reconciliation.totals.ledger_input_vat],['Input Difference',reconciliation.totals.input_difference],['Total in-scope documents',reconciliation.counts.total_in_scope],['Reconciled documents',reconciliation.counts.reconciled],['Unreconciled documents',reconciliation.counts.unreconciled],[],headers,
-    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount),d.obligation_id??'',d.journal_entry_id??'',d.expected_memo??'',d.ledger_vat_amount===undefined?'':Number(d.ledger_vat_amount),d.reconciliation_status??'']),
+    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount),d.document_type==='sale'?'not_applicable':d.recoverability_status,d.document_type==='sale'?'':Number(d.recoverable_vat_amount??0),d.document_type==='sale'?'':Number(d.non_recoverable_vat_amount??0),d.document_type==='sale'?'':d.recoverability_reason??'',d.document_type==='sale'?'':d.recoverability_reviewed_by_user_id??'',d.document_type==='sale'?'':d.recoverability_reviewed_at??'',d.obligation_id??'',d.journal_entry_id??'',d.expected_memo??'',d.ledger_vat_amount===undefined?'':Number(d.ledger_vat_amount),d.reconciliation_status??'']),
   ];
   const sheetRows=rows.map((row,r)=>`<row r="${r+1}">${row.map((v,c)=>typeof v==='number'?`<c r="${colName(c)}${r+1}"><v>${Number.isFinite(v)?v:0}</v></c>`:`<c r="${colName(c)}${r+1}" t="inlineStr"><is><t>${xml(v)}</t></is></c>`).join('')}</row>`).join('');
   const files=[
