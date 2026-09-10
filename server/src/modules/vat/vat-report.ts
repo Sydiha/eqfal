@@ -36,7 +36,9 @@ export interface VatClosingReport {
   treatments: Record<VatTreatment, { count: number; taxable_amount: number; vat_amount: number }>;
   documents: VatReportDocument[];
   reconciliation: VatReconciliation;
+  adjustments?: VatReportAdjustment[];
 }
+export interface VatReportAdjustment { id:string; document_vat_review_id:string; original_vat_period_id:string; adjustment_vat_period_id:string; adjustment_type:string; reason:string; taxable_amount_delta:string; vat_amount_delta:string; recoverable_vat_amount_delta:string; status:'draft'|'reviewed'|'applied'; created_by_user_id:string; reviewed_by_user_id:string|null; reviewed_at:string|null; }
 
 export class VatReportNotFoundError extends Error {}
 export class VatReportOpenPeriodError extends Error {}
@@ -63,6 +65,8 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
         AND r.tax_date BETWEEN $2 AND $3
       ORDER BY r.tax_date,d.created_at,d.id`, [companyId, period.period_start, period.period_end]);
   const reconciliation = await loadVatReconciliation(db, companyId, period.period_start, period.period_end);
+  const adjustmentResult = await db.query<VatReportAdjustment>(`SELECT a.id,a.document_vat_review_id,a.original_vat_period_id,a.adjustment_vat_period_id,a.adjustment_type,a.reason,a.taxable_amount_delta::text,a.vat_amount_delta::text,a.recoverable_vat_amount_delta::text,a.status,a.created_by_user_id,a.reviewed_by_user_id,a.reviewed_at::text FROM vat_adjustments a WHERE a.company_id=$1 AND a.adjustment_vat_period_id=$2 ORDER BY a.created_at,a.id`, [companyId, period.id]);
+  const adjustments=adjustmentResult.rows.filter(a=>Boolean(a.id&&a.adjustment_type));
   const reconciliationByDocument = new Map(reconciliation.documents.map(document => [document.document_id, document]));
   const documents = documentResult.rows.map(document => {
     const detail = reconciliationByDocument.get(document.id);
@@ -83,7 +87,7 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     else { input+=vat;recoverableInput+=Number(document.recoverable_vat_amount??0);nonRecoverableInput+=Number(document.non_recoverable_vat_amount??0);purchaseExpenseTotal+=total;if(document.recoverability_status==='needs_review')needsReview++;else if(document.recoverability_status==='fully_recoverable')fully++;else if(document.recoverability_status==='partially_recoverable')partially++;else if(document.recoverability_status==='non_recoverable')nonRecoverable++; }
   }
 
-  return {
+  const result: VatClosingReport = {
     period: { id: period.id, period_start: period.period_start, period_end: period.period_end, status: 'closed' },
     company: { id: companyId, name: period.company_name },
     totals:{output_vat:output,input_vat:input,net_vat:output-input,sales_total:salesTotal,purchase_expense_total:purchaseExpenseTotal,gross_reviewed_input_vat:input,recoverable_input_vat:recoverableInput,non_recoverable_input_vat:nonRecoverableInput,recoverability_needs_review:needsReview,fully_recoverable_documents:fully,partially_recoverable_documents:partially,non_recoverable_documents:nonRecoverable},
@@ -91,6 +95,13 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     documents,
     reconciliation,
   };
+  if (adjustments.length) {
+    const outputAdjustment=adjustments.filter(a=>a.status==='applied').reduce((sum,a)=>sum+Number(a.vat_amount_delta),0);
+    const recoverableAdjustment=adjustments.filter(a=>a.status==='applied').reduce((sum,a)=>sum+Number(a.recoverable_vat_amount_delta),0);
+    result.adjustments=adjustments;
+    result.totals={...result.totals,output_vat_adjustments:outputAdjustment,recoverable_input_vat_adjustments:recoverableAdjustment,final_output_vat:output+outputAdjustment,final_recoverable_input_vat:recoverableInput+recoverableAdjustment,base_net_vat:output-input,net_adjustment_effect:outputAdjustment-recoverableAdjustment,final_net_vat:(output+outputAdjustment)-(input-recoverableInput+recoverableAdjustment)} as VatClosingReport['totals'];
+  }
+  return result;
 }
 
 function xml(value: unknown): string {
