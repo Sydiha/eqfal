@@ -24,6 +24,7 @@ import { FixedAssets } from './components/FixedAssets';
 import { CompanyAccountingProfile } from './components/CompanyAccountingProfile';
 import { OpeningBalanceReview } from './components/OpeningBalanceReview';
 import { PeriodicAdjustments } from './components/PeriodicAdjustments';
+import { AnnualClosing } from './components/AnnualClosing';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 
@@ -35,7 +36,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -169,6 +170,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
     {page === 'openingBalances' && <OpeningBalanceReview canView={c.includes('opening_balance.view')} canManage={c.includes('opening_balance.manage')} canReview={c.includes('opening_balance.review')} canApprove={c.includes('opening_balance.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'periodicAdjustments' && <PeriodicAdjustments canView={c.includes('periodic_adjustment.view')} canManage={c.includes('periodic_adjustment.manage')} canReview={c.includes('periodic_adjustment.review')} canApprove={c.includes('periodic_adjustment.approve')} canPost={c.includes('periodic_adjustment.post')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'annualClosing' && <AnnualClosing canView={c.includes('annual_close.view')} onUnauthorized={handleUnauthorized}/>}
     {page === 'assets' && <FixedAssets canView={c.includes('asset.view')} canManage={c.includes('asset.manage')} canApprove={c.includes('asset.approve')} canDispose={c.includes('asset.dispose')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
