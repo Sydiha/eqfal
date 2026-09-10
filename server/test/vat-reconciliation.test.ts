@@ -8,7 +8,7 @@ const START='2026-01-01',END='2026-03-31';
 function detail(overrides:Partial<VatReconciliationDocument>={}):VatReconciliationDocument {
   return {document_id:'33333333-3333-4333-8333-333333333333',obligation_id:'44444444-4444-4444-8444-444444444444',document_type:'sale',tax_date:'2026-02-01',treatment:'standard',reviewed_vat_amount:'15.00',recoverability_status:'not_applicable',recoverable_vat_amount:null,non_recoverable_vat_amount:null,expected_vat_amount:'15.00',expected_memo:'VAT_OUTPUT',journal_entry_id:'55555555-5555-4555-8555-555555555555',journal_status:'posted',ledger_vat_amount:'15.00',reconciliation_status:'reconciled',...overrides};
 }
-function database(rows:VatReconciliationDocument[]){return{query:vi.fn(async()=>({rows,rowCount:rows.length}))} as any;}
+function database(rows:VatReconciliationDocument[],adjustments={adjusted_output_vat:'0',adjusted_gross_input_vat:'0',adjusted_recoverable_input_vat:'0'}){return{query:vi.fn(async()=>({rows:rows.length?rows.map(row=>({...row,...adjustments})):[adjustments],rowCount:Math.max(1,rows.length)}))} as any;}
 
 describe('Phase 6B1 VAT reconciliation',()=>{
   it.each([
@@ -50,6 +50,18 @@ describe('Phase 6B1 VAT reconciliation',()=>{
     ]),COMPANY,START,END);
     expect(value.totals).toEqual({reviewed_output_vat:17,reviewed_input_vat:7.5,gross_reviewed_input_vat:7.5,recoverable_input_vat:7.5,non_recoverable_input_vat:0,ledger_output_vat:15,ledger_input_vat:7.5,output_difference:2,input_difference:0});
     expect(value.counts).toEqual({total_in_scope:3,reconciled:2,unreconciled:1});
+  });
+
+  it('integrates only applied adjustment-period VAT deltas into reconciliation totals',async()=>{
+    const db=database([detail()],{adjusted_output_vat:'2.00',adjusted_gross_input_vat:'4.00',adjusted_recoverable_input_vat:'3.00'});
+    const value=await loadVatReconciliation(db,COMPANY,START,END);
+    expect(value.totals).toMatchObject({reviewed_output_vat:17,gross_reviewed_input_vat:4,recoverable_input_vat:3,non_recoverable_input_vat:1,output_difference:2,input_difference:3});
+    const [sql,params]=db.query.mock.calls[0];
+    expect(params).toEqual([COMPANY,START,END]);
+    expect(sql).toContain("a.status='applied'");
+    expect(sql).toContain('p.period_start <= $3 AND p.period_end >= $2');
+    expect(sql).toContain("d.document_type='sale'");
+    expect(sql).toContain("d.document_type IN ('purchase','expense')");
   });
 
   it('uses tax date and tenant-scopes every reconciliation relation',async()=>{
