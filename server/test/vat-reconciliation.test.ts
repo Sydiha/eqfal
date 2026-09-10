@@ -86,4 +86,14 @@ describe('Phase 6B1 VAT reconciliation',()=>{
     expect(sql).toContain('WHEN expected_line_count>1');
     expect(sql).toContain("l.memo=s.expected_memo");
   });
+
+  it('does not let zero expected VAT hide unexpected reserved VAT lines',async()=>{
+    const db=database([]);
+    await loadVatReconciliation(db,COMPANY,START,END);
+    const sql=db.query.mock.calls[0][0] as string;
+    expect(sql).toContain("WHEN expected_vat_amount=0 AND opposite_line_count>0 THEN 'wrong_vat_direction'");
+    expect(sql).toContain("WHEN expected_vat_amount=0 AND expected_line_count>1 THEN 'vat_amount_mismatch'");
+    expect(sql).toContain("WHEN expected_vat_amount=0 AND expected_line_count=1 AND ledger_vat_amount::numeric<>0 THEN 'vat_amount_mismatch'");
+    expect(sql).toContain("WHEN expected_vat_amount=0 THEN 'reconciled'");
+  });
 });
