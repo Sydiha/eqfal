@@ -26,12 +26,12 @@ describeDatabase('Phase 6B1 reconciliation with PostgreSQL',()=>{
     return value;
   }
 
-  async function reviewedDocument(client:PoolClient,t:Tenant,options:{type?:DocumentType;vat?:string;treatment?:Treatment;taxDate?:string;documentDate?:string}={}){
+  async function reviewedDocument(client:PoolClient,t:Tenant,options:{type?:DocumentType;vat?:string;treatment?:Treatment;taxDate?:string;documentDate?:string;recoverability?:'fully_recoverable'|'partially_recoverable'|'non_recoverable'|'needs_review';recoverable?:string|null}={}){
     const id=randomUUID(),type=options.type??'sale',vat=options.vat??'15.00';
     await client.query(`INSERT INTO documents(id,company_id,uploaded_by_user_id,status,original_filename,mime_type,size_bytes,storage_key,sha256,document_type,document_date,total_amount)
       VALUES($1,$2,$3,'approved',$4,'application/pdf',1,$5,$6,$7,$8::date,'115.00'::numeric)`,[id,t.company,t.user,`${id}.pdf`,`${t.company}/${id}`,'a'.repeat(64),type,options.documentDate??'2026-02-01']);
-    await client.query(`INSERT INTO document_vat_reviews(company_id,document_id,tax_date,treatment,taxable_amount,vat_amount,review_status,reviewed_by_user_id,reviewed_at)
-      VALUES($1,$2,$3::date,$4,'100.00'::numeric,$5::numeric,'reviewed',$6,NOW())`,[t.company,id,options.taxDate??'2026-02-01',options.treatment??'standard',vat,t.user]);
+    await client.query(`INSERT INTO document_vat_reviews(company_id,document_id,tax_date,treatment,taxable_amount,vat_amount,review_status,reviewed_by_user_id,reviewed_at,recoverability_status,recoverable_vat_amount,recoverability_reviewed_by_user_id,recoverability_reviewed_at)
+      VALUES($1,$2,$3::date,$4,'100.00'::numeric,$5::numeric,'reviewed',$6,NOW(),$7,$8::numeric,CASE WHEN $7 IN ('fully_recoverable','partially_recoverable','non_recoverable') THEN $6 ELSE NULL END,CASE WHEN $7 IN ('fully_recoverable','partially_recoverable','non_recoverable') THEN NOW() ELSE NULL END)`,[t.company,id,options.taxDate??'2026-02-01',options.treatment??'standard',vat,t.user,type==='sale'?'not_applicable':options.recoverability??(vat==='0.00'?'fully_recoverable':'fully_recoverable'),type==='sale'?null:(Object.prototype.hasOwnProperty.call(options,'recoverable')?options.recoverable:vat)]);
     return id;
   }
 
@@ -132,7 +132,20 @@ describeDatabase('Phase 6B1 reconciliation with PostgreSQL',()=>{
     const purchase=await reviewedDocument(client,a,{type:'purchase',vat:'7.50'}),purchaseObligation=await obligation(client,a,purchase);await journal(client,a,purchaseObligation,{lines:[{memo:'VAT_INPUT',debit:'7.50',credit:'0.00'}]});
     const expense=await reviewedDocument(client,a,{type:'expense',vat:'2.25'}),expenseObligation=await obligation(client,a,expense);await journal(client,a,expenseObligation,{lines:[{memo:'VAT_INPUT',debit:'2.00',credit:'0.00'}]});
     const value=await loadVatReconciliation(client,a.company,START,END);
-    expect(value.totals).toEqual({reviewed_output_vat:15,reviewed_input_vat:9.75,ledger_output_vat:15,ledger_input_vat:7.5,output_difference:0,input_difference:2.25});
+    expect(value.totals).toEqual({reviewed_output_vat:15,reviewed_input_vat:9.75,gross_reviewed_input_vat:9.75,recoverable_input_vat:9.75,non_recoverable_input_vat:0,ledger_output_vat:15,ledger_input_vat:7.5,output_difference:0,input_difference:2.25});
     expect(value.counts).toEqual({total_in_scope:3,reconciled:2,unreconciled:1});
   }));
+
+  it('uses approved recoverability amounts and excludes needs_review',async()=>isolated(async(client,a)=>{
+    const full=await reviewedDocument(client,a,{type:'purchase',vat:'15.00',recoverability:'fully_recoverable',recoverable:'15.00'}),fullObligation=await obligation(client,a,full);await journal(client,a,fullObligation,{lines:[{memo:'VAT_INPUT',debit:'15.00',credit:'0.00'}]});
+    const partial=await reviewedDocument(client,a,{type:'purchase',vat:'15.00',recoverability:'partially_recoverable',recoverable:'9.00'}),partialObligation=await obligation(client,a,partial);await journal(client,a,partialObligation,{lines:[{memo:'VAT_INPUT',debit:'9.00',credit:'0.00'}]});
+    const none=await reviewedDocument(client,a,{type:'purchase',vat:'15.00',recoverability:'non_recoverable',recoverable:'0.00'});await obligation(client,a,none);
+    const pending=await reviewedDocument(client,a,{type:'purchase',vat:'15.00',recoverability:'needs_review',recoverable:null});await obligation(client,a,pending);
+    const value=await loadVatReconciliation(client,a.company,START,END);
+    expect(value.documents.map(row=>row.document_id).sort()).toEqual([full,partial,none].sort());
+    expect(value.documents.find(row=>row.document_id===partial)).toMatchObject({expected_vat_amount:'9.00',recoverable_vat_amount:'9.00',non_recoverable_vat_amount:'6.00',reconciliation_status:'reconciled'});
+    expect(value.documents.find(row=>row.document_id===none)).toMatchObject({expected_vat_amount:'0.00',non_recoverable_vat_amount:'15.00',reconciliation_status:'reconciled'});
+    expect(value.totals).toMatchObject({reviewed_input_vat:45,gross_reviewed_input_vat:45,recoverable_input_vat:24,non_recoverable_input_vat:21,ledger_input_vat:24,input_difference:0});
+  }));
+
 });
