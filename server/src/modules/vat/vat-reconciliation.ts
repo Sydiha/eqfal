@@ -41,10 +41,19 @@ export async function loadVatReconciliation(db:QueryRunner,companyId:string,peri
   LEFT JOIN LATERAL (SELECT COUNT(*)::int line_count FROM journal_lines l WHERE l.company_id=$1 AND l.journal_entry_id=j.id AND l.memo=CASE WHEN s.expected_memo='VAT_OUTPUT' THEN 'VAT_INPUT' ELSE 'VAT_OUTPUT' END) opposite_lines ON TRUE
  ) SELECT document_id,obligation_id,document_type,tax_date::text,treatment,reviewed_vat_amount::text,recoverability_status,
   recoverable_vat_amount::text,non_recoverable_vat_amount::text,expected_vat_amount::text,expected_memo,journal_entry_id,journal_status,ledger_vat_amount,
-  CASE WHEN expected_vat_amount=0 THEN 'reconciled' WHEN journal_entry_id IS NULL OR journal_status<>'posted' THEN 'missing_posted_journal'
-   WHEN expected_line_count=0 AND opposite_line_count>0 THEN 'wrong_vat_direction' WHEN expected_line_count=0 THEN 'missing_vat_line'
-   WHEN expected_line_count>1 THEN 'vat_amount_mismatch' WHEN NOT direction_ok THEN 'wrong_vat_direction'
-   WHEN ledger_vat_amount::numeric<>expected_vat_amount THEN 'vat_amount_mismatch' ELSE 'reconciled' END reconciliation_status
+  CASE
+   WHEN expected_vat_amount=0 AND opposite_line_count>0 THEN 'wrong_vat_direction'
+   WHEN expected_vat_amount=0 AND expected_line_count>1 THEN 'vat_amount_mismatch'
+   WHEN expected_vat_amount=0 AND expected_line_count=1 AND ledger_vat_amount::numeric<>0 THEN 'vat_amount_mismatch'
+   WHEN expected_vat_amount=0 THEN 'reconciled'
+   WHEN journal_entry_id IS NULL OR journal_status<>'posted' THEN 'missing_posted_journal'
+   WHEN expected_line_count=0 AND opposite_line_count>0 THEN 'wrong_vat_direction'
+   WHEN expected_line_count=0 THEN 'missing_vat_line'
+   WHEN expected_line_count>1 THEN 'vat_amount_mismatch'
+   WHEN NOT direction_ok THEN 'wrong_vat_direction'
+   WHEN ledger_vat_amount::numeric<>expected_vat_amount THEN 'vat_amount_mismatch'
+   ELSE 'reconciled'
+  END reconciliation_status
  FROM evaluated ORDER BY tax_date,document_id`,[companyId,periodStart,periodEnd]);
  let output=0,grossInput=0,recoverableInput=0,nonRecoverableInput=0,ledgerOutput=0,ledgerInput=0,reconciled=0;
  for(const d of rows){const gross=Number(d.reviewed_vat_amount),recoverable=Number(d.recoverable_vat_amount??0);if(d.document_type==='sale')output+=gross;else{grossInput+=gross;recoverableInput+=recoverable;nonRecoverableInput+=Number(d.non_recoverable_vat_amount??0)}if(d.reconciliation_status==='reconciled'){reconciled++;const ledger=Number(d.ledger_vat_amount??0);if(d.document_type==='sale')ledgerOutput+=ledger;else ledgerInput+=ledger}}
