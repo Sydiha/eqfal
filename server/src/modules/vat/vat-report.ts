@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { loadVatReconciliation, VatReconciliation } from './vat-reconciliation';
 
 type QueryRunner = Pick<Pool, 'query'>;
 export type VatDocumentType = 'purchase' | 'expense' | 'sale';
@@ -15,6 +16,11 @@ export interface VatReportDocument {
   treatment: VatTreatment;
   taxable_amount: string;
   vat_amount: string;
+  obligation_id?: string;
+  journal_entry_id?: string;
+  expected_memo?: 'VAT_INPUT' | 'VAT_OUTPUT';
+  ledger_vat_amount?: string;
+  reconciliation_status?: string;
 }
 
 export interface VatClosingReport {
@@ -23,6 +29,7 @@ export interface VatClosingReport {
   totals: { output_vat: number; input_vat: number; net_vat: number; sales_total: number; purchase_expense_total: number };
   treatments: Record<VatTreatment, { count: number; taxable_amount: number; vat_amount: number }>;
   documents: VatReportDocument[];
+  reconciliation: VatReconciliation;
 }
 
 export class VatReportNotFoundError extends Error {}
@@ -47,6 +54,14 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
         AND r.review_status='reviewed'
         AND ((d.document_date BETWEEN $2 AND $3) OR (r.tax_date BETWEEN $2 AND $3))
       ORDER BY r.tax_date,d.created_at,d.id`, [companyId, period.period_start, period.period_end]);
+  const reconciliation = await loadVatReconciliation(db, companyId, period.period_start, period.period_end);
+  const reconciliationByDocument = new Map(reconciliation.documents.map(document => [document.document_id, document]));
+  const documents = documentResult.rows.map(document => {
+    const detail = reconciliationByDocument.get(document.id);
+    return detail ? { ...document, obligation_id: detail.obligation_id, journal_entry_id: detail.journal_entry_id ?? undefined,
+      expected_memo: detail.expected_memo, ledger_vat_amount: detail.ledger_vat_amount ?? undefined,
+      reconciliation_status: detail.reconciliation_status } : document;
+  });
 
   const treatmentTotals = Object.fromEntries(treatments.map(t => [t, { count: 0, taxable_amount: 0, vat_amount: 0 }])) as VatClosingReport['treatments'];
   let output = 0, input = 0, salesTotal = 0, purchaseExpenseTotal = 0;
@@ -65,7 +80,8 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     company: { id: companyId, name: period.company_name },
     totals: { output_vat: output, input_vat: input, net_vat: output - input, sales_total: salesTotal, purchase_expense_total: purchaseExpenseTotal },
     treatments: treatmentTotals,
-    documents: documentResult.rows,
+    documents,
+    reconciliation,
   };
 }
 
@@ -101,12 +117,14 @@ const treatmentLabel: Record<VatTreatment,string> = {
 };
 
 export function buildVatWorkingPaperXlsx(report: VatClosingReport): Buffer {
-  const headers=['المستند / Document','العميل / المورد / Customer / Supplier','النوع / Type','تاريخ المستند / Document Date','التاريخ الضريبي / Tax Date','الإجمالي / Total','المعالجة / Treatment','المبلغ الخاضع / Taxable Amount','مبلغ الضريبة / VAT Amount'];
+  const headers=['المستند / Document','العميل / المورد / Customer / Supplier','النوع / Type','تاريخ المستند / Document Date','التاريخ الضريبي / Tax Date','الإجمالي / Total','المعالجة / Treatment','المبلغ الخاضع / Taxable Amount','مبلغ الضريبة / VAT Amount','Obligation ID','Journal Entry ID','Expected VAT Memo','Ledger VAT Amount','Reconciliation Status'];
+  const reconciliation=report.reconciliation;
   const rows: Array<Array<string|number>>=[
     ['ورقة عمل ضريبة القيمة المضافة / VAT Working Paper'],['الشركة / Company',report.company.name],['الفترة / Period',`${report.period.period_start} — ${report.period.period_end}`],
     ['الحالة / Status','مقفلة / Closed'],['تاريخ الإنشاء / Generated At',new Date().toISOString()],
-    ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT',report.totals.net_vat],[],headers,
-    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount)]),
+    ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT',report.totals.net_vat],[],
+    ['VAT Reconciliation Summary'],['Reviewed Output VAT',reconciliation.totals.reviewed_output_vat],['Ledger Output VAT',reconciliation.totals.ledger_output_vat],['Output Difference',reconciliation.totals.output_difference],['Reviewed Input VAT',reconciliation.totals.reviewed_input_vat],['Ledger Input VAT',reconciliation.totals.ledger_input_vat],['Input Difference',reconciliation.totals.input_difference],['Total in-scope documents',reconciliation.counts.total_in_scope],['Reconciled documents',reconciliation.counts.reconciled],['Unreconciled documents',reconciliation.counts.unreconciled],[],headers,
+    ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount),d.obligation_id??'',d.journal_entry_id??'',d.expected_memo??'',d.ledger_vat_amount===undefined?'':Number(d.ledger_vat_amount),d.reconciliation_status??'']),
   ];
   const sheetRows=rows.map((row,r)=>`<row r="${r+1}">${row.map((v,c)=>typeof v==='number'?`<c r="${colName(c)}${r+1}"><v>${Number.isFinite(v)?v:0}</v></c>`:`<c r="${colName(c)}${r+1}" t="inlineStr"><is><t>${xml(v)}</t></is></c>`).join('')}</row>`).join('');
   const files=[
