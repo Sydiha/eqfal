@@ -14,6 +14,7 @@ import { monthlyCloseRouter } from './modules/monthly-close/monthly-close.router
 import { vatRouter } from './modules/vat/vat.router';
 import { vatReportRouter } from './modules/vat/vat-report.router';
 import { vatAdjustmentsRouter } from './modules/vat/vat-adjustments.router';
+import { vatReturnsRouter } from './modules/vat/vat-returns.router';
 import { accountingRouter } from './modules/accounting/accounting.router';
 import { salesRouter } from './modules/sales/sales.router';
 import { purchasesRouter } from './modules/purchases/purchases.router';
@@ -49,6 +50,7 @@ app.use('/api', monthlyCloseRouter);
 app.use('/api', vatRouter);
 app.use('/api', vatReportRouter);
 app.use('/api', vatAdjustmentsRouter);
+app.use('/api', vatReturnsRouter);
 app.use('/api', accountingRouter);
 app.use('/api', salesRouter);
 app.use('/api', purchasesRouter);
