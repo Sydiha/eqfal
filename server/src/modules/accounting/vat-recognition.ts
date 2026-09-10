@@ -2,6 +2,12 @@ import type { PoolClient } from 'pg';
 
 type QueryRunner = Pick<PoolClient, 'query'>;
 type VatMemo = 'VAT_INPUT' | 'VAT_OUTPUT';
+type RecoverabilityStatus =
+  | 'not_applicable'
+  | 'fully_recoverable'
+  | 'non_recoverable'
+  | 'partially_recoverable'
+  | 'needs_review';
 type VatRequirement = {
   documentId: string;
   memo: VatMemo;
@@ -16,6 +22,12 @@ export class VatRecognitionIncompleteError extends Error {
   constructor() {
     super('Reviewed VAT is not correctly recognized in the journal');
   }
+}
+
+function isPositiveMoney(value: string | null) {
+  if (value === null) return false;
+  const [whole, fraction = ''] = value.split('.');
+  return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')) > 0n;
 }
 
 async function requirementForSource(
@@ -34,8 +46,13 @@ async function requirementForSource(
     document_type: 'sale' | 'purchase' | 'expense';
     review_status: 'pending' | 'reviewed' | null;
     vat_amount: string | null;
+    recoverability_status: RecoverabilityStatus | null;
+    recoverable_vat_amount: string | null;
   }>(
-    `SELECT d.id document_id,d.document_type,r.review_status,r.vat_amount::numeric(18,2)::text vat_amount
+    `SELECT d.id document_id,d.document_type,r.review_status,
+       r.vat_amount::numeric(18,2)::text vat_amount,
+       r.recoverability_status,
+       r.recoverable_vat_amount::numeric(18,2)::text recoverable_vat_amount
      FROM obligations o
      JOIN documents d ON d.id=o.document_id AND d.company_id=o.company_id
        AND d.status='approved' AND d.document_type IN ('sale','purchase','expense')
@@ -45,7 +62,7 @@ async function requirementForSource(
     [companyId, sourceId],
   );
   const row = rows[0];
-  if (!row || row.review_status !== 'reviewed' || row.vat_amount === null || Number(row.vat_amount) <= 0) return null;
+  if (!row || row.review_status !== 'reviewed' || !isPositiveMoney(row.vat_amount)) return null;
 
   if (row.document_type === 'sale') {
     return {
@@ -53,14 +70,24 @@ async function requirementForSource(
       memo: 'VAT_OUTPUT',
       accountType: 'liability',
       debit: '0.00',
-      credit: row.vat_amount,
+      credit: row.vat_amount!,
     };
   }
+
+  // Positive input VAT must not be stamped as VAT_INPUT until recoverability is resolved.
+  if (
+    row.recoverability_status === 'needs_review' ||
+    row.recoverability_status === 'not_applicable' ||
+    !isPositiveMoney(row.recoverable_vat_amount)
+  ) {
+    return null;
+  }
+
   return {
     documentId: row.document_id,
     memo: 'VAT_INPUT',
     accountType: 'asset',
-    debit: row.vat_amount,
+    debit: row.recoverable_vat_amount!,
     credit: '0.00',
   };
 }
