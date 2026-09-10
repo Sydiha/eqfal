@@ -18,7 +18,7 @@ export interface VatReconciliation {
 
 /** Unresolved recoverability is deliberately excluded: readiness reports that control separately. */
 export async function loadVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
- const {rows}=await db.query<VatReconciliationDocument>(`WITH scoped AS (
+ const result=await db.query<VatReconciliationDocument&{adjusted_output_vat:string;adjusted_gross_input_vat:string;adjusted_recoverable_input_vat:string}>(`WITH scoped AS (
   SELECT d.id document_id,o.id obligation_id,d.document_type,r.tax_date,r.treatment,r.vat_amount reviewed_vat_amount,
     r.recoverability_status,
     CASE WHEN d.document_type='sale' THEN NULL ELSE r.recoverable_vat_amount END recoverable_vat_amount,
@@ -30,6 +30,14 @@ export async function loadVatReconciliation(db:QueryRunner,companyId:string,peri
   WHERE d.company_id=$1 AND d.status='approved' AND d.document_type IN ('purchase','expense','sale')
     AND r.review_status='reviewed' AND r.tax_date BETWEEN $2 AND $3
     AND (d.document_type='sale' OR r.recoverability_status NOT IN ('needs_review','not_applicable'))
+ ), adjustment_totals AS (
+  SELECT COALESCE(SUM(CASE WHEN d.document_type='sale' THEN a.vat_amount_delta ELSE 0 END),0) adjusted_output_vat,
+   COALESCE(SUM(CASE WHEN d.document_type IN ('purchase','expense') THEN a.vat_amount_delta ELSE 0 END),0) adjusted_gross_input_vat,
+   COALESCE(SUM(CASE WHEN d.document_type IN ('purchase','expense') THEN a.recoverable_vat_amount_delta ELSE 0 END),0) adjusted_recoverable_input_vat
+  FROM vat_adjustments a JOIN vat_periods p ON p.id=a.adjustment_vat_period_id AND p.company_id=a.company_id
+  JOIN document_vat_reviews r ON r.id=a.document_vat_review_id AND r.company_id=a.company_id
+  JOIN documents d ON d.id=r.document_id AND d.company_id=r.company_id
+  WHERE a.company_id=$1 AND a.status='applied' AND p.period_start <= $3 AND p.period_end >= $2
  ), evaluated AS (
   SELECT s.*,j.id journal_entry_id,j.status journal_status,expected_lines.line_count expected_line_count,
    CASE WHEN expected_lines.line_count=1 THEN expected_lines.amount::text END ledger_vat_amount,
@@ -53,9 +61,12 @@ export async function loadVatReconciliation(db:QueryRunner,companyId:string,peri
    WHEN NOT direction_ok THEN 'wrong_vat_direction'
    WHEN ledger_vat_amount::numeric<>expected_vat_amount THEN 'vat_amount_mismatch'
    ELSE 'reconciled'
-  END reconciliation_status
- FROM evaluated ORDER BY tax_date,document_id`,[companyId,periodStart,periodEnd]);
- let output=0,grossInput=0,recoverableInput=0,nonRecoverableInput=0,ledgerOutput=0,ledgerInput=0,reconciled=0;
+  END reconciliation_status,a.adjusted_output_vat::text,a.adjusted_gross_input_vat::text,a.adjusted_recoverable_input_vat::text
+ FROM evaluated RIGHT JOIN adjustment_totals a ON TRUE ORDER BY tax_date,document_id`,[companyId,periodStart,periodEnd]);
+ const adjustment=result.rows[0];
+ const rows=result.rows.filter(row=>row.document_id!==null);
+ const adjustedOutput=Number(adjustment?.adjusted_output_vat??0),adjustedGrossInput=Number(adjustment?.adjusted_gross_input_vat??0),adjustedRecoverableInput=Number(adjustment?.adjusted_recoverable_input_vat??0);
+ let output=adjustedOutput,grossInput=adjustedGrossInput,recoverableInput=adjustedRecoverableInput,nonRecoverableInput=adjustedGrossInput-adjustedRecoverableInput,ledgerOutput=0,ledgerInput=0,reconciled=0;
  for(const d of rows){const gross=Number(d.reviewed_vat_amount),recoverable=Number(d.recoverable_vat_amount??0);if(d.document_type==='sale')output+=gross;else{grossInput+=gross;recoverableInput+=recoverable;nonRecoverableInput+=Number(d.non_recoverable_vat_amount??0)}if(d.reconciliation_status==='reconciled'){reconciled++;const ledger=Number(d.ledger_vat_amount??0);if(d.document_type==='sale')ledgerOutput+=ledger;else ledgerInput+=ledger}}
  return{totals:{reviewed_output_vat:output,reviewed_input_vat:grossInput,gross_reviewed_input_vat:grossInput,recoverable_input_vat:recoverableInput,non_recoverable_input_vat:nonRecoverableInput,ledger_output_vat:ledgerOutput,ledger_input_vat:ledgerInput,output_difference:output-ledgerOutput,input_difference:recoverableInput-ledgerInput},counts:{total_in_scope:rows.length,reconciled,unreconciled:rows.length-reconciled},documents:rows};
 }
