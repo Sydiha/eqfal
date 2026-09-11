@@ -28,7 +28,18 @@ After the Autonomous Operating Model governance package is merged to `main`:
 - Routine user Design Approval and routine user Merge Approval are superseded after this governance is merged.
 - Production, paid cost, destructive real-data actions, material accounting/tax policy changes, secrets/credentials, specified sensitive real-user access changes, material unresolved ambiguity, and exceptional Git recovery remain Human Gates.
 
-No Autonomous Agent readiness is claimed until the Orchestrator, Builder-role integration, Independent Reviewer, and end-to-end Autonomous Agent PoC are actually built and verified.
+No Full Autonomous readiness is claimed until event-driven automatic continuation is actually operationally proven.
+
+## Product Track / Agent Infrastructure Track Separation
+
+The approved Architecture Decision in `docs/ARCHITECTURE_DECISION_PRODUCT_AGENT_TRACKS.md` separates work into two independent tracks:
+
+- **Product Track** continues the approved Product roadmap from current dependencies.
+- **Agent Infrastructure Track** continues autonomous-execution infrastructure work.
+
+The unresolved **Automatic Continuation Gap blocks Full Autonomous Readiness only**. It does **not** block Product roadmap execution, including Phase 5, when the normal Product Design/Execution/Review/CI/Merge/Validation gates can be satisfied.
+
+The two tracks may progress independently. Agent Infrastructure work must not silently change Product scope or roadmap priority, and Product work must not be represented as proof that Full Autonomous continuation is operational.
 
 ## Permanent Delivery Rules
 
@@ -64,11 +75,11 @@ Replit Agent is allowed only in FREE MODE for synchronization, Git-state checks,
 
 - Governance Reconciliation documentation: **DONE**.
 - Replit Sync PoC: **PASS WITH HUMAN ACTION**.
-- Autonomous Operating Model governance package: **CURRENT GOVERNANCE WORK** until merged.
-- Orchestrator implementation/readiness: **NOT YET PROVEN**.
-- Builder Role + Cloud Codex integration: **NOT YET PROVEN**.
-- Independent Reviewer implementation/readiness: **NOT YET PROVEN**.
-- Autonomous Agent end-to-end PoC: **NOT YET PROVEN**.
+- Orchestrator deterministic core: **PROVEN for the implemented scope**.
+- Durable delivery through Connector Publisher: **PROVEN**.
+- Independent Review + exact-SHA CI + Merge Gate + merge + Replit runtime validation path: **PROVEN through PR #188**.
+- Automatic/event-driven continuation: **NOT OPERATIONALLY PROVEN**.
+- Full Autonomous Readiness: **NOT READY — blocked by Automatic Continuation Gap**.
 
 ## Phase 0 — Project reference and accounting/compliance governance
 
@@ -110,7 +121,7 @@ Accrual/prepayment/deferred/periodic-adjustment workflow foundation is implement
 
 ## Phase 5 — Chart Classification and Financial Statement Mapping
 
-**Status: NOT STARTED — NEXT REAL PRODUCT GAP after Agent-readiness work**
+**Status: NOT STARTED — NEXT REAL PRODUCT GAP**
 
 Required scope remains:
 - expand chart classification where necessary: current/non-current assets, contra-assets, current/non-current liabilities, equity, revenue, cost of sales when applicable, operating expenses, finance and other income/expense as needed;
@@ -232,14 +243,20 @@ Existing application/PostgreSQL infrastructure should be used wherever practical
 
 ## Current Architecture / Execution Sequence
 
-This is the active sequence after the Autonomous Operating Model governance package is merged:
+Two independent tracks are active:
 
-1. Build and test **Orchestrator**.
-2. Build and test **Builder Role with Cloud Codex as primary execution engine**.
-3. Build and test **Independent Reviewer**.
-4. Run an **Autonomous Agent PoC** proving task handoff, durable checkpoints, independent review, exact-SHA CI gating, compliant merge control, failure recovery, and user-notification states without bypassing Human Gates.
-5. Only after Agent readiness is actually proven, resume the real Product roadmap from current dependencies. The currently identified next real Product gap remains **Phase 5 — Financial Statement Mapping**, while Phase 8 remains PARTIAL pending its dedicated completeness gap audit.
-6. Continue later roadmap work from actual dependencies/current `main`, not historical phase numbering alone.
-7. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
+### Product Track
 
-Do not claim autonomous operation is ready merely because this governance design exists; readiness requires implementation and evidence.
+1. Resume Product roadmap from actual dependencies/current `main`.
+2. The current next Product gap is **Phase 5 — Chart Classification and Financial Statement Mapping**.
+3. Every Product task still follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
+4. Continue later roadmap work from actual dependencies/current `main`, not historical phase numbering alone.
+5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
+
+### Agent Infrastructure Track
+
+1. Continue resolving the **Automatic Continuation Gap** independently of Product work.
+2. Hourly watchdog remains recovery/watchdog only and is not the primary execution driver.
+3. Do not claim Full Autonomous Readiness until event-driven continuation is operationally proven with durable execution evidence.
+
+Product work does not wait for Full Autonomous Readiness, and continuing Product work does not by itself prove Full Autonomous operation.
