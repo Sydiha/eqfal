@@ -15,7 +15,8 @@ This file provides supplementary development guidance. It is lower authority tha
 - أقل تعديل ممكن يحقق Execution Contract.
 - لا توسع جانبي ولا تغيير Roadmap/Scope من Builder أو Orchestrator.
 - لا مهمة برمجية ثانية قبل إغلاق الحالية تقنيًا إلا لسبب حقيقي تبرره الحوكمة.
-- أي Migration يجب أن تكون ضمن Execution Contract المعتمد وأن تمر البوابات المناسبة قبل أي Production consideration.
+- أي Migration يجب أن تكون ضمن Execution Contract المعتمد.
+- أي Migration أو تغيير بيئي يمكن أن يؤثر على Production يمر أولًا عبر Staging/بيئة الاختبار المناسبة ثم الاختبار والمراجعة قبل أي Production change، مع بقاء Production نفسه Human Gate مستقلًا.
 - One-Shot Rule وZero-Loop Rule مستمران.
 
 ## توزيع المسؤوليات
