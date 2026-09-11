@@ -1,4 +1,28 @@
-export type AccountResponse={id:string;code:string;name:string;account_type:'asset'|'liability'|'equity'|'revenue'|'expense';parent_account_id:string|null;is_active:boolean};
+export type StatementCategory=
+ |'unmapped'
+ |'current_asset'
+ |'non_current_asset'
+ |'current_liability'
+ |'non_current_liability'
+ |'equity'
+ |'revenue'
+ |'cost_of_sales'
+ |'operating_expense'
+ |'finance_income'
+ |'finance_expense'
+ |'other_income'
+ |'other_expense';
+
+export type AccountResponse={
+ id:string;
+ code:string;
+ name:string;
+ account_type:'asset'|'liability'|'equity'|'revenue'|'expense';
+ parent_account_id:string|null;
+ is_active:boolean;
+ statement_category?:StatementCategory;
+ is_contra?:boolean;
+};
 export type JournalResponse={id:string;fiscal_year_id:string;accounting_date:string;description:string;reference:string|null;entry_type:'standard'|'opening_balance';status:'draft'|'posted'};
 export type JournalLineResponse={id:string;company_id:string;journal_entry_id:string;account_id:string;debit:string;credit:string;memo:string|null;sequence:number};
 
