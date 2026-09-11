@@ -289,3 +289,64 @@
 **الحد:** هذا الإغلاق لا يوسع نطاق Phase 3 إلى المطابقة التلقائية، many-to-many matching، multiple funding sources، advanced over/prepayment، الدفع الشخصي نيابة عن الشركة، أو GL/VAT classification؛ هذه تبقى مؤجلة لمراحل/مهام مستقلة.
 
 **ملاحظة UX:** مشاكل الجداول/RTL/LTR/الأعمدة/المبالغ/التواريخ/الresponsive المسجلة لا تعيد فتح Phase 3؛ تعالج في مهمة UI/UX مستقلة وعلى مستوى النمط المشترك والصفحات المتأثرة.
+
+---
+
+## 2026-09-11 — Governance Reconciliation, Replit Free Mode, and Codex Recovery
+
+**القرار:** اعتماد reconciliation جديد لحالة المشروع والحوكمة مقابل GitHub/main baseline `6b1b75382d9cedb9d2b2fb229aa3e9a860cbbc69` بتاريخ `2026-09-11`. هذا SHA هو audit/reconciliation baseline فقط وليس ضمانًا بأنه current HEAD مستقبلًا.
+
+### Authority hierarchy
+اعتماد الترتيب التالي لحل تعارض الوثائق:
+
+`GitHub/main → AGENTS.md → docs/WORKFLOW_GOVERNANCE.md → docs/TOOLING_RECOVERY_PLAYBOOK.md → docs/EXECUTION_ROADMAP.md → TODO.md → Historical records`
+
+الأعلى يحكم عند التعارض، وأي ambiguity جوهري غير محسوم = STOP + escalate.
+
+### Current roadmap interpretation
+- Phase 6 — VAT: **DONE FOR CURRENTLY APPROVED SCOPE** فقط؛ لا يغلق أو يوافق مسبقًا على أي نطاق ضريبي مستقبلي.
+- Phase 8 — Integrated Monthly Close: **PARTIAL / STRONG FOUNDATION** حتى تنفيذ Dedicated Completeness Gap Audit مقابل أحدث Roadmap.
+- بعد أعمال Agent readiness، **Phase 5 — Financial Statement Mapping** هو NEXT REAL PRODUCT GAP.
+
+### Replit Agent policy — superseding decision
+هذا القرار **supersedes** أي قرار أو نص سابق يفرض حظرًا مطلقًا ودائمًا على Replit Agent.
+
+Replit Agent مسموح فقط في **FREE MODE**، subject to successful **Replit Sync Proof of Concept**، وللنطاق التشغيلي التالي فقط:
+- GitHub main → Replit sync;
+- Git state checks;
+- application startup;
+- basic smoke tests;
+- runtime/latest-approved-main SHA verification.
+
+يبقى ممنوعًا في:
+- coding/refactoring/feature implementation;
+- accounting/tax logic changes;
+- DB/schema design/migrations;
+- PR rescue/branch reconstruction/patch relay;
+- push/write/PR actions to GitHub;
+- Power Mode;
+- Max Mode;
+- paid credits/additional paid usage.
+
+إذا Free Mode لم يعد مجانيًا فعليًا: **STOP**.
+
+السماح بالسياسة لا يعني أن autonomous/end-to-end Replit synchronization قدرة مثبتة؛ **Replit Sync PoC يبقى Agent-readiness blocker مستقلًا** حتى ينجح عمليًا.
+
+### Codex recovery architecture
+المبدأ الدائم:
+
+**GitHub = durable project state. Codex session = disposable executor.**
+
+- تصنف الحوادث إلى PROJECT FAILURE أو TOOLING FAILURE.
+- يسمح بـone tooling retry maximum.
+- ثم fresh Codex session from verified GitHub state.
+- ثم approved fallback / STOP.
+- no infinite retry loops.
+- no automatic paid credits.
+- no rebuilding valid pushed commits/branches/PRs from scratch.
+- session-local/non-durable work لا يعتبر محفوظًا بعد session failure ما لم يوجد durable GitHub checkpoint.
+
+التفاصيل canonical في `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
+
+### Historical records
+القرارات القديمة تبقى محفوظة للتاريخ ولا تحذف، لكن أي قرار سابق متعارض مع هذا القرار يعتبر superseded في نطاق التعارض فقط. Historical status must never override current authoritative state.
