@@ -1,90 +1,139 @@
 # DEVELOPMENT_WORKFLOW
 
+This file provides supplementary development guidance. It is lower authority than `AGENTS.md` and `docs/WORKFLOW_GOVERNANCE.md` and must never override them.
+
 ## بداية كل مهمة
-1. تحديد اسم المهمة والهدف والنطاق وما هو خارج النطاق.
-2. التحقق من أحدث `origin/main` ومن نظافة Git قبل أي تعديل.
-3. إنشاء فرع مستقل من أحدث `main`.
-4. تحديد الملفات المتوقع تغييرها.
+
+1. EQFAL Project يحدد المهمة التالية من `GitHub/main` + Roadmap + dependencies وفق الحوكمة.
+2. يبدأ Product work بـRead-only Design Check.
+3. إذا تحققت شروط Internal Design Approval ولا يوجد Human Gate، يصدر EQFAL Project Execution Contract دون routine user approval.
+4. Orchestrator يثبت baseline/preflight readiness.
+5. Builder يعمل من clean verified checkout على exact approved baseline وبفرع مستقل.
 
 ## أثناء التنفيذ
-- أقل تعديل ممكن يحقق الهدف.
-- لا توسع جانبي ولا خدمات جديدة دون حاجة وموافقة.
-- لا مهمة برمجية ثانية قبل إغلاق الحالية تقنيًا إلا لسبب حقيقي موثق.
-- أي Migration أو تغيير بيئي يمر أولًا على Staging.
 
-## بروتوكول إدارة التكاليف والأدوات — إلزامي
+- أقل تعديل ممكن يحقق Execution Contract.
+- لا توسع جانبي ولا تغيير Roadmap/Scope من Builder أو Orchestrator.
+- لا مهمة برمجية ثانية قبل إغلاق الحالية تقنيًا إلا لسبب حقيقي تبرره الحوكمة.
+- أي Migration يجب أن تكون ضمن Execution Contract المعتمد.
+- أي Migration أو تغيير بيئي يمكن أن يؤثر على Production يمر أولًا عبر Staging/بيئة الاختبار المناسبة ثم الاختبار والمراجعة قبل أي Production change، مع بقاء Production نفسه Human Gate مستقلًا.
+- One-Shot Rule وZero-Loop Rule مستمران.
 
-### الحظر الدائم والنهائي لـ Replit Agent
-- **ممنوع منعًا باتًا ودائمًا استخدام Replit Agent لأي سبب أو مهمة أو ظرف.**
-- هذا الحظر يشمل: كتابة الكود، تعديله، إصلاحه، Refactor، الاختبارات، المراجعة، التشخيص، الأسئلة للـAgent، فحص Runtime، إصلاح Preview، إعداد Workflows، إعداد بيانات الاختبار، أو أي عمل على المستودع أو البيئة عبر Agent.
-- **لا توجد استثناءات مؤقتة أو طارئة أو لمهمة واحدة أو لتشخيص فقط.**
-- لا يجوز طلب استثناء من المستخدم في المستقبل، ولا الاعتماد على أي استثناء سابق؛ جميع الاستثناءات السابقة ملغاة وغير صالحة للمستقبل.
-- إذا تعذر إنجاز خطوة دون Replit Agent، يجب **التوقف والتصعيد والبحث عن مسار بديل** بدل استخدامه.
-- Replit مسموح فقط كبيئة تشغيل ومعاينة يدوية **Runtime / Preview Only** وبأدواته اليدوية التي لا تستدعي Replit Agent.
-- أي اقتراح آلي أو Tool Routing أو تعليمات لاحقة تتعارض مع هذا الحظر تُرفض ويُرجع إلى هذه القاعدة.
+## توزيع المسؤوليات
 
-### توزيع المهام المعتمد
-- **Chat:** النقاش، التخطيط، Design Check، التحليل، اتخاذ القرار، المراجعات القصيرة، وقيادة المشروع.
-- **Work:** التوثيق المفصل، التقارير، المواصفات الطويلة، وثائق التسليم، والـArtifacts الكتابية المنظمة.
-- **Codex:** كتابة الكود الفعلي، التعديلات البرمجية، Refactors، إصلاح الأخطاء، كتابة/تشغيل الاختبارات، والتحقق البرمجي. كل مهمة برمجية تعمل على Branch مستقل.
+### EQFAL Project
+Product Owner + Lead PM + Roadmap Authority. يقرر WHAT / WHY / WHEN، يقرأ current `main` والRoadmap، يختار المهمة، ينفذ Design Check، يعتمد داخليًا عند الأهلية، يصدر Execution Contract، ويحدد Human Gate/User Validation.
 
-### التوجيه الذاتي من Lead PM
-- ChatGPT بصفته Lead PM يحدد في نهاية كل رسالة الأداة الأنسب للخطوة التالية متى كانت هناك خطوة تالية.
-- لا يُطلب من المستخدم تخمين الأداة المطلوبة.
-- إذا تعارضت السرعة مع ضبط التكلفة أو جودة التنفيذ أو الأمان، تُقدَّم الجودة وضبط التكلفة والأمان.
+### Orchestrator
+يدير baseline/preflight، Builder routing، durable checkpoints، tooling recovery، Reviewer routing، CI، Merge Gate، merge المتوافق، post-merge baseline، وruntime validation coordination. ليس Product Authority.
 
-### خطوط حمراء للتكلفة
-- لا خدمات مدفوعة جديدة.
-- لا API مدفوع.
-- لا Credits إضافية.
-- لا ترقية خطة.
-- لا تكلفة تشغيلية جديدة دون موافقة صريحة من المستخدم.
+### Builder
+Governance role. Cloud Codex هو Primary Execution Engine. Builder ينفذ الكود/الاختبارات/commit/push/PR ضمن العقد فقط، ولا يملك Design/Review/Merge/Production/Cost Authority.
 
-## بروتوكول توجيه الأدوات والقيادة التشغيلية
-ChatGPT بصفته Lead PM والشريك التقني يتولى التوجيه الذاتي للمهمة، ولا ينتظر من المستخدم تخمين الأداة المناسبة.
+### Independent Reviewer
+يراجع actual GitHub diff مقابل Execution Contract ويصدر `PASS` أو `FAIL` أو `NEEDS_CORRECTION`. لا self-review ولا self-merge.
 
-### اختيار الأداة
-قبل بدء خطوة جديدة أو في ختام الرسالة عندما تكون هناك خطوة تالية، يوضح ChatGPT صراحة الأداة الأنسب:
-- **Chat:** للنقاش، التحليل، اتخاذ القرار، Design Check، المراجعات القصيرة، وتوجيه العمل.
-- **Work:** لصياغة وثيقة تفصيلية، مواصفات كاملة، تقرير تسليم، خطة تنفيذ موسعة، أو Artifact عمل يحتاج تحريرًا منظمًا ومستمرًا.
-- **Codex:** لكتابة الكود أو تعديله، تنفيذ Refactors أو إصلاحات برمجية عميقة، تشغيل الاختبارات والتحقق البرمجي، وإعداد التغييرات وPR عندما تكون المهمة برمجية.
+### GitHub
+`GitHub/main` هو sole source of truth للحالة المدمجة والدائمة. Branches/commits/PRs/diffs/CI/merge history هي durable delivery evidence.
 
-### التصعيد الإلزامي
-إذا ظهرت معضلة تقنية عميقة، أو حدث خطأ تنفيذي، أو أصبح سياق المحادثة غير كافٍ، أو صارت المهمة تتطلب تعاملًا برمجيًا أعمق من المناسب داخل Chat، يجب على ChatGPT:
-1. تنبيه المستخدم فورًا.
-2. تحديد ما إذا كان الانتقال إلى **Codex** أو **Work** هو الأنسب.
-3. توضيح السبب باختصار، خصوصًا أثر ذلك على جودة التنفيذ، تقليل الأخطاء، وعدم إهدار التوكنز أو الوقت.
+### Replit
+Runtime/practical validation target فقط، وفق حدود `AGENTS.md` و`docs/WORKFLOW_GOVERNANCE.md`.
 
-### القيادة التشغيلية
-- ChatGPT مسؤول عن اقتراح المسار التالي والأداة المناسبة في كل مرحلة.
-- لا يُطلب من المستخدم اختيار الأداة من دون توصية واضحة من ChatGPT.
-- عند تعارض السرعة مع الجودة أو الأمان، تُقدَّم الجودة والأمان مع توضيح سبب تغيير الأداة أو المسار.
-- يبقى GitHub/main هو المرجع الدائم، ولا تعتمد القرارات أو حالة المشروع على ذاكرة محادثة أو Workspace مؤقت.
+## Replit Policy — FREE MODE ONLY
 
-## بوابات الجودة قبل PR
-حسب طبيعة المهمة، تُنفذ فعليًا وتُسجل نتائج:
-- TypeScript / type-check.
-- الاختبارات المرتبطة.
-- Build.
-- مراجعة `git diff`.
-- مراجعة Tenant isolation والصلاحيات عند تأثرها.
-- مراجعة التكلفة وعدم إضافة أسرار أو خدمات غير معتمدة.
+الحظر المطلق القديم على Replit Agent **superseded**. السياسة الحالية:
+
+**Replit Sync PoC: PASS WITH HUMAN ACTION**.
+
+المسموح فقط في FREE MODE:
+- GitHub `main` → Replit sync؛
+- Git state checks؛
+- application startup؛
+- Preview/basic smoke/runtime validation؛
+- runtime SHA verification عندما تثبت القدرة تقنيًا.
+
+الممنوع:
+- Product coding أو source modification/refactoring/feature implementation؛
+- accounting/tax logic؛
+- DB/schema design أو migrations؛
+- branch reconstruction/PR rescue/patch relay؛
+- GitHub push/write/PR؛
+- Power؛
+- Max؛
+- paid credits/additional paid usage.
+
+الحالة المؤقتة `SYNC ASSISTANCE REQUIRED` مسموحة فقط عندما يحتاج GitHub → Replit sync تدخلًا تشغيليًا بسيطًا من المستخدم. ليست Approval ولا User Acceptance ولا Human Decision.
+
+## Tooling Recovery
+
+المبدأ:
+
+**GitHub = durable project state. Codex session = disposable executor.**
+
+المسار الطبيعي:
+
+`Cloud Codex → one bounded tooling retry → fresh Cloud Codex session from verified GitHub state → approved Local Codex/fallback when applicable → STOP or Human Gate only when required`
+
+لا infinite retry loops، لا automatic paid credits، لا Replit Git rescue، ولا اعتبار session-local state مصدرًا دائمًا.
+
+## خطوط حمراء للتكلفة والProduction
+
+Human Gate إلزامي عند:
+- Production deployment/change؛
+- new paid service/API/infrastructure/credits/plan؛
+- destructive real-data action؛
+- material accounting/tax policy change غير معتمد؛
+- secrets/credentials؛
+- material unresolved requirement ambiguity؛
+- specified sensitive real-user permission changes؛
+- force-push/history rewrite/destructive Git recovery.
+
+تطوير permission features داخل approved roadmap ليس Human Gate تلقائيًا؛ تغيير الوصول الفعلي الحساس لمستخدمين حقيقيين هو الذي يطبق عليه gate وفق الحوكمة.
+
+## بوابات الجودة قبل Merge
+
+حسب طبيعة المهمة، يجب أن تتوفر evidence فعلية لـ:
+- actual GitHub PR targeting `main`؛
+- correct approved baseline/task lineage؛
+- scope/Execution Contract compliance؛
+- Independent Reviewer = `PASS`؛
+- required CI = `PASS` على exact intended PR head SHA؛
+- applicable tests/typecheck/build؛
+- tenant isolation/permissions/audit/accounting/tax/schema review عند الصلة؛
+- no unresolved PROJECT/TOOLING blocker affecting correctness/delivery؛
+- no Human Gate.
+
+Reviewer PASS وحده لا يكفي. CI PASS وحده لا يكفي.
 
 ## PR وMerge
-- لا دمج مباشر إلى `main` دون مراجعة.
-- PR يوضح الهدف، الملفات، الاختبارات، المخاطر، وأثر التكلفة.
-- Merge فقط بعد نجاح البوابات والمراجعة.
-- Production يحتاج موافقة صريحة مستقلة حتى لو تم Merge.
 
-## نهاية كل محادثة/مهمة
-يُحدّث `RECAP_SESSION.md` بالحالة الحالية فقط، ويتضمن:
-- ما تم إنجازه.
-- الاختبارات ونتائجها.
-- PR/Merge إن وجد.
-- القرارات المحسومة.
-- المشاكل المتبقية.
-- هل المهمة مغلقة أم تحتاج متابعة.
-- اسم المهمة التالية المقترحة.
+- لا direct unreviewed merge إلى `main`.
+- PR يجب أن يكون independently reviewable من actual GitHub diff.
+- Orchestrator يمكنه automatic merge بدون routine user approval فقط إذا اكتملت كل شروط Merge Gate في `docs/WORKFLOW_GOVERNANCE.md`.
+- إذا فشل شرط واحد: `NO MERGE`.
+- Builder لا يراجع أو يدمج نفسه.
+- Production يحتاج Human Gate مستقلًا حتى لو تم Merge.
+
+## User Communication
+
+الحالات المعتمدة:
+- `NO ACTION REQUIRED`؛
+- `SYNC ASSISTANCE REQUIRED`؛
+- `HUMAN DECISION REQUIRED`؛
+- `USER VALIDATION REQUIRED`.
+
+المستخدم ليس Git/PR/CI/Codex integration operator روتينيًا.
+
+## نهاية المهمة
+
+بعد merge متوافق:
+- Orchestrator يسجل new `main` SHA ويثبت diff/review/CI evidence؛
+- ينسق runtime validation ضمن الحدود المسموحة؛
+- يعيد الحالة إلى EQFAL Project؛
+- EQFAL Project يقرر task completion / next task / User Validation / Human Gate.
+
+تحديث ملفات current-state/history مثل `TODO.md`, `DECISIONS.md`, أو `RECAP_SESSION.md` يتم فقط عندما تقتضي repository policy/الحالة الفعلية ذلك؛ لا يعتبر `RECAP_SESSION.md` أعلى من authority hierarchy ولا يستخدم لتجاوز current `main`/Roadmap.
 
 ## قاعدة الإثبات
-لا يُذكر اختبار أو أمر أو نشر على أنه تم إلا إذا نُفذ فعليًا وكانت نتيجته معروفة.
+
+لا يذكر اختبار أو build أو review أو CI أو merge أو sync أو deployment على أنه نجح إلا إذا نفذ فعليًا وكانت النتيجة قابلة للتحقق.

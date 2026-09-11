@@ -9,17 +9,17 @@ Authority hierarchy:
 
 `GitHub/main → AGENTS.md → docs/WORKFLOW_GOVERNANCE.md → docs/TOOLING_RECOVERY_PLAYBOOK.md → docs/EXECUTION_ROADMAP.md → TODO.md → Historical records`
 
-If this file conflicts with a higher source, the higher source governs. Historical material must never be used to override current authoritative state.
+If this file conflicts with a higher source, the higher source governs. Historical material must never override current authoritative state.
 
 ## Reconciliation Metadata
 
 Last reconciled against GitHub/main SHA:
-`6b1b75382d9cedb9d2b2fb229aa3e9a860cbbc69`
+`2644c9fde0062221240409d47795ae2ee0d022e3`
 
 Reconciliation date:
 `2026-09-11`
 
-This SHA is an audit/reconciliation baseline only. It is **not** a promise that it remains the current GitHub/main HEAD after later merges.
+This SHA is an audit/reconciliation baseline only, not a promise that it remains future `main` HEAD.
 
 ---
 
@@ -44,27 +44,49 @@ This SHA is an audit/reconciliation baseline only. It is **not** a promise that 
 - Phase 15 — System-wide UI/UX Redesign: **DEFERRED**
 
 Notes:
-- VAT is DONE only for the currently approved scope; future tax work is neither implied nor pre-approved.
-- Monthly Close has a strong foundation but remains PARTIAL until a dedicated completeness gap audit is performed against the latest roadmap.
-- Annual Closing readiness foundation is present on `main`; it does not by itself constitute final financial statements, zakat calculation/filing, or final year-end package export.
+- VAT is DONE only for the currently approved scope; future tax scope is neither implied nor pre-approved.
+- Monthly Close remains PARTIAL until a dedicated completeness gap audit is accepted against the latest roadmap.
+- Annual Closing readiness does not itself constitute final financial statements, zakat filing/calculation, or final year-end package export.
 
-## Active governance / Agent-readiness backlog
+## Governance / Agent-readiness status
 
-1. Complete and merge the Governance Reconciliation documentation PR.
-2. Run a **Replit Sync Proof of Concept** using Replit Agent **FREE MODE ONLY** and only within the approved operational allowlist.
-3. Confirm Replit Free Mode sync/run/smoke-test/runtime-SHA verification works without coding, GitHub writes, Power, Max, or paid credits.
-4. Review open PR #140 and PR #96 separately; do not merge or close them automatically from this backlog.
-5. Run a read-only stale-branch hygiene audit before any branch deletion.
-6. Run a dedicated **Integrated Monthly Close Completeness Gap Audit** against the latest roadmap.
-7. Re-run **Agent Readiness Audit** for the proposed Orchestrator / Builder / Reviewer architecture.
+- Previous Governance Reconciliation: **DONE**.
+- Replit Sync PoC: **PASS WITH HUMAN ACTION**.
+  - verified PoC SHA: `2644c9fde0062221240409d47795ae2ee0d022e3`;
+  - Preview startup: **PASS**;
+  - full autonomous GitHub → Replit sync: **NOT YET PROVEN**;
+  - runtime SHA verification from the running application: **NOT YET PROVEN**.
+- Autonomous Operating Model governance package: **CURRENT GOVERNANCE WORK** until merged.
+- Orchestrator: **NOT YET BUILT/PROVEN**.
+- Builder Role + Cloud Codex integration: **NOT YET BUILT/PROVEN**.
+- Independent Reviewer: **NOT YET BUILT/PROVEN**.
+- Autonomous Agent PoC: **NOT YET RUN/PROVEN**.
+
+## Active architecture sequence after governance merge
+
+1. Build/test **Orchestrator**.
+2. Build/test **Builder Role with Cloud Codex as primary execution engine**.
+3. Build/test **Independent Reviewer**.
+4. Run **Autonomous Agent PoC** with exact-SHA GitHub/CI evidence, independent review, merge-gate enforcement, recovery-path validation, and user-notification-state validation.
+5. Resume Product roadmap from current dependencies only after Agent readiness is actually proven.
+
+Do not claim Autonomous Agents are ready before this sequence is implemented and verified.
+
+## Parallel repository hygiene / review backlog
+
+These existing items remain open unless separately verified complete; they do not change Product phase status or authorize automatic destructive actions:
+
+- Review open PR #140 and PR #96 separately; do not merge or close them solely from this backlog.
+- Run a read-only stale-branch hygiene audit before any branch deletion.
+- Any branch deletion, force/history rewrite, or other destructive/exceptional Git recovery must follow current governance and applicable Human Gates.
 
 ## Next real product gap
 
-After the Agent-readiness/governance work above, the next real product gap is:
+After Agent-readiness work, the currently identified next real Product gap is:
 
 **Phase 5 — Chart Classification & Financial Statement Mapping**
 
-No implementation starts until a dedicated Read-only Design Check is completed and approved.
+Phase 8 Monthly Close remains PARTIAL pending its dedicated completeness gap audit. EQFAL Project must choose actual next Product work from current `main`, roadmap dependencies, and the approved governance at that time.
 
 ## Product backlog after Phase 5 dependency is addressed
 
@@ -79,25 +101,27 @@ No implementation starts until a dedicated Read-only Design Check is completed a
 
 ## Conditional / deferred work
 
-Remain deferred unless separately approved and justified:
+Remain deferred unless justified and passed through applicable Design/Human Gates:
 - Inventory / COGS for companies that genuinely require it.
 - E-invoicing / ZATCA Fatoora.
 - Paid OCR/AI/messaging/external integrations.
 - Automatic/scored bank matching.
 - Many-to-many bank transaction allocation.
-- Advanced funding/prepayment patterns beyond the approved foundations.
+- Advanced funding/prepayment patterns beyond approved foundations.
 - Production deployment.
 
 ## Permanent operational safeguards
 
 - GitHub/main is the sole merged source of truth.
-- One programming task at a time.
-- Read-only Design Check before implementation.
-- No Production without explicit approval.
-- No new paid service, paid API, plan upgrade, or extra credits without explicit approval.
-- Replit Agent is FREE MODE ONLY, limited to the approved operational allowlist and subject to successful Replit Sync PoC.
-- If Free Mode is no longer actually free: STOP.
-- Codex tooling incidents follow `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
+- One bounded programming task at a time.
+- Every Product task begins with Read-only Design Check.
+- Internal Design Approval is allowed only under the conditions in `AGENTS.md` / `docs/WORKFLOW_GOVERNANCE.md` after that governance is merged.
+- Builder cannot self-review or self-merge.
+- Independent Reviewer and required exact-SHA CI are mandatory for normal merge.
+- Production, new paid cost, destructive real-data actions, material accounting/tax policy changes, secrets/credentials, specified sensitive real-user access changes, material unresolved ambiguity, and exceptional Git recovery remain Human Gates.
+- Replit is runtime/practical validation only and may not write to GitHub.
+- Replit Agent is FREE MODE ONLY within the approved allowlist; if Free Mode is no longer actually free: STOP.
+- Tooling incidents follow `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
 
 ---
 
@@ -105,14 +129,6 @@ Remain deferred unless separately approved and justified:
 
 **Historical only — do not use this section for current task selection, current phase status, current HEAD, or governance authority.**
 
-The previous version of this file was last updated on `2026-08-17` and described the project when the main execution milestone was the completion of the banking/payment/custody Phase 3 era. It recorded, among other things:
+The prior backlog described earlier project stages and the pre-autonomous workflow. Those records remain useful as project history, but current GitHub/main implementation and the authority hierarchy supersede their use as current status.
 
-- Core security / tenancy / auth / memberships / capabilities foundations as complete.
-- Fiscal Years foundation as complete.
-- Documents as closed.
-- Banking import, matching/reconciliation, payment settlement, custody/advances, and real-bank-statement import validation as closed.
-- Practical Phase 3 evidence including bank import, settlements, custody closeout, audit trail, company isolation, and permission tests.
-- Older next-step suggestions around Banking UI/UX and early functional roadmap phases.
-- Older deferred items such as automatic matching, many-to-many transaction allocation, advanced payment/funding patterns, VAT work, partners/obligations, monthly close, zakat, and later UI/UX.
-
-Those records remain useful as project history, but later GitHub/main implementation superseded their use as current status. For durable historical decisions and rationale, consult `DECISIONS.md` and merged GitHub PR/commit history.
+For durable historical decisions and rationale, consult `DECISIONS.md` and merged GitHub PR/commit history.

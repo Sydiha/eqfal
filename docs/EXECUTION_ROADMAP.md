@@ -4,85 +4,87 @@ Status: Approved project guidance
 Reconciliation date: 2026-09-11
 
 Last reconciled against GitHub/main SHA:
-`6b1b75382d9cedb9d2b2fb229aa3e9a860cbbc69`
+`2644c9fde0062221240409d47795ae2ee0d022e3`
 
-This SHA is an audit/reconciliation baseline only; it is not a guarantee that it remains the current GitHub/main HEAD after later merges.
+This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
 ## Authority
 
 `GitHub/main → AGENTS.md → docs/WORKFLOW_GOVERNANCE.md → docs/TOOLING_RECOVERY_PLAYBOOK.md → docs/EXECUTION_ROADMAP.md → TODO.md → Historical records`
 
-This document is authoritative for product roadmap/status below the higher governance sources. Historical phase recaps or old TODO entries must not override this roadmap. If a material ambiguity remains after applying the hierarchy: STOP + escalate.
+This document is authoritative for product roadmap/status below the higher governance sources. Historical phase recaps or old TODO entries must not override it.
 
-## Permanent delivery rules
+## Autonomous Operating Model Context
+
+After the Autonomous Operating Model governance package is merged to `main`:
+
+- **EQFAL Project = Product Owner + Lead PM + Roadmap Authority** and selects the next task from current `main`, this roadmap, and dependency order.
+- Every Product task begins with a Read-only Design Check.
+- EQFAL Project may internally approve a Design Check when it is inside the approved roadmap/direct dependency and no Human Gate applies.
+- Orchestrator manages execution lifecycle but cannot change product scope/roadmap.
+- Builder is a role; Cloud Codex is the primary Builder execution engine.
+- Independent Reviewer checks the actual GitHub diff against the approved Execution Contract.
+- Merge may be automatic only through the complete Merge Gate in `docs/WORKFLOW_GOVERNANCE.md`.
+- Routine user Design Approval and routine user Merge Approval are superseded after this governance is merged.
+- Production, paid cost, destructive real-data actions, material accounting/tax policy changes, secrets/credentials, specified sensitive real-user access changes, material unresolved ambiguity, and exceptional Git recovery remain Human Gates.
+
+No Autonomous Agent readiness is claimed until the Orchestrator, Builder-role integration, Independent Reviewer, and end-to-end Autonomous Agent PoC are actually built and verified.
+
+## Permanent Delivery Rules
 
 - GitHub `main` is the sole source of truth for merged project state.
 - One bounded programming task at a time.
-- Every implementation task begins with a read-only Design Check; no coding before approval.
-- After Design Approval, use one complete implementation contract for Codex whenever practical.
-- Avoid iterative prompt loops and unnecessary context transfer.
-- One corrective implementation pass is allowed for a real code/acceptance blocker. A second corrective pass requires stopping and revisiting the design.
-- No Production changes without explicit approval.
-- No paid service, new operating cost, paid API, extra credits, plan upgrade, paid runner, extra server/database/storage/OCR/messaging dependency without explicit prior approval.
-- Complete the system functionally and accounting-wise before system-wide UI/UX redesign.
-- UI/UX work before that point is limited to functional blockers or usability defects that prevent correct operation.
-- The project owner/operator is treated as a non-accountant. EQFAL must not require a non-accountant to make unexplained professional accounting/tax judgments.
-- Roles are templates; effective capabilities are authoritative and company-scoped. Backend authorization remains authoritative.
+- Approved Execution Contracts are binding.
+- One corrective implementation pass maximum for a real code/acceptance blocker; tooling failures follow the recovery playbook and do not create extra code-fix loops.
+- No Production change without Human Gate.
+- No paid service/API/credits/plan/infrastructure/operating cost without Human Gate.
+- Complete the system functionally/accounting-wise before system-wide UI/UX redesign; earlier UI work is limited to functional/usability blockers.
+- The owner/operator is treated as a non-accountant; EQFAL must not require unexplained professional accounting/tax judgments from the user.
+- Roles are templates; effective capabilities are authoritative and company-scoped; Backend authorization remains authoritative.
 - Sensitive changes require auditability and controlled effective dates where relevant.
 
-## Replit Agent — FREE MODE ONLY
+## Replit — Current Proven State
 
-Replit Agent may be used only in **FREE MODE** for the approved operational scope, and only subject to successful Replit Sync Proof of Concept. The policy permits this constrained use; it does not claim autonomous/end-to-end sync is already proven.
+**Replit Sync PoC: PASS WITH HUMAN ACTION**.
 
-Allowed only:
-- GitHub `main` → Replit sync.
-- Git state checks.
-- application startup.
-- basic smoke tests.
-- runtime/latest-approved-main SHA verification.
+Proven:
+- GitHub/main synchronized successfully to Replit during the PoC.
+- Verified SHA during PoC: `2644c9fde0062221240409d47795ae2ee0d022e3`.
+- Preview startup: **PASS**.
 
-Prohibited:
-- coding/refactoring/feature implementation;
-- accounting/tax logic changes;
-- DB/schema design or migrations;
-- PR rescue/branch reconstruction/patch relay;
-- push/write/PR changes to GitHub;
-- Power Mode;
-- Max Mode;
-- paid credits or paid additional usage.
+Not yet proven:
+- full autonomous GitHub → Replit synchronization;
+- runtime SHA verification from the running application.
 
-If Free Mode is no longer actually free: **STOP**.
+Until both are proven, Replit remains runtime/practical validation only. A small user sync action may use `SYNC ASSISTANCE REQUIRED`; it is not approval or User Acceptance.
 
-Replit Sync PoC remains an Agent-readiness blocker until proven separately.
+Replit Agent is allowed only in FREE MODE for synchronization, Git-state checks, startup, Preview/basic smoke/runtime validation, and runtime SHA verification when proven. It remains prohibited for Product coding/refactoring, accounting/tax logic, DB/schema design/migrations, branch reconstruction, PR rescue, patch relay, GitHub push/write/PR, Power, Max, or paid credits/additional paid usage.
 
-## Codex / GitHub delivery model
+## Agent Readiness Status
 
-The current binding delivery lifecycle is defined in `docs/WORKFLOW_GOVERNANCE.md`.
-
-- The managing conversation performs live GitHub baseline reads and records the intended baseline SHA.
-- Codex verifies correct repository/checkout, cleanliness, and exact baseline match.
-- A normal sandbox `origin`, authenticated sandbox `gh`, or pre-implementation native PR button is not itself a mandatory preflight requirement when the governing checks have otherwise passed.
-- PR delivery is evaluated at the Delivery Gate after implementation/tests.
-- Real GitHub diff + required CI + Design Check compliance are required for acceptance.
-- Tooling failures follow `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
+- Governance Reconciliation documentation: **DONE**.
+- Replit Sync PoC: **PASS WITH HUMAN ACTION**.
+- Autonomous Operating Model governance package: **CURRENT GOVERNANCE WORK** until merged.
+- Orchestrator implementation/readiness: **NOT YET PROVEN**.
+- Builder Role + Cloud Codex integration: **NOT YET PROVEN**.
+- Independent Reviewer implementation/readiness: **NOT YET PROVEN**.
+- Autonomous Agent end-to-end PoC: **NOT YET PROVEN**.
 
 ## Phase 0 — Project reference and accounting/compliance governance
 
 **Status: DONE / ONGOING GOVERNANCE**
 
 - Keep Saudi accounting/tax compliance guidance in project documentation.
-- Treat the owner/manager as a non-accountant operator.
-- EQFAL records operational truth, links evidence, applies deterministic controls, surfaces gaps, and routes material professional judgments to an authorized accountant/reviewer.
+- Treat owner/manager as a non-accountant operator.
+- EQFAL records operational truth, links evidence, applies deterministic controls, surfaces gaps, and routes material professional judgments to authorized accountant/reviewer.
 - UI/API success alone does not prove accounting completeness.
-- 2026 remains the first live year; historical/opening balances are handled through controlled review.
+- 2026 remains the first live year; historical/opening balances use controlled review.
 
 ## Phase 1 — Company Accounting & Tax Profile
 
 **Status: DONE**
 
-Implemented current approved foundation includes accounting framework, fiscal/currency context, VAT profile, Zakat/income-tax context, WHT profile, effective dating/workflow metadata, and the approved capabilities/workflow.
-
-Future expansion requires a new Design Check and is not implied by DONE.
+Implemented approved foundation includes accounting framework, fiscal/currency context, VAT profile, Zakat/income-tax context, WHT profile, effective dating/workflow metadata, and approved capabilities/workflow. Future expansion requires a new Design Check.
 
 ## Phase 2 — Fixed Asset Depreciation Policy
 
@@ -90,7 +92,7 @@ Future expansion requires a new Design Check and is not implied by DONE.
 
 Strong Fixed Assets foundation exists, including categories, useful life/residual value, account links, depreciation schedule/posting integration, opening accumulated depreciation, disposal handling, and close integration.
 
-Remaining gap: complete governed category-level depreciation policy/history/effective-dating/review semantics and any approved rate/useful-life consistency requirements not yet represented as a full policy lifecycle.
+Remaining gap: complete governed category-level depreciation policy/history/effective-dating/review semantics and approved rate/useful-life consistency requirements not yet represented as a full policy lifecycle.
 
 Advanced impairment, revaluation, components, multiple books, tax depreciation, and similar advanced features remain deferred until proven necessary.
 
@@ -104,7 +106,7 @@ Governed opening-balance review and traceability/correction foundations are impl
 
 **Status: DONE**
 
-Accrual/prepayment/deferred/periodic-adjustment workflow foundation is implemented with schedules, review/approval behavior, posting integration, period locking and Monthly Close integration for the approved scope.
+Accrual/prepayment/deferred/periodic-adjustment workflow foundation is implemented with schedules, review/approval behavior, posting integration, period locking, and Monthly Close integration for the approved scope.
 
 ## Phase 5 — Chart Classification and Financial Statement Mapping
 
@@ -117,30 +119,30 @@ Required scope remains:
 - Profit or Loss;
 - Changes in Equity;
 - Cash Flows when prerequisite data is complete;
-- derive reports from the ledger rather than independent manual numbers;
-- do not present profitability/cash-flow KPIs as final before the underlying accounting cycle is complete.
+- derive reports from ledger data rather than independent manual numbers;
+- do not present profitability/cash-flow KPIs as final before the accounting cycle is complete.
 
-No implementation begins until a dedicated Read-only Design Check is approved.
+No implementation starts without a dedicated Read-only Design Check and a valid approval under current governance.
 
 ## Phase 6 — VAT Reconciliation Hardening
 
 **Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-The currently approved VAT scope includes authoritative company VAT profile behavior, filing-period authority, reconciliation, recoverability review, controlled adjustments/post-period correction lifecycle, return snapshots and filing records/readiness.
+The approved VAT scope includes authoritative company VAT profile behavior, filing-period authority, reconciliation, recoverability review, controlled adjustments/post-period correction lifecycle, return snapshots, and filing records/readiness.
 
-This status does **not** close, imply, or pre-approve any future VAT/tax requirement outside the scope already designed and merged. New tax scope requires a fresh Design Check.
+This does not pre-approve future VAT/tax requirements. New tax scope requires a new Design Check and any applicable Human Gate.
 
 ## Phase 7 — Zakat, Income Tax and Withholding Tax
 
 **Status: PARTIAL**
 
-Company applicability/profile foundations exist and Annual Closing can surface conservative readiness. The following product work remains subject to future approved designs:
+Company applicability/profile foundations exist and Annual Closing can surface conservative readiness. Remaining future work includes, subject to approved designs:
 - Zakat/tax working papers and reconciliations tied to financial statements;
 - ownership/tax treatment context where relevant;
 - WHT review/workflows for relevant non-resident payments;
 - professional review/approval before final filing outputs.
 
-EQFAL prepares, reconciles, explains and surfaces exceptions; it does not replace final professional tax judgment.
+EQFAL prepares, reconciles, explains, and surfaces exceptions; it does not replace final professional tax judgment.
 
 ## Phase 8 — Integrated Monthly Close
 
@@ -148,7 +150,7 @@ EQFAL prepares, reconciles, explains and surfaces exceptions; it does not replac
 
 A strong implemented foundation exists: monthly periods, blockers, period locking/reopen controls, ledger/VAT/assets/adjustments integration, and closed-period coordination.
 
-This phase is **not considered finally DONE yet**. Before final closure, perform a dedicated **Monthly Close Completeness Gap Audit** against the latest roadmap and verify all applicable blocker categories, plain-language resolution semantics, navigation targets, role/capability behavior, and company-profile-aware applicability.
+Phase 8 remains not finally DONE until a dedicated **Monthly Close Completeness Gap Audit** verifies applicable blocker categories, plain-language resolution semantics, navigation targets, role/capability behavior, company-profile-aware applicability, and reopen reason/audit/capability behavior.
 
 Expected review areas include, where applicable:
 - incomplete/unreviewed documents;
@@ -167,25 +169,27 @@ Expected review areas include, where applicable:
 
 **Status: PARTIAL**
 
-Strong capability/company-scoped authorization and Grant Ceiling foundations exist. A dedicated completeness review is still required before the final permission model is declared DONE, including separation of view/create/edit/review/approve/post/cancel/reopen/policy/user-administration capabilities where relevant and audit of permission changes.
+Strong capability/company-scoped authorization and Grant Ceiling foundations exist. A completeness review is still required before DONE, including separation of view/create/edit/review/approve/post/cancel/reopen/policy/user-administration capabilities where relevant and audit of permission changes.
+
+Developing permission-model features within this approved roadmap is normal Product work. Human Gate applies only to sensitive access changes affecting real users as defined by governance.
 
 ## Phase 10 — Company Manager Workspace
 
 **Status: PARTIAL**
 
-Operational modules exist for purchases, sales, documents, banking, obligations, partners, assets and close visibility. A coherent manager-facing workspace still requires completion/validation so a non-accountant can record operational reality without accounting mechanics.
+Operational modules exist for purchases, sales, documents, banking, obligations, partners, assets, and close visibility. A coherent manager-facing workspace still requires completion/validation so a non-accountant can record operational reality without accounting mechanics.
 
 ## Phase 11 — Home Screen Alerts
 
 **Status: PARTIAL**
 
-Home already surfaces Monthly Close readiness/blockers and drill-through behavior. Remaining scope includes richer current-action, upcoming-due, waiting-for-accountant and waiting-for-team classification subject to capabilities, without exposing restricted detail.
+Home already surfaces Monthly Close readiness/blockers and drill-through behavior. Remaining scope includes richer current-action, upcoming-due, waiting-for-accountant, and waiting-for-team classification subject to capabilities, without exposing restricted detail.
 
 ## Phase 12 — Manager Financial Snapshot
 
 **Status: NOT STARTED**
 
-When underlying data is trustworthy, the intended snapshot may include:
+When underlying data is trustworthy, intended snapshot may include:
 - bank balances;
 - amounts to collect;
 - amounts to pay;
@@ -198,42 +202,44 @@ Do not confuse bank balance with profit/liquidity/net financial position, and do
 
 **Status: DEFERRED**
 
-Implement only when a company genuinely needs them and after separate approval:
+Implement only when a company genuinely needs them and after applicable Design/Human Gates:
 - inventory / COGS / stock counts and adjustments;
 - e-invoicing / ZATCA Fatoora;
 - advanced external integrations;
 - paid OCR/AI/messaging services.
 
-Before any cost-bearing conditional capability, document need and cost impact and obtain explicit approval.
+Any cost-bearing capability requires a Human Gate before cost is introduced.
 
 ## Phase 14 — Full Operational and Accounting Cycle Validation
 
 **Status: NOT STARTED**
 
-Validate a real end-to-end cycle after prerequisite product gaps are complete:
+Validate a real end-to-end cycle after prerequisite Product gaps are complete:
 
 Company setup → Accounting & Tax Profile → Fiscal year → Opening balances → customers/suppliers → purchase → evidence → payment → sale → collection → expense → obligations → custody → banking/import/matching → fixed asset → depreciation → accruals/prepayments → VAT → journals/adjustments → ledger/trial balance → monthly close → financial statements → applicable Zakat/tax workpapers → year-end close.
 
-Also validate tenant isolation, permissions, audit, duplicate prevention, period locks, numerical correctness, document relationships, tax handling, workflow transitions and usability for a non-accountant manager.
+Also validate tenant isolation, permissions, audit, duplicate prevention, period locks, numerical correctness, document relationships, tax handling, workflow transitions, and usability for a non-accountant manager.
 
 ## Phase 15 — System-wide UI/UX Redesign & Polish
 
 **Status: DEFERRED**
 
-Start only after functional/accounting completion and full-cycle validation. Until then, UI/UX work is limited to functional blockers or defects that prevent correct use.
+Start only after functional/accounting completion and full-cycle validation. Before that, UI/UX work is limited to functional blockers or defects preventing correct use.
 
-## Cost-control rule
+## Cost-Control Rule
 
-The accounting/profile/policy/permission/alert logic should use existing PostgreSQL/application infrastructure and should not itself require new recurring cost. Potential future cost drivers such as document storage volume and optional external integrations/services require separate approval.
+Existing application/PostgreSQL infrastructure should be used wherever practical. New paid services, APIs, credits, runners, servers, databases, storage, OCR, messaging, or other recurring costs require a Human Gate.
 
-## Current execution order
+## Current Architecture / Execution Sequence
 
-This order supersedes the older sequence that treated Phase 1 as the next implementation task.
+This is the active sequence after the Autonomous Operating Model governance package is merged:
 
-1. Complete Governance Reconciliation and merge the documentation-only governance PR after review/approval.
-2. Complete Agent-readiness prerequisites, including the Replit Sync Proof of Concept under FREE MODE ONLY and cleanup/readiness audits as separately approved.
-3. Perform the dedicated **Integrated Monthly Close Completeness Gap Audit**; Phase 8 remains PARTIAL / STRONG FOUNDATION until that audit is accepted.
-4. Re-run Agent Readiness for the proposed Orchestrator / Builder / Reviewer architecture.
-5. Once Agent readiness is established, begin a dedicated Read-only Design Check for the **NEXT REAL PRODUCT GAP: Phase 5 — Financial Statement Mapping**.
-6. Continue later roadmap work based on actual dependencies and current GitHub/main state, not historical phase numbering alone.
+1. Build and test **Orchestrator**.
+2. Build and test **Builder Role with Cloud Codex as primary execution engine**.
+3. Build and test **Independent Reviewer**.
+4. Run an **Autonomous Agent PoC** proving task handoff, durable checkpoints, independent review, exact-SHA CI gating, compliant merge control, failure recovery, and user-notification states without bypassing Human Gates.
+5. Only after Agent readiness is actually proven, resume the real Product roadmap from current dependencies. The currently identified next real Product gap remains **Phase 5 — Financial Statement Mapping**, while Phase 8 remains PARTIAL pending its dedicated completeness gap audit.
+6. Continue later roadmap work from actual dependencies/current `main`, not historical phase numbering alone.
 7. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
+
+Do not claim autonomous operation is ready merely because this governance design exists; readiness requires implementation and evidence.
