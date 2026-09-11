@@ -64,13 +64,19 @@ Notes:
 
 ## Active architecture sequence after governance merge
 
-1. Build/test **Orchestrator**.
-2. Build/test **Builder Role with Cloud Codex as primary execution engine**.
-3. Build/test **Independent Reviewer**.
-4. Run **Autonomous Agent PoC** with exact-SHA GitHub/CI evidence, independent review, merge-gate enforcement, recovery-path validation, and user-notification-state validation.
-5. Resume Product roadmap from current dependencies only after Agent readiness is actually proven.
+Two independent tracks are active:
 
-Do not claim Autonomous Agents are ready before this sequence is implemented and verified.
+### Product Track
+
+1. Resume Product roadmap from current dependencies/current `main` without waiting for Full Autonomous Readiness.
+2. The current next Product gap is **Phase 5 — Chart Classification & Financial Statement Mapping**.
+3. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
+
+### Agent Infrastructure Track
+
+1. Continue solving the **Automatic Continuation Gap** independently.
+2. This gap blocks **Full Autonomous Readiness only** and does not block Product work.
+3. Do not claim Full Autonomous Readiness until event-driven continuation is operationally proven.
 
 ## Parallel repository hygiene / review backlog
 
@@ -82,7 +88,7 @@ These existing items remain open unless separately verified complete; they do no
 
 ## Next real product gap
 
-After Agent-readiness work, the currently identified next real Product gap is:
+The currently identified next real Product gap is:
 
 **Phase 5 — Chart Classification & Financial Statement Mapping**
 
