@@ -28,6 +28,11 @@ const gate = {
   noMaterialAccountingOrTaxAmbiguity: true, noExceptionalGitRecovery: true,
 };
 
+const durableCheckpoint = {
+  source: "GITHUB", checkpointType: "OPEN_PULL_REQUEST",
+  repository: "Sydiha/eqfal", sha: SHA, githubRef: "pull/177",
+};
+
 test("accepts a complete execution contract", () => {
   assert.deepEqual(core.validateExecutionContract(contract), { valid: true, blockers: [] });
 });
@@ -94,9 +99,36 @@ test("failure classification never authorizes Product scope mutation", () => {
   });
 });
 
+test("accepts explicit durable GitHub checkpoint evidence", () => {
+  assert.deepEqual(core.validateDurableCheckpoint(durableCheckpoint), {
+    valid: true, blockers: [],
+  });
+});
+
+test("missing and unknown durable checkpoint evidence fail closed", () => {
+  assert.deepEqual(core.validateDurableCheckpoint(), {
+    valid: false, blockers: ["DURABLE_CHECKPOINT_INVALID"],
+  });
+  const unknown = core.validateDurableCheckpoint({
+    ...durableCheckpoint, checkpointType: "EXECUTOR_MEMORY",
+  });
+  assert.equal(unknown.valid, false);
+  assert.ok(unknown.blockers.includes("DURABLE_CHECKPOINT_TYPE_UNKNOWN"));
+});
+
+test("session-local evidence can never satisfy a durable checkpoint", () => {
+  const result = core.validateDurableCheckpoint({
+    ...durableCheckpoint, source: "SESSION_LOCAL",
+  });
+  assert.equal(result.valid, false);
+  assert.ok(result.blockers.includes("DURABLE_CHECKPOINT_SOURCE_NOT_GITHUB"));
+});
+
 test("selects deterministic fail-closed lifecycle actions", () => {
   assert.equal(core.nextOrchestratorAction({ phase: "PREFLIGHT" }, { preflight, contract }), "ROUTE_TO_BUILDER");
   assert.equal(core.nextOrchestratorAction({ phase: "MERGE" }, { mergeGate: gate }), "MERGE");
   assert.equal(core.nextOrchestratorAction({ phase: "MERGE" }, {}), "REPORT_BLOCKERS");
+  assert.equal(core.nextOrchestratorAction({ phase: "BUILD" }, { durableCheckpoint }), "ROUTE_TO_REVIEWER");
+  assert.equal(core.nextOrchestratorAction({ phase: "BUILD" }), "REPORT_BLOCKERS");
   assert.equal(core.nextOrchestratorAction({ phase: "BUILD", humanGateRequired: true }), "STOP_FOR_HUMAN_DECISION");
 });

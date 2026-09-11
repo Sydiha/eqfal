@@ -99,6 +99,47 @@ const TOOLING_FAILURE_CODES = new Set([
   "REPLIT_SYNC_ASSISTANCE", "EXCEPTIONAL_GIT_RECOVERY",
 ]);
 
+export const DURABLE_CHECKPOINT_TYPES = Object.freeze([
+  "MAIN_COMMIT", "PUSHED_COMMIT", "OPEN_PULL_REQUEST", "CI_EVIDENCE",
+  "REVIEW_EVIDENCE",
+] as const);
+
+export type DurableCheckpointType = typeof DURABLE_CHECKPOINT_TYPES[number];
+
+/** Evidence must describe state independently readable from GitHub, not an executor session. */
+export interface DurableCheckpointEvidence {
+  source?: unknown;
+  checkpointType?: unknown;
+  repository?: unknown;
+  sha?: unknown;
+  githubRef?: unknown;
+}
+
+export function validateDurableCheckpoint(evidence: unknown): ValidationResult {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    return { valid: false, blockers: ["DURABLE_CHECKPOINT_INVALID"] };
+  }
+
+  const candidate = evidence as DurableCheckpointEvidence;
+  const blockers: string[] = [];
+  if (candidate.source !== "GITHUB") {
+    blockers.push("DURABLE_CHECKPOINT_SOURCE_NOT_GITHUB");
+  }
+  if (!DURABLE_CHECKPOINT_TYPES.includes(candidate.checkpointType as DurableCheckpointType)) {
+    blockers.push("DURABLE_CHECKPOINT_TYPE_UNKNOWN");
+  }
+  if (typeof candidate.repository !== "string" || candidate.repository.trim().length === 0) {
+    blockers.push("DURABLE_CHECKPOINT_REPOSITORY_MISSING");
+  }
+  if (typeof candidate.sha !== "string" || !/^[0-9a-f]{40}$/i.test(candidate.sha)) {
+    blockers.push("DURABLE_CHECKPOINT_SHA_INVALID");
+  }
+  if (typeof candidate.githubRef !== "string" || candidate.githubRef.trim().length === 0) {
+    blockers.push("DURABLE_CHECKPOINT_GITHUB_REF_MISSING");
+  }
+  return { valid: blockers.length === 0, blockers };
+}
+
 export type FailureClassification = Readonly<{
   category: "PROJECT" | "TOOLING";
   code: string;
@@ -205,7 +246,12 @@ export type OrchestratorAction = "STOP_FOR_HUMAN_DECISION" | "REQUEST_REPLIT_SYN
 
 export function nextOrchestratorAction(
   state: OrchestratorState,
-  evidence: { preflight?: PreflightEvidence; contract?: ExecutionContract; mergeGate?: MergeGateEvidence } = {},
+  evidence: {
+    preflight?: PreflightEvidence;
+    contract?: ExecutionContract;
+    durableCheckpoint?: DurableCheckpointEvidence;
+    mergeGate?: MergeGateEvidence;
+  } = {},
 ): OrchestratorAction {
   const notification = deriveNotificationState(state);
   if (notification === "HUMAN DECISION REQUIRED") return "STOP_FOR_HUMAN_DECISION";
@@ -216,7 +262,9 @@ export function nextOrchestratorAction(
       if (!evidence.preflight || !evidence.contract) return "RUN_PREFLIGHT";
       return validatePreflight(evidence.preflight, evidence.contract).valid
         ? "ROUTE_TO_BUILDER" : "REPORT_BLOCKERS";
-    case "BUILD": return "ROUTE_TO_REVIEWER";
+    case "BUILD":
+      return validateDurableCheckpoint(evidence.durableCheckpoint).valid
+        ? "ROUTE_TO_REVIEWER" : "REPORT_BLOCKERS";
     case "REVIEW": return "WAIT_FOR_CI";
     case "CI":
     case "MERGE":
