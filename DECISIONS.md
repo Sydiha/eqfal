@@ -350,3 +350,133 @@ Replit Agent مسموح فقط في **FREE MODE**، subject to successful **Repl
 
 ### Historical records
 القرارات القديمة تبقى محفوظة للتاريخ ولا تحذف، لكن أي قرار سابق متعارض مع هذا القرار يعتبر superseded في نطاق التعارض فقط. Historical status must never override current authoritative state.
+
+---
+
+## 2026-09-11 — EQFAL Autonomous Operating Model
+
+**القرار:** اعتماد نموذج حوكمة يجعل **EQFAL Project = Product Owner + Lead PM + Roadmap Authority** فوق أدوار التنفيذ، بحيث يقرر WHAT / WHY / WHEN، يقرأ `GitHub/main` والRoadmap، يختار المهمة التالية تلقائيًا من dependency order، ينفذ Read-only Design Check، ويصدر Execution Contract. لا يكتب EQFAL Project Product code بنفسه.
+
+### Superseded routine approvals
+بعد دمج هذا القرار إلى `main`:
+- routine user Design Approval **superseded** للمهمات المؤهلة داخل approved roadmap/direct dependencies؛
+- routine user Merge Approval **superseded** عندما يمر Automatic Merge Gate كاملًا؛
+- أي Governance PR يغير هذه القواعد قبل دمجها يظل خاضعًا للحوكمة الموجودة على `main` وقت التنفيذ.
+
+### Internal Design Approval
+يجوز لـEQFAL Project اعتماد Design داخليًا فقط عندما:
+- المهمة داخل approved roadmap أو direct dependency واضحة؛
+- current `GitHub/main` مقروء؛
+- scope/out-of-scope محددان؛
+- لا material ambiguity؛
+- لا Human Gate؛
+- لا Production؛
+- لا new paid cost؛
+- لا destructive real-data action؛
+- لا material new accounting/tax policy؛
+- لا new sensitive security/permission policy خارج approved roadmap؛
+- tenancy/security/audit/capability boundaries محفوظة.
+
+Execution Contract يتضمن على الأقل: baseline SHA, goal, scope, out-of-scope, affected boundaries, schema/migrations if applicable, acceptance criteria, tests, Human Gates, Definition of Done.
+
+**Design self-approval لا يعني implementation self-approval.**
+
+### Orchestrator
+Orchestrator = execution lifecycle manager وليس Product Authority. مسؤول عن baseline/preflight، Builder routing، durable checkpoints، failure classification، Tooling Recovery Playbook، Reviewer routing، CI monitoring، Merge Gate، compliant merge، post-merge baseline recording، Replit/runtime validation coordination، وإعادة evidence/state إلى EQFAL Project.
+
+ممنوع عليه تغيير roadmap/scope/Execution Contract أو تجاوز Reviewer/CI/Human Gate أو اختراع accounting/tax/security policy.
+
+### Builder / Cloud Codex
+**Builder = governance role. Cloud Codex = Primary Execution Engine.**
+
+Builder مسؤول عن clean verified checkout، exact approved baseline، independent branch، implementation، approved migrations فقط، tests، commit، push، PR.
+
+Builder لا يملك Design/Roadmap/Reviewer/Merge/Production/Cost Authority، وممنوع من self-review أو self-merge.
+
+Tooling recovery الطبيعي:
+
+`Cloud Codex → one bounded tooling retry → fresh Cloud Codex session → approved Local Codex/fallback when applicable → STOP or Human Gate only when required`
+
+GitHub durable state يسبق دائمًا session-local state.
+
+### Independent Reviewer
+Reviewer مستقل عن Builder، وليس Product Owner أو Design Authority. يراجع actual GitHub diff ويحدد هل التنفيذ مطابق للعقد وآمن.
+
+يفحص عند الصلة: scope، Design/Execution Contract compliance، accounting integrity، tax integrity، tenant isolation، permissions/capabilities، auditability، migrations/schema، regression risk، tests، exact-SHA CI evidence.
+
+النتائج فقط: `PASS`, `FAIL`, `NEEDS_CORRECTION`.
+
+Reviewer PASS وحده لا يكفي للmerge، وCI PASS وحده لا يكفي للmerge.
+
+### Automatic Merge Gate
+Orchestrator يمكنه merge بدون routine user approval فقط إذا تحققت جميع الشروط:
+1. Actual GitHub PR targeting `main`.
+2. Correct approved task/baseline lineage.
+3. Scope matches Execution Contract.
+4. No unapproved expansion.
+5. Independent Reviewer = `PASS`.
+6. Required CI = `PASS` on exact intended PR head SHA.
+7. No unresolved PROJECT blocker.
+8. No unresolved TOOLING blocker affecting correctness/delivery.
+9. No Human Gate.
+10. No Production change.
+11. No new paid service/API/infrastructure/credits/plan.
+12. No destructive real-data action.
+13. No secrets/credentials action.
+14. No sensitive real-user permission action requiring Human Gate.
+15. No material accounting/tax policy ambiguity/change requiring Human Gate.
+16. No exceptional Git recovery such as force/history rewrite.
+
+إذا فشل شرط واحد: **NO MERGE**.
+
+### Human Gates
+`HUMAN DECISION REQUIRED` فقط لـ:
+- Production deployment/change؛
+- new paid service/API/infrastructure/credits/plan؛
+- destructive real-data action؛
+- material accounting/tax policy change غير معتمد مسبقًا؛
+- secrets/credentials؛
+- material requirement ambiguity غير قابل للحسم؛
+- sensitive real-user access changes: Administrator-level access، cross-company expansion، approve/post/reopen/user-administration privileges، أو real-user credentials/secrets؛
+- exceptional recovery مثل force push/history rewrite/destructive Git recovery.
+
+تطوير permission features داخل approved roadmap ليس Human Gate تلقائيًا.
+
+### User communication states
+اعتماد أربع حالات:
+- `NO ACTION REQUIRED`؛
+- `SYNC ASSISTANCE REQUIRED` — مؤقتة فقط لتدخل GitHub → Replit sync التشغيلي؛ ليست approval أو acceptance أو Human Decision؛
+- `HUMAN DECISION REQUIRED` — Human Gates فقط؛
+- `USER VALIDATION REQUIRED` — بعد Phase أو meaningful testable increment مع خطوات الفحص والنتيجة المتوقعة.
+
+دور المستخدم = Human Decisions + User Acceptance Validation عند الحاجة، وليس routine Git/PR/CI/Codex integration work.
+
+### Replit proven state
+**Replit Sync PoC: PASS WITH HUMAN ACTION**.
+
+Proven:
+- GitHub/main synchronized successfully to Replit؛
+- verified PoC SHA: `2644c9fde0062221240409d47795ae2ee0d022e3`؛
+- Preview startup: `PASS`.
+
+Not proven:
+- Full autonomous GitHub → Replit sync؛
+- runtime SHA verification from the running application.
+
+Replit يبقى runtime/practical validation target only وممنوع من Product coding/refactoring/migrations/design، branch reconstruction، PR rescue، GitHub push/write/PR، Power، Max، أو paid credits.
+
+### Safety controls
+هذا النموذج لا يسمح بـ:
+- uncontrolled self-approval؛
+- Builder self-merge؛
+- Reviewer bypass؛
+- CI bypass؛
+- Production بلا Human Gate؛
+- paid usage بلا Human Gate؛
+- autonomous accounting/tax policy expansion؛
+- Replit GitHub writes؛
+- infinite tooling retries؛
+- session-local state كمصدر حقيقة؛
+- automatic destructive Git recovery.
+
+`GitHub/main` يبقى sole source of truth.
