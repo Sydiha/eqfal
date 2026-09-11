@@ -72,6 +72,14 @@ Notes:
 
 Do not claim Autonomous Agents are ready before this sequence is implemented and verified.
 
+## Parallel repository hygiene / review backlog
+
+These existing items remain open unless separately verified complete; they do not change Product phase status or authorize automatic destructive actions:
+
+- Review open PR #140 and PR #96 separately; do not merge or close them solely from this backlog.
+- Run a read-only stale-branch hygiene audit before any branch deletion.
+- Any branch deletion, force/history rewrite, or other destructive/exceptional Git recovery must follow current governance and applicable Human Gates.
+
 ## Next real product gap
 
 After Agent-readiness work, the currently identified next real Product gap is:
