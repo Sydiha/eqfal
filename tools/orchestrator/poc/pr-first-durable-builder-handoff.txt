@@ -1,0 +1,4 @@
+EQFAL Agent Readiness 2C PoC
+Purpose: prove PR-first durable Cloud Codex builder handoff.
+Seed artifact only. No Product behavior.
+Expected Builder action: append one durable confirmation line to this file from Cloud Codex on the same PR branch.
