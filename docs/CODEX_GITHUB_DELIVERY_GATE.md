@@ -1,105 +1,137 @@
-# EQFAL — Codex ↔ GitHub Delivery Gate
+# EQFAL — Codex Repository Access & GitHub Delivery Gates
 
-Status: Approved project guidance
-Date: 2026-09-06
+Status: Active project guidance
 
-This document records the tested delivery paths for EQFAL and refines the generic Codex/GitHub preflight rules in `docs/EXECUTION_ROADMAP.md`.
+This document separates two concerns that must not be confused:
 
-## Purpose
+1. **Repository Access / Execution Preflight** — required before Coding.
+2. **GitHub Delivery / PR Handoff** — occurs after Coding and is not a condition for Coding success.
 
-No implementation task may begin until its selected Codex delivery path can reach `Sydiha/eqfal`, produce a dedicated branch/commit, and deliver changes to a GitHub Pull Request that can later be updated on the same PR.
+This file is subordinate to `AGENTS.md`, `docs/WORKFLOW_GOVERNANCE.md`, and `DEVELOPMENT_WORKFLOW.md`.
 
-If the selected path cannot prove delivery before editing code, stop and repair the delivery path first.
+If a material conflict exists with higher-priority active governance: STOP and report it to the Project Owner.
 
-## Local Codex App on Windows — tested and approved
+## 1. Repository Access / Execution Preflight
 
-The approved local repository is:
+Before Codex Cloud performs Product Coding, EQFAL must establish with evidence:
 
-`C:\Users\easar\OneDrive\المستندات\eqfal`
+1. repository is exactly `Sydiha/eqfal`;
+2. requested base/branch is correct;
+3. approved baseline `HEAD SHA` is correct and recorded;
+4. expected repository files can be read;
+5. the required execution/test environment is usable for the task's basic validation.
 
-The following path was practically validated on 2026-09-06:
+A UI saying “connected” is not enough if repository identity or baseline cannot be verified.
 
-- Git for Windows installed and available in PATH.
-- Repository is a real Git working tree.
-- `origin` points to `https://github.com/Sydiha/eqfal.git`.
-- Local `main` can be synchronized with `origin/main` using fast-forward only.
-- GitHub authentication permits push.
-- A dedicated branch can be created and pushed.
-- A Pull Request can be created from the pushed branch.
-- A later commit pushed to the same branch updates the same Pull Request.
+If this preflight fails:
 
-The validation PR was #151 and was closed without merge after the test.
+**STOP. Do not start Product Coding. Do not consume Codex Credit in random implementation retries.**
 
-### Local preflight before implementation
+The availability of Create PR / Update PR is intentionally **not** part of this preflight.
 
-For a Local task, prove before code changes:
+## 2. Codex Cloud Role
 
-1. The working directory is the approved EQFAL repository.
-2. `git status -sb` is understood and no unrelated changes are present.
-3. `git remote -v` shows the correct `Sydiha/eqfal` origin for fetch and push.
-4. Fetch succeeds.
-5. Baseline `main` is synchronized with `origin/main` using a safe fast-forward path when needed.
-6. Record the exact baseline SHA.
-7. Work on a dedicated branch, never directly on `main`.
-8. Push capability is available before substantial implementation starts.
-9. Corrective commits remain on the same PR branch.
+Codex Cloud is a bounded Coding Engine only.
 
-If any of these fail, stop before implementation.
+It may be invoked after:
 
-## Codex Cloud — tested and approved through platform PR handoff
+`READ-ONLY → PLAN → OWNER APPROVAL → CODEX PREFLIGHT`
 
-The Codex Cloud Environment `eqfal` is linked to repository `Sydiha/eqfal` through the ChatGPT Codex Connector. The GitHub App installation has read/write access to code, issues, pull requests, workflows, and actions for the repository.
+No autonomous or multi-agent workflow is permitted. There is no Orchestrator Agent, Builder Agent, Reviewer Agent, autonomous continuation, unattended execution, automatic task selection, or automatic merge.
 
-The Cloud sandbox may present a platform-managed working branch such as `work`, may have no `origin` remote inside the shell, and `gh auth status` may report no authenticated GitHub host. Those shell conditions alone are **not** a delivery failure for Cloud.
+EQFAL remains the sole coordinator.
 
-For Cloud, the authoritative delivery path is the Codex platform handoff:
+## 3. Required Coding Task Contract
 
-Cloud task → commit → **Create PR** → follow-up commit → **Update PR** on the same pull request.
+The Codex task must include at least:
+- goal;
+- approved baseline/SHA;
+- expected files or scope;
+- constraints;
+- what must not be changed;
+- required tests;
+- acceptance criteria / success definition.
 
-This path was practically validated on 2026-09-06. The validation PR was #152; it was created from Codex Cloud, updated from the same Cloud task using **Update PR**, and closed without merge after validation.
+Codex must not expand scope or add unrelated refactors/dependency upgrades.
 
-### Cloud preflight before implementation
+## 4. Codex Credit Conservation
 
-For a Cloud task, prove before substantial code changes:
+Codex Credit is a project resource that must be conserved.
 
-1. The selected Environment is `eqfal`.
-2. The Environment is linked to repository `Sydiha/eqfal`.
-3. The requested base in the Codex UI is `main`.
-4. The Cloud task can read the expected repository baseline/content.
-5. The normal Codex Cloud delivery action is available for creating a PR after a minimal bounded change when delivery needs revalidation.
-6. Existing PR work must use **Update PR**, not create a second PR.
+Rules:
+- EQFAL performs diagnosis, inspection, planning, and task decomposition itself where reasonably possible;
+- no unnecessary Codex exploration;
+- no ambiguous Coding prompt;
+- prefer one complete run where safe;
+- do not rerun Coding because push, Create PR, Update PR, or other handoff failed;
+- do not resend the same prompt before diagnosing the failure cause;
+- every new Codex Cloud execution after the initial run, including a bounded correction inside the same scope, requires new explicit Owner Approval before execution;
+- EQFAL may diagnose and prepare the correction plan without new approval, but there is no implicit approval and no automatic Codex correction loop;
+- no unrelated refactor or side improvement;
+- if multiple Codex rounds or materially high Credit use is reasonably expected, inform the Owner before Codex execution;
+- no paid Credit/capacity increase without explicit Owner Approval.
 
-Do **not** require native `origin`, `git push`, or authenticated `gh` inside the Cloud sandbox when the platform-managed Create PR / Update PR handoff is functioning.
+## 5. GitHub Delivery / PR Handoff
 
-Do not add a personal GitHub token, PAT, new Secret, paid service, or other credential workaround merely to make the Cloud shell behave like Local Git unless a future documented platform requirement makes that necessary and the project owner explicitly approves it.
+After Coding, the preferred delivery path is:
 
-## Selection rule
+`Codex result/commit → GitHub branch/commit → PR → CI`
 
-- Local Codex App is the dependable native-Git path and may be used for normal implementation.
-- Codex Cloud is also an approved path when the platform Create PR / Update PR handoff is available.
-- Choose the path that best fits the task while minimizing token/credit usage and avoiding manual artifact relay.
-- If the chosen path fails its own delivery gate, try the other already-approved path only if doing so does not create duplicate implementation work.
-- If both paths fail, stop and repair connectivity before coding.
+Successful Coding does **not** depend on Codex itself successfully creating or updating a PR.
 
-## Token and credit conservation
+If Codex implemented the approved change successfully but push / Create PR / Update PR fails:
 
-- Design and scope the task before handing it to Codex.
-- Prefer one complete implementation contract.
-- Do not use Codex for open-ended discussion that can be settled in project planning first.
-- Avoid repeating full project history; reference repository documentation and only the relevant files/decisions.
-- Prefer focused diffs and targeted tests; rely on CI for broader verification where appropriate.
-- Keep corrective work on the same PR and allow at most one implementation correction for a real blocker before revisiting the design.
+1. do not rerun the Coding task;
+2. do not recreate valid work merely to repair handoff;
+3. identify whether an implementation commit/result exists and whether any part is already durable on GitHub;
+4. diagnose the handoff failure separately from code correctness;
+5. preserve valid durable state;
+6. use the lowest-cost compliant GitHub handoff path; manual handoff does not require new Owner Approval when it only transports the same already-approved implementation without changing code or scope, such as creating a branch, pushing the approved commit/result, creating a PR, updating the same PR with the same approved implementation, or adding non-implementation PR metadata;
+7. if handoff requires code/implementation changes, a new Codex run, scope change, dependency addition, or behavior change, return to `OWNER APPROVAL` before Coding;
+8. report to the Owner when Owner action or a material decision is otherwise needed.
 
-## Cost rule
+Never state that a branch, commit, PR, or PR update exists until GitHub is independently verified.
 
-This delivery setup uses the existing Codex, GitHub repository, GitHub App/Connector, Git for Windows, and current project infrastructure. It must not introduce new paid services or recurring infrastructure costs without explicit prior approval.
+## 6. GitHub Source-of-Truth Rule
 
-## Acceptance rule
+`GitHub/main` is the Source of Truth for merged code and durable repository state.
 
-A task is not accepted merely because Codex reports success. Acceptance requires:
+GitHub PRs/branches/commits are delivery evidence only when independently readable from GitHub.
 
-- the actual GitHub PR/diff;
-- changed files within approved scope;
-- tests/CI appropriate to the risk on the exact head commit;
-- comparison with the approved read-only design check;
-- no unrelated changes or unauthorized cost/infrastructure additions.
+Session-local Codex state is not durable GitHub evidence.
+
+## 7. SHA Delivery Chain
+
+For practical validation, keep a clear chain where applicable:
+
+`identifiable Codex result/commit → GitHub PR HEAD SHA → Replit validated SHA`
+
+Before Owner UAT, it is mandatory to prove:
+
+`GitHub PR HEAD SHA == Replit validated SHA`
+
+If SHAs differ or cannot be proven: STOP and do not accept runtime validation.
+
+## 8. Replit Boundary
+
+Replit is Runtime / Practical Validation only.
+
+It is not:
+- Source of Truth;
+- Product coding environment for an independent version;
+- GitHub branch/PR rescue path;
+- alternate durable delivery mechanism.
+
+## 9. Delivery Acceptance
+
+A task is not accepted merely because Codex reports success.
+
+Acceptance evidence includes, as applicable:
+- actual implementation result/diff;
+- approved scope compliance;
+- GitHub branch/PR state if handoff has occurred;
+- exact PR HEAD SHA;
+- appropriate tests/CI on the intended SHA;
+- Replit same-SHA validation;
+- Owner UAT;
+- explicit Owner Merge Decision before merge.
