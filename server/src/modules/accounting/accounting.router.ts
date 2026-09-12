@@ -5,6 +5,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { AccountingPeriodClosedError, assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
+import { accountClassificationRouter } from './account-classification.router';
 import { JournalPostingConflictError, JournalPostingNotFoundError, JournalPostingValidationError, postJournalInTransaction } from './journal-posting';
 import { isOperationalSourceType, loadOperationalSources, operationalSourceQuery, OperationalSource, OperationalSourceType } from './operational-sources';
 import { VAT_RECOGNITION_ERROR_CODE, VatRecognitionIncompleteError } from './vat-recognition';
@@ -69,3 +70,5 @@ accountingRouter.put('/journals/:id/lines',requireSameOrigin,...base,requireCapa
 accountingRouter.post('/journals/:id/post',requireSameOrigin,...base,requireCapability('accounting.journal.post'),route(async(req,res)=>{try{if(!UUID.test(req.params.id)||Object.keys(req.body??{}).length)throw new AccountingValidationError('Invalid request');const s=service(res);if(s)res.json(await s.post(context(req).activeCompanyId,context(req).user.id,req.params.id));}catch(e){handle(e,res);}}));
 accountingRouter.get('/trial-balance',...base,requireCapability('accounting.view'),route(async(req,res)=>{try{if(typeof req.query.fiscal_year_id!=='string'||!UUID.test(req.query.fiscal_year_id)||(req.query.start_date!==undefined&&!validDate(req.query.start_date))||(req.query.end_date!==undefined&&!validDate(req.query.end_date)))throw new AccountingValidationError('Invalid request');const s=service(res);if(s)res.json(await s.trialBalance(context(req).activeCompanyId,req.query.fiscal_year_id,req.query.start_date as string|undefined,req.query.end_date as string|undefined));}catch(e){handle(e,res);}}));
 accountingRouter.get('/general-ledger',...base,requireCapability('accounting.view'),route(async(req,res)=>{try{if(typeof req.query.account_id!=='string'||!UUID.test(req.query.account_id)||typeof req.query.fiscal_year_id!=='string'||!UUID.test(req.query.fiscal_year_id)||(req.query.start_date!==undefined&&!validDate(req.query.start_date))||(req.query.end_date!==undefined&&!validDate(req.query.end_date)))throw new AccountingValidationError('Invalid request');const s=service(res);if(s)res.json(await s.ledger(context(req).activeCompanyId,req.query.account_id,req.query.fiscal_year_id,req.query.start_date as string|undefined,req.query.end_date as string|undefined));}catch(e){handle(e,res);}}));
+
+accountingRouter.use(accountClassificationRouter);
