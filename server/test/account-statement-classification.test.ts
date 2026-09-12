@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration=readFileSync(new URL('../migrations/033_account_statement_classification.sql',import.meta.url),'utf8');
 const router=readFileSync(new URL('../src/modules/accounting/account-classification.router.ts',import.meta.url),'utf8');
-const accountingCore=readFileSync(new URL('../src/modules/accounting/accounting-core.router.ts',import.meta.url),'utf8');
+const accountingRouter=readFileSync(new URL('../src/modules/accounting/accounting.router.ts',import.meta.url),'utf8');
 
 describe('Phase 5A account statement classification',()=>{
   it('uses explicit non-null unmapped semantics',()=>{
@@ -42,7 +42,7 @@ describe('Phase 5A account statement classification',()=>{
   it('does not alter posted journals, trial balance, or general ledger logic',()=>{
     expect(migration).not.toMatch(/journal_entries|journal_lines|trial.balance|general.ledger/i);
     expect(router).not.toMatch(/journal_entries|journal_lines|trial.?balance|general.?ledger/i);
-    expect(accountingCore).toContain('async trialBalance(');
-    expect(accountingCore).toContain('async ledger(');
+    expect(accountingRouter).toContain('async trialBalance(');
+    expect(accountingRouter).toContain('async ledger(');
   });
 });
