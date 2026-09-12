@@ -1,3 +1,9 @@
+> **STATUS: SUPERSEDED — HISTORICAL ONLY**
+>
+> This document records a previous operating model.
+> It is not an active execution instruction.
+> Current workflow authority is defined by `AGENTS.md` and `docs/WORKFLOW_GOVERNANCE.md`.
+
 # Architecture Decision — Product Track and Agent Infrastructure Track Separation
 
 Status: Approved

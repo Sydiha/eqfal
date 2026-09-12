@@ -1,264 +1,269 @@
 # AGENTS.md
 
-## EQFAL — Permanent Autonomous Operating, Governance & Cost Protocol
+## EQFAL — Owner-Controlled Governance & Codex Execution Protocol
 
-These rules are mandatory for every automated agent, assistant, coding session, and workspace operating on this repository. Governance changes become binding only after they are merged to `GitHub/main`. If any prompt, memory, document, tool output, session state, or external recommendation conflicts with this file, follow the authority hierarchy below. If a material conflict remains unresolved, STOP and use the applicable Human Gate.
+This file contains the highest-priority active operating rules for work on the EQFAL repository. It applies to EQFAL, Codex Cloud coding sessions, and any tool or assistant acting on this repository.
 
-## 1. Authority Hierarchy
+## 1. Operating Authority and Document Precedence
 
-`GitHub/main → AGENTS.md → docs/WORKFLOW_GOVERNANCE.md → docs/TOOLING_RECOVERY_PLAYBOOK.md → docs/EXECUTION_ROADMAP.md → TODO.md → Historical records`
+For current operating instructions, use this precedence:
 
-- **GitHub/main** is the sole source of truth for merged code and current durable project state.
-- **AGENTS.md** contains permanent high-level binding rules.
-- **docs/WORKFLOW_GOVERNANCE.md** defines the detailed operating lifecycle and gates.
-- **docs/TOOLING_RECOVERY_PLAYBOOK.md** is canonical for tooling-failure classification and recovery.
-- **docs/EXECUTION_ROADMAP.md** defines approved product roadmap scope and reconciled phase status.
-- **TODO.md** contains the current operational backlog and active sequencing.
-- Historical records preserve prior evidence and decisions but never override current authoritative state.
+1. `AGENTS.md`
+2. `docs/WORKFLOW_GOVERNANCE.md`
+3. `DEVELOPMENT_WORKFLOW.md`
+4. Specialized operational playbooks
 
-## 2. Autonomous Operating Model
+`GitHub/main` remains the source of truth for merged code and durable repository state.
 
-The normal lifecycle is:
+Historical or superseded documents are evidence of previous decisions only. They are not active execution instructions and never override the files above.
 
-`EQFAL Project → Orchestrator → Builder Role (Cloud Codex primary) → Independent Reviewer → GitHub/CI → Automated Merge Gate → Replit runtime/practical validation → EQFAL Project → user only when required`
+If active instructions materially conflict or cannot be reconciled safely: **STOP and report the conflict to the Project Owner. Do not choose an interpretation independently.**
 
-### EQFAL Project
+## 2. Roles and Final Authority
 
-**EQFAL Project = Product Owner + Lead PM + Roadmap Authority.**
+### Project Owner
 
-It decides **WHAT, WHY, and WHEN**. It does not write Product code.
+The Project Owner is the final decision authority.
 
-Responsibilities:
-- read current `GitHub/main` and the approved roadmap;
-- reason about dependencies and select the next task automatically;
-- perform the Read-only Design Check;
-- internally approve a Design Check when the task is within the approved roadmap/direct dependency and no Human Gate applies;
-- issue the binding Execution Contract;
-- determine Phase/meaningful-increment completion;
-- determine whether a Human Gate or User Validation is required.
+The Owner:
+- approves the EQFAL plan before any Product coding begins;
+- performs final User Acceptance Testing (UAT);
+- alone makes the final Merge Decision;
+- must explicitly approve any Production change, new paid service/cost, or other gate requiring owner authority.
 
-### Orchestrator
+There is no implicit approval. Silence, inactivity, or prior approval of a different task is not approval for coding or merge.
 
-The Orchestrator is the execution-lifecycle manager, not Product Authority.
+### EQFAL
 
-Responsibilities:
-- baseline verification and preflight;
-- route the approved Execution Contract to Builder;
-- track durable checkpoints;
-- classify PROJECT vs TOOLING failures and apply the recovery playbook;
-- route the actual GitHub change to the Independent Reviewer;
-- monitor required CI;
-- evaluate the Merge Gate and merge when every gate passes;
-- record the new `main` SHA;
-- coordinate post-merge runtime/practical validation;
-- return verified evidence/state to EQFAL Project.
+EQFAL is the single coordinator for the complete workflow.
 
-The Orchestrator must not change the roadmap, expand scope, rewrite the approved Execution Contract, bypass Reviewer/CI/Human Gates, or invent accounting, tax, security, permission, or architecture policy.
+EQFAL is responsible for:
+- understanding the task;
+- Read-only inspection of current repository state;
+- diagnosis of the current condition and relevant gaps;
+- preparing the implementation plan;
+- identifying expected files, scope, constraints, tests, risks, and acceptance criteria;
+- presenting the plan to the Owner;
+- not starting Product implementation before explicit Owner Approval;
+- after approval, preparing one precise Codex Cloud coding task;
+- reviewing Codex output and the actual repository diff;
+- verifying required tests and CI;
+- verifying GitHub state;
+- verifying Replit tests the same approved GitHub SHA;
+- preparing a concrete UAT checklist for the Owner;
+- diagnosing corrections and preparing bounded correction plans until acceptance criteria are met or a STOP condition is reached; before every new Codex Cloud execution, obtaining a new explicit Owner Approval.
 
-### Builder Role
+EQFAL does not delegate coordination authority to an autonomous workflow.
 
-**Builder is a governance role. Cloud Codex is the primary execution engine for Builder.**
+### Codex Cloud
 
-Builder responsibilities:
-- verified clean checkout;
-- exact approved baseline;
-- independent branch;
-- implementation;
-- migrations only when explicitly included in the approved contract;
-- required tests;
-- commit, push, and PR delivery.
+Codex Cloud is allowed and is **not prohibited by the No Agents rule**. It is used only as a bounded **Coding Engine** after the required pre-coding gates pass.
 
-Builder has no Design Authority, Roadmap Authority, Reviewer Authority, Merge Authority, Production Authority, or Cost Authority. Builder must never self-review or self-merge.
+Normal sequence:
 
-### Independent Reviewer
+`READ-ONLY → PLAN → OWNER APPROVAL → CODEX PREFLIGHT → CODEX EXECUTION`
 
-Reviewer is independent from Builder and reviews the **actual GitHub diff**, not Builder summaries.
+Codex Cloud does not own roadmap selection, design approval, review authority, merge authority, Production authority, or cost authority.
 
-Reviewer checks as applicable:
-- scope and Execution Contract compliance;
-- accounting integrity;
-- tax integrity;
-- tenant isolation;
-- permissions/capabilities;
-- auditability;
-- migrations/schema;
-- regression risk;
-- tests;
-- CI evidence tied to the exact intended SHA.
+## 3. No Agents — Exact Meaning
 
-Reviewer result is exactly one of:
-- `PASS`
-- `FAIL`
-- `NEEDS_CORRECTION`
+**No autonomous or multi-agent workflow.**
 
-Reviewer is not Product Owner or Design Authority. Reviewer `PASS` alone is insufficient for merge. CI `PASS` alone is insufficient for merge.
+The following operating model is prohibited:
+- Orchestrator Agent;
+- Builder Agent;
+- Reviewer Agent or Independent Reviewer Agent;
+- autonomous continuation;
+- unattended execution;
+- automatic task selection;
+- automatic merge.
 
-## 3. Permanent Non-Negotiable Rules
+Codex Cloud remains allowed only as the bounded Coding Engine described in this file. EQFAL is the sole coordinator.
 
-- **GitHub/main is the only source of truth for merged work and durable project state.** Session-local state is never authoritative.
-- One bounded programming task at a time. Product programming uses an independent branch and PR targeting `main`.
-- Approved Design Checks and Execution Contracts are binding scope contracts. Material deviation requires STOP and re-evaluation by EQFAL Project or a Human Gate when applicable.
-- Security boundaries are binding: separation of duties, tenant isolation, capabilities, permissions, audit requirements, architecture, approved API semantics, schema, state transitions, validation, limits, fields, workflows, and UX behavior must not be weakened or broadened outside the approved contract.
-- **One-Shot Rule:** Builder receives one complete Execution Contract for normal implementation.
-- **Zero-Loop Rule:** after the initial implementation, at most one corrective programming pass is allowed for a real code/acceptance blocker. Tooling failures do not create extra code-fix passes.
-- No Production deployment/change without a Human Gate.
-- No paid service, paid API, additional credits, plan upgrade, paid infrastructure, or new operating cost without a Human Gate.
-- No destructive action on real data without a Human Gate.
-- No material new accounting/tax policy outside approved governance without a Human Gate.
-- No secrets/credentials action without a Human Gate.
-- Sensitive real-user access changes require a Human Gate when they grant/remove Administrator-level access, expand cross-company access, alter approve/post/reopen/user-administration privileges for real users, or involve credentials/secrets. Building permission features inside the approved roadmap is normal Product work and is not automatically a Human Gate.
-- Exceptional Git recovery such as force-push, history rewrite, or destructive repository recovery requires a Human Gate.
-- Never claim tests, builds, reviews, deployments, synchronization, or other actions succeeded unless actually executed and verified.
+## 4. Mandatory Workflow Gates
 
-## 4. Design Approval Rule
+Every Product task follows these gates in order:
 
-Every Product task begins with a Read-only Design Check.
+1. `READ-ONLY`
+2. `PLAN`
+3. `OWNER APPROVAL`
+4. `CODEX PREFLIGHT`
+5. `CODEX EXECUTION`
+6. `EQFAL REVIEW`
+7. `TESTS / CI`
+8. `GITHUB HANDOFF`
+9. `REPLIT SAME-SHA VALIDATION`
+10. `OWNER UAT`
+11. `OWNER MERGE DECISION`
 
-EQFAL Project may internally approve the design only when all are true:
-- task is inside the approved roadmap or a clear direct dependency;
-- current `GitHub/main` has been read;
-- scope and out-of-scope are explicit;
-- no material requirement ambiguity exists;
-- no Human Gate applies;
-- no Production change;
-- no new paid cost;
-- no destructive real-data action;
-- no material new accounting/tax policy;
-- no new sensitive security/permission policy outside the approved roadmap;
-- tenancy, security, audit, capability, and architecture boundaries remain protected.
+No gate may be skipped, assumed, or silently combined with another gate when doing so would weaken its evidence requirement.
 
-The Execution Contract must contain at least:
-- baseline SHA;
+A material failure at any gate blocks progression to the next gate until the issue is resolved through an approved path.
+
+## 5. Read-only, Plan, and Owner Approval
+
+Every Product task begins with a Read-only inspection of current `GitHub/main` and directly relevant repository material.
+
+The plan presented to the Owner must identify at least:
+- current baseline HEAD SHA;
 - goal;
-- scope;
-- out-of-scope;
-- affected boundaries;
-- schema/migrations when applicable;
+- expected scope/files;
+- out-of-scope items;
+- constraints and protected boundaries;
+- expected tests/CI;
+- relevant risks;
 - acceptance criteria;
+- any expected cost or multi-run Codex risk.
+
+**No Product coding begins without explicit Owner Approval of the plan.**
+
+## 6. Codex Credit Management
+
+Codex Credit is a constrained project resource and must be conserved.
+
+Mandatory rules:
+- EQFAL performs diagnosis, repository inspection, planning, and task decomposition itself whenever reasonably possible;
+- do not use Codex for unnecessary exploration, open-ended discovery, or planning that EQFAL can perform;
+- send a complete, bounded coding task rather than an ambiguous prompt;
+- combine logically related implementation work into one appropriate Codex run when that reduces cost and risk without expanding scope;
+- do not rerun a Coding task because push, PR creation, PR update, or another GitHub handoff step failed;
+- do not resend the same prompt without first diagnosing why the previous attempt failed;
+- every new Codex Cloud execution after the initial run, including a bounded correction inside the same scope, requires a new explicit Owner Approval before execution;
+- EQFAL may diagnose and prepare a bounded correction plan without new approval, but may not start the correction run without renewed Owner Approval;
+- no implicit approval and no automatic Codex correction loop;
+- do not use Codex for unrelated refactoring, cleanup, dependency upgrades, or side improvements;
+- if multiple Codex rounds or materially high Credit usage is reasonably expected, inform the Owner before starting Codex execution;
+- never buy credits, increase paid capacity, or add a paid service without explicit Owner Approval.
+
+## 7. Codex Repository Access / Execution Preflight
+
+`CODEX PREFLIGHT` is separate from GitHub delivery or PR handoff.
+
+Before Codex changes Product code, verify with evidence:
+- repository is exactly `Sydiha/eqfal`;
+- correct requested base/branch is selected;
+- correct baseline `HEAD SHA` is recorded and available;
+- expected repository files are readable;
+- the required execution/test environment is usable for the task's basic validation.
+
+If repository access or the execution environment preflight fails: **STOP. Do not begin Coding and do not consume Credit in random Coding retries.**
+
+Create PR / Update PR capability is **not** a requirement for Coding success.
+
+## 8. Codex Execution Contract
+
+The task sent to Codex must be precise and include at least:
+- goal;
+- approved baseline / SHA;
+- expected files or scope;
+- constraints;
+- explicit out-of-scope / protected areas;
 - required tests;
-- Human Gates;
-- Definition of Done.
+- acceptance criteria / definition of success.
 
-**Design self-approval is not implementation self-approval.** The Independent Reviewer and required CI remain mandatory before merge.
+Codex must not expand scope, introduce unrelated refactors, upgrade dependencies unless required and approved, modify Production, or adopt a paid service on its own.
 
-## 5. Automatic Merge Gate
+## 9. EQFAL Review and Testing
 
-The Orchestrator may merge without routine user approval only when **every** condition below is true:
+After Codex execution, EQFAL reviews the actual result against the approved plan.
 
-1. An actual GitHub PR targets `main`.
-2. The PR has correct approved task/baseline lineage.
-3. Scope matches the approved Execution Contract.
-4. No unapproved expansion exists.
-5. Independent Reviewer = `PASS`.
-6. Required CI = `PASS` on the exact intended PR head SHA.
-7. No unresolved PROJECT blocker exists.
-8. No unresolved TOOLING blocker affects correctness or delivery.
-9. No Human Gate applies.
-10. No Production change is included.
-11. No new paid service/API/infrastructure/credits/plan is included.
-12. No destructive real-data action is included.
-13. No secrets/credentials action is included.
-14. No sensitive real-user permission action requiring a Human Gate is included.
-15. No material accounting/tax policy ambiguity/change requiring a Human Gate exists.
-16. No exceptional Git recovery such as force/history rewrite is required.
+As applicable, EQFAL must verify:
+- actual changed files and diff;
+- scope compliance;
+- accounting/tax integrity;
+- tenant isolation;
+- capabilities/permissions;
+- audit behavior;
+- schema/migration safety;
+- regression risk;
+- required targeted tests;
+- typecheck/lint/build when relevant;
+- CI on the intended exact SHA.
 
-If any condition is false: **NO MERGE**.
+Do not claim success without verifiable evidence. A P1 related to the change or relevant failing CI blocks progression.
 
-## 6. Human Gates
+## 10. GitHub Handoff Is Separate from Coding Success
 
-Use `HUMAN DECISION REQUIRED` only for:
-- Production deployment/change;
-- new paid service/API/infrastructure/credits/plan;
-- destructive action on real data;
-- material accounting/tax policy change not previously approved;
-- secrets/credentials;
-- material requirement ambiguity not resolvable from current governance/roadmap/code;
-- sensitive real-user access changes defined above;
-- exceptional recovery such as force-push/history rewrite/destructive Git recovery.
+The ideal delivery path is:
 
-Routine task selection, normal Design Approval, branch creation, implementation, PR creation, CI, independent review, and compliant merge do **not** require routine user approval.
+`Codex result/commit → GitHub branch/commit → PR → CI → Replit same-SHA validation`
 
-## 7. User Communication States
+GitHub PR creation or update by Codex is not a condition for successful Coding execution.
 
-Use exactly these operating states:
+If Coding succeeds but push / Create PR / Update PR fails:
+- do not rerun the Coding task;
+- do not recreate valid implementation work merely to fix delivery;
+- classify the problem as a GitHub handoff/tooling issue separate from code correctness;
+- preserve any identifiable result or durable GitHub checkpoint;
+- report the handoff state to the Owner when Owner action or a material decision is needed;
+- a manual GitHub handoff does not require new Owner Approval when it only transports the same already-approved implementation without changing code or scope (for example: create a branch, push the approved commit/result, create a PR, update the same PR with the same approved implementation, or add non-implementation PR metadata);
+- if handoff requires any code or implementation change, a new Codex run, scope change, dependency addition, or behavior change, it is no longer handoff-only and must return to OWNER APPROVAL before Coding.
 
-### `NO ACTION REQUIRED`
-The project is proceeding and needs no user action.
+Never state that a PR was created or updated until GitHub is independently verified.
 
-### `SYNC ASSISTANCE REQUIRED`
-Temporary Replit-only state when GitHub → Replit synchronization needs a small operational action from the user. This is not approval, acceptance, or a Human Decision. Remove this state when full autonomous Replit sync is proven.
+## 11. SHA Integrity and Replit
 
-### `HUMAN DECISION REQUIRED`
-Use only for Human Gates. State the exact decision, why automation cannot decide it, available options, impact, and what is blocked.
+`GitHub/main` is the Source of Truth for merged state.
 
-### `USER VALIDATION REQUIRED`
-Use after a Phase or meaningful testable increment when practical user validation is required. EQFAL Project must state what was completed, where to enter, what to click, what to inspect, the expected result, and what evidence to send if validation fails.
+Replit is a Runtime / Practical Validation environment only. It is not a Source of Truth, independent development environment, or Git recovery mechanism.
 
-The user is not a routine Git/PR/CI/Codex/branch integration operator.
+Before Owner UAT there must be verifiable SHA continuity between:
+- identifiable Codex result/commit when one exists;
+- GitHub PR HEAD SHA;
+- SHA being validated in Replit.
 
-## 8. Replit — FREE MODE, Runtime/Practical Validation Only
+At minimum, `GitHub PR HEAD SHA == Replit validated SHA` must be proven before Owner UAT.
 
-Current proven state:
-- **Replit Sync PoC: PASS WITH HUMAN ACTION**.
-- GitHub/main was synchronized successfully to Replit during the PoC.
-- Verified PoC SHA: `2644c9fde0062221240409d47795ae2ee0d022e3`.
-- Preview startup: **PASS**.
+If the SHA chain cannot be proven or the SHAs differ: **STOP. Do not accept the runtime validation.**
 
-Not yet proven:
-- full autonomous GitHub → Replit synchronization;
-- runtime SHA verification from the running application.
+## 12. Owner UAT
 
-Replit remains a runtime/practical validation target only. It is not a primary development environment, source of truth, or Git delivery bridge.
+Before the merge decision, EQFAL provides the Owner a concrete UAT checklist.
 
-Allowed in FREE MODE only:
-- GitHub `main` → Replit workspace synchronization;
-- Git state checks;
-- application startup;
-- Preview/basic smoke/runtime validation;
-- runtime SHA verification when the capability is proven.
+For each step state:
+- where to go;
+- what to click;
+- what to enter;
+- what should appear;
+- the expected result;
+- important error/edge cases to try.
 
-Prohibited:
-- Product coding or source modification;
-- refactoring or feature implementation;
-- accounting/tax logic changes;
-- database/schema design or migrations;
-- branch reconstruction, PR rescue, patch relay, or alternate delivery;
-- push, PR creation/update, or any GitHub write;
-- Power Mode;
-- Max Mode;
-- paid credits/additional paid usage.
+Do not use a generic instruction such as “test the system.”
 
-If Free Mode is no longer actually free or the requested action leaves this allowlist: STOP and use the applicable Human Gate.
+The Owner performs final UAT.
 
-## 9. Tooling Recovery Principle
+## 13. Owner Merge Decision
 
-**GitHub = durable project state. Codex session = disposable executor.**
+Only the Project Owner makes the final Merge Decision.
 
-Normal Builder recovery path:
+- no automatic merge;
+- no implicit merge approval;
+- no merge because CI passed alone;
+- no merge because EQFAL review passed alone;
+- no merge because Owner previously approved the Coding plan;
+- silence is not merge approval.
 
-`Cloud Codex → one bounded tooling retry → fresh Cloud Codex session from verified GitHub state → approved Local Codex/fallback when applicable → STOP or Human Gate only when required`
+A merge may occur only after the prior gates are satisfied and the Owner explicitly approves merge.
 
-- classify every incident as PROJECT FAILURE or TOOLING FAILURE;
-- never enter infinite retry loops;
-- never buy credits automatically;
-- never rebuild valid pushed commits/branches/PRs merely because a session failed;
-- never treat session-local state as durable evidence;
-- never use Replit as a Git recovery path.
+## 14. Permanent Non-Negotiable Rules
 
-Detailed incident rules are canonical in `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
+- One task at a time.
+- No autonomous or multi-agent workflow.
+- No Production changes without explicit Owner Approval.
+- No paid services, paid APIs, additional credits, plan upgrades, or new operating cost without explicit Owner Approval.
+- No scope expansion.
+- No unrelated refactors.
+- No dependency upgrades unless required by the approved task and explicitly approved when material.
+- No automatic merge.
+- No claiming tests, CI, GitHub delivery, Replit synchronization, validation, deployment, or success without verifiable evidence.
+- `GitHub/main` remains the source of truth for merged state.
+- No destructive real-data action, secrets/credentials change, or exceptional Git recovery without explicit Owner Approval.
 
-## 10. Context Minimization and Evidence
+## 15. References
 
-- Load only material required by the current task, while preserving governance/security verification.
-- For reviews, inspect changed GitHub files/diff and directly relevant material.
-- Prefer GitHub CI/test evidence tied to the exact SHA over copied logs.
-- Agent summaries are not acceptance evidence.
-
-## 11. References
-
-- `docs/WORKFLOW_GOVERNANCE.md` — detailed autonomous execution lifecycle and gates.
-- `docs/TOOLING_RECOVERY_PLAYBOOK.md` — canonical tooling recovery architecture.
-- `docs/EXECUTION_ROADMAP.md` — approved product roadmap and phase state.
-- `TODO.md` — current operational backlog.
-- `DECISIONS.md` — durable decision history.
-- `DEVELOPMENT_WORKFLOW.md` — additional workflow guidance when materially relevant; it must remain consistent with the higher authority hierarchy.
+- `docs/WORKFLOW_GOVERNANCE.md` — detailed gates and operating lifecycle.
+- `DEVELOPMENT_WORKFLOW.md` — concise day-to-day development procedure.
+- `docs/CODEX_GITHUB_DELIVERY_GATE.md` — Codex preflight and GitHub handoff rules.
+- `docs/TOOLING_RECOVERY_PLAYBOOK.md` — tooling-failure diagnosis and bounded recovery.
+- `docs/EXECUTION_ROADMAP.md` — product roadmap scope and phase sequencing where consistent with higher-priority operating governance.
+- Historical/superseded documents — evidence only, never current execution authority.
