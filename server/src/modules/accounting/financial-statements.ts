@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
@@ -14,6 +14,7 @@ export type StatementAccount={
   statement_category:StatementCategory;is_contra:boolean;amount:string;
 };
 type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string};
+type QueryRunner=Pick<Pool|PoolClient,'query'>;
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=(value:string)=>DATE.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`));
@@ -30,8 +31,8 @@ const accountAmount=(row:Pick<Movement,'debit'|'credit'|'account_type'|'is_contr
 export class FinancialStatementsService{
   constructor(private db:Pool){}
 
-  private async movements(companyId:string,fiscalYearId:string,start?:string,end?:string){
-    const year=(await this.db.query<{start_date:string;end_date:string}>(
+  private async movements(companyId:string,fiscalYearId:string,start?:string,end?:string,db:QueryRunner=this.db){
+    const year=(await db.query<{start_date:string;end_date:string}>(
       'SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',
       [fiscalYearId,companyId],
     )).rows[0];
@@ -40,7 +41,7 @@ export class FinancialStatementsService{
     if(!validDate(from)||!validDate(to)||from>to||from<year.start_date||to>year.end_date){
       throw new FinancialStatementValidationError('Invalid report date range');
     }
-    const rows=(await this.db.query<Movement>(
+    const rows=(await db.query<Movement>(
       `SELECT a.id account_id,a.code,a.name,a.account_type,a.statement_category,a.is_contra,
               COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
               COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
@@ -90,30 +91,40 @@ export class FinancialStatementsService{
   }
 
   async changesInEquity(companyId:string,fiscalYearId:string,start?:string,end?:string){
-    const period=await this.movements(companyId,fiscalYearId,start,end);
-    const closing=await this.movements(companyId,fiscalYearId,undefined,period.end_date);
-    const previousDate=new Date(`${period.start_date}T00:00:00Z`);
-    previousDate.setUTCDate(previousDate.getUTCDate()-1);
-    const previousEnd=previousDate.toISOString().slice(0,10);
-    const opening=previousEnd<closing.start_date
-      ? {accounts:[] as StatementAccount[]}
-      : await this.movements(companyId,fiscalYearId,undefined,previousEnd);
-    const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
-    const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
-    const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
-    const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
-    const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
-    const currentPeriodEarnings=this.earnings(periodAccounts);
-    const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
-    const financialPositionEquity=this.equityWithEarnings(closing.accounts);
-    const difference=closingEquity-financialPositionEquity;
-    return{
-      fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,
-      statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
-      direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
-      current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
-      reconciliation:{expected:closingEquity.toFixed(2),actual:financialPositionEquity.toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005},
-    };
+    const client=await this.db.connect();
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const period=await this.movements(companyId,fiscalYearId,start,end,client);
+      const closing=await this.movements(companyId,fiscalYearId,undefined,period.end_date,client);
+      const previousDate=new Date(`${period.start_date}T00:00:00Z`);
+      previousDate.setUTCDate(previousDate.getUTCDate()-1);
+      const previousEnd=previousDate.toISOString().slice(0,10);
+      const opening=previousEnd<closing.start_date
+        ? {accounts:[] as StatementAccount[]}
+        : await this.movements(companyId,fiscalYearId,undefined,previousEnd,client);
+      const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
+      const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
+      const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
+      const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
+      const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
+      const currentPeriodEarnings=this.earnings(periodAccounts);
+      const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
+      const financialPositionEquity=this.equityWithEarnings(closing.accounts);
+      const difference=closingEquity-financialPositionEquity;
+      await client.query('COMMIT');
+      return{
+        fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,
+        statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
+        direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
+        current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
+        reconciliation:{expected:closingEquity.toFixed(2),actual:financialPositionEquity.toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005},
+      };
+    }catch(error){
+      await client.query('ROLLBACK');
+      throw error;
+    }finally{
+      client.release();
+    }
   }
 
   private earnings(accounts:StatementAccount[]){

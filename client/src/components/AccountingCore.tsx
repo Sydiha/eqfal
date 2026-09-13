@@ -195,6 +195,7 @@ export function Accounting({
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [statement, setStatement] = useState<StatementReport | null>(null);
   const [statementBlocked, setStatementBlocked] = useState(false);
+  const [changesInEquityYearId, setChangesInEquityYearId] = useState("");
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
@@ -351,6 +352,7 @@ export function Accounting({
           Number(source.amount) <= Number(sourceFilters.amountMax)),
     );
   }, [sources, sourceFilters, sourceTypes]);
+  const changesInEquityYear = years.find((year) => year.id === changesInEquityYearId) ?? years[0];
   if (!canView)
     return (
       <section className="panel">
@@ -1219,10 +1221,10 @@ export function Accounting({
       {!loading && (tab === "financialPosition" || tab === "profitOrLoss" || tab === "changesInEquity") && (
         <>
           <form className="compact-form" onSubmit={(e) => void report(tab, e)}>
-            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
+            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required {...(tab === "changesInEquity" ? { value: changesInEquityYear?.id ?? "", onChange: (event) => setChangesInEquityYearId(event.target.value) } : {})}>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
             {tab === "financialPosition" ? <label>{t("accounting.statements.asOf")}<input name="as_of_date" type="date" defaultValue={years[0]?.end_date} required /></label> : <>
-              <label>{t("accounting.discovery.from")}<input name="start_date" type="date" defaultValue={years[0]?.start_date} required /></label>
-              <label>{t("accounting.discovery.to")}<input name="end_date" type="date" defaultValue={years[0]?.end_date} required /></label>
+              <label>{t("accounting.discovery.from")}<input key={`${tab}-${changesInEquityYear?.id}-start`} name="start_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.start_date : years[0]?.start_date} required /></label>
+              <label>{t("accounting.discovery.to")}<input key={`${tab}-${changesInEquityYear?.id}-end`} name="end_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.end_date : years[0]?.end_date} required /></label>
             </>}
             <button className="primary">{t("accounting.run")}</button>
           </form>

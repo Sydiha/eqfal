@@ -54,4 +54,17 @@ describe('Accounting financial statements',()=>{
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/financial-statements/changes-in-equity?'),expect.anything());
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('start_date=2026-01-01&end_date=2026-12-31'),expect.anything());
  });
+
+ it('synchronizes changes-in-equity dates when switching fiscal years',async()=>{
+  const nextYear={id:'44444444-4444-4444-8444-444444444444',name:'2027',start_date:'2027-04-01',end_date:'2028-03-31'};
+  const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url==='/api/fiscal-years'?{fiscalYears:[year,nextYear]}:url.startsWith('/api/financial-statements/')?equity:base(url))));
+  vi.stubGlobal('fetch',fetchMock);
+  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('tab',{name:'Changes in Equity'}));
+  fireEvent.change(screen.getByRole('combobox'),{target:{value:nextYear.id}});
+  expect(screen.getByLabelText('From accounting date')).toHaveValue('2027-04-01');
+  expect(screen.getByLabelText('To accounting date')).toHaveValue('2028-03-31');
+  fireEvent.click(screen.getByRole('button',{name:'Run report'}));
+  await waitFor(()=>expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`fiscal_year_id=${nextYear.id}&start_date=2027-04-01&end_date=2028-03-31`),expect.anything()));
+ });
 });

@@ -5,6 +5,11 @@ import { FinancialStatementsService, FinancialStatementUnmappedError, FinancialS
 const year={start_date:'2026-01-01',end_date:'2026-12-31'};
 const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,opening_debit:'0',opening_credit:'0',...overrides});
 const database=(rows:unknown[])=>({query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})});
+const snapshotDatabase=(results:unknown[][])=>{
+  const pending=[...results];
+  const client={query:vi.fn(async(sql:string)=>sql.startsWith('BEGIN')||sql==='COMMIT'||sql==='ROLLBACK'?{rows:[]}:{rows:pending.shift()??[]}),release:vi.fn()};
+  return{db:{query:vi.fn(),connect:vi.fn().mockResolvedValue(client)},client};
+};
 
 describe('Phase 5B financial statements',()=>{
   it('accumulates financial position from fiscal-year start through its as-of date',async()=>{
@@ -68,33 +73,34 @@ describe('Phase 5C statement of changes in equity',()=>{
     const openingRows=[row('equity','0','100',{account_id:'e',code:'3000',account_type:'equity'}),row('revenue','0','20',{account_id:'r',account_type:'revenue'})];
     const periodRows=[row('equity','0','30',{account_id:'e',code:'3000',account_type:'equity'}),row('revenue','0','80',{account_id:'r',account_type:'revenue'}),row('operating_expense','10','0',{account_id:'x',account_type:'expense'})];
     const closingRows=[row('equity','0','130',{account_id:'e',code:'3000',account_type:'equity'}),row('revenue','0','100',{account_id:'r',account_type:'revenue'}),row('operating_expense','10','0',{account_id:'x',account_type:'expense'})];
-    const db={query:vi.fn()
-      .mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows:periodRows})
-      .mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows:closingRows})
-      .mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows:openingRows})};
+    const{db,client}=snapshotDatabase([[year],periodRows,[year],closingRows,[year],openingRows]);
     const result=await new FinancialStatementsService(db as never).changesInEquity('company','year','2026-04-01','2026-06-30');
     expect(result).toMatchObject({opening_equity:'120.00',direct_equity_movements:'30.00',current_period_earnings:'70.00',closing_equity:'220.00'});
     expect(result.equity_accounts).toHaveLength(1);
     expect(result.reconciliation).toEqual({expected:'220.00',actual:'220.00',difference:'0.00',balanced:true});
-    expect(db.query.mock.calls[1]![1]).toEqual(['company','year','2026-04-01','2026-06-30']);
-    expect(db.query.mock.calls[5]![1]).toEqual(['company','year','2026-01-01','2026-03-31']);
+    expect(client.query.mock.calls[0]![0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    expect(client.query.mock.calls[2]![1]).toEqual(['company','year','2026-04-01','2026-06-30']);
+    expect(client.query.mock.calls[6]![1]).toEqual(['company','year','2026-01-01','2026-03-31']);
+    expect(client.query.mock.calls.at(-1)![0]).toBe('COMMIT');
+    expect(db.query).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledOnce();
   });
 
   it('presents fiscal-year opening journals as opening equity and keeps period activity separate',async()=>{
     const rows=[row('equity','0','25',{account_id:'e',account_type:'equity',opening_credit:'25'}),row('revenue','0','75',{account_id:'r',account_type:'revenue'})];
-    const db={query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows}).mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})};
+    const{db,client}=snapshotDatabase([[year],rows,[year],rows]);
     const result=await new FinancialStatementsService(db as never).changesInEquity('company','year','2026-01-01','2026-12-31');
     expect(result.opening_equity).toBe('25.00');
     expect(result.direct_equity_movements).toBe('0.00');
     expect(result.current_period_earnings).toBe('75.00');
     expect(result.closing_equity).toBe('100.00');
     expect(result.reconciliation).toEqual({expected:'100.00',actual:'100.00',difference:'0.00',balanced:true});
-    expect(db.query.mock.calls[1]![0]).toContain("j.status='posted'");
-    expect(db.query.mock.calls[1]![0]).toContain('l.company_id=$1 AND j.company_id=$1');
+    expect(client.query.mock.calls[2]![0]).toContain("j.status='posted'");
+    expect(client.query.mock.calls[2]![0]).toContain('l.company_id=$1 AND j.company_id=$1');
   });
 
   it('fails closed when cumulative activity contains an unmapped account',async()=>{
-    const db={query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows:[row('unmapped','10','0')]})};
+    const{db}=snapshotDatabase([[year],[],[year],[row('unmapped','10','0')]]);
     await expect(new FinancialStatementsService(db as never).changesInEquity('company','year','2026-02-01','2026-02-28')).rejects.toBeInstanceOf(FinancialStatementUnmappedError);
   });
 });
