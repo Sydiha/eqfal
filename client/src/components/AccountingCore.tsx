@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   PageHeader,
@@ -39,6 +39,12 @@ type LedgerRow = {
   credit: string;
   running_balance: string;
 };
+type StatementSection = {
+  category: string;
+  accounts: Array<{ account_id: string; code: string; name: string; amount: string }>;
+  total: string;
+};
+type StatementReport = { sections: StatementSection[]; profit_or_loss?: string; total_assets?: string; total_liabilities?: string; total_equity?: string };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -47,7 +53,7 @@ type OperationalSource = {
   description: string;
   reference: string | null;
 };
-type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger";
+type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss";
 type JournalFilters = {
   search: string;
   status: "" | "draft" | "posted";
@@ -69,6 +75,8 @@ const tabs: readonly Tab[] = [
   "sources",
   "trial",
   "ledger",
+  "financialPosition",
+  "profitOrLoss",
 ];
 const journalFilterParameters = [
   "journalSearch",
@@ -184,6 +192,8 @@ export function Accounting({
   const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
   const [trial, setTrial] = useState<TrialRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [statement, setStatement] = useState<StatementReport | null>(null);
+  const [statementBlocked, setStatementBlocked] = useState(false);
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
@@ -524,12 +534,13 @@ export function Accounting({
     }
   };
   const report = async (
-    kind: "trial" | "ledger",
+    kind: "trial" | "ledger" | "financialPosition" | "profitOrLoss",
     e: FormEvent<HTMLFormElement>,
   ) => {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
     const year = String(d.get("fiscal_year_id"));
+    setStatementBlocked(false);
     try {
       if (kind === "trial") {
         const r = await api(
@@ -538,7 +549,7 @@ export function Accounting({
           onUnauthorized,
         );
         setTrial(((await r.json()) as { accounts: TrialRow[] }).accounts);
-      } else {
+      } else if (kind === "ledger") {
         const account = String(d.get("account_id"));
         const r = await api(
           `/api/general-ledger?fiscal_year_id=${encodeURIComponent(year)}&account_id=${encodeURIComponent(account)}`,
@@ -546,9 +557,14 @@ export function Accounting({
           onUnauthorized,
         );
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
+      } else {
+        const endpoint = kind === "financialPosition" ? "financial-position" : "profit-or-loss";
+        const r = await api(`/api/financial-statements/${endpoint}?fiscal_year_id=${encodeURIComponent(year)}`, {}, onUnauthorized);
+        setStatement((await r.json()) as StatementReport);
       }
-    } catch {
-      setError(true);
+    } catch (reportError) {
+      if (reportError instanceof ApiError && reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS") setStatementBlocked(true);
+      else setError(true);
     }
   };
   return (
@@ -1189,6 +1205,23 @@ export function Accounting({
               </tbody>
             </table>
           </div>
+        </>
+      )}
+      {!loading && (tab === "financialPosition" || tab === "profitOrLoss") && (
+        <>
+          <form className="compact-form" onSubmit={(e) => void report(tab, e)}>
+            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
+            <button className="primary">{t("accounting.run")}</button>
+          </form>
+          {statementBlocked && <WorkspaceState tone="error">{t("accounting.statements.unmapped")}</WorkspaceState>}
+          {statement && !statementBlocked && <div className="table-wrap"><table><tbody>
+            {statement.sections.map((section) => <Fragment key={section.category}>
+              <tr><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
+              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
+              <tr><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
+            </Fragment>)}
+            {tab === "profitOrLoss" && <tr><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
+          </tbody></table></div>}
         </>
       )}
     </section>
