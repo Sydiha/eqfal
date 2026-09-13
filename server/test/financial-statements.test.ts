@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FinancialStatementsService, FinancialStatementUnmappedError, FinancialStatementValidationError } from '../src/modules/accounting/financial-statements';
 
 const year={start_date:'2026-01-01',end_date:'2026-12-31'};
-const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,...overrides});
+const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,opening_debit:'0',opening_credit:'0',...overrides});
 const database=(rows:unknown[])=>({query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})});
 
 describe('Phase 5B financial statements',()=>{
@@ -51,6 +51,11 @@ describe('Phase 5B financial statements',()=>{
     const db=database([row('unmapped','10','0')]);
     await expect(new FinancialStatementsService(db as never).financialPosition('company','year')).rejects.toBeInstanceOf(FinancialStatementUnmappedError);
   });
+
+  it('blocks gross posted activity on unmapped accounts when it nets to zero',async()=>{
+    const db=database([row('unmapped','10','10')]);
+    await expect(new FinancialStatementsService(db as never).financialPosition('company','year')).rejects.toBeInstanceOf(FinancialStatementUnmappedError);
+  });
 });
 
 describe('Phase 5C statement of changes in equity',()=>{
@@ -75,12 +80,15 @@ describe('Phase 5C statement of changes in equity',()=>{
     expect(db.query.mock.calls[5]![1]).toEqual(['company','year','2026-01-01','2026-03-31']);
   });
 
-  it('uses zero opening equity at fiscal-year start and posted-only company-scoped queries',async()=>{
-    const rows=[row('equity','0','25',{account_id:'e',account_type:'equity'}),row('revenue','0','75',{account_id:'r',account_type:'revenue'})];
+  it('presents fiscal-year opening journals as opening equity and keeps period activity separate',async()=>{
+    const rows=[row('equity','0','25',{account_id:'e',account_type:'equity',opening_credit:'25'}),row('revenue','0','75',{account_id:'r',account_type:'revenue'})];
     const db={query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows}).mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})};
     const result=await new FinancialStatementsService(db as never).changesInEquity('company','year','2026-01-01','2026-12-31');
-    expect(result.opening_equity).toBe('0.00');
+    expect(result.opening_equity).toBe('25.00');
+    expect(result.direct_equity_movements).toBe('0.00');
+    expect(result.current_period_earnings).toBe('75.00');
     expect(result.closing_equity).toBe('100.00');
+    expect(result.reconciliation).toEqual({expected:'100.00',actual:'100.00',difference:'0.00',balanced:true});
     expect(db.query.mock.calls[1]![0]).toContain("j.status='posted'");
     expect(db.query.mock.calls[1]![0]).toContain('l.company_id=$1 AND j.company_id=$1');
   });
