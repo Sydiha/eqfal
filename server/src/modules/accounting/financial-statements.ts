@@ -13,14 +13,14 @@ export type StatementAccount={
   account_id:string;code:string;name:string;account_type:string;
   statement_category:StatementCategory;is_contra:boolean;amount:string;
 };
-type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string};
+type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string};
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=(value:string)=>DATE.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 const financialPositionCategories:StatementCategory[]=['current_asset','non_current_asset','current_liability','non_current_liability','equity'];
 const profitOrLossCategories:StatementCategory[]=['revenue','cost_of_sales','operating_expense','finance_income','finance_expense','other_income','other_expense'];
 
-const accountAmount=(row:Movement)=>{
+const accountAmount=(row:Pick<Movement,'debit'|'credit'|'account_type'|'is_contra'>)=>{
   const debit=Number(row.debit),credit=Number(row.credit);
   if(row.account_type==='asset')return row.is_contra?debit-credit:debit-credit;
   if(row.account_type==='expense')return debit-credit;
@@ -42,7 +42,9 @@ export class FinancialStatementsService{
     }
     const rows=(await this.db.query<Movement>(
       `SELECT a.id account_id,a.code,a.name,a.account_type,a.statement_category,a.is_contra,
-              COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit
+              COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.credit ELSE 0 END),0)::text opening_credit
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -52,10 +54,11 @@ export class FinancialStatementsService{
        ORDER BY a.code,a.id`,
       [companyId,fiscalYearId,from,to],
     )).rows;
-    const accounts=rows.map(row=>({...row,amount:accountAmount(row).toFixed(2)}));
-    const unmapped=accounts.filter(row=>row.statement_category==='unmapped'&&Number(row.amount)!==0);
+    const accounts=rows.map(({opening_debit:openingDebit,opening_credit:openingCredit,...row})=>({...row,amount:accountAmount(row).toFixed(2)}));
+    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
+    const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(Number(rows[index]!.debit)!==0||Number(rows[index]!.credit)!==0));
     if(unmapped.length)throw new FinancialStatementUnmappedError(unmapped);
-    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts};
+    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts,openingAccounts};
   }
 
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
@@ -74,14 +77,16 @@ export class FinancialStatementsService{
     const liabilities=total(['current_liability','non_current_liability']);
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
-    return{...report,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    const{openingAccounts:_,...publicReport}=report;
+    return{...publicReport,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
     const report=await this.movements(companyId,fiscalYearId,start,end);
     const sections=this.sections(report.accounts,profitOrLossCategories);
     const profit=this.earnings(report.accounts);
-    return{...report,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
+    const{openingAccounts:_,...publicReport}=report;
+    return{...publicReport,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
   }
 
   async changesInEquity(companyId:string,fiscalYearId:string,start?:string,end?:string){
@@ -93,10 +98,12 @@ export class FinancialStatementsService{
     const opening=previousEnd<closing.start_date
       ? {accounts:[] as StatementAccount[]}
       : await this.movements(companyId,fiscalYearId,undefined,previousEnd);
-    const equityAccounts=period.accounts.filter(account=>account.statement_category==='equity');
-    const openingEquity=this.equityWithEarnings(opening.accounts);
+    const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
+    const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
+    const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
+    const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
     const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
-    const currentPeriodEarnings=this.earnings(period.accounts);
+    const currentPeriodEarnings=this.earnings(periodAccounts);
     const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
     const financialPositionEquity=this.equityWithEarnings(closing.accounts);
     const difference=closingEquity-financialPositionEquity;
