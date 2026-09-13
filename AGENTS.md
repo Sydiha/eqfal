@@ -146,6 +146,14 @@ Before Codex changes Product code, verify with evidence:
 - expected repository files are readable;
 - the required execution/test environment is usable for the task's basic validation.
 
+Repository identity does **not** require a configured local Git remote or authenticated GitHub API access when those are unavailable inside the Codex execution environment. Identity may be established from a consistent evidence chain, including one or more of:
+- exact approved PR/branch `HEAD SHA` supplied by EQFAL and matching local `HEAD`;
+- repository-specific task provenance injected by the GitHub/Codex integration, such as repository and PR context;
+- expected EQFAL repository files and governance files being present and readable at the matching SHA;
+- known approved base/branch context matching the task instruction.
+
+The evidence must be mutually consistent and sufficient to tie the checkout to `Sydiha/eqfal`. Absence of `git remote` or GitHub API authentication by itself is **not** a preflight failure. If evidence conflicts, the supplied SHA does not match, repository-specific files are inconsistent, or the checkout cannot be tied to `Sydiha/eqfal` with reasonable confidence: **STOP.**
+
 If repository access or the execution environment preflight fails: **STOP. Do not begin Coding and do not consume Credit in random Coding retries.**
 
 Create PR / Update PR capability is **not** a requirement for Coding success.
