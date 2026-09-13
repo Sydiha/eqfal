@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   PageHeader,
@@ -39,6 +39,12 @@ type LedgerRow = {
   credit: string;
   running_balance: string;
 };
+type StatementSection = {
+  category: string;
+  accounts: Array<{ account_id: string; code: string; name: string; amount: string }>;
+  total: string;
+};
+type StatementReport = { statement: "financial_position" | "profit_or_loss"; sections: StatementSection[]; profit_or_loss?: string; current_period_earnings?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean } };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -47,7 +53,7 @@ type OperationalSource = {
   description: string;
   reference: string | null;
 };
-type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger";
+type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss";
 type JournalFilters = {
   search: string;
   status: "" | "draft" | "posted";
@@ -69,6 +75,8 @@ const tabs: readonly Tab[] = [
   "sources",
   "trial",
   "ledger",
+  "financialPosition",
+  "profitOrLoss",
 ];
 const journalFilterParameters = [
   "journalSearch",
@@ -184,6 +192,8 @@ export function Accounting({
   const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
   const [trial, setTrial] = useState<TrialRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [statement, setStatement] = useState<StatementReport | null>(null);
+  const [statementBlocked, setStatementBlocked] = useState(false);
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
@@ -195,6 +205,10 @@ export function Accounting({
   const [saving, setSaving] = useState(false);
   const setTab = (value: Tab) => {
     setTabState(value);
+    if (value === "financialPosition" || value === "profitOrLoss") {
+      setStatement(null);
+      setStatementBlocked(false);
+    }
     writeQueryParameters({ accountingTab: value });
   };
   const updateJournalFilter = (key: keyof JournalFilters, value: string) => {
@@ -524,12 +538,13 @@ export function Accounting({
     }
   };
   const report = async (
-    kind: "trial" | "ledger",
+    kind: "trial" | "ledger" | "financialPosition" | "profitOrLoss",
     e: FormEvent<HTMLFormElement>,
   ) => {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
     const year = String(d.get("fiscal_year_id"));
+    setStatementBlocked(false);
     try {
       if (kind === "trial") {
         const r = await api(
@@ -538,7 +553,7 @@ export function Accounting({
           onUnauthorized,
         );
         setTrial(((await r.json()) as { accounts: TrialRow[] }).accounts);
-      } else {
+      } else if (kind === "ledger") {
         const account = String(d.get("account_id"));
         const r = await api(
           `/api/general-ledger?fiscal_year_id=${encodeURIComponent(year)}&account_id=${encodeURIComponent(account)}`,
@@ -546,9 +561,18 @@ export function Accounting({
           onUnauthorized,
         );
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
+      } else {
+        const endpoint = kind === "financialPosition" ? "financial-position" : "profit-or-loss";
+        const dates = kind === "financialPosition"
+          ? `&as_of_date=${encodeURIComponent(String(d.get("as_of_date")))}`
+          : `&start_date=${encodeURIComponent(String(d.get("start_date")))}&end_date=${encodeURIComponent(String(d.get("end_date")))}`;
+        setStatement(null);
+        const r = await api(`/api/financial-statements/${endpoint}?fiscal_year_id=${encodeURIComponent(year)}${dates}`, {}, onUnauthorized);
+        setStatement((await r.json()) as StatementReport);
       }
-    } catch {
-      setError(true);
+    } catch (reportError) {
+      if (reportError instanceof ApiError && reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS") setStatementBlocked(true);
+      else setError(true);
     }
   };
   return (
@@ -1189,6 +1213,31 @@ export function Accounting({
               </tbody>
             </table>
           </div>
+        </>
+      )}
+      {!loading && (tab === "financialPosition" || tab === "profitOrLoss") && (
+        <>
+          <form className="compact-form" onSubmit={(e) => void report(tab, e)}>
+            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
+            {tab === "financialPosition" ? <label>{t("accounting.statements.asOf")}<input name="as_of_date" type="date" defaultValue={years[0]?.end_date} required /></label> : <>
+              <label>{t("accounting.discovery.from")}<input name="start_date" type="date" defaultValue={years[0]?.start_date} required /></label>
+              <label>{t("accounting.discovery.to")}<input name="end_date" type="date" defaultValue={years[0]?.end_date} required /></label>
+            </>}
+            <button className="primary">{t("accounting.run")}</button>
+          </form>
+          {statementBlocked && <WorkspaceState tone="error">{t("accounting.statements.unmapped")}</WorkspaceState>}
+          {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : "profit_or_loss") && <div className="table-wrap"><table><tbody>
+            {statement.sections.map((section) => <Fragment key={section.category}>
+              <tr><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
+              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
+              <tr><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
+            </Fragment>)}
+            {tab === "profitOrLoss" && <tr><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
+            {tab === "financialPosition" && <>
+              <tr><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
+              <tr><th>{t("accounting.statements.equation")}</th><th>{statement.accounting_equation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
+            </>}
+          </tbody></table></div>}
         </>
       )}
     </section>
