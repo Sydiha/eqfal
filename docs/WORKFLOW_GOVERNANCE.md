@@ -129,7 +129,15 @@ Before Product Coding, verify:
 - repository files required by the task are readable;
 - required execution/test environment is usable for basic task validation.
 
-A UI label such as “connected” is not sufficient if repository identity or baseline cannot be independently established.
+Repository identity may be established through a consistent evidence chain and does not depend exclusively on a configured local Git remote or authenticated GitHub API access inside the Codex environment. Acceptable evidence can include:
+- exact approved PR/branch `HEAD SHA` supplied by EQFAL and matching local `HEAD`;
+- repository/PR provenance supplied by the GitHub/Codex task context;
+- expected EQFAL repository and governance files present and readable at that SHA;
+- approved base/branch context matching the task instruction.
+
+The evidence must be mutually consistent and sufficient to tie the checkout to `Sydiha/eqfal`. A missing `git remote` or unavailable GitHub API authentication alone does not fail preflight. If evidence conflicts, the supplied SHA does not match, repository-specific files are inconsistent, or identity still cannot be established with reasonable confidence: **STOP.**
+
+A UI label such as “connected” is not sufficient if repository identity or baseline cannot be independently established from the available evidence chain.
 
 If this preflight fails: **STOP. Do not start Coding and do not perform random Coding retries.**
 
