@@ -69,7 +69,7 @@ export class FinancialStatementsService{
     const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
     const sections=this.sections(report.accounts,financialPositionCategories);
     const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0);
-    const currentPeriodEarnings=this.sections(report.accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+    const currentPeriodEarnings=this.earnings(report.accounts);
     const assets=total(['current_asset','non_current_asset']);
     const liabilities=total(['current_liability','non_current_liability']);
     const equity=total(['equity'])+currentPeriodEarnings;
@@ -80,7 +80,40 @@ export class FinancialStatementsService{
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
     const report=await this.movements(companyId,fiscalYearId,start,end);
     const sections=this.sections(report.accounts,profitOrLossCategories);
-    const profit=sections.reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+    const profit=this.earnings(report.accounts);
     return{...report,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
+  }
+
+  async changesInEquity(companyId:string,fiscalYearId:string,start?:string,end?:string){
+    const period=await this.movements(companyId,fiscalYearId,start,end);
+    const closing=await this.movements(companyId,fiscalYearId,undefined,period.end_date);
+    const previousDate=new Date(`${period.start_date}T00:00:00Z`);
+    previousDate.setUTCDate(previousDate.getUTCDate()-1);
+    const previousEnd=previousDate.toISOString().slice(0,10);
+    const opening=previousEnd<closing.start_date
+      ? {accounts:[] as StatementAccount[]}
+      : await this.movements(companyId,fiscalYearId,undefined,previousEnd);
+    const equityAccounts=period.accounts.filter(account=>account.statement_category==='equity');
+    const openingEquity=this.equityWithEarnings(opening.accounts);
+    const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
+    const currentPeriodEarnings=this.earnings(period.accounts);
+    const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
+    const financialPositionEquity=this.equityWithEarnings(closing.accounts);
+    const difference=closingEquity-financialPositionEquity;
+    return{
+      fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,
+      statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
+      direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
+      current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
+      reconciliation:{expected:closingEquity.toFixed(2),actual:financialPositionEquity.toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005},
+    };
+  }
+
+  private earnings(accounts:StatementAccount[]){
+    return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+  }
+
+  private equityWithEarnings(accounts:StatementAccount[]){
+    return accounts.filter(account=>account.statement_category==='equity').reduce((sum,account)=>sum+Number(account.amount),0)+this.earnings(accounts);
   }
 }
