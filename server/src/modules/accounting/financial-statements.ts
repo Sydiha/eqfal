@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
@@ -13,14 +13,15 @@ export type StatementAccount={
   account_id:string;code:string;name:string;account_type:string;
   statement_category:StatementCategory;is_contra:boolean;amount:string;
 };
-type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string};
+type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string};
+type QueryRunner=Pick<Pool|PoolClient,'query'>;
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=(value:string)=>DATE.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 const financialPositionCategories:StatementCategory[]=['current_asset','non_current_asset','current_liability','non_current_liability','equity'];
 const profitOrLossCategories:StatementCategory[]=['revenue','cost_of_sales','operating_expense','finance_income','finance_expense','other_income','other_expense'];
 
-const accountAmount=(row:Movement)=>{
+const accountAmount=(row:Pick<Movement,'debit'|'credit'|'account_type'|'is_contra'>)=>{
   const debit=Number(row.debit),credit=Number(row.credit);
   if(row.account_type==='asset')return row.is_contra?debit-credit:debit-credit;
   if(row.account_type==='expense')return debit-credit;
@@ -30,8 +31,8 @@ const accountAmount=(row:Movement)=>{
 export class FinancialStatementsService{
   constructor(private db:Pool){}
 
-  private async movements(companyId:string,fiscalYearId:string,start?:string,end?:string){
-    const year=(await this.db.query<{start_date:string;end_date:string}>(
+  private async movements(companyId:string,fiscalYearId:string,start?:string,end?:string,db:QueryRunner=this.db){
+    const year=(await db.query<{start_date:string;end_date:string}>(
       'SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',
       [fiscalYearId,companyId],
     )).rows[0];
@@ -40,9 +41,11 @@ export class FinancialStatementsService{
     if(!validDate(from)||!validDate(to)||from>to||from<year.start_date||to>year.end_date){
       throw new FinancialStatementValidationError('Invalid report date range');
     }
-    const rows=(await this.db.query<Movement>(
+    const rows=(await db.query<Movement>(
       `SELECT a.id account_id,a.code,a.name,a.account_type,a.statement_category,a.is_contra,
-              COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit
+              COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.credit ELSE 0 END),0)::text opening_credit
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -52,10 +55,11 @@ export class FinancialStatementsService{
        ORDER BY a.code,a.id`,
       [companyId,fiscalYearId,from,to],
     )).rows;
-    const accounts=rows.map(row=>({...row,amount:accountAmount(row).toFixed(2)}));
-    const unmapped=accounts.filter(row=>row.statement_category==='unmapped'&&Number(row.amount)!==0);
+    const accounts=rows.map(({opening_debit:openingDebit,opening_credit:openingCredit,...row})=>({...row,amount:accountAmount(row).toFixed(2)}));
+    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
+    const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(Number(rows[index]!.debit)!==0||Number(rows[index]!.credit)!==0));
     if(unmapped.length)throw new FinancialStatementUnmappedError(unmapped);
-    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts};
+    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts,openingAccounts};
   }
 
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
@@ -69,18 +73,65 @@ export class FinancialStatementsService{
     const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
     const sections=this.sections(report.accounts,financialPositionCategories);
     const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0);
-    const currentPeriodEarnings=this.sections(report.accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+    const currentPeriodEarnings=this.earnings(report.accounts);
     const assets=total(['current_asset','non_current_asset']);
     const liabilities=total(['current_liability','non_current_liability']);
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
-    return{...report,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    const{openingAccounts:_,...publicReport}=report;
+    return{...publicReport,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
     const report=await this.movements(companyId,fiscalYearId,start,end);
     const sections=this.sections(report.accounts,profitOrLossCategories);
-    const profit=sections.reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
-    return{...report,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
+    const profit=this.earnings(report.accounts);
+    const{openingAccounts:_,...publicReport}=report;
+    return{...publicReport,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
+  }
+
+  async changesInEquity(companyId:string,fiscalYearId:string,start?:string,end?:string){
+    const client=await this.db.connect();
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const period=await this.movements(companyId,fiscalYearId,start,end,client);
+      const closing=await this.movements(companyId,fiscalYearId,undefined,period.end_date,client);
+      const previousDate=new Date(`${period.start_date}T00:00:00Z`);
+      previousDate.setUTCDate(previousDate.getUTCDate()-1);
+      const previousEnd=previousDate.toISOString().slice(0,10);
+      const opening=previousEnd<closing.start_date
+        ? {accounts:[] as StatementAccount[]}
+        : await this.movements(companyId,fiscalYearId,undefined,previousEnd,client);
+      const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
+      const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
+      const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
+      const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
+      const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
+      const currentPeriodEarnings=this.earnings(periodAccounts);
+      const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
+      const financialPositionEquity=this.equityWithEarnings(closing.accounts);
+      const difference=closingEquity-financialPositionEquity;
+      await client.query('COMMIT');
+      return{
+        fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,
+        statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
+        direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
+        current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
+        reconciliation:{expected:closingEquity.toFixed(2),actual:financialPositionEquity.toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005},
+      };
+    }catch(error){
+      await client.query('ROLLBACK');
+      throw error;
+    }finally{
+      client.release();
+    }
+  }
+
+  private earnings(accounts:StatementAccount[]){
+    return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+  }
+
+  private equityWithEarnings(accounts:StatementAccount[]){
+    return accounts.filter(account=>account.statement_category==='equity').reduce((sum,account)=>sum+Number(account.amount),0)+this.earnings(accounts);
   }
 }
