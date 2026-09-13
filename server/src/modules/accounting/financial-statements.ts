@@ -65,11 +65,16 @@ export class FinancialStatementsService{
     });
   }
 
-  async financialPosition(companyId:string,fiscalYearId:string,start?:string,end?:string){
-    const report=await this.movements(companyId,fiscalYearId,start,end);
+  async financialPosition(companyId:string,fiscalYearId:string,asOf?:string){
+    const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
     const sections=this.sections(report.accounts,financialPositionCategories);
-    const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0).toFixed(2);
-    return{...report,statement:'financial_position',sections,total_assets:total(['current_asset','non_current_asset']),total_liabilities:total(['current_liability','non_current_liability']),total_equity:total(['equity'])};
+    const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0);
+    const currentPeriodEarnings=this.sections(report.accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+    const assets=total(['current_asset','non_current_asset']);
+    const liabilities=total(['current_liability','non_current_liability']);
+    const equity=total(['equity'])+currentPeriodEarnings;
+    const difference=assets-liabilities-equity;
+    return{...report,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
