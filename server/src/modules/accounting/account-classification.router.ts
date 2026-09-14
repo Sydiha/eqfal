@@ -24,9 +24,13 @@ export const STATEMENT_CATEGORIES=[
   'other_income',
   'other_expense',
 ] as const;
+export const CASH_ROLES=['non_cash','cash','cash_equivalent'] as const;
+export const CASH_FLOW_CATEGORIES=['unmapped','operating','investing','financing'] as const;
 
 type AccountType=typeof ACCOUNT_TYPES[number];
 export type StatementCategory=typeof STATEMENT_CATEGORIES[number];
+export type CashRole=typeof CASH_ROLES[number];
+export type CashFlowCategory=typeof CASH_FLOW_CATEGORIES[number];
 type AccountClassification={
   id:string;
   company_id:string;
@@ -37,10 +41,17 @@ type AccountClassification={
   is_active:boolean;
   statement_category:StatementCategory;
   is_contra:boolean;
+  cash_role:CashRole;
+  cash_flow_category:CashFlowCategory;
   created_at:Date;
   updated_at:Date;
 };
-type ClassificationInput={statementCategory?:StatementCategory;isContra?:boolean};
+type ClassificationInput={
+  statementCategory?:StatementCategory;
+  isContra?:boolean;
+  cashRole?:CashRole;
+  cashFlowCategory?:CashFlowCategory;
+};
 
 const ALLOWED:Record<AccountType,readonly StatementCategory[]>={
   asset:['unmapped','current_asset','non_current_asset'],
@@ -59,13 +70,18 @@ const context=(req:Request)=>getAuthenticatedContext(req)! as ReturnType<typeof 
 const base=[requireAuth,requireActiveCompany] as const;
 const isCategory=(value:unknown):value is StatementCategory=>
   typeof value==='string'&&STATEMENT_CATEGORIES.includes(value as StatementCategory);
+const isCashRole=(value:unknown):value is CashRole=>
+  typeof value==='string'&&CASH_ROLES.includes(value as CashRole);
+const isCashFlowCategory=(value:unknown):value is CashFlowCategory=>
+  typeof value==='string'&&CASH_FLOW_CATEGORIES.includes(value as CashFlowCategory);
 const bodyObject=(value:unknown):Record<string,unknown>|null=>
   value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;
 
 function parseInput(body:unknown):ClassificationInput|null{
   const value=bodyObject(body);
   if(!value)return null;
-  if(!Object.keys(value).every(key=>key==='statement_category'||key==='is_contra'))return null;
+  if(!Object.keys(value).every(key=>
+    key==='statement_category'||key==='is_contra'||key==='cash_role'||key==='cash_flow_category'))return null;
   if(!Object.keys(value).length)return null;
   const result:ClassificationInput={};
   if('statement_category' in value){
@@ -76,10 +92,21 @@ function parseInput(body:unknown):ClassificationInput|null{
     if(typeof value.is_contra!=='boolean')return null;
     result.isContra=value.is_contra;
   }
+  if('cash_role' in value){
+    if(!isCashRole(value.cash_role))return null;
+    result.cashRole=value.cash_role;
+  }
+  if('cash_flow_category' in value){
+    if(!isCashFlowCategory(value.cash_flow_category))return null;
+    result.cashFlowCategory=value.cash_flow_category;
+  }
   return result;
 }
 function compatible(accountType:AccountType,category:StatementCategory,isContra:boolean){
   return ALLOWED[accountType].includes(category)&&(!isContra||accountType==='asset');
+}
+function cashCompatible(accountType:AccountType,cashRole:CashRole){
+  return cashRole==='non_cash'||accountType==='asset';
 }
 
 export class AccountClassificationService{
@@ -91,7 +118,7 @@ export class AccountClassificationService{
     let where='company_id=$1';
     if(category!==undefined){params.push(category);where+=' AND statement_category=$2';}
     const {rows}=await this.db.query<AccountClassification>(
-      `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,created_at,updated_at
+      `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
        FROM accounts WHERE ${where} ORDER BY code,id`,
       params,
     );
@@ -103,7 +130,7 @@ export class AccountClassificationService{
     try{
       await client.query('BEGIN');
       const before=(await client.query<AccountClassification>(
-        `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,created_at,updated_at
+        `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
          FROM accounts WHERE id=$1 AND company_id=$2 FOR UPDATE`,
         [id,companyId],
       )).rows[0];
@@ -111,16 +138,18 @@ export class AccountClassificationService{
 
       const statementCategory=input.statementCategory??before.statement_category;
       const isContra=input.isContra??before.is_contra;
-      if(!compatible(before.account_type,statementCategory,isContra)){
+      const cashRole=input.cashRole??before.cash_role;
+      const cashFlowCategory=input.cashFlowCategory??before.cash_flow_category;
+      if(!compatible(before.account_type,statementCategory,isContra)||!cashCompatible(before.account_type,cashRole)){
         throw new ClassificationValidationError('Invalid account classification');
       }
 
       const after=(await client.query<AccountClassification>(
         `UPDATE accounts
-         SET statement_category=$3,is_contra=$4,updated_at=NOW()
+         SET statement_category=$3,is_contra=$4,cash_role=$5,cash_flow_category=$6,updated_at=NOW()
          WHERE id=$1 AND company_id=$2
-         RETURNING id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,created_at,updated_at`,
-        [id,companyId,statementCategory,isContra],
+         RETURNING id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at`,
+        [id,companyId,statementCategory,isContra,cashRole,cashFlowCategory],
       )).rows[0]!;
       await this.audit.logEvent({
         company_id:companyId,

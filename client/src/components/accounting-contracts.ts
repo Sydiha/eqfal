@@ -12,6 +12,8 @@ export type StatementCategory=
  |'finance_expense'
  |'other_income'
  |'other_expense';
+export type CashRole='non_cash'|'cash'|'cash_equivalent';
+export type CashFlowCategory='unmapped'|'operating'|'investing'|'financing';
 
 export type AccountResponse={
  id:string;
@@ -22,6 +24,8 @@ export type AccountResponse={
  is_active:boolean;
  statement_category?:StatementCategory;
  is_contra?:boolean;
+ cash_role?:CashRole;
+ cash_flow_category?:CashFlowCategory;
 };
 export type JournalResponse={id:string;fiscal_year_id:string;accounting_date:string;description:string;reference:string|null;entry_type:'standard'|'opening_balance';status:'draft'|'posted'};
 export type JournalLineResponse={id:string;company_id:string;journal_entry_id:string;account_id:string;debit:string;credit:string;memo:string|null;sequence:number};

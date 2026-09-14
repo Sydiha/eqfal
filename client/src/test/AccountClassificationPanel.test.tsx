@@ -11,6 +11,8 @@ const account={
   is_active:true,
   statement_category:'unmapped' as const,
   is_contra:false,
+  cash_role:'non_cash' as const,
+  cash_flow_category:'unmapped' as const,
 };
 
 describe('AccountClassificationPanel',()=>{
@@ -34,10 +36,14 @@ describe('AccountClassificationPanel',()=>{
     expect(await screen.findByText('Cash')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Statement category 1000'),{target:{value:'current_asset'}});
+    fireEvent.change(screen.getByLabelText('Cash role 1000'),{target:{value:'cash'}});
+    fireEvent.change(screen.getByLabelText('Cash-flow activity 1000'),{target:{value:'operating'}});
     fireEvent.click(screen.getByRole('button',{name:/Save/}));
 
-    await waitFor(()=>expect(writes).toEqual([{statement_category:'current_asset',is_contra:false}]));
-    expect(Object.keys(writes[0]!).sort()).toEqual(['is_contra','statement_category']);
+    await waitFor(()=>expect(writes).toEqual([{
+      statement_category:'current_asset',is_contra:false,cash_role:'cash',cash_flow_category:'operating',
+    }]));
+    expect(Object.keys(writes[0]!).sort()).toEqual(['cash_flow_category','cash_role','is_contra','statement_category']);
   });
 
   it('does not offer incompatible categories and disables contra for non-assets',async()=>{
@@ -51,5 +57,19 @@ describe('AccountClassificationPanel',()=>{
     expect(category).toHaveTextContent('Current liability');
     expect(category).not.toHaveTextContent('Current asset');
     expect(screen.getByLabelText('Contra account 2000')).toBeDisabled();
+    expect(screen.getByLabelText('Cash role 2000')).toHaveTextContent('Non-cash');
+    expect(screen.getByLabelText('Cash role 2000')).not.toHaveTextContent('Cash equivalent');
+  });
+
+  it('retains classification drafts when an update is rejected',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>
+      options?.method==='PATCH'?new Response(null,{status:400}):new Response(JSON.stringify({accounts:[account]}))));
+    render(<AccountClassificationPanel canView canManage onUnauthorized={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button',{name:/Financial statement mapping/}));
+    await screen.findByText('Cash');
+    fireEvent.change(screen.getByLabelText('Cash role 1000'),{target:{value:'cash_equivalent'}});
+    fireEvent.click(screen.getByRole('button',{name:/Save/}));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cash role 1000')).toHaveValue('cash_equivalent');
   });
 });
