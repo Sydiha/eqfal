@@ -80,7 +80,17 @@ export class FiscalYearRepository {
   /** Return all fiscal years for a company, ordered chronologically. */
   async findByCompany(companyId: string): Promise<FiscalYear[]> {
     const { rows } = await this.pool.query<FiscalYear>(
-      `SELECT * FROM fiscal_years WHERE company_id = $1 ORDER BY start_date`,
+      `SELECT id,
+              company_id,
+              name,
+              to_char(start_date, 'YYYY-MM-DD') AS start_date,
+              to_char(end_date, 'YYYY-MM-DD') AS end_date,
+              status,
+              created_at,
+              updated_at
+         FROM fiscal_years
+        WHERE company_id = $1
+        ORDER BY fiscal_years.start_date`,
       [companyId],
     );
     return rows;
