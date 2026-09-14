@@ -83,14 +83,14 @@ export class FiscalYearRepository {
       `SELECT id,
               company_id,
               name,
-              start_date::text AS start_date,
-              end_date::text AS end_date,
+              to_char(start_date, 'YYYY-MM-DD') AS start_date,
+              to_char(end_date, 'YYYY-MM-DD') AS end_date,
               status,
               created_at,
               updated_at
          FROM fiscal_years
         WHERE company_id = $1
-        ORDER BY start_date`,
+        ORDER BY fiscal_years.start_date`,
       [companyId],
     );
     return rows;

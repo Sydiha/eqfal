@@ -5,7 +5,7 @@ import { FiscalYearRepository } from '../src/modules/fiscal-years/fiscal-year.re
 const COMPANY_ID = '00000000-0000-4000-8000-000000000001';
 
 describe('FiscalYearRepository', () => {
-  it('returns company fiscal-year dates as YYYY-MM-DD strings', async () => {
+  it('formats company fiscal-year dates deterministically and orders by the date column', async () => {
     const fiscalYear = {
       id: '00000000-0000-4000-8000-000000000002',
       company_id: COMPANY_ID,
@@ -22,8 +22,17 @@ describe('FiscalYearRepository', () => {
     const result = await repository.findByCompany(COMPANY_ID);
 
     const [sql, parameters] = query.mock.calls[0] as [string, unknown[]];
-    expect(sql).toMatch(/start_date::text AS start_date/i);
-    expect(sql).toMatch(/end_date::text AS end_date/i);
+    // PostgreSQL's date-to-text cast follows the connection DateStyle (for
+    // example, SQL, DMY would produce 01/01/2026). An explicit to_char mask
+    // makes the API contract independent of that setting.
+    expect(sql).toMatch(
+      /to_char\(start_date,\s*'YYYY-MM-DD'\)\s+AS\s+start_date/i,
+    );
+    expect(sql).toMatch(
+      /to_char\(end_date,\s*'YYYY-MM-DD'\)\s+AS\s+end_date/i,
+    );
+    expect(sql).not.toMatch(/(?:start_date|end_date)::text/i);
+    expect(sql).toMatch(/ORDER\s+BY\s+fiscal_years\.start_date/i);
     expect(parameters).toEqual([COMPANY_ID]);
     expect(result).toEqual([expect.objectContaining({
       start_date: '2026-01-01',
