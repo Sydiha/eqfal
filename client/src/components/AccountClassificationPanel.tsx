@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AccountResponse, StatementCategory } from './accounting-contracts';
+import { AccountResponse, CashFlowCategory, CashRole, StatementCategory } from './accounting-contracts';
 
 interface Props{
   canView:boolean;
@@ -30,6 +30,19 @@ const COMPATIBLE:Record<AccountResponse['account_type'],readonly StatementCatego
   expense:['unmapped','cost_of_sales','operating_expense','finance_expense','other_expense'],
 };
 const ALL_CATEGORIES=Object.keys(CATEGORY_LABELS) as StatementCategory[];
+const CASH_ROLE_LABELS:Record<CashRole,string>={
+  non_cash:'Non-cash / غير نقدي',
+  cash:'Cash / نقد',
+  cash_equivalent:'Cash equivalent / ما يعادل النقد',
+};
+const CASH_FLOW_LABELS:Record<CashFlowCategory,string>={
+  unmapped:'Unmapped / غير مصنف',
+  operating:'Operating / تشغيلي',
+  investing:'Investing / استثماري',
+  financing:'Financing / تمويلي',
+};
+const CASH_FLOW_CATEGORIES=Object.keys(CASH_FLOW_LABELS) as CashFlowCategory[];
+type Draft={statement_category:StatementCategory;is_contra:boolean;cash_role:CashRole;cash_flow_category:CashFlowCategory};
 
 async function request(url:string,options:RequestInit,onUnauthorized:()=>void){
   const response=await fetch(url,{credentials:'same-origin',...options});
@@ -42,7 +55,7 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
   const [opened,setOpened]=useState(false);
   const [filter,setFilter]=useState<StatementCategory|'all'>('unmapped');
   const [accounts,setAccounts]=useState<AccountResponse[]>([]);
-  const [drafts,setDrafts]=useState<Record<string,{statement_category:StatementCategory;is_contra:boolean}>>({});
+  const [drafts,setDrafts]=useState<Record<string,Draft>>({});
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(false);
   const [saving,setSaving]=useState<string|null>(null);
@@ -61,6 +74,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
         {
           statement_category:account.statement_category??'unmapped',
           is_contra:Boolean(account.is_contra),
+          cash_role:account.cash_role??'non_cash',
+          cash_flow_category:account.cash_flow_category??'unmapped',
         },
       ])));
     }catch{
@@ -81,6 +96,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
       [account.id]:{
         statement_category:value,
         is_contra:current[account.id]?.is_contra??Boolean(account.is_contra),
+        cash_role:current[account.id]?.cash_role??account.cash_role??'non_cash',
+        cash_flow_category:current[account.id]?.cash_flow_category??account.cash_flow_category??'unmapped',
       },
     }));
   };
@@ -91,8 +108,28 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
       [account.id]:{
         statement_category:current[account.id]?.statement_category??account.statement_category??'unmapped',
         is_contra:value,
+        cash_role:current[account.id]?.cash_role??account.cash_role??'non_cash',
+        cash_flow_category:current[account.id]?.cash_flow_category??account.cash_flow_category??'unmapped',
       },
     }));
+  };
+
+  const changeCashRole=(account:AccountResponse,value:CashRole)=>{
+    setDrafts(current=>({...current,[account.id]:{
+      statement_category:current[account.id]?.statement_category??account.statement_category??'unmapped',
+      is_contra:current[account.id]?.is_contra??Boolean(account.is_contra),
+      cash_role:value,
+      cash_flow_category:current[account.id]?.cash_flow_category??account.cash_flow_category??'unmapped',
+    }}));
+  };
+
+  const changeCashFlowCategory=(account:AccountResponse,value:CashFlowCategory)=>{
+    setDrafts(current=>({...current,[account.id]:{
+      statement_category:current[account.id]?.statement_category??account.statement_category??'unmapped',
+      is_contra:current[account.id]?.is_contra??Boolean(account.is_contra),
+      cash_role:current[account.id]?.cash_role??account.cash_role??'non_cash',
+      cash_flow_category:value,
+    }}));
   };
 
   const save=async(account:AccountResponse)=>{
@@ -116,6 +153,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
         [account.id]:{
           statement_category:updated.statement_category??'unmapped',
           is_contra:Boolean(updated.is_contra),
+          cash_role:updated.cash_role??'non_cash',
+          cash_flow_category:updated.cash_flow_category??'unmapped',
         },
       }));
       if(filter!=='all'&&updated.statement_category!==filter){
@@ -163,6 +202,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
           <th>Name / الاسم</th>
           <th>Account type / نوع الحساب</th>
           <th>Statement category / تصنيف القائمة</th>
+          <th>Cash role / الدور النقدي</th>
+          <th>Cash-flow activity / نشاط التدفق النقدي</th>
           <th>Contra / مقابل</th>
           {canManage&&<th>Action / الإجراء</th>}
         </tr></thead>
@@ -171,6 +212,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
             const draft=drafts[account.id]??{
               statement_category:account.statement_category??'unmapped',
               is_contra:Boolean(account.is_contra),
+              cash_role:account.cash_role??'non_cash',
+              cash_flow_category:account.cash_flow_category??'unmapped',
             };
             return <tr key={account.id}>
               <td>{account.code}</td>
@@ -188,6 +231,19 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
                     )}
                   </select>:
                   CATEGORY_LABELS[draft.statement_category]}
+              </td>
+              <td>
+                {canManage?<select aria-label={`Cash role ${account.code}`} value={draft.cash_role}
+                  onChange={event=>changeCashRole(account,event.target.value as CashRole)}>
+                  {(account.account_type==='asset'?Object.keys(CASH_ROLE_LABELS):['non_cash']).map(role=>
+                    <option key={role} value={role}>{CASH_ROLE_LABELS[role as CashRole]}</option>)}
+                </select>:CASH_ROLE_LABELS[draft.cash_role]}
+              </td>
+              <td>
+                {canManage?<select aria-label={`Cash-flow activity ${account.code}`} value={draft.cash_flow_category}
+                  onChange={event=>changeCashFlowCategory(account,event.target.value as CashFlowCategory)}>
+                  {CASH_FLOW_CATEGORIES.map(category=><option key={category} value={category}>{CASH_FLOW_LABELS[category]}</option>)}
+                </select>:CASH_FLOW_LABELS[draft.cash_flow_category]}
               </td>
               <td>
                 {canManage?
