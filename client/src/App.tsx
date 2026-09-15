@@ -170,7 +170,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
     {page === 'accounting' && <Accounting canView={c.includes('accounting.view')} canManageChart={c.includes('accounting.chart.manage')} canManageJournals={c.includes('accounting.journal.manage')} canPost={c.includes('accounting.journal.post')} onUnauthorized={handleUnauthorized}/>}
     {page === 'openingBalances' && <OpeningBalanceReview canView={c.includes('opening_balance.view')} canManage={c.includes('opening_balance.manage')} canReview={c.includes('opening_balance.review')} canApprove={c.includes('opening_balance.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'periodicAdjustments' && <PeriodicAdjustments canView={c.includes('periodic_adjustment.view')} canManage={c.includes('periodic_adjustment.manage')} canReview={c.includes('periodic_adjustment.review')} canApprove={c.includes('periodic_adjustment.approve')} canPost={c.includes('periodic_adjustment.post')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'annualClosing' && <AnnualClosing canView={c.includes('annual_close.view')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'annualClosing' && <AnnualClosing canView={c.includes('annual_close.view')} canViewWorkpaper={c.includes('tax_workpaper.view')} canManage={c.includes('tax_workpaper.manage')} canReview={c.includes('tax_workpaper.review')} canApprove={c.includes('tax_workpaper.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'assets' && <FixedAssets canView={c.includes('asset.view')} canManage={c.includes('asset.manage')} canApprove={c.includes('asset.approve')} canDispose={c.includes('asset.dispose')} onUnauthorized={handleUnauthorized}/>}
   </div>;
 }
