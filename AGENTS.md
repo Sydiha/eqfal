@@ -124,6 +124,12 @@ Codex Credit is a constrained project resource and must be conserved.
 Mandatory rules:
 - EQFAL performs diagnosis, repository inspection, planning, and task decomposition itself whenever reasonably possible;
 - do not use Codex for unnecessary exploration, open-ended discovery, or planning that EQFAL can perform;
+- Codex preflight and execution should inspect only the governance files and directly relevant Product files needed for the approved task; do not ask Codex to review the whole repository unless a demonstrated cross-cutting risk makes that necessary;
+- send the shortest complete bounded coding instruction that is sufficient for safe execution; when an approved GitHub Issue already contains the full Execution Contract, the `@codex` trigger should reference that contract rather than duplicate it;
+- keep the expected file set narrow and task-specific; do not include broad neighboring modules merely for reassurance;
+- prefer targeted tests inside Codex for the changed behavior and directly affected boundaries;
+- broad regression suites should run in GitHub CI when CI already provides the required coverage; do not consume Codex Credit re-running broad suites locally unless the change is genuinely cross-cutting, the repository contract explicitly requires it, or CI cannot provide equivalent evidence;
+- if a broad repository scan, full regression run, or expensive local validation is materially necessary, EQFAL must be able to justify why targeted inspection/tests plus CI are insufficient and inform the Owner beforehand when the Credit impact is material;
 - send a complete, bounded coding task rather than an ambiguous prompt;
 - combine logically related implementation work into one appropriate Codex run when that reduces cost and risk without expanding scope;
 - do not rerun a Coding task because push, PR creation, PR update, or another GitHub handoff step failed;
@@ -231,7 +237,7 @@ Before the merge decision, EQFAL provides the Owner a concrete UAT checklist.
 For each step state:
 - where to go;
 - what to click;
-- what to enter;
+- what data to enter;
 - what should appear;
 - the expected result;
 - important error/edge cases to try.
