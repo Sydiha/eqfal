@@ -16,3 +16,9 @@ export interface AnnualClosingResponse {
   zakat_readiness: { status: 'not_started' | 'needs_review' | 'blocked' | 'ready'; tax_path?: string; blockers?: string[] };
   package_manifest: Array<{ section: string; status: ReadinessState; blocker_count?: number; source: string }>;
 }
+
+export interface PackageManifestSection {
+  section:string; status:ReadinessState; critical:boolean; blocker_count:number; blockers:string[];
+  source:string; source_reference:Record<string,string>; summary:Record<string,string|number|boolean>;
+  snapshot_as_of:string; fingerprint:string;
+}

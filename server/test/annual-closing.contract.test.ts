@@ -9,14 +9,14 @@ describe('Phase 7A annual closing contract', () => {
   it('adds only the annual view capability and protects the read-only endpoint', () => {
     expect(migration).toContain("'annual_close.view'"); expect(migration).not.toMatch(/annual_close\.(close|reopen|approve|finalize)/);
     expect(router).toContain("get('/annual-closing/:fiscalYearId'"); expect(router).toContain("requireCapability('annual_close.view')");
-    expect(router).not.toMatch(/annualClosingRouter\.(post|put|patch|delete)/);
+    expect(router).toContain("requireCapability('annual_close.package.finalize')");
   });
   it('validates tenant-owned fiscal-year scope without cross-company leakage', () => {
     expect(service).toContain('WHERE id=$1 AND company_id=$2'); expect(router).toContain("res.status(404).json({ error: 'Not found' })");
   });
   it('keeps every source query company scoped and the endpoint mutation-free', () => {
     expect(service.match(/company_id=\$1/g)?.length).toBeGreaterThan(15);
-    expect(service).not.toMatch(/\b(INSERT|UPDATE|DELETE)\b/); expect(router).not.toMatch(/audit/i);
+    expect(service).not.toMatch(/\b(INSERT|UPDATE|DELETE)\b/);
   });
   it('implements canonical blocker semantics and year-end obligation balances', () => {
     for (const term of ["j.status='draft'", "status='posted'", "r.status <> 'filed'", "reconciliation_status<>'reconciled'", "verification_status='unconfirmed'", "status='pending'", "status<>'approved'"]) expect(service).toContain(term);

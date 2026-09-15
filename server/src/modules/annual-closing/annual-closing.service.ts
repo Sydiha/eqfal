@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { loadOperationalSources } from '../accounting/operational-sources';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 
@@ -67,7 +67,7 @@ export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<st
 }
 
 export class AnnualClosingService {
-  constructor(private db: Pool) {}
+  constructor(private db: Pool | PoolClient) {}
 
   async readiness(companyId: string, fiscalYearId: string): Promise<AnnualClosingResponse> {
     const fiscalYear = (await this.db.query<FiscalYear>(
