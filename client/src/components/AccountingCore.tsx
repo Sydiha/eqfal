@@ -44,7 +44,7 @@ type StatementSection = {
   accounts: Array<{ account_id: string; code: string; name: string; amount: string }>;
   total: string;
 };
-type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity"; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -53,7 +53,7 @@ type OperationalSource = {
   description: string;
   reference: string | null;
 };
-type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity";
+type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity" | "cashFlow";
 type JournalFilters = {
   search: string;
   status: "" | "draft" | "posted";
@@ -78,6 +78,7 @@ const tabs: readonly Tab[] = [
   "financialPosition",
   "profitOrLoss",
   "changesInEquity",
+  "cashFlow",
 ];
 const journalFilterParameters = [
   "journalSearch",
@@ -207,7 +208,7 @@ export function Accounting({
   const [saving, setSaving] = useState(false);
   const setTab = (value: Tab) => {
     setTabState(value);
-    if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity") {
+    if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
       setStatement(null);
       setStatementBlocked(false);
     }
@@ -541,7 +542,7 @@ export function Accounting({
     }
   };
   const report = async (
-    kind: "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity",
+    kind: "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity" | "cashFlow",
     e: FormEvent<HTMLFormElement>,
   ) => {
     e.preventDefault();
@@ -565,7 +566,7 @@ export function Accounting({
         );
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
       } else {
-        const endpoint = kind === "financialPosition" ? "financial-position" : kind === "profitOrLoss" ? "profit-or-loss" : "changes-in-equity";
+        const endpoint = kind === "financialPosition" ? "financial-position" : kind === "profitOrLoss" ? "profit-or-loss" : kind === "changesInEquity" ? "changes-in-equity" : "cash-flow";
         const dates = kind === "financialPosition"
           ? `&as_of_date=${encodeURIComponent(String(d.get("as_of_date")))}`
           : `&start_date=${encodeURIComponent(String(d.get("start_date")))}&end_date=${encodeURIComponent(String(d.get("end_date")))}`;
@@ -574,7 +575,7 @@ export function Accounting({
         setStatement((await r.json()) as StatementReport);
       }
     } catch (reportError) {
-      if (reportError instanceof ApiError && reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS") setStatementBlocked(true);
+      if (reportError instanceof ApiError && (reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS" || reportError.code === "CASH_FLOW_CLASSIFICATION_BLOCKED")) setStatementBlocked(true);
       else setError(true);
     }
   };
@@ -1218,18 +1219,18 @@ export function Accounting({
           </div>
         </>
       )}
-      {!loading && (tab === "financialPosition" || tab === "profitOrLoss" || tab === "changesInEquity") && (
+      {!loading && (tab === "financialPosition" || tab === "profitOrLoss" || tab === "changesInEquity" || tab === "cashFlow") && (
         <>
           <form className="compact-form" onSubmit={(e) => void report(tab, e)}>
-            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required {...(tab === "changesInEquity" ? { value: changesInEquityYear?.id ?? "", onChange: (event) => setChangesInEquityYearId(event.target.value) } : {})}>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
+            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required {...(tab === "changesInEquity" || tab === "cashFlow" ? { value: changesInEquityYear?.id ?? "", onChange: (event) => setChangesInEquityYearId(event.target.value) } : {})}>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
             {tab === "financialPosition" ? <label>{t("accounting.statements.asOf")}<input name="as_of_date" type="date" defaultValue={years[0]?.end_date} required /></label> : <>
               <label>{t("accounting.discovery.from")}<input key={`${tab}-${changesInEquityYear?.id}-start`} name="start_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.start_date : years[0]?.start_date} required /></label>
               <label>{t("accounting.discovery.to")}<input key={`${tab}-${changesInEquityYear?.id}-end`} name="end_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.end_date : years[0]?.end_date} required /></label>
             </>}
             <button className="primary">{t("accounting.run")}</button>
           </form>
-          {statementBlocked && <WorkspaceState tone="error">{t("accounting.statements.unmapped")}</WorkspaceState>}
-          {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : "changes_in_equity") && <div className="table-wrap"><table><tbody>
+          {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
+          {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <div className="table-wrap"><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
               {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
@@ -1248,6 +1249,12 @@ export function Accounting({
               <tr><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
               <tr><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
               <tr><th>{t("accounting.statements.reconciliation")}</th><th>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference}) — {statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
+            </>}
+            {tab === "cashFlow" && <>
+              <tr><th>{t("accounting.statements.openingCash")}</th><th>{statement.opening_cash_and_cash_equivalents}</th></tr>
+              <tr><th>{t("accounting.statements.netCashChange")}</th><th>{statement.net_change_in_cash_and_cash_equivalents}</th></tr>
+              <tr><th>{t("accounting.statements.closingCash")}</th><th>{statement.closing_cash_and_cash_equivalents}</th></tr>
+              <tr><th>{t("accounting.statements.cashReconciliation")}</th><th>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference}) — {statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
             </>}
           </tbody></table></div>}
         </>
