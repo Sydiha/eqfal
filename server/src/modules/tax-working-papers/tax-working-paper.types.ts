@@ -1,0 +1,4 @@
+export type TaxPath = 'zakat'|'income_tax'|'mixed'|'needs_review';
+export type WorkpaperStatus = 'draft'|'needs_review'|'reviewed'|'approved';
+export interface TaxAdjustment { id:string; company_id:string; workpaper_id:string; description:string; direction:'add'|'deduct'; amount:string; notes:string|null; source_reference:string|null; professional_review_required:boolean; version:number; }
+export interface TaxWorkpaper { id:string; company_id:string; fiscal_year_id:string; accounting_profile_id:string|null; tax_path:TaxPath; workflow_status:WorkpaperStatus; notes:string|null; professional_review_required:boolean; prepared_by_user_id:string; prepared_at:string; reviewed_by_user_id:string|null; reviewed_at:string|null; approved_by_user_id:string|null; approved_at:string|null; version:number; adjustments:TaxAdjustment[]; }

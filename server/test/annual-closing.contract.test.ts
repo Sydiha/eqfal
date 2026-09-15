@@ -23,8 +23,9 @@ describe('Phase 7A annual closing contract', () => {
     expect(service).toContain("o.direction='receivable'"); expect(service).toContain("o.direction='payable'");
     expect(service).toContain('open_receivable_balance'); expect(service).toContain('open_payable_balance');
   });
-  it('surfaces VAT boundary review, ownership gaps, and no zakat calculation conservatively', () => {
+  it('surfaces VAT boundary review, ownership gaps, and governed tax readiness conservatively', () => {
     expect(service).toContain('boundary_review_periods'); expect(service).toContain('ownership_gaps_needing_review');
-    expect(service).toContain('calculation_performed: false'); expect(service).toContain("zakat_readiness: { status: 'needs_review' }");
+    expect(service).toContain('calculation_performed:false'); expect(service).toContain("workpaper_status:workpaper?.workflow_status??'not_started'");
+    expect(service).toContain("status='blocked'"); expect(service).toContain("status='ready'");
   });
 });

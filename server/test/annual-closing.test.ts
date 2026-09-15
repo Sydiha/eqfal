@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AnnualClosingNotFoundError, AnnualClosingService, assembleAnnualClosing, domain, expectedMonthlyPeriods } from '../src/modules/annual-closing/annual-closing.service';
+import { AnnualClosingNotFoundError, AnnualClosingService, assembleAnnualClosing, domain, expectedMonthlyPeriods, taxReadiness } from '../src/modules/annual-closing/annual-closing.service';
 import { Pool } from 'pg';
 
 const fiscalYear = { id: 'fy', start_date: '2025-04-15', end_date: '2026-04-14', status: 'open' };
@@ -10,6 +10,9 @@ const clearDomains = () => ({
 });
 
 describe('Phase 7A annual readiness computation', () => {
+  it.each([['zakat','zakat'],['income_tax','income_tax'],['mixed','mixed']])('preserves the %s profile path',(_label,path)=>{expect(taxReadiness(path,'p',null,0).summary.tax_path).toBe(path);});
+  it('fails closed for missing profiles/workpapers and incomplete statements',()=>{expect(taxReadiness('needs_review',null,null,0).status).toBe('needs_review');expect(taxReadiness('zakat','p',null,0).status).toBe('not_started');expect(taxReadiness('zakat','p',{accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0},1).status).toBe('blocked');});
+  it('only becomes ready for a matching approved workpaper without unresolved review items',()=>{const paper={accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0};expect(taxReadiness('zakat','p',paper,0).status).toBe('ready');expect(taxReadiness('zakat','p',{...paper,unresolved:1},0).status).toBe('needs_review');expect(taxReadiness('zakat','p',{...paper,workflow_status:'reviewed'},0).status).toBe('needs_review');});
   it('clips first and last monthly periods for a non-calendar fiscal year', () => {
     const periods = expectedMonthlyPeriods(fiscalYear.start_date, fiscalYear.end_date);
     expect(periods).toHaveLength(13);
