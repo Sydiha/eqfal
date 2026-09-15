@@ -214,6 +214,11 @@ Ideal path:
 
 A Coding task may be technically successful even if Codex cannot push, Create PR, or Update PR.
 
+**Owner interaction rule:**
+- The moment the workflow reaches a point where the Project Owner needs to use **Create PR** or **Update PR**, EQFAL must tell the Owner immediately and explicitly that this action is now required.
+- Do not leave a required Create PR / Update PR action implicit, assume the Owner will notice it, or wait until a later step to mention it.
+- The notification must identify whether the required action is **Create PR** or **Update PR** and which task/PR it applies to.
+
 If Coding succeeded and handoff fails:
 - do not rerun Coding;
 - do not rebuild valid work merely to repair handoff;
