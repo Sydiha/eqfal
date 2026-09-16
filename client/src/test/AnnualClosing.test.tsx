@@ -14,6 +14,50 @@ describe('Annual Closing Center', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/annual-closing/fy-1'));
     expect(await screen.findByText('Not ready')).toBeInTheDocument(); expect(screen.getByText('Monthly close')).toBeInTheDocument(); expect(screen.getByText('Annual Closing Package manifest')).toBeInTheDocument();
   });
+  it('presents unresolved items and blocked financial domains in English', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      ready: false, blocker_count: 34,
+      financial_statements_readiness: { status: 'blocked', label: 'Financial statements readiness', label_ar: 'جاهزية القوائم المالية' }, zakat_readiness: { status: 'ready' },
+      domains: {
+        monthly_close: { ready: false, blocker_count: 10, status: 'blocked', summary: {} }, ledger: { ready: false, blocker_count: 8, status: 'blocked', summary: {} },
+        documents: { ready: false, blocker_count: 7, status: 'blocked', summary: {} }, assets: { ready: false, blocker_count: 4, status: 'blocked', summary: {} },
+        adjustments: { ready: true, blocker_count: 0, status: 'ready', summary: {} }, opening_balances: { ready: true, blocker_count: 0, status: 'ready', summary: {} },
+      },
+      package_manifest: [{ section: 'financial_statements_readiness', status: 'blocked', blocker_count: 34 }],
+    }), { status: 200 }));
+    render(<AnnualClosing canView onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByText('Unresolved items: 34')).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader', { name: 'Unresolved items' })).toHaveLength(2);
+    const readinessRow = screen.getAllByText('Financial statements readiness').at(-1)?.closest('tr');
+    expect(readinessRow).not.toBeNull();
+    expect(within(readinessRow!).getByText('4 blocked domains')).toBeInTheDocument();
+    expect(within(readinessRow!).queryByText('34')).not.toBeInTheDocument();
+  });
+  it('presents unresolved items and blocked financial domains in Arabic', async () => {
+    await i18n.changeLanguage('ar');
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: '2025', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      ready: false, blocker_count: 34,
+      financial_statements_readiness: { status: 'blocked', label: 'Financial statements readiness', label_ar: 'جاهزية القوائم المالية' }, zakat_readiness: { status: 'ready' },
+      domains: {
+        monthly_close: { ready: false, blocker_count: 10, status: 'blocked', summary: {} }, ledger: { ready: false, blocker_count: 8, status: 'blocked', summary: {} },
+        documents: { ready: false, blocker_count: 7, status: 'blocked', summary: {} }, assets: { ready: false, blocker_count: 4, status: 'blocked', summary: {} },
+        adjustments: { ready: true, blocker_count: 0, status: 'ready', summary: {} }, opening_balances: { ready: true, blocker_count: 0, status: 'ready', summary: {} },
+      },
+      package_manifest: [{ section: 'financial_statements_readiness', status: 'blocked', blocker_count: 34 }],
+    }), { status: 200 }));
+    render(<AnnualClosing canView onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByText('العناصر غير المحسومة: 34')).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader', { name: 'العناصر غير المحسومة' })).toHaveLength(2);
+    const readinessRow = screen.getAllByText('جاهزية القوائم المالية').at(-1)?.closest('tr');
+    expect(readinessRow).not.toBeNull();
+    expect(within(readinessRow!).getByText('4 مجالات متعثرة')).toBeInTheDocument();
+    expect(within(readinessRow!).queryByText('34')).not.toBeInTheDocument();
+    expect(screen.queryByText('العوائق الجوهرية')).not.toBeInTheDocument();
+  });
   it('renders capability-sensitive package actions and internal-handoff wording',async()=>{const fetchMock=vi.spyOn(globalThis,'fetch');fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'Ready for financial statement preparation',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[{section:'cash_flow',status:'ready',blocker_count:0,blockers:[],source:'financial-statements',summary:{}}],source_fingerprint:'x'},drift:false}),{status:200}));render(<AnnualClosing canView canViewPackage canManagePackage canFinalizePackage onUnauthorized={vi.fn()}/>);expect(await screen.findByRole('button',{name:'Create preview snapshot'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Finalize package'})).toBeInTheDocument();expect(screen.getByText(/not government or ZATCA filing/i)).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Mark accountant handoff'})).not.toBeInTheDocument();});
   it('renders friendly Arabic package sources and blocker messages without technical identifiers',async()=>{
     await i18n.changeLanguage('ar');
