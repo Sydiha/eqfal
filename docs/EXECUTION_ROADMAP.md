@@ -1,10 +1,10 @@
 # EQFAL — Approved Execution Roadmap
 
 Status: Approved project guidance
-Reconciliation date: 2026-09-11
+Reconciliation date: 2026-09-16
 
 Last reconciled against GitHub/main SHA:
-`2644c9fde0062221240409d47795ae2ee0d022e3`
+`212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -121,19 +121,22 @@ Accrual/prepayment/deferred/periodic-adjustment workflow foundation is implement
 
 ## Phase 5 — Chart Classification and Financial Statement Mapping
 
-**Status: NOT STARTED — NEXT REAL PRODUCT GAP**
+**Status: DONE**
 
-Required scope remains:
-- expand chart classification where necessary: current/non-current assets, contra-assets, current/non-current liabilities, equity, revenue, cost of sales when applicable, operating expenses, finance and other income/expense as needed;
-- map accounts to financial-statement presentation;
+Read-only completeness reconciliation against `GitHub/main` SHA `212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca` confirmed that the approved Phase 5 scope is implemented and covered by dedicated tests.
+
+Implemented scope includes:
+- account classification for current/non-current assets, contra-assets, current/non-current liabilities, equity, revenue, cost of sales, operating expenses, finance income/expense, and other income/expense;
+- explicit financial-statement mapping with fail-closed `unmapped` semantics;
 - Statement of Financial Position;
 - Profit or Loss;
-- Changes in Equity;
-- Cash Flows when prerequisite data is complete;
-- derive reports from ledger data rather than independent manual numbers;
-- do not present profitability/cash-flow KPIs as final before the accounting cycle is complete.
+- Statement of Changes in Equity;
+- Statement of Cash Flows with explicit operating/investing/financing classification and reconciliation;
+- reports derived from posted ledger/journal data rather than independent manual figures;
+- tenant-scoped reads/writes, capability enforcement, and audit logging for classification changes;
+- blocking of financial-statement output when material posted activity remains unmapped or cash-flow classification is ambiguous.
 
-No implementation starts without a dedicated Read-only Design Check and a valid approval under current governance.
+Any future expansion beyond this implemented scope requires a new Read-only Design Check.
 
 ## Phase 6 — VAT Reconciliation Hardening
 
@@ -248,9 +251,9 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from actual dependencies/current `main`.
-2. The current next Product gap is **Phase 5 — Chart Classification and Financial Statement Mapping**.
-3. Every Product task still follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
-4. Continue later roadmap work from actual dependencies/current `main`, not historical phase numbering alone.
+2. Phase 5 is **DONE**; do not recreate or reimplement its completed financial-statement foundation without a new approved gap.
+3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
+4. Every Product task follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
 
 ### Agent Infrastructure Track
