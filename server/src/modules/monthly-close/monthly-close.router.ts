@@ -12,6 +12,7 @@ export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
+type FiscalYearOption = { id:string; company_id:string; name:string; start_date:string; end_date:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
 type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; opening_balances:number; periodic_adjustments:number; total:number };
 export class MonthlyCloseValidationError extends Error {}
 export class MonthlyCloseNotFoundError extends Error {}
@@ -100,6 +101,7 @@ export class MonthlyCloseService {
     const assets=Number(assetCounts.pending)+Number(assetCounts.drafts);
     return{documents,obligations,bank_transactions,vat,ledger,assets,opening_balances,periodic_adjustments,total:documents+obligations+bank_transactions+vat+ledger+assets+opening_balances+periodic_adjustments};
   }
+  async fiscalYears(companyId:string){const {rows}=await this.db.query<FiscalYearOption>(`SELECT id,company_id,name,to_char(start_date,'YYYY-MM-DD') start_date,to_char(end_date,'YYYY-MM-DD') end_date,status,created_at,updated_at FROM fiscal_years WHERE company_id=$1 ORDER BY fiscal_years.start_date`,[companyId]);return{fiscalYears:rows};}
   async list(companyId:string){
     const {rows}=await this.db.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE company_id=$1 ORDER BY monthly_close_periods.period_start DESC',[companyId]);
     return {periods:await Promise.all(rows.map(async period=>{
@@ -120,6 +122,7 @@ export class MonthlyCloseService {
 }
 function service(res:Response){if(!pool){res.status(503).json({error:'Database unavailable'});return null;}return new MonthlyCloseService(pool);}
 function handle(error:unknown,res:Response){if(error instanceof MonthlyCloseValidationError)res.status(400).json({error:error.message});else if(error instanceof MonthlyCloseNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof MonthlyCloseConflictError)res.status(409).json({error:error.message});else throw error;}
+monthlyCloseRouter.get('/monthly-close-fiscal-years',requireAuth,requireActiveCompany,requireCapability('monthly_close.create'),route(async(req,res)=>{const value=service(res);if(value)res.json(await value.fiscalYears(context(req).activeCompanyId));}));
 monthlyCloseRouter.get('/monthly-close-periods',requireAuth,requireActiveCompany,requireCapability('monthly_close.view'),route(async(req,res)=>{const value=service(res);if(value)res.json(await value.list(context(req).activeCompanyId));}));
 monthlyCloseRouter.post('/monthly-close-periods',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.create'),route(async(req,res)=>{try{const body=parseCreate(req.body);if(!body)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.status(201).json(await value.create(context(req).activeCompanyId,context(req).user.id,body.fiscalYearId,body.start,body.end));}catch(error){handle(error,res);}}));
 monthlyCloseRouter.post('/monthly-close-periods/:id/close',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('monthly_close.close'),route(async(req,res)=>{try{if(!UUID.test(req.params.id)||Object.keys(req.body??{}).length)throw new MonthlyCloseValidationError('Invalid request');const value=service(res);if(value)res.json(await value.close(context(req).activeCompanyId,context(req).user.id,req.params.id));}catch(error){handle(error,res);}}));
