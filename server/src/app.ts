@@ -24,6 +24,7 @@ import { openingBalancesRouter } from './modules/opening-balances/opening-balanc
 import { periodicAdjustmentsRouter } from './modules/periodic-adjustments/periodic-adjustments.router';
 import { annualClosingRouter } from './modules/annual-closing/annual-closing.router';
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
+import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api', openingBalancesRouter);
 app.use('/api', periodicAdjustmentsRouter);
 app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
+app.use('/api', accessAdministrationRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {

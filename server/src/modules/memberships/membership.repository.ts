@@ -41,8 +41,9 @@ export class MembershipRepository {
     return rows[0] as Membership;
   }
 
-  async findMembershipById(id: string): Promise<Membership | null> {
-    const { rows } = await this.pool.query<Membership>(
+  async findMembershipById(id: string, client?: PoolClient): Promise<Membership | null> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<Membership>(
       'SELECT * FROM memberships WHERE id = $1',
       [id],
     );
@@ -119,8 +120,9 @@ export class MembershipRepository {
     return rows[0] as Role;
   }
 
-  async findRoleById(id: string): Promise<Role | null> {
-    const { rows } = await this.pool.query<Role>(
+  async findRoleById(id: string, client?: PoolClient): Promise<Role | null> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<Role>(
       'SELECT * FROM roles WHERE id = $1',
       [id],
     );
@@ -141,17 +143,50 @@ export class MembershipRepository {
     );
   }
 
-  async getRoleCapabilities(roleId: string): Promise<string[]> {
-    const { rows } = await this.pool.query<{ capability_id: string }>(
+  async getRoleCapabilities(roleId: string, client?: PoolClient): Promise<string[]> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ capability_id: string }>(
       'SELECT capability_id FROM role_capabilities WHERE role_id = $1',
       [roleId],
     );
     return rows.map((r) => r.capability_id);
   }
 
+  async listMemberships(companyId: string): Promise<Membership[]> {
+    const { rows } = await this.pool.query<Membership>(
+      'SELECT * FROM memberships WHERE company_id = $1 ORDER BY created_at, id',
+      [companyId],
+    );
+    return rows;
+  }
+
+  async listRoles(companyId: string): Promise<Role[]> {
+    const { rows } = await this.pool.query<Role>(
+      'SELECT * FROM roles WHERE company_id = $1 ORDER BY name, id',
+      [companyId],
+    );
+    return rows;
+  }
+
+  async setMembershipActive(id: string, companyId: string, active: boolean, client: PoolClient): Promise<Membership | null> {
+    const { rows } = await client.query<Membership>(
+      'UPDATE memberships SET is_active = $3, updated_at = NOW() WHERE id = $1 AND company_id = $2 RETURNING *',
+      [id, companyId, active],
+    );
+    return rows[0] ?? null;
+  }
+
+  async removeCapabilityFromRole(roleId: string, capabilityId: string, client: PoolClient): Promise<void> {
+    await client.query(
+      'DELETE FROM role_capabilities WHERE role_id = $1 AND capability_id = $2',
+      [roleId, capabilityId],
+    );
+  }
+
   /** Whether the user currently holds an active Full Access role in this company. */
-  async hasActiveFullAccessRole(userId: string, companyId: string): Promise<boolean> {
-    const { rows } = await this.pool.query<{ has_full_access: boolean }>(
+  async hasActiveFullAccessRole(userId: string, companyId: string, client?: PoolClient): Promise<boolean> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ has_full_access: boolean }>(
       `SELECT EXISTS (
          SELECT 1
          FROM memberships m
@@ -172,8 +207,9 @@ export class MembershipRepository {
    * all agree. The explicit roles/company join is defense-in-depth against a
    * corrupted or manually-written cross-company role_id.
    */
-  async getActiveCapabilities(userId: string, companyId: string): Promise<string[]> {
-    const { rows } = await this.pool.query<{ capability_id: string }>(
+  async getActiveCapabilities(userId: string, companyId: string, client?: PoolClient): Promise<string[]> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ capability_id: string }>(
       `SELECT cap.id AS capability_id
        FROM memberships m
        JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
