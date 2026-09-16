@@ -19,6 +19,7 @@ function loadMock(review:unknown,items:unknown[],difference='0.00'){
 }
 
 describe('OpeningBalanceReview',()=>{
+ it('restores a fiscal-year context supplied by Monthly Close drill-through',async()=>{window.history.replaceState(null,'',`/?page=openingBalances&fiscalYear=${year.id}`);vi.stubGlobal('fetch',loadMock({id:'r1',status:'draft',journal_entry_id:null},[]));render(<OpeningBalanceReview canView canManage canReview canApprove={false} onUnauthorized={vi.fn()}/>);await waitFor(()=>expect(screen.getByRole('combobox',{name:'Fiscal year'})).toHaveValue(year.id));});
  beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();});
  it('shows no-access state without reading APIs',()=>{const fetchMock=vi.fn();vi.stubGlobal('fetch',fetchMock);render(<OpeningBalanceReview canView={false} canManage={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);expect(screen.getByText(/do not have permission/i)).toBeInTheDocument();expect(fetchMock).not.toHaveBeenCalled();});
  it('formats the opening balance as-of date for display',async()=>{vi.stubGlobal('fetch',loadMock({id:'r1',status:'draft',journal_entry_id:null},[]));render(<OpeningBalanceReview canView canManage canReview canApprove={false} onUnauthorized={vi.fn()}/>);expect(await screen.findByText('01/01/2026')).toBeInTheDocument();expect(screen.queryByText('2026-01-01')).not.toBeInTheDocument();});

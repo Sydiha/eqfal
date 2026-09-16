@@ -31,8 +31,9 @@ describe('Phase 4 periodic adjustments accounting contract',()=>{
  it('blocks monthly close for unresolved or due periodic adjustments',()=>{
   expect(close).toContain("a.workflow_status IN ('draft','in_review')");
   expect(close).toContain("a.workflow_status='approved' AND s.status='pending'");
-  expect(close).toContain('periodicAdjustments=Number(rows[0]!.periodic_adjustments??0)');
-  expect(close).toContain('independentDrafts+periodicAdjustments');
+  expect(close).toContain('periodic_adjustments=Number(rows[0]!.periodic_adjustments)');
+  expect(close).toContain('total:documents+obligations+bank_transactions+vat+ledger+assets+opening_balances+periodic_adjustments');
+  expect(close).not.toContain('independentDrafts+periodicAdjustments');
  });
  it('requires a reason to return an in-review adjustment to draft',()=>{
   expect(router).toContain("'/periodic-adjustments/:id/return-to-draft'");
