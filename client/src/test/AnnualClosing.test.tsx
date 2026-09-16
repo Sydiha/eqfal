@@ -41,7 +41,7 @@ describe('Annual Closing Center', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'2025',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:false,blocker_count:2,financial_statements_readiness:{status:'blocked',label:'',label_ar:'جاهزية القوائم المالية'},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false}),{status:200}));
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close_not_ready','financial_statements_not_ready']}),{status:409}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close:blocked','monthly_close:monthly_close_not_ready','cash_flow:blocked','cash_flow:cash_flow_not_ready']}),{status:409}));
     render(<AnnualClosing canView canViewPackage canFinalizePackage onUnauthorized={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('button',{name:'اعتماد الحزمة نهائياً'}));
     const warning=await screen.findByRole('alert');
@@ -49,7 +49,26 @@ describe('Annual Closing Center', () => {
     expect(within(warning).getByText('تعذر اعتماد الحزمة نهائيًا')).toBeInTheDocument();
     expect(within(warning).getAllByRole('listitem')).toHaveLength(2);
     expect(within(warning).getByText('الإقفال الشهري غير جاهز')).toBeInTheDocument();
-    expect(within(warning).getByText('القوائم المالية غير جاهزة')).toBeInTheDocument();
+    expect(within(warning).getByText('قائمة التدفقات النقدية غير جاهزة')).toBeInTheDocument();
+    expect(warning).not.toHaveTextContent('القسم متعثر');
+    expect(warning).not.toHaveTextContent('Monthly close is not ready');
+    expect(warning).not.toHaveTextContent('monthly_close_not_ready');
+  });
+  it('shows only English actionable blockers when finalization fails in English',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'2025',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:false,blocker_count:2,financial_statements_readiness:{status:'blocked',label:'Financial statement readiness',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close:blocked','monthly_close:monthly_close_not_ready','cash_flow:needs_review','cash_flow:cash_flow_not_ready']}),{status:409}));
+    render(<AnnualClosing canView canViewPackage canFinalizePackage onUnauthorized={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Finalize package'}));
+    const warning=await screen.findByRole('alert');
+    expect(within(warning).getByText('Package could not be finalized')).toBeInTheDocument();
+    expect(within(warning).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(warning).getByText('Monthly close is not ready')).toBeInTheDocument();
+    expect(within(warning).getByText('Cash Flow is not ready')).toBeInTheDocument();
+    expect(warning).not.toHaveTextContent('Blocked');
+    expect(warning).not.toHaveTextContent('الإقفال الشهري غير جاهز');
     expect(warning).not.toHaveTextContent('monthly_close_not_ready');
   });
   it('localizes Arabic snapshot types and formats package timestamps for people',async()=>{
