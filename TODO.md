@@ -31,7 +31,7 @@ This SHA is an audit/reconciliation baseline only, not a promise that it remains
 - Phase 2 — Fixed Asset Depreciation Policy: **PARTIAL**
 - Phase 3 — Opening Balance Review: **DONE**
 - Phase 4 — Accruals / Prepayments / Periodic Adjustments: **DONE**
-- Phase 5 — Financial Statement Mapping: **NOT STARTED**
+- Phase 5 — Financial Statement Mapping: **DONE**
 - Phase 6 — VAT Reconciliation Hardening: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 7 — Zakat / Income Tax / Withholding Tax: **PARTIAL**
 - Phase 8 — Integrated Monthly Close: **PARTIAL / STRONG FOUNDATION**
@@ -47,6 +47,7 @@ Notes:
 - VAT is DONE only for the currently approved scope; future tax scope is neither implied nor pre-approved.
 - Monthly Close remains PARTIAL until a dedicated completeness gap audit is accepted against the latest roadmap.
 - Annual Closing readiness does not itself constitute final financial statements, zakat filing/calculation, or final year-end package export.
+- Phase 5 was read-only reconciled against GitHub/main SHA `212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca`; the approved chart-classification and financial-statement mapping scope is implemented and tested, so it is no longer a Product gap.
 
 ## Governance / Agent-readiness status
 
@@ -69,8 +70,9 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from current dependencies/current `main` without waiting for Full Autonomous Readiness.
-2. The current next Product gap is **Phase 5 — Chart Classification & Financial Statement Mapping**.
-3. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
+2. Phase 5 is **DONE** and must not be recreated as a Product gap unless a new Read-only Design Check identifies a real deficiency.
+3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
+4. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 
 ### Agent Infrastructure Track
 
@@ -88,13 +90,13 @@ These existing items remain open unless separately verified complete; they do no
 
 ## Next real product gap
 
-The currently identified next real Product gap is:
+Phase 5 is no longer the next Product gap.
 
-**Phase 5 — Chart Classification & Financial Statement Mapping**
+This documentation-only closure does not select a replacement task. The next Product task must be chosen from the remaining **PARTIAL / NOT STARTED** roadmap items based on current `main`, dependencies, and a dedicated Read-only Design Check before implementation.
 
 Phase 8 Monthly Close remains PARTIAL pending its dedicated completeness gap audit. EQFAL Project must choose actual next Product work from current `main`, roadmap dependencies, and the approved governance at that time.
 
-## Product backlog after Phase 5 dependency is addressed
+## Remaining product backlog after Phase 5 closure
 
 - Complete remaining Fixed Asset depreciation-policy governance gaps.
 - Continue Zakat / Income Tax / Withholding Tax workpapers/reconciliation according to approved future designs.
