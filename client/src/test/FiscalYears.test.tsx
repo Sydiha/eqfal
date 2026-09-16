@@ -16,29 +16,42 @@ describe('FiscalYears', () => {
   it('renders loading, empty, and error states', async () => {
     let resolveResponse!: (response: Response) => void;
     vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { resolveResponse = resolve; })));
-    const view = render(<FiscalYears canView canManage={false} onUnauthorized={vi.fn()}/>);
+    const view = render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
     expect(screen.getByRole('status')).toHaveTextContent('Loading fiscal years');
     resolveResponse(new Response(JSON.stringify({ fiscalYears: [] }), { status: 200 }));
     expect(await screen.findByText('No fiscal years have been created yet.')).toBeInTheDocument();
     view.unmount();
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
-    render(<FiscalYears canView canManage={false} onUnauthorized={vi.fn()}/>);
+    render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load');
   });
 
   it('enforces view/manage presentation and only offers edit for open years', async () => {
     vi.stubGlobal('fetch', vi.fn());
-    const { rerender } = render(<FiscalYears canView={false} canManage onUnauthorized={vi.fn()}/>);
+    const { rerender } = render(<FiscalYears canView={false} canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
     expect(screen.getByText(/do not have permission/)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ fiscalYears: [openYear, closedYear] }), { status: 200 })));
-    rerender(<FiscalYears canView canManage onUnauthorized={vi.fn()}/>);
+    rerender(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
     expect(await screen.findByText('FY 2026')).toBeInTheDocument();
     expect(screen.getAllByText('Edit')).toHaveLength(1);
     expect(screen.getAllByText('Close')).toHaveLength(1);
     expect(screen.getByText('Create fiscal year')).toBeInTheDocument();
+  });
+
+  it('maps each action to its exact capability', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ fiscalYears: [openYear] }), { status: 200 })));
+    const view = render(<FiscalYears canView canCreate canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
+    await screen.findByText('FY 2026');
+    expect(screen.getByText('Create fiscal year')).toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Close')).not.toBeInTheDocument();
+    view.rerender(<FiscalYears canView canCreate={false} canEdit canClose={false} onUnauthorized={vi.fn()}/>);
+    expect(screen.queryByText('Create fiscal year')).not.toBeInTheDocument();
+    expect(screen.getByText('Edit')).toBeInTheDocument();
+    expect(screen.queryByText('Close')).not.toBeInTheDocument();
   });
 
   it('creates without a company_id and closes with an optional reason after confirmation', async () => {
@@ -49,7 +62,7 @@ describe('FiscalYears', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYear: closedYear }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [closedYear] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<FiscalYears canView canManage onUnauthorized={vi.fn()}/>);
+    render(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
     await screen.findByText('FY 2026');
     fireEvent.click(screen.getByText('Create fiscal year'));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'FY 2027' } });
@@ -74,7 +87,7 @@ describe('FiscalYears', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYear: updated }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [updated] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<FiscalYears canView canManage onUnauthorized={vi.fn()}/>);
+    render(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
     await screen.findByText('FY 2026');
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -90,7 +103,7 @@ describe('FiscalYears', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<FiscalYears canView canManage onUnauthorized={vi.fn()}/>);
+    render(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
     await screen.findByText('No fiscal years have been created yet.');
 
     fireEvent.click(screen.getByText('Create fiscal year'));
@@ -108,24 +121,24 @@ describe('FiscalYears', () => {
     [409, 'conflicts with an existing year'],
   ])('maps API status %s to a specific message', async (status, message) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })));
-    const view = render(<FiscalYears canView canManage={false} onUnauthorized={vi.fn()}/>);
+    const view = render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
     expect(await screen.findByRole('alert')).toHaveTextContent(message);
     view.unmount();
   });
 
   it('provides basic Fiscal Year text in English and Arabic', async () => {
     vi.stubGlobal('fetch', vi.fn());
-    const view = render(<FiscalYears canView={false} canManage={false} onUnauthorized={vi.fn()}/>);
+    const view = render(<FiscalYears canView={false} canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
     expect(screen.getByText('You do not have permission to view fiscal years.')).toBeInTheDocument();
     await i18n.changeLanguage('ar');
-    view.rerender(<FiscalYears canView={false} canManage={false} onUnauthorized={vi.fn()}/>);
+    view.rerender(<FiscalYears canView={false} canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
     expect(screen.getByText('ليس لديك صلاحية عرض السنوات المالية.')).toBeInTheDocument();
   });
 
   it('delegates a 401 to the shared unauthorized handler', async () => {
     const unauthorized = vi.fn();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
-    render(<FiscalYears canView canManage={false} onUnauthorized={unauthorized}/>);
+    render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={unauthorized}/>);
     await waitFor(() => expect(unauthorized).toHaveBeenCalledOnce());
   });
 });
