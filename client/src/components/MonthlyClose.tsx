@@ -5,9 +5,9 @@ import { readQueryParameter, writeQueryParameters } from '../navigation/querySta
 import { Dialog } from './Dialog';
 import { PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState, WorkspaceToolbar } from './SharedUI';
 
-type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:{documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;total:number}};
+type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:{documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number;total:number}};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
-type DestinationPage='documents'|'banks'|'obligations'|'vat'|'accounting'|'assets';
+type DestinationPage='documents'|'banks'|'obligations'|'vat'|'accounting'|'assets'|'openingBalances'|'periodicAdjustments';
 interface Props{canView:boolean;canClose:boolean;canReopen:boolean;onNavigate?:(page:DestinationPage,parameters:Record<string,string>)=>void;onUnauthorized:()=>void}
 async function api(url:string,options:RequestInit,onUnauthorized:()=>void){const response=await fetch(url,{credentials:'same-origin',...options});if(response.status===401)onUnauthorized();if(!response.ok)throw new Error(String(response.status));return response;}
 
@@ -37,6 +37,8 @@ export function MonthlyClose({canView,canClose,canReopen,onNavigate=()=>undefine
    {blocker(t('monthlyClose.transactions',{count:selected.blockers.bank_transactions}).replace(/:\s*\d+$/,''),selected.blockers.bank_transactions,()=>drill('banks',{section:'transactions',from:selected.period_start,to:selected.period_end}))}
    {blocker(t('nav.vat'),selected.blockers.vat,()=>drill('vat',{vatFrom:selected.period_start,vatTo:selected.period_end}))}
    {blocker(t('assets.title'),selected.blockers.assets,()=>drill('assets',{}))}
+   {blocker(t('monthlyClose.openingBalances'),selected.blockers.opening_balances,()=>drill('openingBalances',{fiscalYear:selected.fiscal_year_id}))}
+   {blocker(t('monthlyClose.periodicAdjustments'),selected.blockers.periodic_adjustments,()=>drill('periodicAdjustments',{}))}
    {blocker(`${t('accounting.title')} / ${t('accounting.tabs.ledger')}`,selected.blockers.ledger,()=>drill('accounting',{accountingTab:'sources',sourceFrom:selected.period_start,sourceTo:selected.period_end}))}
   </ul>}<div className="fiscal-year-actions">{canClose&&selected.status==='open'&&<button className="danger" disabled={!selected.ready||saving} onClick={()=>void close(selected)}>{t('monthlyClose.close')}</button>}{canReopen&&selected.status==='closed'&&<button disabled={saving} onClick={()=>setReopen(selected)}>{t('monthlyClose.reopen')}</button>}</div></SectionCard>}</div>}
   {creating&&<Dialog title={t('monthlyClose.create')} busy={saving} onClose={()=>setCreating(false)}><form className="form-grid" onSubmit={create}><label>{t('monthlyClose.fiscalYear')}<select name="fiscal_year_id" required>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label><label>{t('monthlyClose.start')}<input name="period_start" type="date" required/></label><label>{t('monthlyClose.end')}<input name="period_end" type="date" required/></label><div className="modal-actions"><button type="button" onClick={()=>setCreating(false)}>{t('common.cancel')}</button><button className="primary" disabled={saving}>{t('common.save')}</button></div></form></Dialog>}
