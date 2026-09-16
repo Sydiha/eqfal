@@ -74,3 +74,13 @@ describe('Fixed Assets functional completeness',()=>{
 
  it('turns the category accounting approval blocker into actionable feedback',async()=>{mockApi(asset(),{approvalError:true});render(<FixedAssets {...props} canApprove/>);await openDetails();fireEvent.click(screen.getByRole('button',{name:'Approve / Activate'}));expect(await screen.findByText(/Configure the category accounting mapping/)).toBeInTheDocument()});
 });
+
+describe('Fixed Assets close discovery',()=>{
+ it('shows document drafts acquired in-period and assets with pending period-end entries',async()=>{
+  window.history.replaceState(null,'','/?page=assets&assetFrom=2026-08-01&assetTo=2026-08-31');
+  const acquired=asset({id:'acquired',asset_number:'FA-ACQUIRED',name:'Acquired',source_type:'document',source_document_id:'doc',acquisition_date:'2026-08-10'}),scheduled=asset({id:'scheduled',asset_number:'FA-SCHEDULED',name:'Scheduled',status:'active',acquisition_date:'2025-01-01'}),outside=asset({id:'outside',asset_number:'FA-OUTSIDE',name:'Outside',source_type:'document',source_document_id:'old',acquisition_date:'2025-01-01'});
+  vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request)=>{const url=String(input);if(url==='/api/assets')return new Response(JSON.stringify({assets:[acquired,scheduled,outside]}));if(url==='/api/asset-categories')return new Response(JSON.stringify({categories:[category]}));if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));if(url.includes('/depreciation'))return new Response(JSON.stringify({entries:url.includes('scheduled')?[{id:'e',period_start:'2026-08-01',period_end:'2026-08-31',depreciation_amount:'10',closing_nbv:'90',status:'pending'}]:[]}));throw Error(url)}));
+  render(<FixedAssets {...props}/>);expect(await screen.findByText('FA-ACQUIRED')).toBeInTheDocument();expect(screen.getByText('FA-SCHEDULED')).toBeInTheDocument();expect(screen.queryByText('FA-OUTSIDE')).not.toBeInTheDocument();
+ });
+ it('ignores invalid close context without loading depreciation discovery',async()=>{window.history.replaceState(null,'','/?page=assets&assetFrom=bad&assetTo=2026-08-31');const fetchMock=mockApi();render(<FixedAssets {...props}/>);expect(await screen.findByText('FA-001')).toBeInTheDocument();expect(fetchMock.mock.calls.some(([url])=>String(url).endsWith('/depreciation'))).toBe(false)});
+});
