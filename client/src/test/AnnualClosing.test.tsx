@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { AnnualClosing } from '../components/AnnualClosing';
@@ -34,5 +34,40 @@ describe('Annual Closing Center', () => {
     expect(container).toHaveTextContent('توجد متطلبات غير مكتملة تحتاج إلى المراجعة');
     for(const technicalValue of [...sources,...blockers])expect(container).not.toHaveTextContent(technicalValue);
     expect(container).not.toHaveTextContent('حزمة الإقفال السنوي المحكومة');
+  });
+  it('shows failed finalization blockers in a styled Arabic warning list',async()=>{
+    await i18n.changeLanguage('ar');
+    const fetchMock=vi.spyOn(globalThis,'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'2025',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:false,blocker_count:2,financial_statements_readiness:{status:'blocked',label:'',label_ar:'جاهزية القوائم المالية'},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close_not_ready','financial_statements_not_ready']}),{status:409}));
+    render(<AnnualClosing canView canViewPackage canFinalizePackage onUnauthorized={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'اعتماد الحزمة نهائياً'}));
+    const warning=await screen.findByRole('alert');
+    expect(warning).toHaveClass('warning-alert');
+    expect(within(warning).getByText('تعذر اعتماد الحزمة نهائيًا')).toBeInTheDocument();
+    expect(within(warning).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(warning).getByText('الإقفال الشهري غير جاهز')).toBeInTheDocument();
+    expect(within(warning).getByText('القوائم المالية غير جاهزة')).toBeInTheDocument();
+    expect(warning).not.toHaveTextContent('monthly_close_not_ready');
+  });
+  it('localizes Arabic snapshot types and formats package timestamps for people',async()=>{
+    await i18n.changeLanguage('ar');
+    const previewAt='2025-06-01T10:15:00.000Z';
+    const finalAt='2025-06-02T11:30:00.000Z';
+    const handoffAt='2025-06-03T12:45:00.000Z';
+    const fetchMock=vi.spyOn(globalThis,'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'2025',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'',label_ar:'جاهزة'},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'handed_off',version:3,final_snapshot_id:'s2',finalized_at:finalAt,handed_off_at:handoffAt,handoff_note:null,handoff_reference:null,snapshots:[{id:'s1',snapshot_no:1,snapshot_type:'preview',manifest:[],source_fingerprint:'a',created_at:previewAt},{id:'s2',snapshot_no:2,snapshot_type:'final',manifest:[],source_fingerprint:'b',created_at:finalAt}]},live:{manifest:[],source_fingerprint:'b'},drift:false}),{status:200}));
+    const {container}=render(<AnnualClosing canView canViewPackage onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByText(/\(معاينة\)/)).toBeInTheDocument();
+    expect(screen.getByText(/\(نهائية\)/)).toBeInTheDocument();
+    for(const value of [previewAt,finalAt,handoffAt])expect(container).not.toHaveTextContent(value);
+    const format=(value:string)=>new Intl.DateTimeFormat('ar',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
+    expect(container).toHaveTextContent(format(previewAt));
+    expect(container).toHaveTextContent(format(finalAt));
+    expect(container).toHaveTextContent(format(handoffAt));
   });
 });
