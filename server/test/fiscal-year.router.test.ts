@@ -141,18 +141,29 @@ describe('Fiscal Year API tenant and capability boundary', () => {
     expect(mocks.findByCompany.mock.calls).toEqual([['co-a'], ['co-b']]);
   });
 
-  it('requires fiscal_year.manage for mutations', async () => {
-    setContext(['fiscal_year.view']);
-    const res = await request(app)
+  it('keeps create, edit, and close on independent capability boundaries', async () => {
+    setContext(['fiscal_year.create']);
+    mocks.createFiscalYear.mockResolvedValue(fiscalYear);
+    const create = await request(app)
       .post('/api/fiscal-years')
       .send({ name: 'FY 2026', start_date: '2026-01-01', end_date: '2027-01-01' });
+    const edit = await request(app).patch('/api/fiscal-years/fy-1').send({ name: 'Updated' });
+    const close = await request(app).post('/api/fiscal-years/fy-1/close').send({});
 
-    expect(res.status).toBe(403);
-    expect(mocks.createFiscalYear).not.toHaveBeenCalled();
+    expect(create.status).toBe(201);
+    expect(edit.status).toBe(403);
+    expect(close.status).toBe(403);
+  });
+
+  it('does not accept legacy fiscal_year.manage for any mutation', async () => {
+    setContext(['fiscal_year.manage']);
+    expect((await request(app).post('/api/fiscal-years').send({ name: 'FY 2026', start_date: '2026-01-01', end_date: '2027-01-01' })).status).toBe(403);
+    expect((await request(app).patch('/api/fiscal-years/fy-1').send({ name: 'Updated' })).status).toBe(403);
+    expect((await request(app).post('/api/fiscal-years/fy-1/close').send({})).status).toBe(403);
   });
 
   it('rejects cross-origin create, update, and close before any mutation runs', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.create', 'fiscal_year.edit', 'fiscal_year.close']);
 
     const create = await request(app)
       .post('/api/fiscal-years')
@@ -176,7 +187,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('rejects client-supplied company_id instead of trusting it', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.create']);
     const res = await request(app)
       .post('/api/fiscal-years')
       .send({
@@ -191,7 +202,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('creates using active company and authenticated actor only', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.create']);
     mocks.createFiscalYear.mockResolvedValue(fiscalYear);
 
     const res = await request(app)
@@ -211,7 +222,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('rejects invalid dates and unknown fields at the HTTP boundary', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.create', 'fiscal_year.edit']);
 
     const invalidDate = await request(app)
       .post('/api/fiscal-years')
@@ -225,7 +236,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('maps cross-company/not-found updates to the same 404', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.edit']);
     mocks.updateFiscalYear.mockRejectedValue(new Error('Fiscal year not found or access denied'));
 
     const res = await request(app)
@@ -242,7 +253,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('maps overlap and closed-state domain errors to 409', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.create']);
     mocks.createFiscalYear.mockRejectedValue(
       new Error("Fiscal year overlap: [2026-01-01, 2027-01-01] conflicts with 'FY'"),
     );
@@ -255,7 +266,7 @@ describe('Fiscal Year API tenant and capability boundary', () => {
   });
 
   it('closes inside active company and forwards the authenticated actor and reason', async () => {
-    setContext(['fiscal_year.manage']);
+    setContext(['fiscal_year.close']);
     mocks.closeFiscalYear.mockResolvedValue({ ...fiscalYear, status: 'closed' });
 
     const res = await request(app)

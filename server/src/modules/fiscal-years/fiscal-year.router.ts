@@ -15,7 +15,6 @@ import { UpdateFiscalYearInput } from './fiscal-year.types';
 export const fiscalYearRouter = Router();
 
 const VIEW_CAPABILITY = 'fiscal_year.view';
-const LEGACY_MANAGE_CAPABILITY = 'fiscal_year.manage';
 const CREATE_CAPABILITY = 'fiscal_year.create';
 const EDIT_CAPABILITY = 'fiscal_year.edit';
 const CLOSE_CAPABILITY = 'fiscal_year.close';
@@ -28,21 +27,6 @@ function asyncRoute(
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
     void handler(req, res, next).catch(next);
-  };
-}
-
-function requireCapabilityOrLegacy(capability: string, legacy: string) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const context = getAuthenticatedContext(req);
-    if (!context) {
-      res.status(401).json({ error: 'Unauthenticated' });
-      return;
-    }
-    if (!context.activeCompanyId || (!context.capabilities.includes(capability) && !context.capabilities.includes(legacy))) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-    next();
   };
 }
 
@@ -147,7 +131,7 @@ fiscalYearRouter.post(
   requireSameOrigin,
   requireAuth,
   requireActiveCompany,
-  requireCapabilityOrLegacy(CREATE_CAPABILITY, LEGACY_MANAGE_CAPABILITY),
+  requireCapability(CREATE_CAPABILITY),
   asyncRoute(async (req, res, next) => {
     if (!isPlainObject(req.body) || !hasOnlyKeys(req.body, ['name', 'start_date', 'end_date'])) {
       res.status(400).json({ error: 'Invalid fiscal year request' });
@@ -187,7 +171,7 @@ fiscalYearRouter.patch(
   requireSameOrigin,
   requireAuth,
   requireActiveCompany,
-  requireCapabilityOrLegacy(EDIT_CAPABILITY, LEGACY_MANAGE_CAPABILITY),
+  requireCapability(EDIT_CAPABILITY),
   asyncRoute(async (req, res, next) => {
     if (!isPlainObject(req.body) || !hasOnlyKeys(req.body, ['name', 'start_date', 'end_date'])) {
       res.status(400).json({ error: 'Invalid fiscal year request' });
@@ -246,7 +230,7 @@ fiscalYearRouter.post(
   requireSameOrigin,
   requireAuth,
   requireActiveCompany,
-  requireCapabilityOrLegacy(CLOSE_CAPABILITY, LEGACY_MANAGE_CAPABILITY),
+  requireCapability(CLOSE_CAPABILITY),
   asyncRoute(async (req, res, next) => {
     const body = req.body === undefined ? {} : req.body;
     if (!isPlainObject(body) || !hasOnlyKeys(body, ['reason'])) {

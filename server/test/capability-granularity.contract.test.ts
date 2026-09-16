@@ -25,14 +25,16 @@ describe('Phase 9A.2 capability granularity contract', () => {
   });
 
   it('uses distinct fiscal-year mutation capabilities at the backend boundary', () => {
-    expect(fiscalRouter).toContain('requireCapabilityOrLegacy(CREATE_CAPABILITY, LEGACY_MANAGE_CAPABILITY)');
-    expect(fiscalRouter).toContain('requireCapabilityOrLegacy(EDIT_CAPABILITY, LEGACY_MANAGE_CAPABILITY)');
-    expect(fiscalRouter).toContain('requireCapabilityOrLegacy(CLOSE_CAPABILITY, LEGACY_MANAGE_CAPABILITY)');
+    expect(fiscalRouter).toContain('requireCapability(CREATE_CAPABILITY)');
+    expect(fiscalRouter).toContain('requireCapability(EDIT_CAPABILITY)');
+    expect(fiscalRouter).toContain('requireCapability(CLOSE_CAPABILITY)');
+    expect(fiscalRouter).not.toContain('fiscal_year.manage');
   });
 
   it('does not couple monthly-close visibility or period creation to unrelated actions', () => {
-    expect(monthlyRouter).toContain("requireCapabilityOrLegacy('monthly_close.view','fiscal_year.view')");
-    expect(monthlyRouter).toContain("requireCapabilityOrLegacy('monthly_close.create','monthly_close.close')");
+    expect(monthlyRouter).toContain("requireCapability('monthly_close.view')");
+    expect(monthlyRouter).toContain("requireCapability('monthly_close.create')");
+    expect(monthlyRouter).not.toContain('requireCapabilityOrLegacy');
     expect(monthlyRouter).toContain("requireCapability('monthly_close.close')");
     expect(monthlyRouter).toContain("requireCapability('monthly_close.reopen')");
   });
