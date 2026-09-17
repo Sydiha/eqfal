@@ -14,7 +14,7 @@ If this file conflicts with a higher source, the higher source governs. Historic
 ## Reconciliation Metadata
 
 Last reconciled against GitHub/main SHA:
-`14c9bc025193a74bc4a4ea7055d15a5a40fedea9`
+`5766d58154fce89f6908a056bf9f62cf6e105537`
 
 Reconciliation date:
 `2026-09-18`
@@ -34,7 +34,7 @@ This SHA is an audit/reconciliation baseline only, not a promise that it remains
 - Phase 5 — Financial Statement Mapping: **DONE**
 - Phase 6 — VAT Reconciliation Hardening: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 7 — Zakat / Income Tax / Withholding Tax: **PARTIAL**
-- Phase 8 — Integrated Monthly Close: **PARTIAL / STRONG FOUNDATION**
+- Phase 8 — Integrated Monthly Close: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 9 — Final Permission Model: **PARTIAL**
 - Phase 10 — Company Manager Workspace: **PARTIAL**
 - Phase 11 — Home Screen Alerts: **PARTIAL**
@@ -47,7 +47,7 @@ Notes:
 - Phase 2 closure was read-only reconciled against GitHub/main SHA `14c9bc025193a74bc4a4ea7055d15a5a40fedea9`; governed depreciation-policy lifecycle, effective dating/history, prospective active-asset estimate changes, policy-exception handling, and the operational workflow surface are implemented for the currently approved scope.
 - Advanced fixed-asset topics including impairment, revaluation, components, multiple books, tax depreciation, active-asset depreciation-method changes, retrospective restatement, and advanced proration remain deferred unless a future Read-only Design Check proves they are required.
 - VAT is DONE only for the currently approved scope; future tax scope is neither implied nor pre-approved.
-- Monthly Close remains PARTIAL until a dedicated completeness gap audit is accepted against the latest roadmap.
+- Phase 8 Monthly Close closure was read-only reconciled against GitHub/main SHA `5766d58154fce89f6908a056bf9f62cf6e105537`; blocker coverage, company-aware applicability, capability-aware disclosure, drill-through, close enforcement, and reopen reason/audit/capability behavior are implemented for the currently approved scope.
 - Annual Closing readiness does not itself constitute final financial statements, zakat filing/calculation, or final year-end package export.
 - Phase 5 was read-only reconciled against GitHub/main SHA `212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca`; the approved chart-classification and financial-statement mapping scope is implemented and tested, so it is no longer a Product gap.
 
@@ -72,7 +72,7 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from current dependencies/current `main` without waiting for Full Autonomous Readiness.
-2. Phase 2 and Phase 5 are complete for their currently approved scopes and must not be recreated as Product gaps unless a new Read-only Design Check identifies a real deficiency.
+2. Phase 2, Phase 5, and Phase 8 are complete for their currently approved scopes and must not be recreated as Product gaps unless a new Read-only Design Check identifies a real deficiency.
 3. Select the next Product task from the remaining **PARTIAL / NOT STARTED** roadmap items using current dependencies and a dedicated Read-only Design Check.
 4. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 
@@ -92,11 +92,11 @@ These existing items remain open unless separately verified complete; they do no
 
 ## Next real product gap
 
-Phase 2 and Phase 5 are no longer Product gaps for their currently approved scopes.
+Phase 2, Phase 5, and Phase 8 are no longer Product gaps for their currently approved scopes.
 
 The next Product task must be chosen from the remaining **PARTIAL / NOT STARTED** roadmap items based on current `main`, dependencies, and a dedicated Read-only Design Check before implementation.
 
-Phase 8 Monthly Close remains PARTIAL pending its dedicated completeness gap audit. EQFAL Project must choose actual next Product work from current `main`, roadmap dependencies, and the approved governance at that time.
+EQFAL Project must choose actual next Product work from the remaining PARTIAL / NOT STARTED roadmap items using current `main`, roadmap dependencies, and the approved governance at that time.
 
 ## Remaining product backlog after Phase 2 closure
 

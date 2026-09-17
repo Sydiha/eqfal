@@ -4,7 +4,7 @@ Status: Approved project guidance
 Reconciliation date: 2026-09-18
 
 Last reconciled against GitHub/main SHA:
-`14c9bc025193a74bc4a4ea7055d15a5a40fedea9`
+`5766d58154fce89f6908a056bf9f62cf6e105537`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -169,24 +169,22 @@ EQFAL prepares, reconciles, explains, and surfaces exceptions; it does not repla
 
 ## Phase 8 — Integrated Monthly Close
 
-**Status: PARTIAL / STRONG FOUNDATION**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-A strong implemented foundation exists: monthly periods, blockers, period locking/reopen controls, ledger/VAT/assets/adjustments integration, and closed-period coordination.
+Read-only closure reconciliation against `GitHub/main` SHA `5766d58154fce89f6908a056bf9f62cf6e105537` confirmed that the approved Phase 8 scope is implemented and covered by focused automated tests.
 
-Phase 8 remains not finally DONE until a dedicated **Monthly Close Completeness Gap Audit** verifies applicable blocker categories, plain-language resolution semantics, navigation targets, role/capability behavior, company-profile-aware applicability, and reopen reason/audit/capability behavior.
+Implemented scope includes:
+- governed monthly close periods with period-boundary validation, overlap prevention, close locking, reopen controls, mandatory reopen reasons, and audit logging;
+- authoritative backend close enforcement that recomputes blockers at close time rather than trusting UI state;
+- blocker coverage for incomplete/unreviewed documents, unconfirmed obligations, unmatched/unresolved bank transactions, VAT readiness, unposted operational/accounting sources, independent draft journals, required depreciation/document-backed asset drafts, periodic adjustments, and applicable opening-balance review;
+- dedicated periodic-adjustment and opening-balance blockers without double counting them into generic ledger blockers;
+- company-profile-aware VAT applicability, including fail-closed behavior when applicability remains unresolved;
+- transition-year opening-balance applicability derived from the approved Company Accounting & Tax Profile and `first_live_accounting_date`;
+- capability-aware blocker disclosure that hides unauthorized categories/counts while preserving authoritative hidden-blocker readiness;
+- period-scoped drill-through/navigation to the relevant operational workspace for disclosed blockers;
+- tenant/company scoping, close/reopen capability enforcement, and closed-period coordination.
 
-Expected review areas include, where applicable:
-- incomplete/unreviewed documents;
-- unconfirmed obligations;
-- unmatched/unresolved bank transactions;
-- unposted operational/accounting sources;
-- independent draft/unposted journals;
-- VAT readiness;
-- required depreciation and document-backed asset drafts;
-- accruals/prepayments and periodic adjustments;
-- opening-balance review during transition periods;
-- configured close requirements;
-- reason/audit/capability behavior for reopen.
+No separate user-configurable close-requirements framework is required by the currently approved scope. Future expansion beyond the deterministic blocker/applicability model above requires a new Read-only Design Check.
 
 ## Phase 9 — Final Permission Model
 
@@ -260,7 +258,7 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from actual dependencies/current `main`.
-2. Phase 2 and Phase 5 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
+2. Phase 2, Phase 5, and Phase 8 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
 3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
 4. Every Product task follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
