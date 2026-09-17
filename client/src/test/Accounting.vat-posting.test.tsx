@@ -28,7 +28,7 @@ describe('Accounting VAT posting feedback',()=>{
    throw new Error(`${method} ${url}`);
   });
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals canPost onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal canEditJournal canPost onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Journals'}));
   fireEvent.click(await screen.findByRole('button',{name:/VAT purchase recognition/}));
   const post=await screen.findByRole('button',{name:'Post journal'});
