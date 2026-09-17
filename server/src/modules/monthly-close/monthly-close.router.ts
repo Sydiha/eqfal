@@ -103,13 +103,13 @@ export class MonthlyCloseService {
         ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text opening_balances_applicable,
       EXISTS(SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$4 AND status='approved')::text opening_balance_approved`,[companyId,start,end,fiscalYearId]);
     const row=rows[0]!;
-    const documents=Number(row.documents),obligations=Number(row.obligations),bank_transactions=Number(row.bank_transactions),periodic_adjustments=Number(row.periodic_adjustments);
+    const documents=Number(row.documents),obligations=Number(row.obligations),bank_transactions=Number(row.bank_transactions),periodic_adjustments=Number(rows[0]!.periodic_adjustments);
     const vatApplicable=row.vat_applicable===undefined?true:row.vat_applicable==='true';
     const vatRequiresResolution=row.vat_requires_resolution===undefined?false:row.vat_requires_resolution==='true';
     const openingBalancesApplicable=row.opening_balances_applicable===undefined?false:row.opening_balances_applicable==='true';
     const openingBalanceApproved=row.opening_balance_approved==='true';
     const openingBalanceRows=Number(row.opening_balances);
-    const opening_balances=openingBalancesApplicable?(openingBalanceApproved?0:Math.max(1,openingBalanceRows)):0;
+    const opening_balances=row.opening_balances_applicable===undefined?openingBalanceRows:(openingBalancesApplicable?(openingBalanceApproved?0:Math.max(1,openingBalanceRows)):0);
     const vat=vatApplicable?(vatRequiresResolution?1:(await new VatService(this.db).readiness(companyId,start,end,client)).ready?0:1):0;
     const incompleteDocuments=await this.incompleteMaterialDocuments(companyId,start,end,client);
     const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
