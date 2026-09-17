@@ -39,17 +39,24 @@ describe('access administration authorization boundary', () => {
     expect((await request(app).get('/api/access/memberships').set('Cookie', 'eqfal_session=token')).status).toBe(403);
   });
 
-  it('requires access.manage', async () => {
+  it('requires access.view for reads', async () => {
     vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(session);
     vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(companies);
     vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities').mockResolvedValue([]);
     expect((await request(app).get('/api/access/memberships').set('Cookie', 'eqfal_session=token')).status).toBe(403);
   });
 
-  it('uses the server-trusted active company on the happy path', async () => {
+  it('does not accept legacy access.manage as a runtime fallback', async () => {
     vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(session);
     vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(companies);
     vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities').mockResolvedValue(['access.manage']);
+    expect((await request(app).get('/api/access/memberships').set('Cookie', 'eqfal_session=token')).status).toBe(403);
+  });
+
+  it('uses the server-trusted active company on the happy path', async () => {
+    vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(session);
+    vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue(companies);
+    vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities').mockResolvedValue(['access.view']);
     const response = await request(app).get('/api/access/memberships?company_id=attacker-company').set('Cookie', 'eqfal_session=token');
     expect(response.status).toBe(200);
     expect(mocks.listMemberships).toHaveBeenCalledWith('company-a');
@@ -58,7 +65,7 @@ describe('access administration authorization boundary', () => {
 
 describe('access administration capability migration', () => {
   const sql = readFileSync(new URL('../migrations/038_access_administration_capability.sql', import.meta.url), 'utf8');
-  it('creates the dedicated capability without granting it to ordinary roles', () => {
+  it('creates the dedicated legacy capability without granting it to ordinary roles', () => {
     expect(sql).toContain("'access.manage'");
     expect(sql).not.toMatch(/INSERT\s+INTO\s+role_capabilities/i);
   });
