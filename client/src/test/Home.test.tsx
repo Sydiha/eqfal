@@ -7,6 +7,8 @@ import i18n from '../i18n';
 const navigate = vi.fn();
 const navigateToDiscovery = vi.fn();
 const onUnauthorized = vi.fn();
+const startPurchaseEntry = vi.fn();
+const startSalesEntry = vi.fn();
 
 function renderHome(capabilities: string[]) {
   return render(
@@ -15,6 +17,8 @@ function renderHome(capabilities: string[]) {
         capabilities={capabilities}
         navigate={navigate}
         navigateToDiscovery={navigateToDiscovery}
+        startPurchaseEntry={startPurchaseEntry}
+        startSalesEntry={startSalesEntry}
         onUnauthorized={onUnauthorized}
       />
     </CompanyProvider>,
@@ -25,6 +29,35 @@ describe('Home v2.1', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
     vi.clearAllMocks();
+  });
+
+  it('shows only authorized daily operations and opens their existing workflows', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    renderHome(['document.upload', 'document.view', 'obligation.view', 'bank.view']);
+
+    expect(screen.getByRole('heading', { name: 'Daily Operations' })).toBeInTheDocument();
+    screen.getByRole('button', { name: 'Add sale' }).click();
+    screen.getByRole('button', { name: 'Add purchase' }).click();
+    screen.getByRole('button', { name: 'Add expense' }).click();
+    screen.getByRole('button', { name: 'Upload document' }).click();
+    screen.getByRole('button', { name: 'Open sales' }).click();
+    screen.getByRole('button', { name: 'Open banking' }).click();
+
+    expect(startSalesEntry).toHaveBeenCalledOnce();
+    expect(startPurchaseEntry).toHaveBeenNthCalledWith(1, 'purchase');
+    expect(startPurchaseEntry).toHaveBeenNthCalledWith(2, 'expense');
+    expect(navigate).toHaveBeenCalledWith('documents');
+    expect(navigate).toHaveBeenCalledWith('sales');
+    expect(navigate).toHaveBeenCalledWith('banks');
+  });
+
+  it('hides daily operations when their required capabilities are absent', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    renderHome([]);
+
+    expect(screen.queryByRole('heading', { name: 'Daily Operations' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open obligations' })).not.toBeInTheDocument();
   });
 
   it('does not load monthly close data without fiscal-year access', () => {

@@ -37,12 +37,14 @@ type Props = {
   capabilities: readonly string[];
   navigate: (page: HomePage) => void;
   navigateToDiscovery: (page: DiscoveryPage, parameters: Record<string, string>) => void;
+  startPurchaseEntry: (type: 'purchase' | 'expense') => void;
+  startSalesEntry: () => void;
   onUnauthorized: () => void;
 };
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
+export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('fiscal_year.view');
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -51,6 +53,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
   const isArabic = i18n.language.startsWith('ar');
   const homeLabels = isArabic
     ? {
+        dailyOperations: 'العمليات اليومية',
+        addSale: 'إضافة مبيعات',
+        addPurchase: 'إضافة مشتريات',
+        addExpense: 'إضافة مصروف',
+        uploadDocument: 'رفع مستند',
+        openSales: 'فتح المبيعات',
+        openPurchases: 'فتح المشتريات',
+        openBanking: 'فتح البنوك',
+        openObligations: 'فتح الالتزامات',
         closeBlockers: 'معوقات الإقفال',
         area: 'المجال',
         blockerState: 'حالة المعوقات',
@@ -60,6 +71,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         periodState: 'حالة الفترة',
       }
     : {
+        dailyOperations: 'Daily Operations',
+        addSale: 'Add sale',
+        addPurchase: 'Add purchase',
+        addExpense: 'Add expense',
+        uploadDocument: 'Upload document',
+        openSales: 'Open sales',
+        openPurchases: 'Open purchases',
+        openBanking: 'Open banking',
+        openObligations: 'Open obligations',
         closeBlockers: 'Close blockers',
         area: 'Area',
         blockerState: 'Blocker status',
@@ -93,6 +113,17 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
 
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
+  const canViewSalesPurchases = can('document.view') && can('obligation.view');
+  const dailyOperations = [
+    { key: 'add-sale', label: homeLabels.addSale, visible: can('document.upload'), open: startSalesEntry },
+    { key: 'add-purchase', label: homeLabels.addPurchase, visible: can('document.upload'), open: () => startPurchaseEntry('purchase') },
+    { key: 'add-expense', label: homeLabels.addExpense, visible: can('document.upload'), open: () => startPurchaseEntry('expense') },
+    { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
+    { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
+    { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
+    { key: 'open-banking', label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
+    { key: 'open-obligations', label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
+  ].filter((action) => action.visible);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
@@ -171,6 +202,21 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
           <p className="home-intro">{t('home.context')}</p>
         </div>
       </header>
+
+      {dailyOperations.length > 0 && (
+        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
+          <div className="home-v21__section-heading">
+            <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
+          </div>
+          <div className="home-launcher__grid">
+            {dailyOperations.map((action) => (
+              <button key={action.key} type="button" onClick={action.open}>
+                <span>{action.label}</span><span aria-hidden="true">↗</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {canViewClose && (
         <section className="home-status-strip" aria-label={t('monthlyClose.title')}>

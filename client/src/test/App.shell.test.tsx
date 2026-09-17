@@ -32,4 +32,12 @@ describe('authenticated application shell', () => {
     render(<AuthProvider><App/></AuthProvider>);
     expect((await screen.findAllByRole('button', { name: 'Sales' })).length).toBeGreaterThan(0);
   });
+  it('hides operational navigation without each relevant view capability', async () => {
+    render(<AuthProvider><App/></AuthProvider>);
+    const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+    expect(within(navigation).getByRole('button', { name: 'Documents' })).toBeInTheDocument();
+    expect(within(navigation).queryByRole('button', { name: 'Banking' })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('button', { name: 'Obligations' })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('button', { name: 'Purchases' })).not.toBeInTheDocument();
+  });
 });
