@@ -20,11 +20,15 @@ describe('Tax/Zakat working-paper capability granularity contract',()=>{
   });
 
   it('uses action-specific runtime authorization with no legacy manage fallback',()=>{
-    for(const cap of granular) expect(router).toContain(`requireCapability('${cap}')`);
+    for(const cap of granular.filter(cap=>cap!=='tax_workpaper.submit')) expect(router).toContain(`requireCapability('${cap}')`);
+    expect(router).toContain("['submit-review','tax_workpaper.submit','draft','needs_review']");
     expect(router).not.toContain("requireCapability('tax_workpaper.manage')");
   });
 
   it('keeps view, review, and approve as independent existing boundaries',()=>{
-    for(const cap of ['tax_workpaper.view','tax_workpaper.review','tax_workpaper.approve']) expect(router).toContain(`requireCapability('${cap}')`);
+    expect(router).toContain("requireCapability('tax_workpaper.view')");
+    expect(router).toContain("requireCapability('tax_workpaper.review')");
+    expect(router).toContain("['review','tax_workpaper.review','needs_review','reviewed']");
+    expect(router).toContain("['approve','tax_workpaper.approve','reviewed','approved']");
   });
 });
