@@ -33,6 +33,14 @@ type Period = {
   };
 };
 
+type HomeAlert = {
+  key: string;
+  class: 'needs_action_now' | 'upcoming_due' | 'needs_review_completion';
+  count: number;
+  destination: DiscoveryPage;
+  parameters: Record<string, string>;
+};
+
 type Props = {
   capabilities: readonly string[];
   navigate: (page: HomePage) => void;
@@ -50,6 +58,10 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
+  const canViewAlerts = capabilities.some(capability => ['obligation.view', 'document.view', 'bank.view'].includes(capability));
+  const [alerts, setAlerts] = useState<HomeAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(canViewAlerts);
+  const [alertsError, setAlertsError] = useState(false);
   const isArabic = i18n.language.startsWith('ar');
   const homeLabels = isArabic
     ? {
@@ -69,6 +81,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
+        alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -87,7 +100,18 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: 'Close readiness',
         periodState: 'Period status',
+        alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
       };
+
+  const alertLabels: Record<string, string> = isArabic ? {
+    overdue_obligations: 'التزامات متأخرة', upcoming_obligations: 'التزامات مستحقة قريباً', unconfirmed_obligations: 'التزامات غير مؤكدة',
+    documents_uploaded: 'مستندات مرفوعة للمراجعة', documents_needs_review: 'مستندات تحتاج مراجعة', documents_incomplete: 'مستندات غير مكتملة',
+    bank_transactions_unmatched: 'حركات بنكية غير مطابقة', bank_transactions_matched: 'حركات بنكية تحتاج تسوية',
+  } : {
+    overdue_obligations: 'Overdue obligations', upcoming_obligations: 'Obligations due soon', unconfirmed_obligations: 'Unconfirmed obligations',
+    documents_uploaded: 'Uploaded documents to review', documents_needs_review: 'Documents needing review', documents_incomplete: 'Incomplete documents',
+    bank_transactions_unmatched: 'Unmatched bank transactions', bank_transactions_matched: 'Bank transactions awaiting reconciliation',
+  };
 
   const load = async () => {
     if (!canViewClose) return;
@@ -110,6 +134,28 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     if (canViewClose) void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canViewClose]);
+
+  const loadAlerts = async () => {
+    if (!canViewAlerts) return;
+    setAlertsLoading(true);
+    setAlertsError(false);
+    try {
+      const response = await fetch('/api/home-alerts', { credentials: 'same-origin' });
+      if (response.status === 401) onUnauthorized();
+      if (!response.ok) throw new Error(String(response.status));
+      const payload = (await response.json()) as { alerts?: HomeAlert[] };
+      setAlerts(Array.isArray(payload.alerts) ? payload.alerts.filter(alert => alert.count > 0) : []);
+    } catch {
+      setAlertsError(true);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (canViewAlerts) void loadAlerts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canViewAlerts]);
 
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
@@ -215,6 +261,23 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               </button>
             ))}
           </div>
+        </section>
+      )}
+
+      {canViewAlerts && (
+        <section className="home-exceptions" aria-labelledby="home-alerts-title">
+          <div className="home-v21__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
+          {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
+            <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
+          ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
+            <div className="home-launcher__grid">
+              {alerts.map(alert => (
+                <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+                  <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
