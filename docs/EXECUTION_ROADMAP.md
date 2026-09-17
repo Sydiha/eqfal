@@ -4,7 +4,7 @@ Status: Approved project guidance
 Reconciliation date: 2026-09-18
 
 Last reconciled against GitHub/main SHA:
-`5766d58154fce89f6908a056bf9f62cf6e105537`
+`116dc676772b20220e7b77704bafe9f1a0d3c243`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -188,11 +188,25 @@ No separate user-configurable close-requirements framework is required by the cu
 
 ## Phase 9 — Final Permission Model
 
-**Status: PARTIAL**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-Strong capability/company-scoped authorization and Grant Ceiling foundations exist. A completeness review is still required before DONE, including separation of view/create/edit/review/approve/post/cancel/reopen/policy/user-administration capabilities where relevant and audit of permission changes.
+Read-only closure reconciliation against `GitHub/main` SHA `116dc676772b20220e7b77704bafe9f1a0d3c243` confirmed that the approved Phase 9 permission-model scope is implemented.
 
-Developing permission-model features within this approved roadmap is normal Product work. Human Gate applies only to sensitive access changes affecting real users as defined by governance.
+Implemented scope includes:
+- company-scoped capability-based backend authorization across the reviewed operational domains;
+- granular separation of view/create/edit/review/approve/post/cancel/reopen/policy actions where applicable;
+- granular Access Administration capabilities for view, membership creation/status changes, role assignment, role creation, and capability grant/revoke;
+- legacy broad capabilities retained only for historical/backfill compatibility where applicable, without runtime fallback for completed granularity migrations;
+- Grant Ceiling enforcement that prevents assigning capabilities beyond the acting user's effective authority;
+- Full Access assignment protection;
+- protection against self-escalation beyond the actor's current authority;
+- server-trusted active-company scoping and cross-company access protections;
+- same-origin protection for sensitive access-administration writes;
+- permanent transactional Audit Trail coverage for access-administration mutations.
+
+Post-merge runtime validation on Replit confirmed Frontend HTTP 200, API HTTP 200, and database status `connected` on the same merged baseline.
+
+Future permission-model expansion beyond this implemented scope requires a new Read-only Design Check.
 
 ## Phase 10 — Company Manager Workspace
 
@@ -258,7 +272,7 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from actual dependencies/current `main`.
-2. Phase 2, Phase 5, and Phase 8 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
+2. Phase 2, Phase 5, Phase 8, and Phase 9 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
 3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
 4. Every Product task follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
