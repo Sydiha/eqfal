@@ -19,7 +19,7 @@ describe('Documents contextual entry',()=>{
    .mockResolvedValueOnce(new Response(JSON.stringify({documents:[{...uploaded,reference_number:'INV-1'}],counterparties:[]})));
   vi.stubGlobal('fetch',fetchMock);
 
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentType="purchase" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentType="purchase" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
   const file=new File([new Uint8Array([0x25,0x50,0x44,0x46,0x2d])],'invoice.pdf',{type:'application/pdf'});
   fireEvent.change(await screen.findByLabelText(/Choose document/),{target:{files:[file]}});
   const uploadForm=screen.getAllByRole('button',{name:'Upload document'}).find(button=>button.closest('form'))?.closest('form');
@@ -38,7 +38,7 @@ describe('Documents contextual entry',()=>{
  it('cancels back to the contextual origin without uploading',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[],counterparties:[]}))));
   const onEntryCancel=vi.fn();
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentType="expense" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentType="expense" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Cancel'}));
   expect(onEntryCancel).toHaveBeenCalledTimes(1);
  });
@@ -48,7 +48,7 @@ describe('Documents contextual entry',()=>{
    .mockResolvedValueOnce(new Response(JSON.stringify({documents:[uploaded],counterparties:[]})))
    .mockResolvedValueOnce(new Response(JSON.stringify({id:'cp-new',name:'New Supplier',is_active:true,type:'supplier',version:1}),{status:201}));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Documents canView canUpload canReview={false} canApprove={false} canManageCounterparties entryDocumentType="purchase" entryReturnPage="purchases" entryCounterpartyType="supplier" onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} canManageCounterparties entryDocumentType="purchase" entryReturnPage="purchases" entryCounterpartyType="supplier" onUnauthorized={vi.fn()}/>);
   await screen.findAllByText('invoice.pdf');
   fireEvent.click(screen.getByRole('button',{name:'+ Supplier'}));
   fireEvent.change(screen.getByRole('textbox',{name:'Counterparty'}),{target:{value:'New Supplier'}});
@@ -65,7 +65,7 @@ describe('Documents contextual entry',()=>{
    .mockResolvedValueOnce(new Response(JSON.stringify({documents:[sale],counterparties:[{id:'customer-1',name:'Existing Customer',type:'customer',is_active:true},{id:'supplier-1',name:'Existing Supplier',type:'supplier',is_active:true}]})))
    .mockResolvedValueOnce(new Response(JSON.stringify({id:'customer-2',name:'New Customer',is_active:true,type:'customer',version:1}),{status:201}));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Documents canView canUpload canReview={false} canApprove={false} canManageCounterparties entryDocumentType="sale" entryReturnPage="sales" entryCounterpartyType="customer" onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} canManageCounterparties entryDocumentType="sale" entryReturnPage="sales" entryCounterpartyType="customer" onUnauthorized={vi.fn()}/>);
   await screen.findAllByText('invoice.pdf');
   const select=screen.getByRole('combobox',{name:/Counterparty/});
   expect(screen.getByRole('option',{name:'Existing Customer'})).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('Documents contextual entry',()=>{
 
  it('does not expose quick-add in ordinary Documents usage',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[uploaded],counterparties:[]}))));
-  render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);
   await screen.findAllByText('invoice.pdf');
   expect(screen.queryByRole('button',{name:'+ Supplier'})).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'+ Customer'})).not.toBeInTheDocument();

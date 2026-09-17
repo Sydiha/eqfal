@@ -52,7 +52,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
    .mockResolvedValueOnce(new Response(JSON.stringify({document:target})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryComplete=vi.fn(),onEntryCancel=vi.fn();
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByDisplayValue('TARGET')).toBeInTheDocument();
   expect(screen.queryByText('doc-1.pdf')).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Upload Document'})).not.toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
  it('locks a contextual sales edit to the original sale type',async()=>{
   const target=document('sale-doc','SALE-TARGET','sale');
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[{id:'customer-1',name:'Customer',type:'customer',is_active:true}]}))));
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={vi.fn()} onUnauthorized={vi.fn()}/>);
   await screen.findByDisplayValue('SALE-TARGET');
   const typeField=screen.getByLabelText('Document Type');
   expect(typeField).toHaveValue('Sale');
@@ -83,7 +83,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[first],counterparties:[]})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryCancel=vi.fn();
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="missing-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentId="missing-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   await waitFor(()=>expect(screen.queryByText('Loading documents...')).not.toBeInTheDocument());
   expect(screen.queryByText('doc-1.pdf')).not.toBeInTheDocument();
   expect(screen.queryByDisplayValue('FIRST')).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
    .mockResolvedValueOnce(new Response(JSON.stringify({document:target})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryComplete=vi.fn();
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentId="purchase-doc" entryReturnPage="purchases" entryCounterpartyType="supplier" onEntryComplete={onEntryComplete} onUnauthorized={vi.fn()}/>);
   const counterpartySelect=await screen.findByDisplayValue('Customer');
   expect(counterpartySelect).toHaveValue('customer-1');
   fireEvent.click(screen.getByRole('button',{name:'Save Intake'}));
@@ -115,7 +115,7 @@ describe('Sales and Purchases contextual edit entry points',()=>{
   const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:[target],counterparties:[]})));
   vi.stubGlobal('fetch',fetchMock);
   const onEntryCancel=vi.fn();
-  render(<Documents canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
+  render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} entryDocumentId="sale-doc" entryReturnPage="sales" entryCounterpartyType="customer" onEntryCancel={onEntryCancel} onUnauthorized={vi.fn()}/>);
   await screen.findByDisplayValue('SALE-TARGET');
   fireEvent.click(screen.getByRole('button',{name:'Sales'}));
   expect(onEntryCancel).toHaveBeenCalledOnce();
