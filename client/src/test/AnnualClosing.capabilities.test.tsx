@@ -24,7 +24,7 @@ describe('Annual Close Package granular capabilities',()=>{
   it('does not expose package creation without create capability',async()=>{
     mockAnnualClosingFetch(null);
     render(<AnnualClosing canView canViewPackage canCreatePackage={false} canCreatePackageSnapshot={false} onUnauthorized={vi.fn()}/>);
-    expect(await screen.findByText('Annual Closing Package has not been created for this fiscal year.')).toBeInTheDocument();
+    expect(await screen.findByText('No annual package has been created.')).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Create package'})).not.toBeInTheDocument();
   });
 
