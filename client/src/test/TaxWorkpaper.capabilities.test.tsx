@@ -11,7 +11,7 @@ describe('Tax workpaper granular capabilities',()=>{
   it('does not expose create without create capability',async()=>{
     vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({workpaper:null}),{status:200}));
     render(<TaxWorkpaper yearId="fy" canView canCreate={false} canEdit={false} canCreateAdjustment={false} canEditAdjustment={false} canDeleteAdjustment={false} canSubmit={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} onChanged={vi.fn()}/>);
-    expect(await screen.findByText('Working paper not started')).toBeInTheDocument();
+    expect(await screen.findByText('No working paper has been started for this fiscal year.')).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Create working paper'})).not.toBeInTheDocument();
   });
 
