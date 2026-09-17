@@ -1,4 +1,4 @@
-import {FormEvent,useEffect,useMemo,useState} from 'react';
+import {FormEvent,useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {SectionCard,StatusBadge,WorkspaceState} from './SharedUI';
 
@@ -8,14 +8,7 @@ type Asset={id:string;asset_category_id:string;asset_number:string;name:string;s
 type Policy={id:string;asset_category_id:string;version_number:number;effective_from:string|null;depreciation_method:'straight_line'|null;useful_life_mode:'fixed'|'asset_specific'|'not_applicable';useful_life_months:number|null;residual_value_policy:'zero'|'asset_specific'|'not_applicable';depreciation_start_basis:'placed_in_service'|'explicit_date'|'not_applicable';asset_account_id:string|null;accumulated_depreciation_account_id:string|null;depreciation_expense_account_id:string|null;status:'draft'|'approved'|'superseded';is_legacy_migrated:boolean;reviewed_at:string|null;approved_at:string|null};
 type EstimateChange={id:string;effective_from:string;old_useful_life_months:number|null;new_remaining_useful_life_months:number|null;old_residual_value:string;new_residual_value:string|null;reason:string;policy_exception:boolean;policy_exception_reason:string|null;status:'draft'|'reviewed'|'approved';reviewed_at:string|null;approved_at:string|null};
 
-type Props={
- canView:boolean;
- canManagePolicy:boolean;
- canCreateEstimate:boolean;
- canReviewEstimate:boolean;
- canApproveEstimate:boolean;
- onUnauthorized:()=>void;
-};
+type Props={canView:boolean;canManagePolicy:boolean;canCreateEstimate:boolean;canReviewEstimate:boolean;canApproveEstimate:boolean;onUnauthorized:()=>void};
 
 export function AssetPolicyOperations({canView,canManagePolicy,canCreateEstimate,canReviewEstimate,canApproveEstimate,onUnauthorized}:Props){
  const{t,i18n}=useTranslation();
@@ -38,7 +31,7 @@ export function AssetPolicyOperations({canView,canManagePolicy,canCreateEstimate
  const reloadChanges=async()=>{if(!assetId)return;setChanges((await(await request(`/api/assets/${assetId}/estimate-changes`)).json()).changes);const a=(await(await request(`/api/assets/${assetId}`)).json()) as Asset;setAssets(list=>list.map(x=>x.id===a.id?{...x,...a}:x))};
  const policyPayload=(d:FormData)=>{const depreciable=selectedCategory?.depreciable!==false;return{effective_from:String(d.get('effectiveFrom')),depreciation_method:depreciable?'straight_line':null,useful_life_mode:depreciable?String(d.get('lifeMode')):'not_applicable',useful_life_months:depreciable&&d.get('lifeMode')==='fixed'?Number(d.get('life')):null,residual_value_policy:depreciable?String(d.get('residualPolicy')):'not_applicable',depreciation_start_basis:depreciable?String(d.get('startBasis')):'not_applicable',asset_account_id:d.get('assetAccount')||null,accumulated_depreciation_account_id:depreciable?(d.get('accumulatedAccount')||null):null,depreciation_expense_account_id:depreciable?(d.get('expenseAccount')||null):null}};
  const submitPolicy=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(!categoryId)return;setError('');try{const payload=policyPayload(new FormData(e.currentTarget));if(editingPolicy)await request(`/api/asset-policies/${editingPolicy.id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});else await request(`/api/asset-categories/${categoryId}/policies`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});await reloadPolicies();setPolicyForm(false);setEditingPolicy(null)}catch(e){setError((e as Error).message)}};
- const actPolicy=async(id:string,action:'review'|'approve')=>{setError('');try{await request(`/api/asset-policies/${id}/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await Promise.all([reloadPolicies(),loadBase()])}catch(e){setError((e as Error).message)}};
+ const actPolicy=async(id:string,action:'review'|'approve')=>{setError('');try{await request(`/api/asset-policies/${id}/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await reloadPolicies();await loadBase()}catch(e){setError((e as Error).message)}};
  const submitEstimate=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(!assetId)return;const d=new FormData(e.currentTarget);setError('');try{await request(`/api/assets/${assetId}/estimate-changes`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({effective_from:d.get('effectiveFrom'),remaining_useful_life_months:d.get('remainingLife')?Number(d.get('remainingLife')):null,residual_value:d.get('residual')?String(d.get('residual')):null,reason:d.get('reason'),policy_exception_reason:d.get('exceptionReason')||null})});await reloadChanges();setEstimateForm(false)}catch(e){setError((e as Error).message)}};
  const actEstimate=async(id:string,action:'review'|'approve')=>{setError('');try{await request(`/api/asset-estimate-changes/${id}/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await reloadChanges()}catch(e){setError((e as Error).message)}};
  const editPolicy=(p:Policy)=>{setEditingPolicy(p);setPolicyForm(true)};
