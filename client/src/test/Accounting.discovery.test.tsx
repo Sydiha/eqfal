@@ -67,8 +67,9 @@ const renderAccounting = () =>
   render(
     <Accounting
       canView
-      canManageChart={false}
-      canManageJournals
+      canCreateChart={false} canEditChart={false}
+      canCreateJournal
+      canEditJournal
       canPost
       onUnauthorized={vi.fn()}
     />,
