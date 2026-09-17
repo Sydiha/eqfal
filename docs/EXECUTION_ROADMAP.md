@@ -1,10 +1,10 @@
 # EQFAL — Approved Execution Roadmap
 
 Status: Approved project guidance
-Reconciliation date: 2026-09-16
+Reconciliation date: 2026-09-18
 
 Last reconciled against GitHub/main SHA:
-`212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca`
+`14c9bc025193a74bc4a4ea7055d15a5a40fedea9`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -99,13 +99,22 @@ Implemented approved foundation includes accounting framework, fiscal/currency c
 
 ## Phase 2 — Fixed Asset Depreciation Policy
 
-**Status: PARTIAL**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-Strong Fixed Assets foundation exists, including categories, useful life/residual value, account links, depreciation schedule/posting integration, opening accumulated depreciation, disposal handling, and close integration.
+Read-only closure reconciliation against `GitHub/main` SHA `14c9bc025193a74bc4a4ea7055d15a5a40fedea9` confirmed that the approved Phase 2 scope is implemented and operationally surfaced.
 
-Remaining gap: complete governed category-level depreciation policy/history/effective-dating/review semantics and approved rate/useful-life consistency requirements not yet represented as a full policy lifecycle.
+Implemented scope includes:
+- governed category-level depreciation policy versions with effective dating and immutable legacy snapshots;
+- draft, review, approval, and supersession lifecycle with audit logging;
+- depreciation-method, useful-life, residual-value, depreciation-start, and account-mapping consistency validation;
+- asset binding to the applicable depreciation-policy version;
+- prospective active-asset estimate-change workflow for remaining useful life and residual value;
+- first-day-of-month effective dates, accounting-period lock protection, and protection of already posted depreciation;
+- prospective schedule rebuilding only, without retrospective restatement of posted depreciation;
+- policy-exception detection and mandatory reason capture where the asset estimate departs from the governed category policy;
+- operational UI for current policy, policy history, policy draft/review/approval, bound policy-version visibility, and estimate-change history/workflow.
 
-Advanced impairment, revaluation, components, multiple books, tax depreciation, and similar advanced features remain deferred until proven necessary.
+Advanced impairment, revaluation, components, multiple books, tax depreciation, active-asset depreciation-method changes, retrospective restatement, advanced proration, and similar advanced features remain deferred until proven necessary and require a new Read-only Design Check.
 
 ## Phase 3 — Opening Balance Review
 
@@ -251,7 +260,7 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from actual dependencies/current `main`.
-2. Phase 5 is **DONE**; do not recreate or reimplement its completed financial-statement foundation without a new approved gap.
+2. Phase 2 and Phase 5 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
 3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
 4. Every Product task follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.

@@ -14,10 +14,10 @@ If this file conflicts with a higher source, the higher source governs. Historic
 ## Reconciliation Metadata
 
 Last reconciled against GitHub/main SHA:
-`2644c9fde0062221240409d47795ae2ee0d022e3`
+`14c9bc025193a74bc4a4ea7055d15a5a40fedea9`
 
 Reconciliation date:
-`2026-09-11`
+`2026-09-18`
 
 This SHA is an audit/reconciliation baseline only, not a promise that it remains future `main` HEAD.
 
@@ -28,7 +28,7 @@ This SHA is an audit/reconciliation baseline only, not a promise that it remains
 ## Current product status
 
 - Phase 1 — Company Accounting & Tax Profile: **DONE**
-- Phase 2 — Fixed Asset Depreciation Policy: **PARTIAL**
+- Phase 2 — Fixed Asset Depreciation Policy: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 3 — Opening Balance Review: **DONE**
 - Phase 4 — Accruals / Prepayments / Periodic Adjustments: **DONE**
 - Phase 5 — Financial Statement Mapping: **DONE**
@@ -44,6 +44,8 @@ This SHA is an audit/reconciliation baseline only, not a promise that it remains
 - Phase 15 — System-wide UI/UX Redesign: **DEFERRED**
 
 Notes:
+- Phase 2 closure was read-only reconciled against GitHub/main SHA `14c9bc025193a74bc4a4ea7055d15a5a40fedea9`; governed depreciation-policy lifecycle, effective dating/history, prospective active-asset estimate changes, policy-exception handling, and the operational workflow surface are implemented for the currently approved scope.
+- Advanced fixed-asset topics including impairment, revaluation, components, multiple books, tax depreciation, active-asset depreciation-method changes, retrospective restatement, and advanced proration remain deferred unless a future Read-only Design Check proves they are required.
 - VAT is DONE only for the currently approved scope; future tax scope is neither implied nor pre-approved.
 - Monthly Close remains PARTIAL until a dedicated completeness gap audit is accepted against the latest roadmap.
 - Annual Closing readiness does not itself constitute final financial statements, zakat filing/calculation, or final year-end package export.
@@ -70,8 +72,8 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from current dependencies/current `main` without waiting for Full Autonomous Readiness.
-2. Phase 5 is **DONE** and must not be recreated as a Product gap unless a new Read-only Design Check identifies a real deficiency.
-3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
+2. Phase 2 and Phase 5 are complete for their currently approved scopes and must not be recreated as Product gaps unless a new Read-only Design Check identifies a real deficiency.
+3. Select the next Product task from the remaining **PARTIAL / NOT STARTED** roadmap items using current dependencies and a dedicated Read-only Design Check.
 4. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 
 ### Agent Infrastructure Track
@@ -90,15 +92,14 @@ These existing items remain open unless separately verified complete; they do no
 
 ## Next real product gap
 
-Phase 5 is no longer the next Product gap.
+Phase 2 and Phase 5 are no longer Product gaps for their currently approved scopes.
 
-This documentation-only closure does not select a replacement task. The next Product task must be chosen from the remaining **PARTIAL / NOT STARTED** roadmap items based on current `main`, dependencies, and a dedicated Read-only Design Check before implementation.
+The next Product task must be chosen from the remaining **PARTIAL / NOT STARTED** roadmap items based on current `main`, dependencies, and a dedicated Read-only Design Check before implementation.
 
 Phase 8 Monthly Close remains PARTIAL pending its dedicated completeness gap audit. EQFAL Project must choose actual next Product work from current `main`, roadmap dependencies, and the approved governance at that time.
 
-## Remaining product backlog after Phase 5 closure
+## Remaining product backlog after Phase 2 closure
 
-- Complete remaining Fixed Asset depreciation-policy governance gaps.
 - Continue Zakat / Income Tax / Withholding Tax workpapers/reconciliation according to approved future designs.
 - Complete Final Permission Model.
 - Complete Company Manager Workspace.
