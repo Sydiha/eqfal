@@ -16,7 +16,8 @@ describe('Phase 1C opening balance server contract',()=>{
       "'/opening-balances/:fiscalYearId/approve'",
     ]) expect(source).toContain(route);
     expect(source).toContain('const base=[requireAuth,requireActiveCompany]');
-    for(const capability of ['opening_balance.view','opening_balance.manage','opening_balance.review','opening_balance.approve']) expect(source).toContain(`requireCapability('${capability}')`);
+    for(const capability of ['opening_balance.view','opening_balance.item.create','opening_balance.item.edit','opening_balance.item.delete','opening_balance.submit','opening_balance.review','opening_balance.approve']) expect(source).toContain(`requireCapability('${capability}')`);
+    expect(source).not.toContain("requireCapability('opening_balance.manage')");
   });
 
   it('enforces tenant ownership for fiscal year, review items and referenced entities',()=>{
