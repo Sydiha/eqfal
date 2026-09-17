@@ -15,6 +15,7 @@ type Period = { id:string; company_id:string; fiscal_year_id:string; period_star
 type FiscalYearOption = { id:string; company_id:string; name:string; start_date:string; end_date:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
 type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; opening_balances:number; periodic_adjustments:number; total:number };
 type BlockerCategory = Exclude<keyof Blockers,'total'>;
+type RequirementRow={documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string;vat_applicable?:string;vat_requires_resolution?:string;opening_balances_applicable?:string;opening_balance_approved?:string};
 const BLOCKER_CAPABILITIES:Record<BlockerCategory,string>={documents:'document.view',obligations:'obligation.view',bank_transactions:'bank.view',vat:'vat.view',ledger:'accounting.view',assets:'asset.view',opening_balances:'opening_balance.view',periodic_adjustments:'periodic_adjustment.view'};
 export class MonthlyCloseValidationError extends Error {}
 export class MonthlyCloseNotFoundError extends Error {}
@@ -65,7 +66,7 @@ export class MonthlyCloseService {
     return new Set(rows.map(row=>row.id));
   }
   private async blockers(companyId:string,fiscalYearId:string,start:string,end:string,client:PoolClient|Pool=this.db):Promise<Blockers>{
-    const {rows}=await client.query<{documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string}>(`SELECT
+    const {rows}=await client.query<RequirementRow>(`SELECT
       (SELECT COUNT(*) FROM documents WHERE company_id=$1 AND document_date BETWEEN $2 AND $3 AND status IN ('uploaded','needs_review','incomplete'))::text documents,
       (SELECT COUNT(*) FROM obligations WHERE company_id=$1 AND recognized_on BETWEEN $2 AND $3 AND NOT is_cancelled AND verification_status='unconfirmed')::text obligations,
       (SELECT COUNT(*) FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$4 AND status<>'approved')::text opening_balances,
@@ -85,10 +86,31 @@ export class MonthlyCloseService {
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
-      ))::text bank_transactions`,[companyId,start,end,fiscalYearId]);
-    const documents=Number(rows[0]!.documents),obligations=Number(rows[0]!.obligations),bank_transactions=Number(rows[0]!.bank_transactions),opening_balances=Number(rows[0]!.opening_balances),periodic_adjustments=Number(rows[0]!.periodic_adjustments);
-    const vatReadiness=await new VatService(this.db).readiness(companyId,start,end,client);
-    const vat=vatReadiness.ready?0:1;
+      ))::text bank_transactions,
+      COALESCE((SELECT CASE
+        WHEN p.vat_status='not_registered' THEN FALSE
+        WHEN p.vat_status='registered' THEN p.vat_registered_from IS NULL OR $3::date>=p.vat_registered_from
+        WHEN p.vat_status='deregistered' THEN p.vat_deregistered_from IS NULL OR $2::date<p.vat_deregistered_from
+        ELSE TRUE END
+        FROM company_accounting_profiles p WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
+        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text vat_applicable,
+      COALESCE((SELECT p.vat_status='needs_review'
+        FROM company_accounting_profiles p WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
+        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text vat_requires_resolution,
+      COALESCE((SELECT p.first_live_accounting_date BETWEEN fy.start_date AND fy.end_date
+        FROM company_accounting_profiles p JOIN fiscal_years fy ON fy.id=$4 AND fy.company_id=p.company_id
+        WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
+        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text opening_balances_applicable,
+      EXISTS(SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$4 AND status='approved')::text opening_balance_approved`,[companyId,start,end,fiscalYearId]);
+    const row=rows[0]!;
+    const documents=Number(row.documents),obligations=Number(row.obligations),bank_transactions=Number(row.bank_transactions),periodic_adjustments=Number(rows[0]!.periodic_adjustments);
+    const vatApplicable=row.vat_applicable===undefined?true:row.vat_applicable==='true';
+    const vatRequiresResolution=row.vat_requires_resolution===undefined?false:row.vat_requires_resolution==='true';
+    const openingBalancesApplicable=row.opening_balances_applicable===undefined?false:row.opening_balances_applicable==='true';
+    const openingBalanceApproved=row.opening_balance_approved==='true';
+    const openingBalanceRows=Number(row.opening_balances);
+    const opening_balances=row.opening_balances_applicable===undefined?openingBalanceRows:(openingBalancesApplicable?(openingBalanceApproved?0:Math.max(1,openingBalanceRows)):0);
+    const vat=vatApplicable?(vatRequiresResolution?1:(await new VatService(this.db).readiness(companyId,start,end,client)).ready?0:1):0;
     const incompleteDocuments=await this.incompleteMaterialDocuments(companyId,start,end,client);
     const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
     let unpostedSources=0;
