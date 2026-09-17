@@ -145,7 +145,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
   return <div key={companyKey}>
-    {page === 'home' && <Home capabilities={c} navigate={setPage} navigateToDiscovery={navigateToDiscovery} onUnauthorized={handleUnauthorized}/>}
+    {page === 'home' && <Home capabilities={c} navigate={setPage} navigateToDiscovery={navigateToDiscovery} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} onUnauthorized={handleUnauthorized}/>}
     {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canCreate={c.includes('fiscal_year.create')} canEdit={c.includes('fiscal_year.edit')} canClose={c.includes('fiscal_year.close')} onUnauthorized={handleUnauthorized}/>}
     {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canEdit={c.includes('document.edit')} canSubmit={c.includes('document.submit')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('counterparty.create')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
     {page === 'banks' && <BankingWorkspace

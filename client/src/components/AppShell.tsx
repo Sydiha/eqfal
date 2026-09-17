@@ -116,7 +116,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Divider my="lg" className="sidebar-divider" />
         <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
           <Stack gap={4}>{nav('home')}</Stack>
-          {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{nav('documents')}{nav('banks')}{nav('obligations')}</>)}
+          {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{capabilities.includes('document.view')&&nav('documents')}{capabilities.includes('bank.view')&&nav('banks')}{capabilities.includes('obligation.view')&&nav('obligations')}</>)}
           {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('annual_close.view')&&nav('annualClosing')}{capabilities.includes('opening_balance.view')&&nav('openingBalances')}{capabilities.includes('periodic_adjustment.view')&&nav('periodicAdjustments')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
           {navGroup(groupLabels.administration, <>{nav('partners')}{capabilities.includes('company_accounting_profile.view')&&nav('companyProfile')}</>)}
         </Stack>
