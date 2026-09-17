@@ -4,7 +4,7 @@ Status: Approved project guidance
 Reconciliation date: 2026-09-18
 
 Last reconciled against GitHub/main SHA:
-`116dc676772b20220e7b77704bafe9f1a0d3c243`
+`ff7fa41b544037a30b5cc00ac3869e22d400526b`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -210,9 +210,19 @@ Future permission-model expansion beyond this implemented scope requires a new R
 
 ## Phase 10 — Company Manager Workspace
 
-**Status: PARTIAL**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-Operational modules exist for purchases, sales, documents, banking, obligations, partners, assets, and close visibility. A coherent manager-facing workspace still requires completion/validation so a non-accountant can record operational reality without accounting mechanics.
+Read-only closure reconciliation against `GitHub/main` SHA `ff7fa41b544037a30b5cc00ac3869e22d400526b` confirmed that the approved Phase 10 manager-workspace scope is implemented.
+
+Implemented scope includes:
+- manager-facing operational navigation across purchases, sales, documents, banking, obligations, partners, assets, and Monthly Close visibility;
+- direct daily operational entry for sales, purchases, and expenses without requiring accounting mechanics;
+- capability-aware navigation and action visibility;
+- operational-entry actions exposed only when the required document/obligation capability set is present;
+- document upload retained as a distinct capability-governed action;
+- accounting review/approval mechanics remain separated from the manager's operational-entry experience.
+
+Phase 10 Closure Audit is **PASS** for the currently approved scope. Future expansion of the Company Manager Workspace requires a new Read-only Design Check.
 
 ## Phase 11 — Home Screen Alerts
 
