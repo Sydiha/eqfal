@@ -14,6 +14,16 @@ describe('Phase 2A.1 versioned fixed-asset depreciation policy core',()=>{
   expect(migration).toContain('fixed_asset_policy_binding_guard');
   expect(migration).toContain("status IN ('approved','superseded')");
  });
+ it('keeps legacy migration provenance explicit without fabricated human approval',()=>{
+  expect(migration).toContain('is_legacy_migrated BOOLEAN NOT NULL DEFAULT FALSE');
+  expect(migration).toContain("'draft',TRUE");
+  expect(migration).toContain('c.company_id,c.id,1,NULL');
+  expect(migration).not.toContain("DATE '1900-01-01'");
+  expect(migration).not.toContain('seed_user.id');
+  expect(migration).toContain('AND NOT is_legacy_migrated');
+  expect(router).toContain('Migrated legacy policy snapshots are immutable');
+  expect(router).toContain('Migrated legacy policy snapshots cannot be reviewed or approved');
+ });
  it('protects category policy fields from the legacy direct-edit path',()=>{
   expect(migration).toContain('guard_asset_category_policy_columns');
   expect(migration).toContain("current_setting('eqfal.asset_policy_sync',true)");
