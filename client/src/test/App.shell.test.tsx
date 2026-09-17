@@ -6,7 +6,7 @@ import i18n from '../i18n';
 
 describe('authenticated application shell', () => {
   beforeEach(async () => { await i18n.changeLanguage('en'); vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [{ id: 'co-1', name: 'Company One', name_ar: null }], activeCompanyId: 'co-1', capabilities: ['fiscal_year.view', 'document.view'] }), { status: 200 }))); });
-  it('navigates between the three frontend workspaces', async () => {
+  it('navigates among capability-visible frontend workspaces', async () => {
     render(<AuthProvider><App/></AuthProvider>);
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: 'Main navigation' });
@@ -15,7 +15,8 @@ describe('authenticated application shell', () => {
     expect(within(brand).getByText('EQFAL')).toBeInTheDocument();
     expect(brand.querySelector('.eqfal-mark svg')).toBeInTheDocument();
     expect(within(navigation).getByText('Operations')).toBeInTheDocument();
-    expect(within(navigation).getAllByText('Accounting')).toHaveLength(2);
+    expect(within(navigation).getByText('Accounting')).toBeInTheDocument();
+    expect(within(navigation).queryByRole('button', { name: 'Accounting' })).not.toBeInTheDocument();
     expect(within(navigation).getByText('Administration')).toBeInTheDocument();
     const fiscal = within(navigation).getByRole('button', { name: 'Fiscal Years' });
     const documents = within(navigation).getByRole('button', { name: 'Documents' });
