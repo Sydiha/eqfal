@@ -22,8 +22,8 @@ const post=(path:string,body:Record<string,unknown>)=>request(app).post(`/api/an
 describe('annual package router capabilities',()=>{
   beforeEach(()=>{mocks.capabilities=[];for(const mock of [mocks.create,mocks.snapshot,mocks.finalize,mocks.handoff])mock.mockReset().mockResolvedValue({});});
   it.each([
-    ['manage','',{},'annual_close.package.manage','create'],
-    ['manage','/snapshots',{version:1},'annual_close.package.manage','snapshot'],
+    ['create','',{},'annual_close.package.create','create'],
+    ['snapshot create','/snapshots',{version:1},'annual_close.package.snapshot.create','snapshot'],
     ['finalize','/finalize',{version:1},'annual_close.package.finalize','finalize'],
     ['handoff','/handoff',{version:1},'annual_close.package.handoff','handoff'],
   ])('enforces the backend %s capability independently',async(_label,path,body,capability,method)=>{expect((await post(path,body)).status).toBe(403);expect(mocks[method as keyof typeof mocks]).not.toHaveBeenCalled();mocks.capabilities=[capability];expect((await post(path,body)).status).not.toBe(403);expect(mocks[method as keyof typeof mocks]).toHaveBeenCalled();});
