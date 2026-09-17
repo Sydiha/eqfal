@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
+import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 
 type HomePage =
   | 'fiscalYears'
@@ -160,10 +161,11 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
   const canViewSalesPurchases = can('document.view') && can('obligation.view');
+  const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
   const dailyOperations = [
-    { key: 'add-sale', label: homeLabels.addSale, visible: can('document.upload'), open: startSalesEntry },
-    { key: 'add-purchase', label: homeLabels.addPurchase, visible: can('document.upload'), open: () => startPurchaseEntry('purchase') },
-    { key: 'add-expense', label: homeLabels.addExpense, visible: can('document.upload'), open: () => startPurchaseEntry('expense') },
+    { key: 'add-sale', label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
+    { key: 'add-purchase', label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
+    { key: 'add-expense', label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
     { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
     { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
     { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },

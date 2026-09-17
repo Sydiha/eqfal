@@ -33,7 +33,7 @@ describe('Home v2.1', () => {
 
   it('shows only authorized daily operations and opens their existing workflows', () => {
     vi.stubGlobal('fetch', vi.fn());
-    renderHome(['document.upload', 'document.view', 'obligation.view', 'bank.view']);
+    renderHome(['document.upload', 'document.view', 'document.edit', 'obligation.view', 'bank.view']);
 
     expect(screen.getByRole('heading', { name: 'Daily Operations' })).toBeInTheDocument();
     screen.getByRole('button', { name: 'Add sale' }).click();
@@ -49,6 +49,17 @@ describe('Home v2.1', () => {
     expect(navigate).toHaveBeenCalledWith('documents');
     expect(navigate).toHaveBeenCalledWith('sales');
     expect(navigate).toHaveBeenCalledWith('banks');
+  });
+
+
+  it('does not offer operational entry when any required capability is missing', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    renderHome(['document.upload', 'document.view', 'obligation.view']);
+
+    expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add purchase' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add expense' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload document' })).toBeInTheDocument();
   });
 
   it('hides daily operations when their required capabilities are absent', () => {
