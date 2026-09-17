@@ -6,7 +6,7 @@ import { MembershipService } from './membership.service';
 
 export const accessAdministrationRouter = Router();
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CAPABILITY = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
 const asyncRoute = (handler: (req: Request, res: Response) => Promise<void>): RequestHandler =>
   (req: Request, res: Response, next: NextFunction) => void handler(req, res).catch(next);
