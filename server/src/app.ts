@@ -25,6 +25,7 @@ import { periodicAdjustmentsRouter } from './modules/periodic-adjustments/period
 import { annualClosingRouter } from './modules/annual-closing/annual-closing.router';
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
 import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
+import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api', periodicAdjustmentsRouter);
 app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
 app.use('/api', accessAdministrationRouter);
+app.use('/api', homeAlertsRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
