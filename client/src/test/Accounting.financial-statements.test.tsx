@@ -15,7 +15,7 @@ describe('Accounting financial statements',()=>{
  it('submits P&L from/to boundaries and renders its scoped result',async()=>{
   const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url.startsWith('/api/financial-statements/')?profit:base(url))));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Profit or Loss'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/Sales/)).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('Accounting financial statements',()=>{
  it('submits financial position as-of date and clears it when changing statement tabs',async()=>{
   const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url.startsWith('/api/financial-statements/')?position:base(url))));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Financial Position'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/1000.*Cash/)).toBeInTheDocument();
@@ -37,7 +37,7 @@ describe('Accounting financial statements',()=>{
 
  it('shows the explicit unmapped blocker',async()=>{
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.startsWith('/api/financial-statements/')?new Response(JSON.stringify({code:'FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS'}),{status:409}):new Response(JSON.stringify(base(url)))));
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Financial Position'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/posted activity exists on unmapped accounts/)).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('Accounting financial statements',()=>{
  it('submits and renders the scoped changes-in-equity result and reconciliation',async()=>{
   const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url.startsWith('/api/financial-statements/')?equity:base(url))));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Changes in Equity'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/Owner equity/)).toBeInTheDocument();
@@ -60,7 +60,7 @@ describe('Accounting financial statements',()=>{
   const nextYear={id:'44444444-4444-4444-8444-444444444444',name:'2027',start_date:'2027-04-01',end_date:'2028-03-31'};
   const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url==='/api/fiscal-years'?{fiscalYears:[year,nextYear]}:url.startsWith('/api/financial-statements/')?equity:base(url))));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Changes in Equity'}));
   fireEvent.change(screen.getByRole('combobox'),{target:{value:nextYear.id}});
   expect(screen.getByLabelText('From accounting date')).toHaveValue('2027-04-01');
@@ -72,7 +72,7 @@ describe('Accounting financial statements',()=>{
  it('loads and renders the three cash-flow sections and reconciled totals',async()=>{
   const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url.startsWith('/api/financial-statements/')?cashFlow:base(url))));
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Cash Flows'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText('Operating activities')).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('Accounting financial statements',()=>{
 
  it('renders the cash-flow fail-closed readiness state',async()=>{
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.startsWith('/api/financial-statements/')?new Response(JSON.stringify({code:'CASH_FLOW_CLASSIFICATION_BLOCKED'}),{status:409}):new Response(JSON.stringify(base(url)))));
-  render(<Accounting canView canManageChart={false} canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Cash Flows'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/cash activity is unmapped or ambiguous/)).toBeInTheDocument();

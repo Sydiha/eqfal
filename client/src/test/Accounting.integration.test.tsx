@@ -41,7 +41,7 @@ describe('Accounting integration contracts',()=>{
    return new Response(JSON.stringify({sources:[]}));
   });
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal canEditJournal canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Journals'}));
   fireEvent.change(screen.getByLabelText('Accounting date'),{target:{value:'2026-08-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Round trip'}});
@@ -82,7 +82,7 @@ describe('Accounting integration contracts',()=>{
    return new Response(JSON.stringify(value));
   });
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart={false} canManageJournals canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal canEditJournal canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Journals'}));
   fireEvent.change(screen.getByLabelText('Accounting date'),{target:{value:'2026-08-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Created once'}});
@@ -107,7 +107,7 @@ describe('Accounting integration contracts',()=>{
    return new Response(JSON.stringify(emptyResponses(url)));
   });
   vi.stubGlobal('fetch',fetchMock);
-  render(<Accounting canView canManageChart canManageJournals={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  render(<Accounting canView canCreateChart canEditChart canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   let code=await screen.findByRole('textbox',{name:'Code'});
   let name=screen.getByRole('textbox',{name:'Name'});
   fireEvent.change(code,{target:{value:'1000'}});fireEvent.change(name,{target:{value:'Cash'}});

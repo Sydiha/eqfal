@@ -201,7 +201,7 @@ accountClassificationRouter.patch(
   '/accounts/:id/classification',
   requireSameOrigin,
   ...base,
-  requireCapability('accounting.chart.manage'),
+  requireCapability('accounting.chart.edit'),
   route(async(req,res)=>{
     try{
       const input=parseInput(req.body);

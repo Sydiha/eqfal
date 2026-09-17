@@ -32,7 +32,7 @@ describe('Phase 5A account statement classification',()=>{
 
   it('protects read/write capabilities and audits classification changes',()=>{
     expect(router).toContain("requireCapability('accounting.view')");
-    expect(router).toContain("requireCapability('accounting.chart.manage')");
+    expect(router).toContain("requireCapability('accounting.chart.edit')");
     expect(router).toContain('requireSameOrigin');
     expect(router).toContain("action:'account.classification.update'");
     expect(router).toContain('before_data:before');
