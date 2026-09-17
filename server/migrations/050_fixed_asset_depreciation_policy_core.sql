@@ -5,7 +5,7 @@ CREATE TABLE asset_category_depreciation_policies (
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   asset_category_id UUID NOT NULL,
   version_number INTEGER NOT NULL CHECK (version_number > 0),
-  effective_from DATE NOT NULL,
+  effective_from DATE,
   depreciation_method TEXT CHECK (depreciation_method IS NULL OR depreciation_method = 'straight_line'),
   useful_life_mode TEXT NOT NULL CHECK (useful_life_mode IN ('fixed','asset_specific','not_applicable')),
   useful_life_months INTEGER CHECK (useful_life_months IS NULL OR useful_life_months > 0),
@@ -15,11 +15,12 @@ CREATE TABLE asset_category_depreciation_policies (
   accumulated_depreciation_account_id UUID,
   depreciation_expense_account_id UUID,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','superseded')),
+  is_legacy_migrated BOOLEAN NOT NULL DEFAULT FALSE,
   reviewed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
   reviewed_at TIMESTAMPTZ,
   approved_by UUID REFERENCES users(id) ON DELETE RESTRICT,
   approved_at TIMESTAMPTZ,
-  created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_by UUID REFERENCES users(id) ON DELETE RESTRICT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(id,company_id),
@@ -38,7 +39,19 @@ CREATE TABLE asset_category_depreciation_policies (
     OR (useful_life_mode<>'not_applicable' AND depreciation_method='straight_line' AND residual_value_policy<>'not_applicable' AND depreciation_start_basis<>'not_applicable')
   ),
   CHECK ((reviewed_by IS NULL) = (reviewed_at IS NULL)),
-  CHECK ((approved_by IS NULL) = (approved_at IS NULL))
+  CHECK ((approved_by IS NULL) = (approved_at IS NULL)),
+  CHECK (
+    (is_legacy_migrated
+      AND status='draft'
+      AND effective_from IS NULL
+      AND reviewed_by IS NULL AND reviewed_at IS NULL
+      AND approved_by IS NULL AND approved_at IS NULL
+      AND created_by IS NULL)
+    OR
+    (NOT is_legacy_migrated
+      AND effective_from IS NOT NULL
+      AND created_by IS NOT NULL)
+  )
 );
 
 CREATE UNIQUE INDEX asset_category_one_approved_policy_uidx
@@ -55,16 +68,18 @@ ALTER TABLE fixed_assets
     REFERENCES asset_category_depreciation_policies(id,company_id)
     ON DELETE RESTRICT;
 
--- Create one legacy baseline policy per category so pre-existing assets can be
--- tied to an explicit historical policy without rewriting financial history.
+-- Preserve the accounting mappings that existed at migration time for already
+-- approved/disposed assets, but do not fabricate a historical effective date,
+-- reviewer, approver or creator. These rows are immutable migrated snapshots,
+-- not approved accounting policies and are never eligible for new approvals.
 INSERT INTO asset_category_depreciation_policies(
   company_id,asset_category_id,version_number,effective_from,depreciation_method,
   useful_life_mode,useful_life_months,residual_value_policy,depreciation_start_basis,
   asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,
-  status,reviewed_by,reviewed_at,approved_by,approved_at,created_by
+  status,is_legacy_migrated
 )
 SELECT
-  c.company_id,c.id,1,DATE '1900-01-01',
+  c.company_id,c.id,1,NULL,
   CASE WHEN c.depreciable THEN c.default_depreciation_method ELSE NULL END,
   CASE WHEN NOT c.depreciable THEN 'not_applicable'
        WHEN c.default_useful_life_months IS NULL THEN 'asset_specific'
@@ -73,27 +88,20 @@ SELECT
   CASE WHEN c.depreciable THEN 'asset_specific' ELSE 'not_applicable' END,
   CASE WHEN c.depreciable THEN 'explicit_date' ELSE 'not_applicable' END,
   c.asset_account_id,c.accumulated_depreciation_account_id,c.depreciation_expense_account_id,
-  'approved',
-  seed_user.id,NOW(),seed_user.id,NOW(),seed_user.id
+  'draft',TRUE
 FROM asset_categories c
-JOIN LATERAL (
-  SELECT u.id
-  FROM memberships m
-  JOIN users u ON u.id=m.user_id
-  WHERE m.company_id=c.company_id AND m.is_active
-  ORDER BY m.created_at,u.id
-  LIMIT 1
-) seed_user ON TRUE
 ON CONFLICT(company_id,asset_category_id,version_number) DO NOTHING;
 
--- Backfill historical linkage. The baseline policy is descriptive only for
--- existing approved/disposed assets and does not regenerate schedules.
+-- Link only historical assets to the migrated snapshot. This preserves their
+-- existing accounting mapping without implying that the snapshot was reviewed
+-- or approved historically and without regenerating any depreciation schedule.
 UPDATE fixed_assets a
 SET depreciation_policy_version_id=p.id
 FROM asset_category_depreciation_policies p
 WHERE p.company_id=a.company_id
   AND p.asset_category_id=a.asset_category_id
   AND p.version_number=1
+  AND p.is_legacy_migrated
   AND a.status IN ('active','fully_depreciated','disposed')
   AND a.depreciation_policy_version_id IS NULL;
 
@@ -138,6 +146,7 @@ BEGIN
     FROM asset_category_depreciation_policies
     WHERE company_id=NEW.company_id
       AND asset_category_id=NEW.asset_category_id
+      AND NOT is_legacy_migrated
       AND status IN ('approved','superseded')
       AND effective_from<=policy_date
     ORDER BY effective_from DESC,version_number DESC
