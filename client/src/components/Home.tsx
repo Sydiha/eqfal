@@ -54,7 +54,7 @@ const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u2
 
 export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
-  const canViewClose = capabilities.includes('fiscal_year.view');
+  const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
