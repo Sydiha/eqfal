@@ -20,6 +20,8 @@ export const documentRouter = Router();
 
 const VIEW_CAPABILITY = 'document.view';
 const UPLOAD_CAPABILITY = 'document.upload';
+const EDIT_CAPABILITY = 'document.edit';
+const SUBMIT_CAPABILITY = 'document.submit';
 const REVIEW_CAPABILITY = 'document.review';
 const APPROVE_CAPABILITY = 'document.approve';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -202,7 +204,7 @@ documentRouter.post(
   requireSameOrigin,
   requireAuth,
   requireActiveCompany,
-  requireCapability(UPLOAD_CAPABILITY),
+  requireCapability(SUBMIT_CAPABILITY),
   asyncRoute(async (req, res) => {
     const context = activeContext(req, res);
     if (!context) return;
@@ -235,7 +237,7 @@ documentRouter.patch(
   requireSameOrigin,
   requireAuth,
   requireActiveCompany,
-  requireCapability(UPLOAD_CAPABILITY),
+  requireCapability(EDIT_CAPABILITY),
   asyncRoute(async (req, res) => {
     const context = activeContext(req, res);
     if (!context) return;

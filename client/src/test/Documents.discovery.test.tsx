@@ -9,7 +9,7 @@ const documents = [
   { id:'d3', original_filename:'sale.pdf', mime_type:'application/pdf', size_bytes:1000, status:'uploaded', review_note:null, reviewed_at:null, created_at:'2026-04-01T00:00:00Z', document_type:'sale', counterparty_id:null, counterparty_name:null, relational_counterparty_name:null, document_date:null, reference_number:'SALE-3', total_amount:'30.00', intake_note:null },
 ];
 const counterparties=[{id:'c1',name:'Acme Trading',type:'supplier',is_active:true},{id:'c2',name:'المورد العربي',type:'supplier',is_active:true}];
-const renderDocuments=(items=documents)=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:items,counterparties}))));return render(<Documents canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>)};
+const renderDocuments=(items=documents)=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({documents:items,counterparties}))));return render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>)};
 const list=()=>screen.getByLabelText(i18n.language==='ar'?'قائمة المستندات':'Document list');
 
 describe('Documents operational discovery',()=>{
