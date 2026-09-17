@@ -28,7 +28,7 @@ describe('Phase 5D.1 cash-flow classification foundation',()=>{
 
   it('uses existing read and chart-management capabilities',()=>{
     expect(router).toContain("requireCapability('accounting.view')");
-    expect(router).toContain("requireCapability('accounting.chart.manage')");
+    expect(router).toContain("requireCapability('accounting.chart.edit')");
   });
 
   it('audits cash metadata atomically with before and after values',()=>{
