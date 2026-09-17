@@ -4,12 +4,13 @@ import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLi
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
 import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
+import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
 import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
 import '../shell-corrective.css';
 
-export type Page = 'home' | 'fiscalYears' | 'monthlyClose' | 'annualClosing' | 'vat' | 'documents' | 'banks' | 'partners' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'sales' | 'purchases' | 'assets' | 'companyProfile';
+export type Page = NavigationPage;
 
 type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
 
@@ -55,7 +56,6 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
 
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
   const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
-  const canViewSalesPurchases = capabilities.includes('document.view') && capabilities.includes('obligation.view');
   const groupLabels = i18n.language === 'ar'
     ? { operations: 'التشغيل', accounting: 'المحاسبة', administration: 'الإدارة' }
     : { operations: 'Operations', accounting: 'Accounting', administration: 'Administration' };
@@ -116,9 +116,9 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Divider my="lg" className="sidebar-divider" />
         <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
           <Stack gap={4}>{nav('home')}</Stack>
-          {navGroup(groupLabels.operations, <>{canViewSalesPurchases && <>{nav('sales')}{nav('purchases')}</>}{capabilities.includes('document.view')&&nav('documents')}{capabilities.includes('bank.view')&&nav('banks')}{capabilities.includes('obligation.view')&&nav('obligations')}</>)}
-          {navGroup(groupLabels.accounting, <>{nav('accounting')}{capabilities.includes('annual_close.view')&&nav('annualClosing')}{capabilities.includes('opening_balance.view')&&nav('openingBalances')}{capabilities.includes('periodic_adjustment.view')&&nav('periodicAdjustments')}{capabilities.includes('asset.view')&&nav('assets')}{nav('vat')}{nav('monthlyClose')}{nav('fiscalYears')}</>)}
-          {navGroup(groupLabels.administration, <>{nav('partners')}{capabilities.includes('company_accounting_profile.view')&&nav('companyProfile')}</>)}
+          {navGroup(groupLabels.operations, <>{canShowNavigationPage('sales', capabilities)&&nav('sales')}{canShowNavigationPage('purchases', capabilities)&&nav('purchases')}{canShowNavigationPage('documents', capabilities)&&nav('documents')}{canShowNavigationPage('banks', capabilities)&&nav('banks')}{canShowNavigationPage('obligations', capabilities)&&nav('obligations')}</>)}
+          {navGroup(groupLabels.accounting, <>{canShowNavigationPage('accounting', capabilities)&&nav('accounting')}{canShowNavigationPage('annualClosing', capabilities)&&nav('annualClosing')}{canShowNavigationPage('openingBalances', capabilities)&&nav('openingBalances')}{canShowNavigationPage('periodicAdjustments', capabilities)&&nav('periodicAdjustments')}{canShowNavigationPage('assets', capabilities)&&nav('assets')}{canShowNavigationPage('vat', capabilities)&&nav('vat')}{canShowNavigationPage('monthlyClose', capabilities)&&nav('monthlyClose')}{canShowNavigationPage('fiscalYears', capabilities)&&nav('fiscalYears')}</>)}
+          {navGroup(groupLabels.administration, <>{canShowNavigationPage('partners', capabilities)&&nav('partners')}{canShowNavigationPage('companyProfile', capabilities)&&nav('companyProfile')}</>)}
         </Stack>
       </MantineAppShell.Navbar>
 
