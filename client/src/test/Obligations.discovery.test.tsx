@@ -8,7 +8,7 @@ const settled={...base,id:'OB-SETTLED',due_on:'2025-12-31',verification_status:'
 const cancelled={...base,id:'OB-CANCELLED',due_on:'2025-12-30',is_cancelled:true,is_overdue:true};
 const data=(obligations:any[]= [base,partial,settled,cancelled])=>({obligations,eligible_documents:[],summary:{open_receivables:'100.00',open_payables:'75.00',unconfirmed_receivables:'100.00',unconfirmed_payables:'0.00',unconfirmed_count:2,partially_settled_count:1,overdue_count:1}});
 const parties={counterparties:[{id:'c1',name:'Acme العربية',type:'customer',is_active:false,version:1},{id:'c2',name:'Beta',type:'supplier',is_active:true,version:1}]};
-const mount=(body=data())=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(body))).mockResolvedValueOnce(new Response(JSON.stringify(parties))));return render(<Obligations canView canManage={false} canSettle={false} onUnauthorized={vi.fn()}/>)};
+const mount=(body=data())=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(body))).mockResolvedValueOnce(new Response(JSON.stringify(parties))));return render(<Obligations canView onUnauthorized={vi.fn()}/>)};
 const shown=(name:string)=>screen.queryAllByRole('cell',{name});
 beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();window.history.replaceState(null,'','/?page=obligations')});
 
