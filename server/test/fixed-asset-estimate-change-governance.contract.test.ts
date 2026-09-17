@@ -21,10 +21,15 @@ describe('Phase 2A.2 governed prospective asset estimate changes',()=>{
   expect(router).toContain("x.effective_from.slice(8,10)!=='01'");
   expect(router).toContain('assertAccountingDateWritable(companyId,input.effectiveFrom,c)');
   expect(router).toContain("status='posted' AND period_end>=$3");
-  expect(router).toContain("status='posted' AND period_end<$3");
   expect(router).toContain("DELETE FROM asset_depreciation_entries WHERE company_id=$1 AND asset_id=$2 AND status='pending' AND period_start>=$3");
   expect(router).toContain('buildProspectiveSchedule');
   expect(router).toContain('Residual value cannot exceed net book value at the effective date');
+ });
+ it('includes prior posted and pending depreciation in NBV while keeping pre-effective pending rows intact',()=>{
+  expect(router).toContain("status IN ('posted','pending') AND period_end<$3");
+  expect(router).toContain('const accumulated=cents(asset.opening_accumulated_depreciation)!+cents(priorDepreciation.total)!');
+  expect(router).toContain("status='pending' AND period_start>=$3");
+  expect(router).not.toContain("status='pending' AND period_start<$3");
  });
  it('requires explicit policy-exception reasoning when category policy is contradicted',()=>{
   expect(router).toContain("p.useful_life_mode==='fixed'");
