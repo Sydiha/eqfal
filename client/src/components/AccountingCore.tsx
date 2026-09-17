@@ -130,8 +130,10 @@ const readSourceFilters = (): SourceFilters => ({
 });
 interface Props {
   canView: boolean;
-  canManageChart: boolean;
-  canManageJournals: boolean;
+  canCreateChart: boolean;
+  canEditChart: boolean;
+  canCreateJournal: boolean;
+  canEditJournal: boolean;
   canPost: boolean;
   onUnauthorized: () => void;
 }
@@ -178,8 +180,10 @@ const emptyLine = (): Line => ({
 
 export function Accounting({
   canView,
-  canManageChart,
-  canManageJournals,
+  canCreateChart,
+  canEditChart,
+  canCreateJournal,
+  canEditJournal,
   canPost,
   onUnauthorized,
 }: Props) {
@@ -638,7 +642,7 @@ export function Accounting({
       {!loading && tab === "accounts" && (
         <>
           <h2>{t("accounting.accounts")}</h2>
-          {canManageChart && (
+          {canCreateChart && (
             <form className="form-grid compact-form" onSubmit={createAccount}>
               <label>
                 {t("accounting.code")}
@@ -699,7 +703,7 @@ export function Accounting({
                     <td>{a.name}</td>
                     <td>{t(`accounting.types.${a.account_type}`)}</td>
                     <td>
-                      {canManageChart ? (
+                      {canEditChart ? (
                         <button
                           disabled={saving}
                           onClick={() => void toggleAccount(a)}
@@ -850,7 +854,7 @@ export function Accounting({
                       <td>{source.amount}</td>
                       <td>{source.reference ?? "—"}</td>
                       <td>
-                        {canManageJournals && (
+                        {canCreateJournal && (
                           <button
                             className="primary"
                             disabled={saving}
@@ -871,7 +875,7 @@ export function Accounting({
       {!loading && tab === "journals" && (
         <>
           <h2>{t("accounting.journals")}</h2>
-          {canManageJournals && (
+          {canCreateJournal && (
             <form className="form-grid compact-form" onSubmit={createJournal}>
               <label>
                 {t("accounting.fiscalYear")}
@@ -1024,7 +1028,7 @@ export function Accounting({
                 <div className="journal-line" key={i}>
                   <select
                     value={l.account_id}
-                    disabled={selected.status === "posted"}
+                    disabled={selected.status === "posted" || !canEditJournal}
                     onChange={(e) =>
                       setLines((v) =>
                         v.map((x, n) =>
@@ -1046,7 +1050,7 @@ export function Accounting({
                     min="0"
                     step="0.01"
                     value={l.debit}
-                    disabled={selected.status === "posted"}
+                    disabled={selected.status === "posted" || !canEditJournal}
                     onChange={(e) =>
                       setLines((v) =>
                         v.map((x, n) =>
@@ -1061,7 +1065,7 @@ export function Accounting({
                     min="0"
                     step="0.01"
                     value={l.credit}
-                    disabled={selected.status === "posted"}
+                    disabled={selected.status === "posted" || !canEditJournal}
                     onChange={(e) =>
                       setLines((v) =>
                         v.map((x, n) =>
@@ -1090,7 +1094,7 @@ export function Accounting({
                     : "accounting.unbalanced",
                 )}
               </p>
-              {selected.status === "draft" && canManageJournals && (
+              {selected.status === "draft" && canEditJournal && (
                 <>
                   <button onClick={() => setLines((v) => [...v, emptyLine()])}>
                     {t("accounting.addLine")}
