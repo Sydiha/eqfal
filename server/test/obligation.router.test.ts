@@ -7,10 +7,25 @@ const mod=await import('../src/modules/obligations/obligation.router');const app
 const ctx=(caps:string[])=>mocks.context={user:{id:USER},activeCompanyId:COMPANY,capabilities:caps};
 function poolFor(handler:(sql:string,args:unknown[])=>any){let gate=Promise.resolve();return{query:vi.fn((s:string,a:unknown[]=[])=>handler(s.replace(/\s+/g,' '),a)),connect:vi.fn(async()=>{const prior=gate;let release!:()=>void;gate=new Promise(r=>release=r);await prior;return{query:async(s:string,a:unknown[]=[])=>{const r=await handler(s.replace(/\s+/g,' '),a);if(s==='COMMIT'||s==='ROLLBACK')release();return r},release:vi.fn()}})}};
 beforeEach(()=>{mocks.context=null;mocks.audit.mockReset();mocks.pool=null});
-describe('Phase 4B authorization',()=>{
+describe('Wave A / A2 authorization',()=>{
+ const valid={direction:'receivable',counterparty_id:O,document_id:null,original_amount:'10.00',recognized_on:'2026-01-01',due_on:null,verification_status:'unconfirmed',source_type:'manual',source_note:null};
  it('requires view on both read endpoints',async()=>{ctx([]);expect((await request(app).get('/api/obligations')).status).toBe(403);expect((await request(app).get('/api/counterparties')).status).toBe(403)});
- it('requires manage for counterparty and obligation writes',async()=>{ctx(['obligation.view']);expect((await request(app).post('/api/counterparties').send({name:'A',type:'customer'})).status).toBe(403);expect((await request(app).post('/api/obligations').send({})).status).toBe(403)});
- it('requires settle for settlement create and removal',async()=>{ctx(['obligation.manage']);expect((await request(app).post(`/api/obligations/${O}/settlements`).send({})).status).toBe(403);expect((await request(app).delete(`/api/obligations/${O}/settlements/${BANK}`).send({reason:'x'})).status).toBe(403)});
+ it('does not accept legacy broad capabilities for corrected actions',async()=>{ctx(['obligation.manage','obligation.settle']);expect((await request(app).post('/api/counterparties').send({name:'A',type:'customer'})).status).toBe(403);expect((await request(app).post('/api/obligations').send(valid)).status).toBe(403);expect((await request(app).post(`/api/obligations/${O}/settlements`).send({})).status).toBe(403)});
+ it.each([
+  ['counterparty.create','post','/api/counterparties',{name:'A',type:'customer'}],
+  ['obligation.create','post','/api/obligations',valid],
+  ['obligation.settlement.create','post',`/api/obligations/${O}/settlements`,{}],
+  ['obligation.settlement.remove','delete',`/api/obligations/${O}/settlements/${BANK}`,{reason:'x'}]
+ ] as const)('isolates %s',async(capability,method,url,body)=>{ctx([]);expect((await request(app)[method](url).send(body)).status).toBe(403);ctx([capability]);expect((await request(app)[method](url).send(body)).status).not.toBe(403)});
+ it.each([
+  ['counterparty.edit','patch',`/api/counterparties/${O}`,{name:'A',version:1}],
+  ['counterparty.disable','patch',`/api/counterparties/${O}`,{is_active:false,version:1}],
+  ['obligation.edit','patch',`/api/obligations/${O}`,{source_note:'edit',version:1}],
+  ['obligation.confirm','patch',`/api/obligations/${O}`,{verification_status:'confirmed',version:1}],
+  ['obligation.cancel','patch',`/api/obligations/${O}`,{is_cancelled:true,reason:'x',version:1}]
+ ] as const)('positively and negatively isolates %s',async(capability,method,url,body)=>{ctx([]);expect((await request(app)[method](url).send(body)).status).toBe(403);ctx([capability]);expect((await request(app)[method](url).send(body)).status).not.toBe(403)});
+ it('requires every capability represented by a multi-action obligation patch',async()=>{const body={source_note:'edit',verification_status:'confirmed',is_cancelled:true,reason:'x',version:1};for(const missing of ['obligation.edit','obligation.confirm','obligation.cancel']){ctx(['obligation.edit','obligation.confirm','obligation.cancel'].filter(x=>x!==missing));expect((await request(app).patch(`/api/obligations/${O}`).send(body)).status).toBe(403)}ctx(['obligation.edit','obligation.confirm','obligation.cancel']);expect((await request(app).patch(`/api/obligations/${O}`).send(body)).status).not.toBe(403)});
+ it('requires edit plus disable for a combined counterparty patch and edit for reactivation',async()=>{const body={name:'A',is_active:false,version:1};ctx(['counterparty.edit']);expect((await request(app).patch(`/api/counterparties/${O}`).send(body)).status).toBe(403);ctx(['counterparty.disable']);expect((await request(app).patch(`/api/counterparties/${O}`).send(body)).status).toBe(403);ctx(['counterparty.edit','counterparty.disable']);expect((await request(app).patch(`/api/counterparties/${O}`).send(body)).status).not.toBe(403);ctx(['counterparty.disable']);expect((await request(app).patch(`/api/counterparties/${O}`).send({is_active:true,version:1})).status).toBe(403)});
 });
 describe('Phase 4B completion behavior',()=>{
  it('rejects document-backed amount drift before mutation',async()=>{const queries:string[]=[];mocks.pool=poolFor((sql)=>{queries.push(sql);if(['BEGIN','ROLLBACK','COMMIT'].includes(sql))return{rows:[],rowCount:0};if(sql.includes('SELECT *,original_amount'))return{rows:[{id:O,company_id:COMPANY,source_type:'document',document_id:BANK,original_amount:'100.00',verification_status:'confirmed',version:1}],rowCount:1};throw Error(sql)});const service=new mod.ObligationService(mocks.pool);await expect(service.updateObligation(COMPANY,USER,O,{version:1,original_amount:'99.00',reason:'x'})).rejects.toThrow();expect(queries.some(q=>q.startsWith('UPDATE obligations'))).toBe(false)});
