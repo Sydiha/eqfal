@@ -12,7 +12,7 @@ describe('Documents', () => {
   const counterparties = [{ id: 'cp-1', name: 'Relational Supplier', is_active: true }, { id: 'cp-inactive', name: 'Inactive Supplier', is_active: false }];
   const intakeDocument = { id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'uploaded', created_at: '2026-08-15T00:00:00Z', review_note: null, reviewed_at: null, document_type: 'purchase', counterparty_id: 'cp-1', counterparty_name: 'Legacy Supplier', relational_counterparty_name: 'Relational Supplier', document_date: '2026-08-14', reference_number: 'INV-7', total_amount: '42.50', intake_note: 'Original note' };
   it('renders nothing without document capabilities', () => {
-    const { container } = render(<Documents canView={false} canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    const { container } = render(<Documents canEdit={false} canSubmit={false} canView={false} canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -21,7 +21,7 @@ describe('Documents', () => {
       documents: [{ id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'approved', review_note: 'Looks good', reviewed_at: '2026-08-15T12:00:00Z', created_at: '2026-08-15T00:00:00Z' }],
     }), { status: 200 })));
 
-    render(<Documents canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(await screen.findAllByText('invoice.pdf')).toHaveLength(2);
     expect(screen.getByText('Looks good')).toBeInTheDocument();
     expect(screen.getByText('Review note')).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe('Documents', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     await screen.findByText('No documents uploaded yet.');
     fireEvent.click(screen.getByRole('button', { name: 'Upload document' }));
 
@@ -57,20 +57,32 @@ describe('Documents', () => {
       documents: [{ id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'needs_review', created_at: '2026-08-15T00:00:00Z' }],
     }), { status: 200 })));
 
-    render(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
 
     expect(await screen.findByRole('button', { name: 'Mark incomplete' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 
-  it('shows Submit for review only to uploaders for uploaded documents', async () => {
+  it('gates upload, intake edit, and submit controls independently', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       documents: [{ id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'uploaded', created_at: '2026-08-15T00:00:00Z' }],
     }), { status: 200 })));
 
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    const view = render(<Documents canEdit={false} canSubmit={false} canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Upload document' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument();
+
+    view.rerender(<Documents canEdit canSubmit={false} canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Save Intake' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument();
+
+    view.rerender(<Documents canEdit={false} canSubmit canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(await screen.findByRole('button', { name: 'Submit for review' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -83,7 +95,7 @@ describe('Documents', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ document: reviewDocument }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [reviewDocument] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<Documents canView canUpload={false} canReview={false} canApprove onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload={false} canReview={false} canApprove onUnauthorized={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
     fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: note } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
@@ -95,21 +107,21 @@ describe('Documents', () => {
     const reviewDocument = { ...intakeDocument, status: 'needs_review' };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [reviewDocument] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload={false} canReview canApprove={false} onUnauthorized={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: action }));
     fireEvent.submit(screen.getByRole('button', { name: 'Confirm' }).closest('form')!);
     expect(await screen.findByRole('alert')).toHaveTextContent('A reason is required.');
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it('shows stored intake and editable controls only to uploaders while uploaded', async () => {
+  it('shows stored intake and editable controls only to editors while uploaded', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [intakeDocument], counterparties }), { status: 200 })));
     const onUnauthorized = vi.fn();
-    const { rerender } = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={onUnauthorized} />);
+    const { rerender } = render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(await screen.findByRole('button', { name: 'Save Intake' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('Relational Supplier')).toBeInTheDocument();
     expect(screen.getByText('INV-7')).toBeInTheDocument();
-    rerender(<Documents canView canUpload={false} canReview canApprove={false} onUnauthorized={onUnauthorized} />);
+    rerender(<Documents canEdit={false} canSubmit canView canUpload={false} canReview canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
     expect(screen.getAllByText('Relational Supplier').length).toBeGreaterThan(0);
   });
@@ -119,7 +131,7 @@ describe('Documents', () => {
       documents: [{ ...intakeDocument, status }],
     }), { status: 200 })));
 
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
 
     expect(await screen.findAllByText('invoice.pdf')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
@@ -133,7 +145,7 @@ describe('Documents', () => {
     await i18n.changeLanguage(language);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [intakeDocument], counterparties }), { status: 200 })));
 
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
 
     expect(await screen.findByLabelText(labels[0])).toBeInTheDocument();
     for (const label of labels.slice(1, 6)) expect(screen.getByLabelText(label)).toBeInTheDocument();
@@ -145,10 +157,10 @@ describe('Documents', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [intakeDocument], counterparties }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [{ ...intakeDocument, id: 'doc-2', counterparty_id: 'cp-2', counterparty_name: 'Legacy B', relational_counterparty_name: 'Supplier B' }], counterparties: [{ id: 'cp-2', name: 'Supplier B', is_active: true }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    const first = render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    const first = render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(await screen.findByDisplayValue('Relational Supplier')).toBeInTheDocument();
     first.unmount();
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect(await screen.findByDisplayValue('Supplier B')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('Relational Supplier')).not.toBeInTheDocument();
   });
@@ -159,7 +171,7 @@ describe('Documents', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ document: intakeDocument }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [intakeDocument], counterparties }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     fireEvent.change(await screen.findByLabelText('Counterparty / Supplier / Entity name'), { target: { value: 'cp-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Intake' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
@@ -171,7 +183,7 @@ describe('Documents', () => {
   it('displays an inactive historical link but does not offer other inactive counterparties', async () => {
     const historical = { ...intakeDocument, counterparty_id: 'cp-inactive', relational_counterparty_name: 'Inactive Supplier' };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [historical], counterparties: [...counterparties, { id: 'cp-other-inactive', name: 'Other Inactive', is_active: false }] }), { status: 200 })));
-    render(<Documents canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     const selector = await screen.findByLabelText('Counterparty / Supplier / Entity name');
     expect(selector).toHaveDisplayValue('Inactive Supplier');
     expect(screen.getByRole('option', { name: 'Inactive Supplier' })).toBeDisabled();
@@ -181,7 +193,7 @@ describe('Documents', () => {
   it('uses legacy counterparty text only when no relational name exists', async () => {
     const legacy = { ...intakeDocument, status: 'approved', counterparty_id: null, relational_counterparty_name: null, counterparty_name: 'Legacy Supplier' };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [legacy], counterparties }), { status: 200 })));
-    render(<Documents canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+    render(<Documents canEdit canSubmit canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect((await screen.findAllByText('Legacy Supplier')).length).toBeGreaterThan(0);
   });
 });

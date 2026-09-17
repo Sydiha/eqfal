@@ -182,16 +182,37 @@ describe('Document API security boundary', () => {
     expect(mocks.storageGet).toHaveBeenCalledWith('co-a/file-1');
   });
 
-  it('allows document.upload to submit an uploaded document for review', async () => {
-    setContext(['document.upload']);
+  it('allows document.submit to submit an uploaded document for review', async () => {
+    setContext(['document.submit']);
     mocks.submitReview.mockResolvedValue({ ...document, status: 'needs_review' });
     const res = await request(app).post('/api/documents/doc-1/submit-review').send();
     expect(res.status).toBe(200);
     expect(mocks.submitReview).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1' });
   });
 
-  it('allows an uploader to edit intake using only the active company', async () => {
-    setContext(['document.upload']); mocks.updateIntake.mockResolvedValue({ ...document, document_type: 'purchase' });
+  it('keeps upload, intake edit, and submit authorization independent', async () => {
+    mocks.upload.mockResolvedValue(document);
+    mocks.updateIntake.mockResolvedValue(document);
+    mocks.submitReview.mockResolvedValue({ ...document, status: 'needs_review' });
+
+    setContext(['document.upload']);
+    expect((await uploadRequest()).status).toBe(201);
+    expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(403);
+    expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(403);
+
+    setContext(['document.edit']);
+    expect((await uploadRequest()).status).toBe(403);
+    expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(200);
+    expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(403);
+
+    setContext(['document.submit']);
+    expect((await uploadRequest()).status).toBe(403);
+    expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(403);
+    expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(200);
+  });
+
+  it('allows a document editor to edit intake using only the active company', async () => {
+    setContext(['document.edit']); mocks.updateIntake.mockResolvedValue({ ...document, document_type: 'purchase' });
     const res = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', company_id: 'co-other' });
     expect(res.status).toBe(400);
     const valid = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 });
@@ -201,7 +222,7 @@ describe('Document API security boundary', () => {
 
   it('enforces intake capability, same origin, validation, 404, and conflict', async () => {
     setContext([]); expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(403);
-    setContext(['document.upload']);
+    setContext(['document.edit']);
     expect((await request(app).patch('/api/documents/doc-1/intake').set('Origin', 'https://evil.example').send({ intake_note: null })).status).toBe(403);
     for (const body of [{ document_type: 'invoice' }, { document_date: '2026-02-30' }, { total_amount: 0 }, { total_amount: -1 }, { counterparty_name: 'x'.repeat(201) }, { reference_number: 'x'.repeat(101) }, { intake_note: 'x'.repeat(501) }]) {
       expect((await request(app).patch('/api/documents/doc-1/intake').send(body)).status).toBe(400);
@@ -212,10 +233,10 @@ describe('Document API security boundary', () => {
     expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(409);
   });
 
-  it('requires document.upload and same origin to submit for review', async () => {
+  it('requires document.submit and same origin to submit for review', async () => {
     setContext([]);
     expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(403);
-    setContext(['document.upload']);
+    setContext(['document.submit']);
     expect((await request(app).post('/api/documents/doc-1/submit-review').set('Origin', 'https://evil.example')).status).toBe(403);
     expect(mocks.submitReview).not.toHaveBeenCalled();
   });
@@ -227,6 +248,7 @@ describe('Document API security boundary', () => {
     mocks.review.mockResolvedValue({ ...document, status: 'approved' });
     expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'approved' })).status).toBe(200);
     expect(mocks.review).toHaveBeenCalledWith(expect.objectContaining({ decision: 'approved', note: null }));
+    expect((await request(app).post('/api/documents/doc-1/review').send({ decision: 'incomplete', note: 'Missing page' })).status).toBe(403);
   });
 
   it('allows document.review to mark needs-review documents incomplete or rejected', async () => {
@@ -245,7 +267,7 @@ describe('Document API security boundary', () => {
   });
 
   it('returns conflict for an invalid transition and safe 404 across companies', async () => {
-    setContext(['document.upload']);
+    setContext(['document.submit']);
     mocks.submitReview.mockRejectedValueOnce(new DocumentReviewConflictError());
     expect((await request(app).post('/api/documents/doc-1/submit-review')).status).toBe(409);
     mocks.submitReview.mockRejectedValueOnce(new DocumentNotFoundError());
