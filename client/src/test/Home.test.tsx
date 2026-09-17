@@ -60,10 +60,10 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('button', { name: 'Open obligations' })).not.toBeInTheDocument();
   });
 
-  it('does not load monthly close data without fiscal-year access', () => {
+  it('does not load monthly close data without monthly-close access', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ alerts: [] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    renderHome(['document.view']);
+    renderHome(['fiscal_year.view', 'document.view']);
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/monthly-close-periods', expect.anything());
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('Home v2.1', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderHome([
-      'fiscal_year.view',
+      'monthly_close.view',
       'document.view',
       'obligation.view',
       'bank.view',
@@ -138,7 +138,7 @@ describe('Home v2.1', () => {
         ],
       }), { status: 200 }),
     ));
-    renderHome(['fiscal_year.view']);
+    renderHome(['monthly_close.view']);
 
     expect(await screen.findByRole('heading', { name: 'No blockers' })).toBeInTheDocument();
     expect(screen.queryByText('Ready to close')).not.toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('Home v2.1', () => {
 
   it('shows an error state instead of treating a failed API request as zero blockers', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
-    renderHome(['fiscal_year.view']);
+    renderHome(['monthly_close.view']);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load or update monthly close.');
     expect(screen.queryByText('Blockers: 0')).not.toBeInTheDocument();
