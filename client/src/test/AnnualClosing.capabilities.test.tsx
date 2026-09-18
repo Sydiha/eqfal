@@ -16,6 +16,7 @@ const mockAnnualClosingFetch=(packageValue:unknown)=>vi.spyOn(globalThis,'fetch'
   if(url==='/api/annual-closing/fy-1/package') return new Response(JSON.stringify({package:packageValue,live:packageValue?{manifest:[],source_fingerprint:'x'}:null,drift:false}),{status:200});
   if(url==='/api/annual-closing/fy-1') return new Response(JSON.stringify(readiness),{status:200});
   throw new Error(`Unexpected fetch: ${url}`);
+
 });
 
 describe('Annual Close Package granular capabilities',()=>{
@@ -34,4 +35,20 @@ describe('Annual Close Package granular capabilities',()=>{
     expect(await screen.findByRole('button',{name:'Create preview snapshot'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Finalize package'})).not.toBeInTheDocument();
   });
+
+  it('gates professional review independently by lifecycle and capability',async()=>{
+    mockAnnualClosingFetch({id:'p',status:'handed_off',version:3,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_at:null,review_note:null,approved_at:null,approval_note:null,snapshots:[]});
+    render(<AnnualClosing canView canViewPackage canReviewPackage canApprovePackage={false} onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByRole('button',{name:'Record professional review'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Record professional approval'})).not.toBeInTheDocument();
+  });
+
+  it('gates professional approval independently by lifecycle and capability',async()=>{
+    mockAnnualClosingFetch({id:'p',status:'reviewed',version:4,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_by_user_id:'reviewer',reviewed_at:'2026-01-03',review_note:'Checked',approved_at:null,approval_note:null,snapshots:[]});
+    render(<AnnualClosing canView canViewPackage canReviewPackage={false} canApprovePackage onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByRole('button',{name:'Record professional approval'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Record professional review'})).not.toBeInTheDocument();
+    expect(screen.getByText(/Professionally reviewed by reviewer/)).toBeInTheDocument();
+  });
+
 });

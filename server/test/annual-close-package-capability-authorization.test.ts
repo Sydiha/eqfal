@@ -21,5 +21,7 @@ describe('Annual Close Package action authorization',()=>{
   it('retains finalize and handoff as distinct actions',()=>{
     expect(routeCapability("post('/annual-closing/:fiscalYearId/package/finalize'")).toContain("requireCapability('annual_close.package.finalize')");
     expect(routeCapability("post('/annual-closing/:fiscalYearId/package/handoff'")).toContain("requireCapability('annual_close.package.handoff')");
+    expect(routeCapability("post('/annual-closing/:fiscalYearId/package/review'")).toContain("requireCapability('annual_close.package.review')");
+    expect(routeCapability("post('/annual-closing/:fiscalYearId/package/approve'")).toContain("requireCapability('annual_close.package.approve')");
   });
 });
