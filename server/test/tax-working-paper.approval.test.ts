@@ -12,7 +12,7 @@ const USER='33333333-3333-4333-8333-333333333333';
 const PROFILE='44444444-4444-4444-8444-444444444444';
 
 const result=(rows:unknown[]=[])=>({rows,rowCount:rows.length});
-const reviewed=()=>({id:'55555555-5555-4555-8555-555555555555',company_id:COMPANY,fiscal_year_id:YEAR,accounting_profile_id:null,tax_path:'needs_review',workflow_status:'reviewed',professional_review_required:false,version:3});
+const reviewed=()=>({id:'55555555-5555-4555-8555-555555555555',company_id:COMPANY,fiscal_year_id:YEAR,accounting_profile_id:null,tax_path:'needs_review',workflow_status:'reviewed',professional_review_required:false,starting_financial_base:'0.00',source_fingerprint:'59c5af6637354ab48051f0558c392cdc8088ec947ff5f5c800bc336592f839eb',version:3});
 
 function poolFor(profile:{id:string;tax_treatment:string}|null){
   const queries:{sql:string;args:unknown[]}[]=[];
@@ -22,6 +22,7 @@ function poolFor(profile:{id:string;tax_treatment:string}|null){
     if(sql.includes('FROM tax_working_papers'))return result([reviewed()]);
     if(sql.includes('FROM tax_working_paper_adjustments'))return result();
     if(sql.includes('FROM fiscal_years'))return result([{start_date:'2026-01-01',end_date:'2026-12-31'}]);
+    if(sql.includes('FROM journal_lines'))return result();
     if(sql.includes('FROM company_accounting_profiles'))return result(profile?[profile]:[]);
     if(sql.startsWith('UPDATE tax_working_papers'))return result([{...reviewed(),accounting_profile_id:args[6],tax_path:args[7],workflow_status:'approved',approved_by_user_id:USER,version:4}]);
     throw new Error(`Unexpected SQL: ${sql}`);
