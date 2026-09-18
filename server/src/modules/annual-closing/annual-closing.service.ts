@@ -38,6 +38,24 @@ export function taxReadiness(taxPath:string, profileId:string|null, workpaper:{a
   return {ready:status==='ready',blocker_count:0,status,summary:{calculation_performed:false,workpaper_data_available:Boolean(workpaper),tax_path:taxPath,workpaper_status:workpaper?.workflow_status??'not_started',unresolved_professional_items:workpaper?.unresolved??0,blockers:blockers.join(',')}};
 }
 
+type WhtProfile={effective_from:string;effective_to:string|null;wht_profile:string;has_non_resident_dealings:string};
+export function whtReadiness(start:string,end:string,profiles:WhtProfile[],reviews:{workflow_status:string;professional_review_required:boolean}[]):AnnualClosingDomain{
+  const risky=profiles.some(p=>['potentially_applicable','needs_review'].includes(p.wht_profile)||['yes','unknown'].includes(p.has_non_resident_dealings));
+  const safe=profiles.filter(p=>p.wht_profile==='not_currently_applicable'&&p.has_non_resident_dealings==='no').sort((a,b)=>a.effective_from.localeCompare(b.effective_from));
+  let coveredThrough=start;
+  for(const profile of safe){if(profile.effective_from>coveredThrough)break;const after=new Date(`${profile.effective_to??end}T00:00:00Z`);after.setUTCDate(after.getUTCDate()+1);const next=after.toISOString().slice(0,10);if(next>coveredThrough)coveredThrough=next;}
+  const endAfter=new Date(`${end}T00:00:00Z`);endAfter.setUTCDate(endAfter.getUTCDate()+1);
+  const fullySafe=!risky&&coveredThrough>=endAfter.toISOString().slice(0,10);
+  const unresolved=reviews.filter(r=>r.workflow_status!=='reviewed'||r.professional_review_required).length;
+  const blockers:string[]=[];let status:ReadinessState;
+  if(fullySafe&&!reviews.length)status='not_applicable';
+  else if(!profiles.length){status='needs_review';blockers.push('approved_profile_required');}
+  else if(unresolved){status='needs_review';blockers.push('wht_review_unresolved');}
+  else if((risky||!fullySafe)&&!reviews.length){status='not_started';blockers.push('wht_review_not_started');}
+  else status='ready';
+  return {ready:status==='ready'||status==='not_applicable',blocker_count:blockers.length?1:0,status,summary:{calculation_performed:false,profile_versions_evaluated:profiles.length,review_count:reviews.length,unresolved_reviews:unresolved,blockers:blockers.join(',')}};
+}
+
 export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<string, AnnualClosingDomain>): AnnualClosingResponse {
   const blockerCount = Object.values(domains).reduce((total, item) => total + item.blocker_count, 0);
   const financialBlockers = ['monthly_close', 'ledger', 'documents', 'assets', 'adjustments', 'opening_balances']
@@ -46,15 +64,15 @@ export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<st
     fiscal_year: 'fiscal-years', trial_balance: 'accounting', general_ledger: 'accounting', financial_statements_readiness: 'annual-closing',
     vat: 'vat', bank_reconciliation: 'banking', receivables_payables: 'obligations', document_exceptions: 'documents',
     partners_ownership: 'partners', fixed_assets_depreciation: 'fixed-assets', periodic_adjustments: 'periodic-adjustments',
-    opening_balances: 'opening-balances', zakat_readiness: 'annual-closing',
+    opening_balances: 'opening-balances', zakat_readiness: 'annual-closing', wht_readiness:'wht-reviews',
   };
   const manifestDomain: Record<string, string | undefined> = {
     trial_balance: 'ledger', general_ledger: 'ledger', financial_statements_readiness: 'ledger', vat: 'vat',
     bank_reconciliation: 'banking', receivables_payables: 'receivables_payables', document_exceptions: 'documents',
     partners_ownership: 'partners', fixed_assets_depreciation: 'assets', periodic_adjustments: 'adjustments',
-    opening_balances: 'opening_balances', zakat_readiness: 'zakat',
+    opening_balances: 'opening_balances', zakat_readiness: 'zakat', wht_readiness:'wht',
   };
-  const package_manifest = Object.keys(manifestSource).map(section => {
+  const package_manifest = Object.keys(manifestSource).filter(section=>section!=='wht_readiness'||Boolean(domains.wht)).map(section => {
     const item = manifestDomain[section] ? domains[manifestDomain[section]!] : undefined;
     const status = section === 'fiscal_year' ? 'ready' as const : section === 'financial_statements_readiness' ? (financialBlockers ? 'blocked' as const : 'ready' as const) : item!.status;
     return { section, status, ...(item ? { blocker_count: section === 'financial_statements_readiness' ? financialBlockers : item.blocker_count } : {}), source: manifestSource[section]! };
@@ -124,6 +142,8 @@ export class AnnualClosingService {
       (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved')::text opening_balances`, [companyId, start, end, fiscalYearId])).rows[0]!;
 
     const profile=(await this.db.query<{id:string;tax_treatment:string}>(`SELECT id,tax_treatment FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>=$3) AND (tax_effective_from IS NULL OR tax_effective_from<=$2) ORDER BY effective_from DESC,version_no DESC LIMIT 1`,[companyId,start,end])).rows[0];
+    const whtProfiles=(await this.db.query<WhtProfile>(`SELECT effective_from::text,effective_to::text,wht_profile,has_non_resident_dealings FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$2) ORDER BY effective_from,version_no`,[companyId,start,end])).rows;
+    const whtReviews=(await this.db.query<{workflow_status:string;professional_review_required:boolean}>(`SELECT workflow_status,professional_review_required FROM wht_reviews WHERE company_id=$1 AND fiscal_year_id=$2`,[companyId,fiscalYearId])).rows;
     const workpaper=(await this.db.query<{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:string}>(`SELECT w.accounting_profile_id,w.tax_path,w.workflow_status,w.professional_review_required,COUNT(a.id) FILTER (WHERE a.professional_review_required)::text unresolved FROM tax_working_papers w LEFT JOIN tax_working_paper_adjustments a ON a.workpaper_id=w.id AND a.company_id=w.company_id WHERE w.company_id=$1 AND w.fiscal_year_id=$2 GROUP BY w.id`,[companyId,fiscalYearId])).rows[0];
     const taxPath=profile?({zakat_applicable:'zakat',income_tax_applicable:'income_tax',mixed:'mixed',needs_review:'needs_review'}[profile.tax_treatment]??'needs_review'):'needs_review';
     const financialBlockers=missingPeriods+openPeriods+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
@@ -140,6 +160,7 @@ export class AnnualClosingService {
       adjustments: domain(Number(general.adjustments), { unresolved_adjustments: Number(general.adjustments) }),
       opening_balances: domain(Number(general.opening_balances), { unresolved_reviews: Number(general.opening_balances) }),
       zakat: taxReadiness(taxPath,profile?.id??null,workpaper?{...workpaper,unresolved:Number(workpaper.unresolved)}:null,financialBlockers),
+      wht: whtReadiness(start,end,whtProfiles,whtReviews),
     };
     return assembleAnnualClosing(fiscalYear, domains);
   }

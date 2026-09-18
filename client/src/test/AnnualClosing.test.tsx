@@ -14,6 +14,29 @@ describe('Annual Closing Center', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/annual-closing/fy-1'));
     expect(await screen.findByText('Not ready')).toBeInTheDocument(); expect(screen.getByText('Monthly close')).toBeInTheDocument(); expect(screen.getByText('Annual Closing Package manifest')).toBeInTheDocument();
   });
+  it.each([
+    ['en', 'Withholding Tax', 'Withholding Tax Readiness'],
+    ['ar', 'ضريبة الاستقطاع', 'جاهزية ضريبة الاستقطاع'],
+  ])('renders translated WHT readiness labels in %s', async (language, domainLabel, manifestLabel) => {
+    await i18n.changeLanguage(language);
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      ready: true,
+      blocker_count: 0,
+      financial_statements_readiness: { status: 'ready', label: 'Financial statements readiness', label_ar: 'جاهزية القوائم المالية' },
+      zakat_readiness: { status: 'ready' },
+      domains: { wht: { ready: true, blocker_count: 0, status: 'ready', summary: {} } },
+      package_manifest: [{ section: 'wht_readiness', status: 'ready', blocker_count: 0 }],
+    }), { status: 200 }));
+
+    const { container } = render(<AnnualClosing canView onUnauthorized={vi.fn()}/>);
+
+    expect(await screen.findByText(domainLabel)).toBeInTheDocument();
+    expect(screen.getByText(manifestLabel)).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('annualClosing.domainNames.wht');
+    expect(container).not.toHaveTextContent('annualClosing.manifestNames.wht_readiness');
+  });
   it('presents unresolved items and blocked financial domains in English', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));

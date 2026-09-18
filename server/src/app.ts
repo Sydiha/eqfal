@@ -28,6 +28,7 @@ import { annualClosingRouter } from './modules/annual-closing/annual-closing.rou
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
 import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
 import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
+import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
 app.use('/api', accessAdministrationRouter);
 app.use('/api', homeAlertsRouter);
+app.use('/api', whtReviewRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
