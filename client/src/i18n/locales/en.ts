@@ -106,7 +106,7 @@ const en = {
     rowStatus: { valid: 'Valid', duplicate: 'Duplicate', possible_duplicate: 'Possible duplicate', invalid: 'Invalid' },
     batchStatus: { mapping_required: 'Mapping required', preview_ready: 'Preview ready', confirmed: 'Confirmed' },
   },
-  whtReviews:{title:'Withholding tax review',boundary:'Readiness review only; no tax rate, liability, treaty outcome, filing, or posting is determined.',loadError:'Unable to load WHT reviews.',actionError:'The WHT review action failed.',sourceType:'Source type',sourceId:'Source ID',source:'Source',counterparty:'Counterparty',assessment:'Non-resident assessment',category:'Payment / service category',basis:'Evidence basis / reference',reviewRequired:'Professional review required',actions:'Actions',create:'Create review',submit:'Submit for review',notApplicable:'Review: not applicable',applicable:'Review: applicable'},
+  whtReviews:{title:'Withholding tax review',boundary:'Readiness review only; no tax rate, liability, treaty outcome, filing, or posting is determined.',loadError:'Unable to load WHT reviews.',actionError:'The WHT review action failed.',sourceType:'Source type',sourceId:'Source ID',source:'Source',counterparty:'Counterparty',assessment:'Non-resident assessment',category:'Payment / service category',basis:'Evidence basis / reference',reviewRequired:'Professional review required',actions:'Actions',create:'Create review',edit:'Edit',save:'Save',cancel:'Cancel',submit:'Submit for review',notApplicable:'Review: not applicable',applicable:'Review: applicable'},
 } as const;
 
 export default en;

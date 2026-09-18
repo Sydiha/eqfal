@@ -106,7 +106,7 @@ const ar = {
     rowStatus: { valid: 'صحيح', duplicate: 'مكرر', possible_duplicate: 'مكرر محتمل', invalid: 'غير صالح' },
     batchStatus: { mapping_required: 'يحتاج ربط الأعمدة', preview_ready: 'المعاينة جاهزة', confirmed: 'مؤكد' },
   },
-  whtReviews:{title:'مراجعة ضريبة الاستقطاع',boundary:'هذه مراجعة جاهزية فقط ولا تحدد نسبة أو التزاماً أو معاهدة أو إقراراً أو قيداً.',loadError:'تعذر تحميل مراجعات ضريبة الاستقطاع.',actionError:'تعذر تنفيذ إجراء مراجعة ضريبة الاستقطاع.',sourceType:'نوع المصدر',sourceId:'معرف المصدر',source:'المصدر',counterparty:'الطرف المقابل',assessment:'تقييم غير المقيم',category:'تصنيف الدفعة / الخدمة',basis:'أساس الدليل / المرجع',reviewRequired:'تتطلب مراجعة مهنية',actions:'الإجراءات',create:'إنشاء مراجعة',submit:'إرسال للمراجعة',notApplicable:'المراجعة: غير منطبقة',applicable:'المراجعة: منطبقة'},
+  whtReviews:{title:'مراجعة ضريبة الاستقطاع',boundary:'هذه مراجعة جاهزية فقط ولا تحدد نسبة أو التزاماً أو معاهدة أو إقراراً أو قيداً.',loadError:'تعذر تحميل مراجعات ضريبة الاستقطاع.',actionError:'تعذر تنفيذ إجراء مراجعة ضريبة الاستقطاع.',sourceType:'نوع المصدر',sourceId:'معرف المصدر',source:'المصدر',counterparty:'الطرف المقابل',assessment:'تقييم غير المقيم',category:'تصنيف الدفعة / الخدمة',basis:'أساس الدليل / المرجع',reviewRequired:'تتطلب مراجعة مهنية',actions:'الإجراءات',create:'إنشاء مراجعة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',submit:'إرسال للمراجعة',notApplicable:'المراجعة: غير منطبقة',applicable:'المراجعة: منطبقة'},
 } as const;
 
 export default ar;
