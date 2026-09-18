@@ -9,6 +9,8 @@ const OTHER_COMPANY = '22222222-2222-4222-8222-222222222222';
 const YEAR = '33333333-3333-4333-8333-333333333333';
 const SOURCE = '44444444-4444-4444-8444-444444444444';
 const OTHER_SOURCE = '55555555-5555-4555-8555-555555555555';
+const CROSS_YEAR_SOURCE = '88888888-8888-4888-8888-888888888888';
+const NULL_DATE_SOURCE = '99999999-9999-4999-8999-999999999999';
 const REVIEW = '66666666-6666-4666-8666-666666666666';
 const USER = '77777777-7777-4777-8777-777777777777';
 
@@ -33,7 +35,7 @@ app.use((_error: unknown, _request: Request, response: Response, _next: NextFunc
 type Row = Record<string, unknown> & { id: string; company_id: string; fiscal_year_id: string; source_type: string; source_id: string; workflow_status: string; assessment_result: string | null; reviewer_note: string | null; professional_review_required: boolean; version: number };
 const initial = (): Row => ({ id: REVIEW, company_id: COMPANY, fiscal_year_id: YEAR, source_type: 'document', source_id: SOURCE, counterparty_id: null, non_resident_assessment: 'unknown', payment_service_category: 'Services', basis_reference: 'Contract', reviewer_note: null, professional_review_required: true, workflow_status: 'needs_review', assessment_result: null, reviewed_by_user_id: null, reviewed_at: null, version: 1 });
 
-function database(seed: Row[] = []) {
+function database(seed: Row[] = [], sourceDates: Record<string, string | null> = {}) {
   const rows = seed.map(row => ({ ...row }));
   const sql: string[] = [];
   const query = async (statement: string, values: unknown[] = []) => {
@@ -41,7 +43,13 @@ function database(seed: Row[] = []) {
     if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(normalized)) return { rows: [], rowCount: 0 };
     if (normalized.startsWith('SELECT r.*')) return { rows: rows.filter(row => row.company_id === values[0] && row.fiscal_year_id === values[1]), rowCount: rows.length };
     if (normalized.startsWith('SELECT 1 FROM fiscal_years')) return { rows: values[1] === COMPANY && values[0] === YEAR ? [{ one: 1 }] : [], rowCount: values[1] === COMPANY && values[0] === YEAR ? 1 : 0 };
-    if (/^SELECT 1 FROM (documents|obligations|bank_transactions)/.test(normalized)) { const found = values[1] === COMPANY && values[0] === SOURCE; return { rows: found ? [{ one: 1 }] : [], rowCount: found ? 1 : 0 }; }
+    if (/^SELECT 1 FROM (documents|obligations|bank_transactions) s JOIN fiscal_years/.test(normalized)) {
+      const table = normalized.split(' ')[3]!;
+      const key = `${table}:${String(values[0])}`;
+      const date = key in sourceDates ? sourceDates[key] : values[0] === SOURCE ? '2026-06-15' : undefined;
+      const found = values[1] === COMPANY && values[2] === YEAR && date != null && date >= '2026-01-01' && date <= '2026-12-31';
+      return { rows: found ? [{ one: 1 }] : [], rowCount: found ? 1 : 0 };
+    }
     if (normalized.startsWith('SELECT 1 FROM counterparties')) return { rows: [], rowCount: 0 };
     if (normalized.startsWith('SELECT * FROM wht_reviews')) { const row = rows.find(item => item.id === values[0] && item.company_id === values[1] && item.fiscal_year_id === values[2]); return { rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 }; }
     if (normalized.startsWith('INSERT INTO wht_reviews')) {
@@ -116,6 +124,38 @@ describe('WHT review tenant and lifecycle protections', () => {
     const db = database(); const service = new WhtReviewService(db as unknown as Pool);
     await expect(service.create(COMPANY, YEAR, USER, { ...values, source_id: OTHER_SOURCE })).rejects.toBeInstanceOf(WhtReviewValidationError);
     await expect(service.create(COMPANY, YEAR, USER, { ...values, counterparty_id: OTHER_SOURCE })).rejects.toBeInstanceOf(WhtReviewValidationError);
+  });
+
+  it.each([
+    ['document', 'documents'],
+    ['obligation', 'obligations'],
+    ['bank_transaction', 'bank_transactions'],
+  ] as const)('rejects a cross-year %s source on create', async (sourceType, table) => {
+    const db = database([], { [`${table}:${CROSS_YEAR_SOURCE}`]: '2025-12-31' });
+    const service = new WhtReviewService(db as unknown as Pool);
+    await expect(service.create(COMPANY, YEAR, USER, { ...values, source_type: sourceType, source_id: CROSS_YEAR_SOURCE })).rejects.toBeInstanceOf(WhtReviewValidationError);
+  });
+
+  it.each([
+    ['document', 'documents'],
+    ['obligation', 'obligations'],
+    ['bank_transaction', 'bank_transactions'],
+  ] as const)('accepts a %s source dated inside the selected fiscal year', async (sourceType, table) => {
+    const db = database([], { [`${table}:${SOURCE}`]: '2026-12-31' });
+    const service = new WhtReviewService(db as unknown as Pool);
+    await expect(service.create(COMPANY, YEAR, USER, { ...values, source_type: sourceType })).resolves.toMatchObject({ source_type: sourceType, source_id: SOURCE });
+  });
+
+  it('rejects a source whose authoritative date is null', async () => {
+    const db = database([], { [`documents:${NULL_DATE_SOURCE}`]: null });
+    const service = new WhtReviewService(db as unknown as Pool);
+    await expect(service.create(COMPANY, YEAR, USER, { ...values, source_id: NULL_DATE_SOURCE })).rejects.toBeInstanceOf(WhtReviewValidationError);
+  });
+
+  it('revalidates the target source date when an edit changes the source', async () => {
+    const db = database([initial()], { [`obligations:${CROSS_YEAR_SOURCE}`]: '2027-01-01' });
+    const service = new WhtReviewService(db as unknown as Pool);
+    await expect(service.update(COMPANY, YEAR, REVIEW, USER, { version: 1, source_type: 'obligation', source_id: CROSS_YEAR_SOURCE })).rejects.toBeInstanceOf(WhtReviewValidationError);
   });
 
   it('enforces optimistic concurrency across edits and transitions', async () => {
