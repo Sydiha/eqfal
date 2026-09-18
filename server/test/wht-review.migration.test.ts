@@ -1,0 +1,2 @@
+import {readFileSync} from 'node:fs';import {describe,expect,it} from 'vitest';
+describe('WHT migration contract',()=>{const sql=readFileSync(new URL('../migrations/054_wht_review_foundation.sql',import.meta.url),'utf8');it('is tenant scoped, constrained and granular',()=>{expect(sql).toContain('UNIQUE(company_id,fiscal_year_id,source_type,source_id)');for(const capability of ['view','create','edit','submit','review'])expect(sql).toContain(`wht_review.${capability}`);expect(sql).not.toContain('wht_review.manage');expect(sql).not.toContain('wht_rate')})});

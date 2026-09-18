@@ -1,0 +1,5 @@
+export type WhtSourceType='document'|'obligation'|'bank_transaction';
+export type WhtAssessment='unknown'|'resident'|'non_resident';
+export type WhtStatus='needs_review'|'submitted'|'not_applicable'|'applicable'|'reviewed';
+export interface WhtReview {id:string;company_id:string;fiscal_year_id:string;source_type:WhtSourceType;source_id:string;counterparty_id:string|null;counterparty_name?:string|null;non_resident_assessment:WhtAssessment;payment_service_category:string;basis_reference:string;reviewer_note:string|null;professional_review_required:boolean;workflow_status:WhtStatus;assessment_result:'not_applicable'|'applicable'|null;prepared_by_user_id:string;prepared_at:string;reviewed_by_user_id:string|null;reviewed_at:string|null;version:number;created_at:string;updated_at:string}
+export interface WhtReviewValues {source_type:WhtSourceType;source_id:string;counterparty_id?:string|null;non_resident_assessment:WhtAssessment;payment_service_category:string;basis_reference:string;reviewer_note?:string|null;professional_review_required:boolean}
