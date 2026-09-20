@@ -1,0 +1,183 @@
+# Phase 14 Full-Cycle Validation Matrix
+
+## 1. Purpose and authority
+
+This document operationalizes **Phase 14 — Full Operational and Accounting Cycle Validation** from `docs/EXECUTION_ROADMAP.md`. It is the authoritative validation design for exercising one complete cycle through the behavior implemented at the approved baseline; it does not add, redefine, or authorize Product behavior.
+
+`GitHub/main` is the source of truth for merged code and durable repository state. Execution must preserve the SHA chain required by `AGENTS.md` and `docs/WORKFLOW_GOVERNANCE.md`.
+
+A failed or blocked validation step does **not** authorize an inline fix. A real Product defect must be recorded, isolated from the validation evidence, and proposed as a separate bounded task beginning again at `READ-ONLY → PLAN → OWNER APPROVAL`. Phase 14 execution may not silently change accounting or tax policy, Product code, data structures, infrastructure, or the agreed scope.
+
+## 2. Baseline and scenario assumptions
+
+### Approved design baseline
+
+- Repository: `Sydiha/eqfal`
+- Base: `main`
+- Exact baseline HEAD: `8f17258df221d15919e56487721f7d087d0a77e9`
+- Matrix authoring status: documentation/validation design only; no validation row has been run.
+
+At the start of every later execution slice, record the exact GitHub PR/main SHA actually under validation. If it differs from the design baseline, review the intervening changes for impact and retain both SHAs in the evidence. Do not treat this document's baseline as proof of a later runtime SHA.
+
+### Conservative scenario
+
+- Use one active validation company and fiscal year 2026.
+- Use SAR as functional/reporting currency. Confirm the runtime and company profile accept this assumption: **TO VERIFY DURING EXECUTION**.
+- Use no inventory; no stock, COGS, or inventory-adjustment behavior is implied.
+- Use no paid service or external integration. Bank input, if used, must use the currently supported local import path and sanitized validation data.
+- Use only supported current modules. The baseline contains directly relevant company/profile, fiscal-year, opening-balance, partner/document, purchase/sale, obligation/custody/banking, fixed-asset, periodic-adjustment, VAT, accounting, monthly-close, tax-workpaper, WHT-review, and annual-closing server modules and corresponding focused tests or UI surfaces.
+- Exact navigation labels, required field values, account mappings, tax treatments, posting rules, and workflow transitions not established by the current runtime are **TO VERIFY DURING EXECUTION**. Do not substitute theoretical accounting behavior.
+- Use synthetic, non-Production validation data. Record identifiers and amounts needed for reconciliation without exposing secrets or real personal/business data.
+
+### Status vocabulary
+
+Each matrix row begins as `NOT RUN` and may be changed only to one of:
+
+- `PASS` — all row expectations and the evidence standard in section 6 are satisfied.
+- `FAIL` — observed behavior contradicts a supported expectation; classify the failure under section 7.
+- `BLOCKED` — a prerequisite, environment, authorization, or authoritative control prevents completion; record the blocker.
+- `NOT APPLICABLE` — repository-supported evidence demonstrates the step does not apply to this scenario; record that evidence. Lack of knowledge is not `NOT APPLICABLE`.
+
+## 3. Full-cycle validation matrix
+
+Capability entries name a supported capability **family**, not an exhaustive permission identifier. During execution, capture the exact capability identifier enforced by the current SHA or mark it **TO VERIFY DURING EXECUTION**. For every financially relevant row, `VERIFY AGAINST CURRENT POSTING RULE` means compare the source to the actual configured/implemented posting rule and resulting balanced journal; it is not permission to invent a debit/credit entry.
+
+| # / Step / domain | Preconditions | Operator action | Required capability family | Data/evidence created or changed | Expected operational result | Expected accounting/ledger effect | Expected audit trail | Expected close/readiness interaction | Primary verification surface/API/module | Negative/edge case | Pass evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1. Company setup | Authorized user; synthetic company details | Create/select the active validation company; confirm company switching context | Company/access administration — exact identifier **TO VERIFY DURING EXECUTION** | Company and active-company context | Exactly one intended company is active; other-company data is absent | None unless current setup rule posts: **TO VERIFY DURING EXECUTION** | Actor, company identity, timestamp, before/after where supported | Establishes tenant context for every later check | Company switcher/context; companies and memberships modules/API | Attempt inactive/unauthorized/cross-company selection | Exact SHA, company ID, active-context response/UI, isolation and denial evidence | `NOT RUN` |
+| 2. Accounting & Tax Profile | Step 1; authorized profile operator | Create/update the profile with SAR and only scenario-applicable tax settings | Company accounting profile view/edit/review | Versioned profile/configuration evidence | Saved profile reloads unchanged and is scoped to active company | No direct posting expected; downstream rules consume the approved profile | Actor, reason/version and before/after where supported | Missing/incomplete settings surface as authoritative readiness inputs where implemented | Company Accounting Profile UI/API/module | Invalid dates/rates; stale version; unauthorized edit | Persisted profile, reload, negative result, audit record, readiness observation | `NOT RUN` |
+| 3. Fiscal year | Steps 1–2; 2026 dates | Create/retrieve fiscal year 2026 and exercise only supported state transitions | Fiscal-year view/manage/close family | Fiscal year and state/version | One valid non-overlapping 2026 year is available | No entry invented; year bounds govern later dated postings | Creation/transition event with actor and company | Defines allowed periods; close/reopen semantics **TO VERIFY DURING EXECUTION** | Fiscal Years UI/API/module | Overlap, invalid range, unauthorized transition | Stored dates/state, denial/conflict, audit and active-company scope | `NOT RUN` |
+| 4. Opening balances | Open writable 2026 period; valid mapped accounts; profile/year ready | Enter, review/confirm, and post a balanced opening set through supported flow | Opening-balance view/edit/review/post family | Batch, lines, review/posting state, source linkage | Batch progresses only in allowed order; balanced values persist exactly | Opening journal reconciles to accepted lines; `VERIFY AGAINST CURRENT POSTING RULE` | Create/edit/review/post events and actor/reason where supported | Unbalanced, unreviewed, or unposted opening data remains a blocker where implemented | Opening Balance Review UI/API; opening-balance/accounting modules | Unbalanced batch, duplicate post, closed date, stale version | Batch/line totals, journal ID/lines, TB impact, denials, audit | `NOT RUN` |
+| 5. Customers / suppliers | Active company/year | Create scenario customer and supplier/counterparty; reload and edit through supported flow | Counterparty/partner view/create/edit/disable family | Tenant-scoped master records | Both usable in relevant source workflows without cross-company leakage | None on master creation | Create/update/disable events where supported | Active master records satisfy downstream source prerequisites | Partner/counterparty API and relevant UI | Duplicate/invalid record; disabled or foreign-company record use | IDs, scoped reload, denial/validation and audit evidence | `NOT RUN` |
+| 6. Purchase | Supplier exists; writable date; supported classification/profile settings | Create, complete/review, and if supported post one purchase document | Document/purchase create/edit/review/post family | Purchase source, totals, status, links | Valid purchase follows supported transition order; totals remain exact | Resulting journal/source coverage reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Lifecycle events with actor/company and before/after as supported | Unreviewed/unposted source affects readiness only as implemented | Purchases UI; purchases/document/accounting APIs | Duplicate reference, invalid total/date, forbidden transition, closed period | Source snapshot, exact totals, status history, journal reconciliation, audit | `NOT RUN` |
+| 7. Evidence / document linkage | Purchase exists; supported evidence format available | Attach/link evidence using the current document flow; retrieve linkage from source | Document create/edit/review family | Document metadata and source relationship | Evidence remains retrievable and linked to the intended source only | No independent entry unless current rule provides one: `VERIFY AGAINST CURRENT POSTING RULE` | Link/create/update event where supported | Missing/unreviewed evidence influences readiness only as implemented | Documents API and purchase/document UI | Unsupported input, duplicate link, foreign-company source/document | Source/document IDs, relationship query/UI, denial and audit evidence | `NOT RUN` |
+| 8. Payment | Payable purchase/obligation exists; writable date | Record payment/settlement through the supported document or obligation path | Document/obligation settlement create/delete family | Settlement, amount, source link, remaining balance | Settlement cannot exceed or detach from its valid source; balance updates exactly | Payment posting reconciles to source and settlement; `VERIFY AGAINST CURRENT POSTING RULE` | Settlement create/delete with actor and source IDs | Outstanding payable/readiness measures update as implemented | Document settlement and obligation APIs/UI | Overpayment, duplicate settlement, closed date, unauthorized deletion | Before/after balance, settlement ID, journal/bank relation if applicable, audit | `NOT RUN` |
+| 9. Sale | Customer exists; writable date; supported classification/profile | Create, complete/review, and if supported post one sale document | Document/sale create/edit/review/post family | Sale source, totals, status, links | Valid sale follows supported transitions and persists exact totals | Resulting journal/source coverage reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Lifecycle events with actor/company and before/after as supported | Unreviewed/unposted source affects readiness only as implemented | Sales UI; sales/document/accounting APIs | Duplicate reference, invalid total/date, forbidden transition, closed period | Source snapshot, totals, status, journal reconciliation and audit | `NOT RUN` |
+| 10. Collection | Receivable sale/obligation exists; writable date | Record supported receipt/settlement against the sale/receivable | Document/obligation settlement create/delete family | Settlement and remaining receivable | Receipt is linked once and remaining balance is exact | Collection posting reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Settlement lifecycle event | Outstanding receivable/readiness updates as implemented | Document settlement and obligation APIs/UI | Over-collection, duplicate, foreign source, closed period | Balance delta, linkage, journal/bank relation if applicable, audit | `NOT RUN` |
+| 11. Expense | Writable period; supplier/classification available | Record and process one supported expense (standalone or purchase-document path) | Document/purchase family — exact route **TO VERIFY DURING EXECUTION** | Expense source/evidence/status | Expense is retained and classified only through supported fields/workflow | Posted result reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Source lifecycle event | Incomplete/unposted expense influences blockers as implemented | Purchases/documents UI/API and operational-source accounting coverage | Invalid classification/tax/date; duplicate source | Source, evidence, journal reconciliation, audit and blocker result | `NOT RUN` |
+| 12. Obligations | Counterparty/source exists; writable recognized date | Create payable/receivable as supported; confirm; exercise settlement status | Obligation view/create/edit/confirm/cancel/settlement family | Obligation, verification/version, due date, source and settlements | Direction, due date, confirmation and outstanding amount remain consistent | Reconcile to linked document/opening/manual source; `VERIFY AGAINST CURRENT POSTING RULE` | Create/update/confirm/cancel/settle events | Unconfirmed/overdue/outstanding items appear as implemented blockers/alerts | Obligations UI/API/module | Due date before recognition, invalid source link, stale version, over-settlement | Source-to-obligation reconciliation, balances, denial, audit, readiness | `NOT RUN` |
+| 13. Custody | Authorized custodian flow; writable date | Create/use a custody advance and perform supported settlement/reconciliation | Custody view/manage and relevant bank match family | Custody item, status, amount, optional bank relation | Custody balance/status follows supported transitions | Reconcile custody and related posting; `VERIFY AGAINST CURRENT POSTING RULE` | Custody lifecycle/reconciliation event | Outstanding custody affects readiness only as implemented | Custody Panel/API; banking custody module | Invalid amount/date, foreign-company custody, invalid transition | Custody ledger/balance, source links, journal if applicable, audit | `NOT RUN` |
+| 14. Banking / import / matching | Sanitized supported bank file; sources from prior steps | Import, inspect/resume as supported, match, reconcile, and test reopen rules | Bank view/import/match/reconcile; settlement when document matched | Import batch, transactions, match and reconciliation state | Rows import once; transition ordering and match target integrity hold | Bank transaction, settlement and source reconcile; `VERIFY AGAINST CURRENT POSTING RULE` | Import/match/reconcile/reopen events | Unmatched/matched items remain visible blockers/alerts as implemented | Banking Workspace/API; bank import/reconciliation modules | Duplicate import, malformed file/formula, reconcile before match, reopen with settlement | Import fingerprint/counts, state history, links, balance reconciliation, audit | `NOT RUN` |
+| 15. Fixed asset | Supported purchase/source; profile and writable date | Create asset from supported source/manual path and complete required review/policy fields | Fixed-asset view/create/edit/review family | Asset, source link, cost, dates, policy/version | Asset is scoped, traceable, and ready only when required fields/states are satisfied | Asset recognition reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Create/update/review and policy events | Incomplete/unreviewed asset affects readiness as implemented | Fixed Assets UI/API/module | Foreign/duplicate source, invalid cost/date, unsupported policy change | Asset/source reconciliation, exact amounts, state, audit and denial | `NOT RUN` |
+| 16. Depreciation | Ready fixed asset; valid policy; writable period | Generate/post depreciation using current supported operation | Fixed-asset depreciation/policy operation family | Depreciation run/entry, asset carrying values | No duplicate period run; values and remaining life/carrying value are consistent | Depreciation journal reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Run/post event and policy/version context | Missing or pending depreciation affects readiness only as implemented | Asset Policy Operations/API; fixed-asset/accounting modules | Duplicate run, closed period, invalid estimate/policy transition | Calculation inputs/output, journal, asset roll-forward, audit/denial | `NOT RUN` |
+| 17. Accruals / prepayments / periodic adjustments | Writable period; supported account/source configuration | Create, review/approve, post, and where supported reverse representative adjustment(s) | Periodic-adjustment view/create/review/post/reverse family | Adjustment schedule/status/source and journal links | Only supported adjustment types/transitions execute; amounts remain exact | Adjustment/reversal reconciles; `VERIFY AGAINST CURRENT POSTING RULE` | Full lifecycle including reason/actor where supported | Draft/unposted/due adjustment affects blockers as implemented | Periodic Adjustments UI/API/module | Unbalanced/invalid schedule, duplicate post/reversal, closed period | Schedule-to-journal reconciliation, status/audit history and denials | `NOT RUN` |
+| 18. VAT | Profile and VAT-applicable supported sources exist | Review report/reconciliation; create adjustment/return only through supported workflow | VAT report/reconciliation/adjustment/return capability families | VAT report lines, reconciliation, adjustment/return states | Included/excluded sources and workflow states match current rules | VAT values reconcile to sources and ledger; `VERIFY AGAINST CURRENT POSTING RULE` | Review/adjustment/return lifecycle events | Unreconciled VAT and pending states affect close readiness as implemented | VAT UI; VAT report/reconciliation/adjustments/returns APIs | Non-applicable source, invalid period/rate, stale/duplicate transition, closed period | Source-to-report-to-ledger reconciliation, statuses, audit, professional-review note | `NOT RUN` |
+| 19. Journals / adjustments | Writable date; authorized operator; balanced supported input | Inspect operational journals and create/post a supported manual adjustment if available | Accounting journal view/create/post family | Journal header/lines, source reference, status | Balanced journal posts once; source identity and precision persist | Debits equal credits and journal matches current posting rule | Create/post event, actor and reason/source | Draft/unposted journals and period locks behave as implemented | Accounting UI/API; journal-posting module | Unbalanced/duplicate/invalid account, unauthorized or closed-period post | Journal lines/totals/source, duplicate denial, audit and TB delta | `NOT RUN` |
+| 20. Ledger / Trial Balance | Prior relevant postings complete | Query ledger and Trial Balance for 2026/selected period; trace samples to source | Accounting/ledger/report view family | Read-only report evidence/export if supported | Filters and source drill-down return active-company data only | Total debits equal credits; opening plus movements equals ending balances | Read access logging only if implemented: **TO VERIFY DURING EXECUTION** | Balanced, current TB is prerequisite evidence for later reporting/close | Accounting ledger/TB API/UI | Cross-company/account/date filter; include unposted entries attempt | TB equality, sampled source trace, exact totals and isolation evidence | `NOT RUN` |
+| 21. Monthly Close | Period sources processed; authoritative blockers known | View blockers, attempt premature close, clear legitimate prerequisites, then close through supported flow | Monthly-close view/manage family plus blocker-specific view families | Close period/state and blocker snapshot | Close is refused with authoritative blockers and succeeds only when cleared | No invented entry; close locks applicable accounting dates | Close/reopen event and blocker evidence | This is the authoritative readiness interaction under test | Monthly Close UI/API/module and accounting-period guard | Hidden blocker, unauthorized close/reopen, write after close | Before/after blocker set, transition result, post-close write denial, audit | `NOT RUN` |
+| 22. Financial Statements | Posted balanced ledger; mapping configured; reporting period selected | Generate supported statements and trace material balances to TB/mapping | Financial-statement/accounting report view family | Read-only statement output and mapping evidence | Statements render consistently for active company/period | Statements derive from posted ledger and mapping; reconcile to TB; exact equations **TO VERIFY DURING EXECUTION** | Read audit if implemented: **TO VERIFY DURING EXECUTION** | Statement availability/consistency contributes to package readiness as implemented | Accounting Financial Statements UI/API; financial/cash-flow modules | Missing mapping, unposted data, wrong company/period | Statement-to-TB mapping/reconciliation, totals, filters and isolation | `NOT RUN` |
+| 23. Applicable Tax/Zakat/WHT workpapers | Reconciled approved source data; applicability established | Determine scenario applicability; create/reconcile/review/approve applicable workpaper(s) only | Tax-workpaper and WHT review view/manage/reconcile/approve families | Workpaper, source snapshot, reconciliation and approval state | Applicable workflow follows supported states; non-applicable area is evidenced, not guessed | Workpaper values derive from approved/reconciled sources; no policy invented | Lifecycle/approval event with actor/reason | Incomplete reconciliation or approval remains a package blocker where implemented | Tax Workpaper UI/API; WHT review and tax-workpaper modules | Stale source, drift, unauthorized approval, unsupported tax conclusion | Applicability basis, source reconciliation/fingerprint, state/audit, professional review | `NOT RUN` |
+| 24. Annual Closing / package lifecycle | Closed prerequisite periods; reconciled statements/workpapers; applicable approvals | Create package, inspect readiness, exercise supported review/approval/lock/export or equivalent lifecycle | Annual-closing/package view/create/manage/approve family | Package, readiness result, source fingerprint/snapshot, lifecycle state | Invalid ordering/drift blocks progress; valid package preserves traceability | Package totals reconcile to approved ledger/statements/workpapers; `VERIFY AGAINST CURRENT POSTING RULE` | Every lifecycle transition, actor/reason and drift event where supported | Final readiness must use authoritative prerequisites and remain valid at action time | Annual Closing UI/API; annual-closing/package services | Create with blockers, stale fingerprint/source drift, unauthorized/out-of-order transition | Complete reconciliation pack, readiness details, fingerprint/drift check, lifecycle audit | `NOT RUN` |
+
+## 4. Cross-cutting controls
+
+Run these controls within each applicable slice and consolidate them in 14H. A single happy-path row cannot establish a cross-cutting PASS.
+
+### Active-company / tenant isolation
+
+Use a second synthetic company only as needed for negative evidence. For representative reads, writes, updates, links, reports, and identifier-based endpoints, prove that the active company scopes results and that a known foreign-company identifier cannot be read, mutated, linked, matched, or inferred. Verify company switching refreshes the context and does not retain stale data. Record both company IDs safely and the exact denial/not-found behavior.
+
+### Permission/capability enforcement
+
+For every capability family exercised, record the exact capability ID required by the current SHA, an allowed result, and a denied result using a role lacking that capability. Verify server enforcement; hiding a UI control alone is insufficient. Check that composite transitions require all relevant capabilities and that sensitive confirmation, posting, reconciliation, closing, and approval actions remain separated where implemented.
+
+### Audit trail
+
+For each mutation, capture the immutable audit evidence available from the current implementation: active company, actor, action, entity type/ID, timestamp, before/after, reason, and source IDs as applicable. Verify a denied request creates no business mutation. Any field not implemented is **TO VERIFY DURING EXECUTION**, not assumed.
+
+### Duplicate prevention / idempotency
+
+Repeat applicable imports, posts, settlements, matches, confirmation actions, depreciation runs, returns, and package transitions using the same business or request identity. Prove either safe idempotence or a clear conflict with no duplicate financial effect. Record counts and identifiers before and after.
+
+### Closed-period locks
+
+After closing a test period, attempt representative Product mutations carrying accounting dates: operational documents, settlements, reconciliation, asset/depreciation, adjustments, VAT changes, and journals. Confirm the server rejects applicable writes without partial data or audit inconsistency. Exact coverage is **TO VERIFY DURING EXECUTION** against current guards.
+
+### Numerical correctness / exact monetary handling
+
+Use small synthetic values that expose rounding (including a permitted fractional tax calculation if supported). Compare persisted strings/decimal values, source totals, settlements, journals, TB, reports, and packages. No PASS may rely on visually rounded UI values alone. Debits and credits must balance at the system's supported precision; supported precision/rounding policy is **TO VERIFY DURING EXECUTION**.
+
+### Source/document relationships
+
+Trace stable IDs from evidence/document through purchase/sale/expense, obligation, settlement or bank match, journal, ledger, report, workpaper, and annual package wherever applicable. Prove foreign-company and incompatible source links are rejected and deletions/reopens cannot silently orphan downstream records.
+
+### Workflow transition ordering
+
+For each stateful module, capture allowed transitions and attempt at least one supported out-of-order, stale-version, repeat, or reopen case. Confirm invalid transitions do not mutate downstream accounting. Do not infer a universal draft/review/post model where the current module differs.
+
+### Tax/VAT applicability and professional-review boundaries
+
+Derive applicability only from the current company profile, implemented rules, and approved professional input. Validation demonstrates calculations, traceability, controls, and workflow—it does not provide tax advice or establish policy. Mark unresolved legal/tax determinations `BLOCKED` or **TO VERIFY DURING EXECUTION**, and require professional review where the implemented workflow calls for it.
+
+### Source drift / reconciliation integrity
+
+Where fingerprints, versions, or reconciliation snapshots exist, change an allowed upstream item before final approval and prove stale downstream output is detected. Where no such mechanism is evidenced, record **TO VERIFY DURING EXECUTION** rather than claiming protection. Re-run reconciliation after every authorized upstream change.
+
+### Usability for a non-accountant manager
+
+Using an appropriately limited manager role, verify that labels, current status, next action, blocker ownership, dates, amounts, and error messages are understandable without database access or accounting guesswork. Record confusing or inaccessible behavior as evidence; do not redesign or fix it inline. Usability does not override permissions, professional-review boundaries, or accounting evidence.
+
+## 5. Accounting reconciliation checkpoints
+
+Capture a signed/dated execution worksheet (or equivalent durable PR artifact) for these checkpoints. Do not write theoretical debit/credit entries when the current implementation has not proven them.
+
+1. **Opening balances:** accepted line totals equal the opening posting and opening TB balances; debits equal credits.
+2. **Operational sources to journals:** each applicable purchase, sale, expense, settlement, custody event, and obligation is either linked to its posted journal or evidenced as non-posting by the current rule. Compare IDs, dates, and exact amounts.
+3. **Banking:** imported transaction totals and counts match sanitized source data; matches and settlements reconcile to the intended documents/obligations/custody items with no duplicates.
+4. **Fixed assets:** asset acquisition/source values and accumulated depreciation/current carrying value reconcile to posted asset and depreciation journals.
+5. **Periodic adjustments:** schedule, posted adjustment, any reversal, and ledger balances reconcile by period and source.
+6. **VAT:** source VAT treatment, VAT report, reconciliation, adjustments/return state, and relevant ledger balances are mutually consistent; applicability/professional review remains explicit.
+7. **Trial Balance:** total debits equal total credits; opening balances plus posted movements reconcile to closing balances. Unposted sources are not silently included.
+8. **Financial statements:** reported values derive from posted ledger data and the current mapping; reconcile every material line to TB accounts and document unmapped/invalid mappings.
+9. **Monthly Close:** blockers clear only when authoritative prerequisites are satisfied. A hidden or UI-only dismissal is not clearance; post-close locks must hold.
+10. **Tax/Zakat/WHT workpapers:** applicable workpapers use approved, reconciled source data and retain source/version or fingerprint evidence available in the implementation.
+11. **Annual Closing package:** source fingerprint/drift detection, reconciliation and readiness controls remain satisfied at each final lifecycle action. If upstream data changes, stale readiness must not be accepted.
+
+For every exact accounting effect not demonstrable from the current SHA, write `VERIFY AGAINST CURRENT POSTING RULE`, capture the current rule and actual balanced output during execution, and obtain the required professional review. Never fill the gap with an assumed textbook entry.
+
+## 6. Execution evidence standard
+
+A row may be marked `PASS` only when its evidence bundle contains all applicable items below:
+
+1. Exact GitHub SHA under validation and the matrix/design baseline.
+2. Runtime same-SHA evidence when runtime validation applies, proving `GitHub PR HEAD SHA == runtime validated SHA` before Owner UAT.
+3. Operator role, active company ID, relevant fiscal period, sanitized record IDs, timestamps, and exact input values.
+4. User-visible result plus API response or database-safe/read-only evidence where needed. A UI-only appearance is never enough to establish accounting correctness.
+5. Before/after operational state, negative/edge result, required capability and server-side denial evidence.
+6. Audit record(s) for mutations where implemented, or an explicit **TO VERIFY DURING EXECUTION** finding if the audit expectation is not established.
+7. For financially relevant steps, source-to-journal-to-ledger/report reconciliation with exact monetary values and balanced totals.
+8. Close/readiness result and blocker details where the row can influence readiness.
+9. No unresolved blocker relevant to the row and no unexplained source drift, duplicate, cross-tenant access, or reconciliation difference.
+
+Evidence must identify collection method and artifact location without committing secrets, raw credentials, unsafe database dumps, or real customer data. Screenshots may supplement but cannot replace exact API/accounting/reconciliation evidence.
+
+## 7. Failure classification
+
+Every `FAIL` or `BLOCKED` row must record observed versus expected behavior, exact SHA, reproducible steps, sanitized identifiers, evidence location, severity/impact, owner, and one primary classification:
+
+| Classification | Meaning / handling |
+|---|---|
+| Product defect | Implemented behavior violates a supported requirement or integrity/control expectation. Create a separate future bounded task; do not fix during the Phase 14 run. |
+| Data/setup issue | Synthetic scenario data or required configuration is missing, invalid, or inconsistent. Correct only validation data through supported behavior when doing so does not conceal a Product issue; retain evidence. |
+| Permission/configuration issue | The role, capability, company context, profile, mapping, or supported configuration is wrong. Distinguish intended enforcement from misconfiguration. |
+| Expected blocker/control | The system correctly prevents an unsafe, premature, unauthorized, duplicate, stale, or closed-period action. This may be positive control evidence rather than a defect. |
+| Environment/tooling issue | Runtime, database, import tooling, CI, or evidence capture prevents a valid result. Do not classify untested Product behavior as PASS. |
+| Documentation ambiguity | Current authoritative material does not establish the expected workflow or rule. Mark **TO VERIFY DURING EXECUTION** and escalate; do not guess. |
+
+A Product defect must be separated into a later task beginning at `READ-ONLY / PLAN / OWNER APPROVAL`. No Product fix, schema change, dependency change, test-framework addition, runtime/Replit change, accounting/tax policy decision, Production action, or paid service is authorized inside a Phase 14 validation execution.
+
+## 8. Planned execution slices after 14A
+
+These are planning boundaries only. This document does not start or approve any slice. Each slice requires its own governed plan, explicit Owner Approval, preflight, exact-SHA evidence, execution/review, and handoff.
+
+| Slice | Bounded scope | Principal exit evidence |
+|---|---|---|
+| 14B — Foundation & Master Data Validation | Matrix steps 1–5; baseline isolation/permissions/audit controls | Active company/profile/year/opening/master records proven and reconciled |
+| 14C — Purchase/Payment/Banking Cycle | Steps 6–8 and 12–14 as needed for payable, custody, import, match and reconciliation | Purchase/evidence/obligation/payment/bank chain reconciles without duplicates |
+| 14D — Sales/Collection Cycle | Steps 9–10 and receivable portions of step 12/14 | Sale/receivable/collection/bank chain reconciles end to end |
+| 14E — Assets/Adjustments/VAT | Steps 11 and 15–18 | Expense, asset roll-forward, adjustments and VAT reconcile to ledger |
+| 14F — Ledger/Monthly Close/Financial Statements | Steps 19–22 | Balanced TB, authoritative blockers/locks, and statement-to-ledger reconciliation |
+| 14G — Tax/WHT/Annual Closing | Steps 23–24 | Applicability/professional approvals, reconciled workpapers, and drift-safe package lifecycle |
+| 14H — Cross-cutting isolation/permissions/audit/reconciliation closeout | Consolidate section 4 controls and section 5 checkpoints across prior slice evidence | No unresolved relevant blocker; exact-SHA evidence index and full-cycle reconciliation closeout |
+
+If a slice discovers a Product defect, preserve the failure evidence and stop only the affected path as appropriate. Any correction is a separate Owner-approved Product task; resuming or re-running affected validation must use the corrected exact SHA and retain traceability to the original failure.
