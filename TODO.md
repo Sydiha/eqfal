@@ -14,10 +14,10 @@ If this file conflicts with a higher source, the higher source governs. Historic
 ## Reconciliation Metadata
 
 Last reconciled against GitHub/main SHA:
-`ff7fa41b544037a30b5cc00ac3869e22d400526b`
+`14846d39f85e2718677071705e762bc1dd21e789`
 
 Reconciliation date:
-`2026-09-18`
+`2026-09-20`
 
 This SHA is an audit/reconciliation baseline only, not a promise that it remains future `main` HEAD.
 
@@ -33,12 +33,12 @@ This SHA is an audit/reconciliation baseline only, not a promise that it remains
 - Phase 4 — Accruals / Prepayments / Periodic Adjustments: **DONE**
 - Phase 5 — Financial Statement Mapping: **DONE**
 - Phase 6 — VAT Reconciliation Hardening: **DONE FOR CURRENTLY APPROVED SCOPE**
-- Phase 7 — Zakat / Income Tax / Withholding Tax: **PARTIAL**
+- Phase 7 — Zakat / Income Tax / Withholding Tax: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 8 — Integrated Monthly Close: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 9 — Final Permission Model: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 10 — Company Manager Workspace: **DONE FOR CURRENTLY APPROVED SCOPE**
-- Phase 11 — Home Screen Alerts: **PARTIAL**
-- Phase 12 — Manager Financial Snapshot: **NOT STARTED**
+- Phase 11 — Home Screen Alerts: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 12 — Manager Financial Snapshot: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 13 — Conditional Modules: **DEFERRED**
 - Phase 14 — Full Operational & Accounting Cycle Validation: **NOT STARTED**
 - Phase 15 — System-wide UI/UX Redesign: **DEFERRED**
@@ -50,7 +50,10 @@ Notes:
 - Phase 8 Monthly Close closure was read-only reconciled against GitHub/main SHA `5766d58154fce89f6908a056bf9f62cf6e105537`; blocker coverage, company-aware applicability, capability-aware disclosure, drill-through, close enforcement, and reopen reason/audit/capability behavior are implemented for the currently approved scope.
 - Phase 9 Final Permission Model closure was read-only reconciled against GitHub/main SHA `116dc676772b20220e7b77704bafe9f1a0d3c243`; reviewed runtime authorization is granular for the approved scope, Access Administration is split into action-specific capabilities, legacy `access.manage` is no longer a runtime fallback, and Grant Ceiling / Full Access / self-escalation / tenant isolation / audit protections remain enforced.
 - Phase 10 Company Manager Workspace closure was read-only reconciled against GitHub/main SHA `ff7fa41b544037a30b5cc00ac3869e22d400526b`; manager-facing navigation, daily operational entry, capability-aware visibility, and the separation of operational entry from accounting approval mechanics are complete for the currently approved scope.
-- Annual Closing readiness does not itself constitute final financial statements, zakat filing/calculation, or final year-end package export.
+- Phase 7 closure was reconciled against GitHub/main SHA `14846d39f85e2718677071705e762bc1dd21e789`; PRs #211, #213, #272, and #274 provide governed tax/Zakat workpapers, Annual Closing Packages, WHT review, and professional review/approval. Company profile fields `tax_treatment`, `ownership_context`, `wht_profile`, and `has_non_resident_dealings` provide the approved applicability context.
+- Phase 11 closure was reconciled against the same baseline; Home Alerts provide capability-aware, backend-authoritative ownership classification, module visibility boundaries, preserved drill-through, and capability-safe Monthly Close readiness/blocker disclosure.
+- Phase 12 closure was reconciled against the same baseline; the Phase 12A operational snapshot provides trusted available running bank balances, receivables, payables, current-month approved sales and purchases/expenses, plus explicit capability-aware hidden/unavailable states.
+- Annual Closing readiness does not itself constitute final financial statements, tax filing/calculation, automatic WHT rate/treaty/liability determination, or replacement of professional tax judgment. The manager snapshot is not a profitability statement and adds no profit, margin, EBITDA, forecasting, or AI scope.
 - Phase 5 was read-only reconciled against GitHub/main SHA `212d6b94b40a8d0c8bcb1ee7d0c16380e8e360ca`; the approved chart-classification and financial-statement mapping scope is implemented and tested, so it is no longer a Product gap.
 
 ## Governance / Agent-readiness status
@@ -74,8 +77,8 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from current dependencies/current `main` without waiting for Full Autonomous Readiness.
-2. Phase 2, Phase 5, Phase 8, and Phase 9 are complete for their currently approved scopes and must not be recreated as Product gaps unless a new Read-only Design Check identifies a real deficiency.
-3. Select the next Product task from the remaining **PARTIAL / NOT STARTED** roadmap items using current dependencies and a dedicated Read-only Design Check.
+2. Phase 2, Phase 5, Phase 7, Phase 8, Phase 9, Phase 10, Phase 11, and Phase 12 are complete for their currently approved scopes and must not be recreated as Product gaps unless a new Read-only Design Check identifies a real deficiency.
+3. Phase 14 — Full Operational & Accounting Cycle Validation is the next non-deferred Product phase and requires a dedicated Read-only Design Check before implementation.
 4. Continue normal Product governance: Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 
 ### Agent Infrastructure Track
@@ -94,19 +97,15 @@ These existing items remain open unless separately verified complete; they do no
 
 ## Next real product gap
 
-Phase 2, Phase 5, Phase 8, and Phase 9 are no longer Product gaps for their currently approved scopes.
+Phase 2, Phase 5, Phase 7, Phase 8, Phase 9, Phase 10, Phase 11, and Phase 12 are no longer Product gaps for their currently approved scopes.
 
-The next Product task must be chosen from the remaining **PARTIAL / NOT STARTED** roadmap items based on current `main`, dependencies, and a dedicated Read-only Design Check before implementation.
+Phase 14 — Full Operational & Accounting Cycle Validation is the next non-deferred Product phase. It must begin with a dedicated Read-only Design Check under the current approved governance.
 
-EQFAL Project must choose actual next Product work from the remaining PARTIAL / NOT STARTED roadmap items using current `main`, roadmap dependencies, and the approved governance at that time.
+## Remaining product backlog
 
-## Remaining product backlog after Phase 2 closure
-
-- Continue Zakat / Income Tax / Withholding Tax workpapers/reconciliation according to approved future designs.
-- Complete Home Screen Alerts.
-- Build Manager Financial Snapshot only from trustworthy accounting data.
-- Execute Full Operational & Accounting Cycle Validation.
-- Perform System-wide UI/UX Redesign only after functional/accounting completion and full-cycle validation.
+- Execute Phase 14 — Full Operational & Accounting Cycle Validation.
+- Keep Phase 13 conditional modules deferred unless a genuine company need is established and applicable gates are passed.
+- Keep Phase 15 System-wide UI/UX Redesign deferred until functional/accounting completion and full-cycle validation.
 
 ## Conditional / deferred work
 

@@ -1,10 +1,10 @@
 # EQFAL — Approved Execution Roadmap
 
 Status: Approved project guidance
-Reconciliation date: 2026-09-18
+Reconciliation date: 2026-09-20
 
 Last reconciled against GitHub/main SHA:
-`ff7fa41b544037a30b5cc00ac3869e22d400526b`
+`14846d39f85e2718677071705e762bc1dd21e789`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -157,15 +157,18 @@ This does not pre-approve future VAT/tax requirements. New tax scope requires a 
 
 ## Phase 7 — Zakat, Income Tax and Withholding Tax
 
-**Status: PARTIAL**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-Company applicability/profile foundations exist and Annual Closing can surface conservative readiness. Remaining future work includes, subject to approved designs:
-- Zakat/tax working papers and reconciliations tied to financial statements;
-- ownership/tax treatment context where relevant;
-- WHT review/workflows for relevant non-resident payments;
-- professional review/approval before final filing outputs.
+Reconciliation against `GitHub/main` SHA `14846d39f85e2718677071705e762bc1dd21e789` confirmed the merged Phase 7 foundations from PRs #211, #213, #272, and #274.
 
-EQFAL prepares, reconciles, explains, and surfaces exceptions; it does not replace final professional tax judgment.
+Implemented scope includes:
+- governed tax/Zakat working papers tied to posted financial source data, with reconciliation/source fingerprints, drift detection, governed adjustments, review/approval workflow, and professional-review flags;
+- fiscal-year-scoped Annual Closing Packages with lifecycle controls, immutable snapshots, finalization/readiness gates, and accountant handoff metadata;
+- tenant-scoped WHT review workflow with granular capabilities, conservative professional-review semantics, and Annual Closing readiness integration;
+- explicit package review and approval lifecycle with capability enforcement, source-drift protection, and auditability;
+- approved Company Accounting Profile context through `tax_treatment`, `ownership_context`, `wht_profile`, and `has_non_resident_dealings`.
+
+This scope does not automate tax filing, tax calculation, rate/treaty/liability determination, or replace professional tax judgment. Future expansion requires a new Read-only Design Check.
 
 ## Phase 8 — Integrated Monthly Close
 
@@ -226,22 +229,23 @@ Phase 10 Closure Audit is **PASS** for the currently approved scope. Future expa
 
 ## Phase 11 — Home Screen Alerts
 
-**Status: PARTIAL**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-Home already surfaces Monthly Close readiness/blockers and drill-through behavior. Remaining scope includes richer current-action, upcoming-due, waiting-for-accountant, and waiting-for-team classification subject to capabilities, without exposing restricted detail.
+Implemented scope includes capability-aware Home Alerts; current-user, upcoming, waiting-for-accountant, and waiting-for-team ownership classification; backend-authoritative ownership; module visibility boundaries; preserved drill-through; and a Monthly Close readiness/blocker summary with capability-safe disclosure. Future alert expansion requires a new Read-only Design Check.
 
 ## Phase 12 — Manager Financial Snapshot
 
-**Status: NOT STARTED**
+**Status: DONE FOR CURRENTLY APPROVED SCOPE**
 
-When underlying data is trustworthy, intended snapshot may include:
-- bank balances;
+The merged Phase 12A operational management view includes:
+- bank balances only when a trusted available running balance exists;
 - amounts to collect;
 - amounts to pay;
-- current-month sales;
-- current-month purchases/expenses.
+- current-month approved sales;
+- current-month approved purchases/expenses;
+- tenant- and capability-aware disclosure with explicit unavailable and hidden states.
 
-Do not confuse bank balance with profit/liquidity/net financial position, and do not present profit/margin/EBITDA/free-cash-flow as final before the accounting cycle is complete.
+This is an operational management view, not financial statements or a profitability measure. It does not imply profit, margin, EBITDA, forecasting, or AI scope. Future expansion requires a new Read-only Design Check.
 
 ## Phase 13 — Conditional Modules
 
@@ -258,6 +262,8 @@ Any cost-bearing capability requires a Human Gate before cost is introduced.
 ## Phase 14 — Full Operational and Accounting Cycle Validation
 
 **Status: NOT STARTED**
+
+This is the next non-deferred Product phase. Phase 13 remains conditional/deferred, and Phase 15 remains deferred until functional/accounting completion and this full-cycle validation are complete.
 
 Validate a real end-to-end cycle after prerequisite Product gaps are complete:
 
@@ -282,8 +288,8 @@ Two independent tracks are active:
 ### Product Track
 
 1. Resume Product roadmap from actual dependencies/current `main`.
-2. Phase 2, Phase 5, Phase 8, and Phase 9 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
-3. Select the next Product task from the remaining PARTIAL / NOT STARTED roadmap items using current dependencies and a dedicated Read-only Design Check.
+2. Phase 2, Phase 5, Phase 7, Phase 8, Phase 9, Phase 10, Phase 11, and Phase 12 are **DONE for their currently approved scopes**; do not recreate or reimplement those completed foundations without a new approved gap.
+3. Phase 14 — Full Operational and Accounting Cycle Validation is the next non-deferred Product phase and requires a dedicated Read-only Design Check before implementation.
 4. Every Product task follows Read-only Design Check → Execution Contract → Builder → durable GitHub delivery → Independent Reviewer → exact-SHA CI → Merge Gate → merge → Replit/runtime validation.
 5. Keep Phase 13 and Phase 15 deferred until their explicit gates are met.
 
