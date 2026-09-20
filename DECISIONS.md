@@ -480,3 +480,20 @@ Replit يبقى runtime/practical validation target only وممنوع من Produ
 - automatic destructive Git recovery.
 
 `GitHub/main` يبقى sole source of truth.
+
+---
+
+## 2026-09-20 — حظر Replit Agent نهائيًا واعتماد Replit Shell فقط
+
+**القرار:** يُمنع استخدام **Replit Agent** منعًا باتًا في مشروع **إقفال | EQFAL** في جميع الحالات ودون أي استثناء، بما في ذلك FREE MODE أو المزامنة أو الفحص أو التشغيل أو الاختبارات أو Preview أو التحقق من Runtime أو Git أو الاستعادة.
+
+**المسموح فقط:** استخدام **Replit Shell** يدويًا لتنفيذ أوامر المزامنة والتشغيل والفحص والتحقق المعتمدة ضمن Workflow المشروع.
+
+**الأثر الحاكم:** هذا القرار **supersedes** قرار 2026-09-11 وأي نص تاريخي آخر سمح باستخدام Replit Agent كليًا أو جزئيًا. تبقى النصوص القديمة محفوظة كسجل تاريخي فقط ولا تمنح أي صلاحية تشغيلية حالية.
+
+**الحدود المستمرة:**
+- GitHub/main يبقى Source of Truth.
+- Replit يبقى Runtime / Practical Validation فقط.
+- Replit Shell لا يُستخدم لتجاوز Owner Approval أو GitHub/PR/CI governance أو لإعادة بناء تغييرات Product غير معتمدة.
+- لا Production ولا تكلفة مدفوعة جديدة دون موافقة صريحة من Owner.
+

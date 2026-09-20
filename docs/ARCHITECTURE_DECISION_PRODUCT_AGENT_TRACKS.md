@@ -38,3 +38,4 @@ Full Autonomous Readiness remains **NOT READY** until event-driven automatic con
 - The Agent Infrastructure Track must not silently change Product scope or roadmap priority.
 - No Production, paid-cost, secrets/credentials, destructive real-data, sensitive real-user permission, material accounting/tax policy, exceptional Git recovery, or unresolved material ambiguity Human Gate is weakened by this decision.
 - Replit remains runtime/practical validation only and is not a Git rescue or Builder delivery mechanism.
+- Replit Agent is prohibited in all circumstances; approved Replit interaction is manual **Replit Shell only**.

@@ -221,6 +221,8 @@ Never state that a PR was created or updated until GitHub is independently verif
 
 Replit is a Runtime / Practical Validation environment only. It is not a Source of Truth, independent development environment, or Git recovery mechanism.
 
+**Permanent Replit tool boundary:** Replit Agent is prohibited in all circumstances for EQFAL. Do not use Replit Agent for synchronization, coding, refactoring, tests, startup, Preview, runtime validation, Git operations, recovery, or any other project action. The only permitted interactive Replit mechanism is **Replit Shell**, used manually for approved synchronization/runtime/validation commands. This rule supersedes any earlier Replit Agent allowlist or FREE MODE exception.
+
 Before Owner UAT there must be verifiable SHA continuity between:
 - identifiable Codex result/commit when one exists;
 - GitHub PR HEAD SHA;
@@ -269,6 +271,7 @@ A merge may occur only after the prior gates are satisfied and the Owner explici
 - No unrelated refactors.
 - No dependency upgrades unless required by the approved task and explicitly approved when material.
 - No automatic merge.
+- Replit Agent is prohibited without exception; only manual Replit Shell usage is permitted for approved Replit operations.
 - No claiming tests, CI, GitHub delivery, Replit synchronization, validation, deployment, or success without verifiable evidence.
 - `GitHub/main` remains the source of truth for merged state.
 - No destructive real-data action, secrets/credentials change, or exceptional Git recovery without explicit Owner Approval.

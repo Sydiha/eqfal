@@ -69,7 +69,7 @@ Not yet proven:
 
 Until both are proven, Replit remains runtime/practical validation only. A small user sync action may use `SYNC ASSISTANCE REQUIRED`; it is not approval or User Acceptance.
 
-Replit Agent is allowed only in FREE MODE for synchronization, Git-state checks, startup, Preview/basic smoke/runtime validation, and runtime SHA verification when proven. It remains prohibited for Product coding/refactoring, accounting/tax logic, DB/schema design/migrations, branch reconstruction, PR rescue, patch relay, GitHub push/write/PR, Power, Max, or paid credits/additional paid usage.
+**Current binding policy:** Replit Agent is prohibited in all circumstances across EQFAL. There is no FREE MODE exception. Replit may be used only through **manual Replit Shell** for approved synchronization, Git-state checks, startup, Preview/basic smoke checks, runtime validation, and same-SHA verification. Replit Shell must not be used to bypass GitHub governance, recreate Product changes, rescue PRs, or perform unapproved Product coding.
 
 ## Agent Readiness Status
 

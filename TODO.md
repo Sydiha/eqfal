@@ -129,7 +129,7 @@ Remain deferred unless justified and passed through applicable Design/Human Gate
 - Independent Reviewer and required exact-SHA CI are mandatory for normal merge.
 - Production, new paid cost, destructive real-data actions, material accounting/tax policy changes, secrets/credentials, specified sensitive real-user access changes, material unresolved ambiguity, and exceptional Git recovery remain Human Gates.
 - Replit is runtime/practical validation only and may not write to GitHub.
-- Replit Agent is FREE MODE ONLY within the approved allowlist; if Free Mode is no longer actually free: STOP.
+- Replit Agent is prohibited in all circumstances; only manual Replit Shell is permitted for approved Replit synchronization/runtime/validation commands.
 - Tooling incidents follow `docs/TOOLING_RECOVERY_PLAYBOOK.md`.
 
 ---
