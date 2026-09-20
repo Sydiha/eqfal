@@ -178,10 +178,11 @@ Never silently continue from a stale or arbitrary baseline.
 
 ### REPLIT_SYNC_OR_SHA_FAILURE
 1. Replit remains Runtime / Practical Validation only.
-2. Verify GitHub PR HEAD SHA.
-3. Verify the SHA actually being validated in Replit.
-4. If they differ or cannot be proven, STOP validation.
-5. Do not use Replit to recreate, push, or rescue Product changes.
+2. Replit Agent is prohibited for recovery, sync, startup, validation, Git, or any other action. Use manual **Replit Shell only** for approved Replit commands.
+3. Verify GitHub PR HEAD SHA.
+4. Verify the SHA actually being validated in Replit.
+5. If they differ or cannot be proven, STOP validation.
+6. Do not use Replit to recreate, push, or rescue Product changes.
 
 ### EXCEPTIONAL_GIT_RECOVERY
 Force-push, history rewrite, destructive Git recovery, or equivalent exceptional action requires explicit Owner Approval.
