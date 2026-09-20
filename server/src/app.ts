@@ -28,6 +28,7 @@ import { annualClosingRouter } from './modules/annual-closing/annual-closing.rou
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
 import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
 import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
+import { managerFinancialSnapshotRouter } from './modules/manager-financial-snapshot/manager-financial-snapshot.router';
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import logger from './shared/logger';
 
@@ -71,6 +72,7 @@ app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
 app.use('/api', accessAdministrationRouter);
 app.use('/api', homeAlertsRouter);
+app.use('/api', managerFinancialSnapshotRouter);
 app.use('/api', whtReviewRouter);
 
 // 404

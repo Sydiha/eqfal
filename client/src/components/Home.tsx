@@ -44,6 +44,17 @@ type HomeAlert = {
   parameters: Record<string, string>;
 };
 
+type SnapshotMetric = { state: 'available'; amount: string } | { state: 'hidden' };
+type FinancialSnapshot = {
+  metrics: {
+    bank_balances: { state: 'hidden' } | { state: 'available'; accounts: Array<{ id: string; display_name: string; currency_code: string; balance: { state: 'available'; amount: string } | { state: 'unavailable' } }> };
+    amounts_to_collect: SnapshotMetric;
+    amounts_to_pay: SnapshotMetric;
+    current_month_sales: SnapshotMetric;
+    current_month_purchases_expenses: SnapshotMetric;
+  };
+};
+
 type Props = {
   capabilities: readonly string[];
   navigate: (page: HomePage) => void;
@@ -65,6 +76,10 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   const [alerts, setAlerts] = useState<HomeAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(canViewAlerts);
   const [alertsError, setAlertsError] = useState(false);
+  const canViewSnapshot = capabilities.some(capability => ['bank.view', 'obligation.view', 'document.view'].includes(capability));
+  const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(canViewSnapshot);
+  const [snapshotError, setSnapshotError] = useState(false);
   const isArabic = i18n.language.startsWith('ar');
   const homeLabels = isArabic
     ? {
@@ -86,6 +101,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         periodState: 'حالة الفترة',
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
+        snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -106,6 +122,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         periodState: 'Period status',
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
+        snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -161,6 +178,29 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     if (canViewAlerts) void loadAlerts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canViewAlerts]);
+
+  const loadSnapshot = async () => {
+    if (!canViewSnapshot) return;
+    setSnapshotLoading(true);
+    setSnapshotError(false);
+    try {
+      const response = await fetch('/api/manager-financial-snapshot', { credentials: 'same-origin' });
+      if (response.status === 401) onUnauthorized();
+      if (!response.ok) throw new Error(String(response.status));
+      const payload = (await response.json()) as Partial<FinancialSnapshot>;
+      if (!payload.metrics) throw new Error('Invalid snapshot');
+      setSnapshot(payload as FinancialSnapshot);
+    } catch {
+      setSnapshotError(true);
+    } finally {
+      setSnapshotLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (canViewSnapshot) void loadSnapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canViewSnapshot]);
 
   const selected = periods[0] ?? null;
   const alertGroups = (['current_user', 'upcoming', 'waiting_for_accountant', 'waiting_for_team'] as const)
@@ -272,6 +312,35 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               </button>
             ))}
           </div>
+        </section>
+      )}
+
+      {canViewSnapshot && (
+        <section className="home-exceptions" aria-labelledby="home-financial-snapshot-title">
+          <div className="home-v21__section-heading">
+            <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
+          </div>
+          {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
+            <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
+          ) : (
+            <div className="home-launcher__grid">
+              <article>
+                <h3>{homeLabels.bankBalances}</h3>
+                {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
+                  : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
+                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+              </article>
+              {([
+                ['amounts_to_collect', homeLabels.amountsToCollect],
+                ['amounts_to_pay', homeLabels.amountsToPay],
+                ['current_month_sales', homeLabels.monthSales],
+                ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
+              ] as const).map(([key, label]) => {
+                const metric = snapshot.metrics[key];
+                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+              })}
+            </div>
+          )}
         </section>
       )}
 
