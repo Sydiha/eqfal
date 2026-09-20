@@ -37,6 +37,7 @@ type Period = {
 type HomeAlert = {
   key: string;
   class: 'needs_action_now' | 'upcoming_due' | 'needs_review_completion';
+  ownership: 'current_user' | 'waiting_for_accountant' | 'waiting_for_team' | 'upcoming';
   count: number;
   destination: DiscoveryPage;
   parameters: Record<string, string>;
@@ -83,6 +84,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
+        ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -102,6 +104,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         readiness: 'Close readiness',
         periodState: 'Period status',
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
+        ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -159,6 +162,9 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   }, [canViewAlerts]);
 
   const selected = periods[0] ?? null;
+  const alertGroups = (['current_user', 'upcoming', 'waiting_for_accountant', 'waiting_for_team'] as const)
+    .map(ownership => ({ ownership, alerts: alerts.filter(alert => alert.ownership === ownership) }))
+    .filter(group => group.alerts.length > 0);
   const can = (capability: string) => capabilities.includes(capability);
   const canViewSalesPurchases = can('document.view') && can('obligation.view');
   const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
@@ -272,11 +278,18 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
-            <div className="home-launcher__grid">
-              {alerts.map(alert => (
-                <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                  <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
-                </button>
+            <div>
+              {alertGroups.map(group => (
+                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
+                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
+                  <div className="home-launcher__grid">
+                    {group.alerts.map(alert => (
+                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+                        <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}

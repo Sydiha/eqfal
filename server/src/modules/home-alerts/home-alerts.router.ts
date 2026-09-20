@@ -7,10 +7,12 @@ import { getAuthenticatedContext, requireActiveCompany, requireAuth } from '../a
 export const homeAlertsRouter = Router();
 
 type AlertClass = 'needs_action_now' | 'upcoming_due' | 'needs_review_completion';
+type AlertOwnership = 'current_user' | 'waiting_for_accountant' | 'waiting_for_team' | 'upcoming';
 type Destination = 'obligations' | 'documents' | 'banks';
 export type HomeAlert = {
   key: string;
   class: AlertClass;
+  ownership: AlertOwnership;
   count: number;
   destination: Destination;
   parameters: Record<string, string>;
@@ -24,6 +26,9 @@ const addDays = (date: string, days: number) => {
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 };
+
+const ownsAction = (capabilities: readonly string[], capability: string, otherwise: AlertOwnership): AlertOwnership =>
+  capabilities.includes(capability) ? 'current_user' : otherwise;
 
 export class HomeAlertsService {
   constructor(private db: Pool) {}
@@ -50,9 +55,9 @@ export class HomeAlertsService {
       FROM remaining`, [companyId, today, dueThrough]);
       const counts = rows[0] ?? { overdue: '0', upcoming: '0', unconfirmed: '0' };
       alerts.push(
-        { key: 'overdue_obligations', class: 'needs_action_now', count: Number(counts.overdue), destination: 'obligations', parameters: { overdue: '1' } },
-        { key: 'upcoming_obligations', class: 'upcoming_due', count: Number(counts.upcoming), destination: 'obligations', parameters: { dueFrom: today, dueTo: dueThrough } },
-        { key: 'unconfirmed_obligations', class: 'needs_review_completion', count: Number(counts.unconfirmed), destination: 'obligations', parameters: { confirmation: 'unconfirmed' } },
+        { key: 'overdue_obligations', class: 'needs_action_now', ownership: ownsAction(capabilities, 'obligation.settlement.create', 'waiting_for_accountant'), count: Number(counts.overdue), destination: 'obligations', parameters: { overdue: '1' } },
+        { key: 'upcoming_obligations', class: 'upcoming_due', ownership: 'upcoming', count: Number(counts.upcoming), destination: 'obligations', parameters: { dueFrom: today, dueTo: dueThrough } },
+        { key: 'unconfirmed_obligations', class: 'needs_review_completion', ownership: ownsAction(capabilities, 'obligation.confirm', 'waiting_for_team'), count: Number(counts.unconfirmed), destination: 'obligations', parameters: { confirmation: 'unconfirmed' } },
       );
     }
 
@@ -63,7 +68,10 @@ export class HomeAlertsService {
       );
       const counts = new Map(rows.map(row => [row.status, Number(row.count)]));
       for (const status of ['uploaded', 'needs_review', 'incomplete']) {
-        alerts.push({ key: `documents_${status}`, class: 'needs_review_completion', count: counts.get(status) ?? 0, destination: 'documents', parameters: { status } });
+        const ownership = status === 'incomplete'
+          ? ownsAction(capabilities, 'document.edit', 'waiting_for_team')
+          : ownsAction(capabilities, 'document.review', 'waiting_for_accountant');
+        alerts.push({ key: `documents_${status}`, class: 'needs_review_completion', ownership, count: counts.get(status) ?? 0, destination: 'documents', parameters: { status } });
       }
     }
 
@@ -74,7 +82,8 @@ export class HomeAlertsService {
       );
       const counts = new Map(rows.map(row => [row.reconciliation_status, Number(row.count)]));
       for (const status of ['unmatched', 'matched']) {
-        alerts.push({ key: `bank_transactions_${status}`, class: 'needs_review_completion', count: counts.get(status) ?? 0, destination: 'banks', parameters: { section: 'transactions', reconciliation: status } });
+        const capability = status === 'unmatched' ? 'bank.match' : 'bank.reconcile';
+        alerts.push({ key: `bank_transactions_${status}`, class: 'needs_review_completion', ownership: ownsAction(capabilities, capability, 'waiting_for_accountant'), count: counts.get(status) ?? 0, destination: 'banks', parameters: { section: 'transactions', reconciliation: status } });
       }
     }
 

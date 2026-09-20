@@ -38,9 +38,9 @@ describe('home alerts', () => {
     expect(response.body).toEqual({
       as_of: '2026-09-17',
       alerts: [
-        expect.objectContaining({ key: 'overdue_obligations', count: 2, parameters: { overdue: '1' } }),
-        expect.objectContaining({ key: 'upcoming_obligations', count: 3, parameters: { dueFrom: '2026-09-17', dueTo: '2026-10-17' } }),
-        expect.objectContaining({ key: 'unconfirmed_obligations', count: 1, parameters: { confirmation: 'unconfirmed' } }),
+        expect.objectContaining({ key: 'overdue_obligations', ownership: 'waiting_for_accountant', count: 2, parameters: { overdue: '1' } }),
+        expect.objectContaining({ key: 'upcoming_obligations', ownership: 'upcoming', count: 3, parameters: { dueFrom: '2026-09-17', dueTo: '2026-10-17' } }),
+        expect.objectContaining({ key: 'unconfirmed_obligations', ownership: 'waiting_for_team', count: 1, parameters: { confirmation: 'unconfirmed' } }),
       ],
     });
   });
@@ -71,5 +71,60 @@ describe('home alerts', () => {
       expect.objectContaining({ key: 'bank_transactions_unmatched', count: 5 }),
     ]));
     expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses action capabilities, rather than view access, to classify document ownership', async () => {
+    mocks.pool = { query: vi.fn().mockResolvedValue({ rows: [
+      { status: 'uploaded', count: '1' },
+      { status: 'needs_review', count: '2' },
+      { status: 'incomplete', count: '3' },
+    ] }) };
+    mocks.context = { activeCompanyId: COMPANY, capabilities: ['document.view'], user: { id: 'user' } };
+
+    let response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'documents_uploaded', ownership: 'waiting_for_accountant' }),
+      expect.objectContaining({ key: 'documents_needs_review', ownership: 'waiting_for_accountant' }),
+      expect.objectContaining({ key: 'documents_incomplete', ownership: 'waiting_for_team' }),
+    ]));
+
+    mocks.context.capabilities.push('document.review', 'document.edit');
+    response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts.every((alert: { ownership: string }) => alert.ownership === 'current_user')).toBe(true);
+  });
+
+  it('classifies each bank workflow using its matching action capability', async () => {
+    mocks.pool = { query: vi.fn().mockResolvedValue({ rows: [
+      { reconciliation_status: 'unmatched', count: '1' },
+      { reconciliation_status: 'matched', count: '2' },
+    ] }) };
+    mocks.context = { activeCompanyId: COMPANY, capabilities: ['bank.view'], user: { id: 'user' } };
+
+    let response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts.every((alert: { ownership: string }) => alert.ownership === 'waiting_for_accountant')).toBe(true);
+
+    mocks.context.capabilities.push('bank.match');
+    response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'bank_transactions_unmatched', ownership: 'current_user' }),
+      expect.objectContaining({ key: 'bank_transactions_matched', ownership: 'waiting_for_accountant' }),
+    ]));
+
+    mocks.context.capabilities.push('bank.reconcile');
+    response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts.every((alert: { ownership: string }) => alert.ownership === 'current_user')).toBe(true);
+  });
+
+  it('includes ownership on every alert returned across authorized modules', async () => {
+    mocks.pool = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('WITH remaining')) return { rows: [{ overdue: '1', upcoming: '1', unconfirmed: '1' }] };
+      if (sql.includes('FROM documents')) return { rows: [] };
+      return { rows: [] };
+    }) };
+    mocks.context = { activeCompanyId: COMPANY, capabilities: ['obligation.view', 'document.view', 'bank.view'], user: { id: 'user' } };
+
+    const response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts).toHaveLength(8);
+    expect(response.body.alerts.every((alert: { ownership?: string }) => alert.ownership)).toBe(true);
   });
 });

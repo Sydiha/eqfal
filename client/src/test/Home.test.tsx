@@ -168,7 +168,7 @@ describe('Home v2.1', () => {
   it('renders capability-backed alerts and preserves drill-through query state', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/home-alerts') return new Response(JSON.stringify({ alerts: [
-        { key: 'overdue_obligations', class: 'needs_action_now', count: 2, destination: 'obligations', parameters: { overdue: '1' } },
+        { key: 'overdue_obligations', class: 'needs_action_now', ownership: 'waiting_for_accountant', count: 2, destination: 'obligations', parameters: { overdue: '1' } },
       ] }), { status: 200 });
       return new Response('', { status: 404 });
     });
@@ -180,6 +180,21 @@ describe('Home v2.1', () => {
     expect(alert).toHaveTextContent('2');
     alert.click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { overdue: '1' });
+  });
+
+  it('groups alerts by backend ownership and omits empty ownership groups', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ alerts: [
+      { key: 'documents_needs_review', class: 'needs_review_completion', ownership: 'current_user', count: 2, destination: 'documents', parameters: { status: 'needs_review' } },
+      { key: 'upcoming_obligations', class: 'upcoming_due', ownership: 'upcoming', count: 1, destination: 'obligations', parameters: { dueFrom: '2026-09-17', dueTo: '2026-10-17' } },
+      { key: 'bank_transactions_unmatched', class: 'needs_review_completion', ownership: 'waiting_for_accountant', count: 3, destination: 'banks', parameters: { section: 'transactions', reconciliation: 'unmatched' } },
+    ] }), { status: 200 })));
+    renderHome(['document.view', 'obligation.view', 'bank.view']);
+
+    expect(await screen.findByRole('heading', { name: 'Current user action' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Waiting for accountant' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Waiting for team' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Documents needing review/ })).toBeInTheDocument();
   });
 
   it('does not request or render alerts without a supported module view capability', () => {
