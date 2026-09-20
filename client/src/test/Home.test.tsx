@@ -240,4 +240,39 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('heading', { name: 'Alerts' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('renders available snapshot values and explicit unavailable and restricted states', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/manager-financial-snapshot') return new Response(JSON.stringify({ metrics: {
+        bank_balances: { state: 'available', accounts: [
+          { id: 'b1', display_name: 'Operating account', currency_code: 'SAR', balance: { state: 'available', amount: '1250.50' } },
+          { id: 'b2', display_name: 'Reserve account', currency_code: 'USD', balance: { state: 'unavailable' } },
+        ] },
+        amounts_to_collect: { state: 'available', amount: '400.25' },
+        amounts_to_pay: { state: 'available', amount: '90.00' },
+        current_month_sales: { state: 'hidden' },
+        current_month_purchases_expenses: { state: 'hidden' },
+      } }), { status: 200 });
+      if (url === '/api/home-alerts') return new Response(JSON.stringify({ alerts: [] }), { status: 200 });
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderHome(['bank.view', 'obligation.view']);
+
+    expect(await screen.findByRole('heading', { name: 'Manager Financial Snapshot' })).toBeInTheDocument();
+    expect(await screen.findByText('1250.50 SAR')).toBeInTheDocument();
+    expect(screen.getByText('Reserve account').parentElement).toHaveTextContent('Unavailable');
+    expect(screen.getByText('400.25')).toBeInTheDocument();
+    expect(screen.getByText('90.00')).toBeInTheDocument();
+    expect(screen.getAllByText('Restricted by permissions')).toHaveLength(2);
+  });
+
+  it('does not load or show the snapshot without any relevant view capability', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderHome([]);
+
+    expect(screen.queryByRole('heading', { name: 'Manager Financial Snapshot' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
