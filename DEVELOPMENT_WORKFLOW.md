@@ -116,6 +116,8 @@ Never claim a PR exists or is updated until GitHub verifies it.
 
 Replit is Runtime / Practical Validation only.
 
+Replit Agent is **never permitted** for EQFAL. Use **Replit Shell only**, manually, for approved sync/startup/runtime/same-SHA validation commands. No FREE MODE exception exists.
+
 Before Owner UAT, prove:
 
 `GitHub PR HEAD SHA == Replit validated SHA`
