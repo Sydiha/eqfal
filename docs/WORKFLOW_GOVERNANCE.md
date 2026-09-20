@@ -230,6 +230,8 @@ A PR is not considered created or updated until GitHub confirms it.
 
 Replit is Runtime / Practical Validation only.
 
+**Replit Agent is prohibited in all circumstances.** It must not be used for synchronization, coding, testing, startup, Preview, runtime validation, Git operations, recovery, or any other EQFAL action. Only **manual Replit Shell** commands are permitted for approved Replit synchronization/runtime/validation work. This supersedes every earlier FREE MODE or limited-use Replit Agent allowance.
+
 It is not:
 - Source of Truth;
 - an independent Product-development branch;
