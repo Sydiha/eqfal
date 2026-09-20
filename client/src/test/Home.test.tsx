@@ -94,13 +94,14 @@ describe('Home v2.1', () => {
               period_end: '2026-08-31',
               status: 'open',
               ready: false,
+              disclosed_total: 3,
+              has_hidden_blockers: false,
               blockers: {
                 documents: 2,
                 obligations: 1,
                 bank_transactions: 0,
                 vat: 0,
                 ledger: 0,
-                total: 3,
               },
             },
           ],
@@ -125,6 +126,9 @@ describe('Home v2.1', () => {
     expect(within(table).getByText('Blockers: 2')).toBeInTheDocument();
     expect(within(table).getByText('Blockers: 1')).toBeInTheDocument();
     expect(within(table).getAllByText('No blockers')).toHaveLength(3);
+    expect(screen.getAllByText('Blockers: 3').length).toBeGreaterThan(0);
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('undefined');
 
     within(table).getByRole('button', { name: 'Documents' }).click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('documents', {
@@ -144,7 +148,9 @@ describe('Home v2.1', () => {
             period_end: '2026-09-30',
             status: 'closed',
             ready: true,
-            blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, total: 0 },
+            disclosed_total: 0,
+            has_hidden_blockers: false,
+            blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0 },
           },
         ],
       }), { status: 200 }),
@@ -154,6 +160,36 @@ describe('Home v2.1', () => {
     expect(await screen.findByRole('heading', { name: 'No blockers' })).toBeInTheDocument();
     expect(screen.queryByText('Ready to close')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
+  });
+
+  it('uses safe non-numeric wording when undisclosed blockers exist', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      periods: [{
+        id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
+        status: 'open', ready: false, disclosed_total: 2, has_hidden_blockers: true,
+        blockers: { documents: 2, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, total: 99 },
+      }],
+    }), { status: 200 })));
+    renderHome(['monthly_close.view', 'document.view']);
+
+    expect(await screen.findByRole('heading', { name: 'There are blockers that require an authorized user.' })).toBeInTheDocument();
+    expect(screen.getAllByText('There are blockers that require an authorized user.').length).toBeGreaterThan(1);
+    expect(document.body).not.toHaveTextContent('99');
+    expect(document.body).not.toHaveTextContent('undefined');
+  });
+
+  it('preserves ready wording for an open period that the backend marks ready', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      periods: [{
+        id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
+        status: 'open', ready: true, disclosed_total: 0, has_hidden_blockers: false,
+        blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0 },
+      }],
+    }), { status: 200 })));
+    renderHome(['monthly_close.view']);
+
+    expect(await screen.findByRole('heading', { name: 'Ready to close' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('undefined');
   });
 
   it('shows an error state instead of treating a failed API request as zero blockers', async () => {

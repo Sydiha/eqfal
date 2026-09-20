@@ -24,13 +24,14 @@ type Period = {
   period_end: string;
   status: 'open' | 'closed';
   ready: boolean;
+  disclosed_total: number;
+  has_hidden_blockers: boolean;
   blockers: {
     documents: number;
     obligations: number;
     bank_transactions: number;
     vat: number;
     ledger: number;
-    total: number;
   };
 };
 
@@ -236,7 +237,9 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       ? homeLabels.noBlockers
       : selected.ready
         ? t('monthlyClose.ready')
-        : homeLabels.blockers(selected.blockers.total)
+        : selected.has_hidden_blockers
+          ? t('monthlyClose.blockedHidden')
+          : homeLabels.blockers(selected.disclosed_total)
     : '';
 
   const periodRange = selected ? (
@@ -314,7 +317,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               <span className={`home-status-pill home-status-pill--${selected.status}`}>
                 {t(`monthlyClose.${selected.status}`)}
               </span>
-              <span className={`home-status-pill ${selected.blockers.total === 0 ? 'is-ready' : 'is-blocked'}`}>
+              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
                 {closeSummary}
               </span>
             </>
@@ -332,8 +335,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                 <p className="home-eyebrow">{t('monthlyClose.title')}</p>
                 <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
               </div>
-              <span className={`home-status-pill ${selected.blockers.total === 0 ? 'is-ready' : 'is-blocked'}`}>
-                {selected.blockers.total === 0 ? homeLabels.noBlockers : homeLabels.blockers(selected.blockers.total)}
+              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
+                {closeSummary}
               </span>
             </div>
             <div className="home-exceptions__table-wrap">
@@ -378,7 +381,11 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             </div>
             <div className="home-readiness__summary" style={{ marginTop: 0, borderTop: 0 }}>
               <span>{homeLabels.closeBlockers}</span>
-              <strong>{selected.blockers.total}</strong>
+              <strong>
+                {selected.has_hidden_blockers
+                  ? t('monthlyClose.blockedHidden')
+                  : selected.disclosed_total}
+              </strong>
             </div>
             <button type="button" className="home-readiness__open" onClick={() => navigate('monthlyClose')}>
               {t('nav.monthlyClose')}
