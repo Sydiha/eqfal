@@ -72,6 +72,15 @@ export async function postJournalInTransaction(
     throw new JournalPostingValidationError('Opening balance date must equal fiscal year start');
   }
 
+  if (journal.entry_type === 'standard' && !journal.source_type && !journal.source_id) {
+    const today = (
+      await client.query<{ today: string }>('SELECT CURRENT_DATE::text AS today')
+    ).rows[0]!.today;
+    if (journal.accounting_date > today) {
+      throw new JournalPostingValidationError('Manual journal accounting date is in the future');
+    }
+  }
+
   await assertAccountingDateWritable(companyId, journal.accounting_date, client);
 
   const summary = (

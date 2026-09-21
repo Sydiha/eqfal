@@ -19,6 +19,17 @@ describe('shared journal posting contract',()=>{
     expect(shared).toContain("action: 'journal.post'");
   });
 
+  it('blocks future-dated manual standard journals before period checks, posting, or audit',()=>{
+    const futureGuard="if (journal.accounting_date > today)";
+    expect(shared).toContain("journal.entry_type === 'standard' && !journal.source_type && !journal.source_id");
+    expect(shared).toContain("SELECT CURRENT_DATE::text AS today");
+    expect(shared).toContain(futureGuard);
+    expect(shared).toContain("Manual journal accounting date is in the future");
+    expect(shared.indexOf(futureGuard)).toBeLessThan(shared.indexOf('assertAccountingDateWritable(companyId, journal.accounting_date, client)'));
+    expect(shared.indexOf(futureGuard)).toBeLessThan(shared.indexOf("UPDATE journal_entries SET status='posted'"));
+    expect(shared.indexOf(futureGuard)).toBeLessThan(shared.indexOf("action: 'journal.post'"));
+  });
+
   it('opening approval no longer directly posts a journal',()=>{
     const approve=opening.slice(opening.indexOf('async approve('),opening.indexOf('\n}\n\nconst service'));
     expect(approve).not.toContain("UPDATE journal_entries SET status='posted'");
