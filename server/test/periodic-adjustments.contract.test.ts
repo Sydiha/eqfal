@@ -40,6 +40,14 @@ describe('Phase 4 periodic adjustments accounting contract',()=>{
   expect(router).toContain("throw new Invalid('Reason is required')");
   expect(router).toContain("action:'periodic_adjustment.return_to_draft'");
  });
+ it('blocks future periodic-adjustment schedule posting before journal creation',()=>{
+  const futureGuard="if(s.recognition_date>today)throw new Conflict('Periodic adjustment recognition date is in the future')";
+  expect(router).toContain('SELECT CURRENT_DATE::text AS today');
+  expect(router).toContain(futureGuard);
+  expect(router.indexOf(futureGuard)).toBeLessThan(router.indexOf('INSERT INTO journal_entries'));
+  expect(router).toContain("if(s.status!=='pending'||s.journal_entry_id)throw new Conflict('Schedule line is already posted')");
+  expect(router.indexOf('assertAccountingDateWritable(company,s.recognition_date,c)')).toBeLessThan(router.indexOf('INSERT INTO journal_entries'));
+ });
  it('uses an unambiguous typed schedule list projection',()=>{
   expect(router).toContain('FROM periodic_adjustment_schedule s WHERE s.company_id=$1 ORDER BY s.recognition_date,s.id');
   expect(router).toContain('s.recognition_date::text AS recognition_date');
