@@ -11,22 +11,22 @@ const revenue={account_id:'a',code:'4000',account_type:'revenue',statement_categ
 const expense={account_id:'b',code:'5000',account_type:'expense',statement_category:'operating_expense',is_contra:false,debit:'250.00',credit:'0.00'};
 
 function fixture(){
- let source=[revenue,expense],persistedFingerprint:string|null=null,persistedBase:string|null=null,version=2,status='draft',reviewedBy:string|null=null,reviewedAt:string|null=null;
+ let source=[revenue,expense],persistedFingerprint:string|null=null,persistedBase:string|null=null,version=2,status='draft',reviewedBy:string|null=null,reviewedAt:string|null=null,approvedBy:string|null=null,approvedAt:string|null=null;
  const queries:{sql:string;args:unknown[]}[]=[];
  const query=vi.fn(async(sql:string,args:unknown[]=[])=>{
   queries.push({sql,args});
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return result();
-  if(sql.includes('FROM tax_working_papers'))return result([{id:'w',company_id:COMPANY,fiscal_year_id:YEAR,workflow_status:status,professional_review_required:false,accounting_profile_id:'p',tax_path:'zakat',starting_financial_base:persistedBase,source_fingerprint:persistedFingerprint,reviewed_by_user_id:reviewedBy,reviewed_at:reviewedAt,version}]);
+  if(sql.includes('FROM tax_working_papers'))return result([{id:'w',company_id:COMPANY,fiscal_year_id:YEAR,workflow_status:status,professional_review_required:false,accounting_profile_id:'p',tax_path:'zakat',starting_financial_base:persistedBase,source_fingerprint:persistedFingerprint,reviewed_by_user_id:reviewedBy,reviewed_at:reviewedAt,approved_by_user_id:approvedBy,approved_at:approvedAt,version}]);
   if(sql.includes('FROM tax_working_paper_adjustments'))return result([{id:'add',direction:'add',amount:'25.50',professional_review_required:false},{id:'deduct',direction:'deduct',amount:'10.25',professional_review_required:false}]);
   if(sql.includes('FROM fiscal_years'))return result([{start_date:'2026-01-01',end_date:'2026-12-31'}]);
   if(sql.includes('FROM journal_lines'))return result(source);
-  if(sql.startsWith('UPDATE tax_working_papers SET starting_financial_base')){persistedBase=String(args[2]);persistedFingerprint=String(args[3]);if(status==='reviewed'){status='needs_review';reviewedBy=null;reviewedAt=null;}version++;return result([{}]);}
+  if(sql.startsWith('UPDATE tax_working_papers SET starting_financial_base')){persistedBase=String(args[2]);persistedFingerprint=String(args[3]);if(['reviewed','approved'].includes(status)){if(status==='approved'){approvedBy=null;approvedAt=null;}status='needs_review';reviewedBy=null;reviewedAt=null;}version++;return result([{}]);}
   if(sql.includes('FROM company_accounting_profiles'))return result([{id:'p',tax_treatment:'zakat_applicable'}]);
   if(sql.startsWith('UPDATE tax_working_papers SET workflow_status'))return result([{id:'w',workflow_status:'approved'}]);
   throw new Error(`Unexpected SQL: ${sql}`);
  });
  const client={query,release:vi.fn()} as unknown as PoolClient;
- return{service:new TaxWorkpaperService({connect:vi.fn().mockResolvedValue(client),query} as unknown as Pool),queries,setSource:(rows:typeof source)=>{source=rows;},setStatus:(value:string)=>{status=value;if(value==='reviewed'){reviewedBy=USER;reviewedAt='2026-09-18T00:00:00.000Z';}}};
+ return{service:new TaxWorkpaperService({connect:vi.fn().mockResolvedValue(client),query} as unknown as Pool),queries,setSource:(rows:typeof source)=>{source=rows;},setStatus:(value:string)=>{status=value;if(value==='reviewed'){reviewedBy=USER;reviewedAt='2026-09-18T00:00:00.000Z';}if(value==='approved'){reviewedBy=USER;reviewedAt='2026-09-18T00:00:00.000Z';approvedBy=USER;approvedAt='2026-09-18T01:00:00.000Z';}}};
 }
 
 describe('Tax workpaper financial-source reconciliation',()=>{
@@ -42,6 +42,12 @@ describe('Tax workpaper financial-source reconciliation',()=>{
   const x=fixture();x.setStatus('needs_review');
   const reconciled=await x.service.reconcile(COMPANY,YEAR,USER,2);
   expect(reconciled).toMatchObject({workflow_status:'needs_review',reviewed_by_user_id:null,reviewed_at:null,version:3});
+ });
+ it('reconciles an approved workpaper only when evidence changed and invalidates the stale approval',async()=>{
+  const x=fixture();await x.service.reconcile(COMPANY,YEAR,USER,2);x.setStatus('approved');x.setSource([{...revenue,credit:'1200.00'},expense]);
+  const refreshed=await x.service.reconcile(COMPANY,YEAR,USER,3);
+  expect(refreshed).toMatchObject({starting_financial_base:'950.00',source_drift:false,workflow_status:'needs_review',reviewed_by_user_id:null,reviewed_at:null,approved_by_user_id:null,approved_at:null,version:4});
+  expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({action:'tax_workpaper.reconcile',before_data:expect.objectContaining({workflow_status:'approved'}),after_data:expect.objectContaining({workflow_status:'needs_review'})}),expect.anything());
  });
  it('refreshes changed evidence with tenant/version/status guards and requires reviewed workpapers to be reviewed again',async()=>{
   const x=fixture();await x.service.reconcile(COMPANY,YEAR,USER,2);x.setSource([{...revenue,credit:'1200.00'},expense]);
