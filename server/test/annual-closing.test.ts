@@ -11,8 +11,13 @@ const clearDomains = () => ({
 
 describe('Phase 7A annual readiness computation', () => {
   it.each([['zakat','zakat'],['income_tax','income_tax'],['mixed','mixed']])('preserves the %s profile path',(_label,path)=>{expect(taxReadiness(path,'p',null,0).summary.tax_path).toBe(path);});
-  it('fails closed for missing profiles/workpapers and incomplete statements',()=>{expect(taxReadiness('needs_review',null,null,0).status).toBe('needs_review');expect(taxReadiness('zakat','p',null,0).status).toBe('not_started');expect(taxReadiness('zakat','p',{accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0},1).status).toBe('blocked');});
-  it('only becomes ready for a matching approved workpaper without unresolved review items',()=>{const paper={accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0};expect(taxReadiness('zakat','p',paper,0).status).toBe('ready');expect(taxReadiness('zakat','p',{...paper,unresolved:1},0).status).toBe('needs_review');expect(taxReadiness('zakat','p',{...paper,workflow_status:'reviewed'},0).status).toBe('needs_review');});
+  it('fails closed for missing profiles/workpapers and incomplete statements',()=>{expect(taxReadiness('needs_review',null,null,0).status).toBe('needs_review');expect(taxReadiness('zakat','p',null,0).status).toBe('not_started');expect(taxReadiness('zakat','p',{accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0,source_drift:false},1).status).toBe('blocked');});
+  it('only becomes ready for a matching approved workpaper without unresolved review items',()=>{const paper={accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0,source_drift:false};expect(taxReadiness('zakat','p',paper,0).status).toBe('ready');expect(taxReadiness('zakat','p',{...paper,unresolved:1},0).status).toBe('needs_review');expect(taxReadiness('zakat','p',{...paper,workflow_status:'reviewed'},0).status).toBe('needs_review');});
+  it('blocks an otherwise approved tax workpaper when its financial source has drifted',()=>{
+    const paper={accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0,source_drift:true};
+    const result=taxReadiness('zakat','p',paper,0);
+    expect(result.status).toBe('blocked');expect(result.ready).toBe(false);expect(result.summary.blockers).toBe('tax_workpaper_source_drift');
+  });
   it('clips first and last monthly periods for a non-calendar fiscal year', () => {
     const periods = expectedMonthlyPeriods(fiscalYear.start_date, fiscalYear.end_date);
     expect(periods).toHaveLength(13);
