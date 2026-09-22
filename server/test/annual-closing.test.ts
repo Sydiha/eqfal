@@ -16,7 +16,7 @@ describe('Phase 7A annual readiness computation', () => {
   it('blocks an otherwise approved tax workpaper when its financial source has drifted',()=>{
     const paper={accounting_profile_id:'p',tax_path:'zakat',workflow_status:'approved',professional_review_required:false,unresolved:0,source_drift:true};
     const result=taxReadiness('zakat','p',paper,0);
-    expect(result.status).toBe('blocked');expect(result.ready).toBe(false);expect(result.summary.blockers).toBe('tax_workpaper_source_drift');
+    expect(result.status).toBe('blocked');expect(result.ready).toBe(false);expect(result.blocker_count).toBe(1);expect(result.summary.blockers).toBe('tax_workpaper_source_drift');
   });
   it('clips first and last monthly periods for a non-calendar fiscal year', () => {
     const periods = expectedMonthlyPeriods(fiscalYear.start_date, fiscalYear.end_date);

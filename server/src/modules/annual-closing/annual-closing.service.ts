@@ -37,7 +37,7 @@ export function taxReadiness(taxPath:string, profileId:string|null, workpaper:{a
   else if(workpaper.workflow_status!=='approved')blockers.push('workpaper_not_approved');
   else if(workpaper.professional_review_required||workpaper.unresolved){blockers.push('professional_review_unresolved');}
   else status='ready';
-  return {ready:status==='ready',blocker_count:0,status,summary:{calculation_performed:false,workpaper_data_available:Boolean(workpaper),tax_path:taxPath,workpaper_status:workpaper?.workflow_status??'not_started',unresolved_professional_items:workpaper?.unresolved??0,blockers:blockers.join(',')}};
+  return {ready:status==='ready',blocker_count:status==='blocked'?1:0,status,summary:{calculation_performed:false,workpaper_data_available:Boolean(workpaper),tax_path:taxPath,workpaper_status:workpaper?.workflow_status??'not_started',unresolved_professional_items:workpaper?.unresolved??0,blockers:blockers.join(',')}};
 }
 
 type WhtProfile={effective_from:string;effective_to:string|null;wht_profile:string;has_non_resident_dealings:string};
