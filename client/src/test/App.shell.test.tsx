@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { AuthProvider } from '../context/AuthContext';
@@ -40,5 +40,21 @@ describe('authenticated application shell', () => {
     expect(within(navigation).queryByRole('button', { name: 'Banking' })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Obligations' })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Purchases' })).not.toBeInTheDocument();
+  });
+
+  it('mirrors the shell direction without duplicating the full brand lockup', async () => {
+    const { container } = render(<AuthProvider><App/></AuthProvider>);
+    await screen.findByRole('heading', { name: 'Welcome back' });
+
+    expect(document.documentElement).toHaveAttribute('dir', 'ltr');
+    expect(container.querySelector('.app-shell--v2')).toHaveAttribute('data-shell-direction', 'ltr');
+    expect(screen.getByTestId('global-navigation-sidebar').querySelectorAll('.eqfal-brand-lockup')).toHaveLength(1);
+    expect(screen.getByTestId('global-app-header').querySelector('.eqfal-brand-lockup')).not.toBeInTheDocument();
+
+    await i18n.changeLanguage('ar');
+
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('dir', 'rtl'));
+    expect(container.querySelector('.app-shell--v2')).toHaveAttribute('data-shell-direction', 'rtl');
+    expect(screen.getByTestId('global-navigation-sidebar').querySelectorAll('.eqfal-brand-lockup')).toHaveLength(1);
   });
 });

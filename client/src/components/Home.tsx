@@ -291,7 +291,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   ) : null;
 
   return (
-    <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
+    <section className="home-modern home-v21 home-review" aria-labelledby="home-title">
       <header className="home-hero home-v21__hero">
         <div className="home-hero-copy">
           <p className="home-eyebrow">{t('home.workspace')}</p>
@@ -301,14 +301,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       </header>
 
       {dailyOperations.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
+        <section className="home-launcher home-review__operations" aria-labelledby="home-daily-operations-title">
           <div className="home-v21__section-heading">
             <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
           </div>
           <div className="home-launcher__grid">
             {dailyOperations.map((action) => (
-              <button key={action.key} type="button" onClick={action.open}>
-                <span>{action.label}</span><span aria-hidden="true">↗</span>
+              <button key={action.key} type="button" onClick={action.open} data-operation={action.key}>
+                <span className="home-review__action-icon" aria-hidden="true" />
+                <span>{action.label}</span><span className="home-review__arrow" aria-hidden="true">↗</span>
               </button>
             ))}
           </div>
@@ -316,15 +317,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewSnapshot && (
-        <section className="home-exceptions" aria-labelledby="home-financial-snapshot-title">
+        <section className="home-exceptions home-review__snapshot" aria-labelledby="home-financial-snapshot-title">
           <div className="home-v21__section-heading">
             <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
           </div>
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
-            <div className="home-launcher__grid">
-              <article>
+            <div className="home-launcher__grid home-review__metric-grid">
+              <article className="home-review__metric home-review__metric--bank">
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
                   : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
@@ -337,7 +338,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+                return <article className="home-review__metric" key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -345,14 +346,14 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewAlerts && (
-        <section className="home-exceptions" aria-labelledby="home-alerts-title">
+        <section className="home-exceptions home-review__alerts" aria-labelledby="home-alerts-title">
           <div className="home-v21__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
             <div>
               {alertGroups.map(group => (
-                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
+                <section className="home-review__alert-group" key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
                   <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
                   <div className="home-launcher__grid">
                     {group.alerts.map(alert => (
@@ -369,7 +370,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewClose && (
-        <section className="home-status-strip" aria-label={t('monthlyClose.title')}>
+        <section className="home-status-strip home-review__close-status" aria-label={t('monthlyClose.title')}>
           {loading ? (
             <span role="status">{t('monthlyClose.loading')}</span>
           ) : error ? (
@@ -397,7 +398,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
+        <div className="home-v21__workspace-grid home-review__close-workspace" style={{ alignItems: 'start' }}>
           <section className="home-exceptions" aria-labelledby="home-exceptions-title">
             <div className="home-v21__section-heading">
               <div>

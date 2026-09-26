@@ -63,12 +63,13 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   return (
     <MantineAppShell
       className="app-shell app-shell--v2"
+      data-shell-direction={i18n.language === 'ar' ? 'rtl' : 'ltr'}
       header={{ height: 60 }}
       navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >
-      <MantineAppShell.Header className="topbar">
+      <MantineAppShell.Header className="topbar" data-testid="global-app-header">
         <Group h="100%" wrap="nowrap" gap="md">
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
@@ -109,7 +110,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         </Group>
       </MantineAppShell.Header>
 
-      <MantineAppShell.Navbar className="sidebar" p="md">
+      <MantineAppShell.Navbar className="sidebar" p="md" data-testid="global-navigation-sidebar">
         <UnstyledButton className="sidebar-brand" onClick={() => setPage('home')} aria-label={t('nav.home')}>
           <EqfalBrandLockup subtitle={t('app.subtitle')} inverse />
         </UnstyledButton>

@@ -813,3 +813,170 @@
   .company-switcher { max-width: 142px; }
   .home-launcher__grid { grid-template-columns: 1fr; }
 }
+
+/* Phase 15A — Work-approved Modern Clean Financial shell and Home. */
+.app-shell--v2 {
+  --phase15-navy: #082443;
+  --phase15-navy-deep: #061d37;
+  --phase15-teal: #079b8e;
+  --phase15-gold: #c5a363;
+  --phase15-line: #e5ebf0;
+}
+
+.app-shell--v2 .sidebar {
+  background: linear-gradient(180deg, var(--phase15-navy) 0%, var(--phase15-navy-deep) 100%);
+  box-shadow: -8px 0 28px rgba(6, 29, 55, .08);
+}
+
+[dir="ltr"] .app-shell--v2 .sidebar {
+  box-shadow: 8px 0 28px rgba(6, 29, 55, .08);
+}
+
+.app-shell--v2 .sidebar-brand {
+  min-height: 62px;
+  padding: 8px 7px 12px;
+}
+
+.app-shell--v2 .topbar {
+  border-bottom: 1px solid var(--phase15-line);
+  background: rgba(255, 255, 255, .98);
+}
+
+.app-shell--v2 .eqfal-workspace {
+  background: #f5f7f9;
+}
+
+.app-shell--v2 .eqfal-nav-link[data-active] {
+  border-color: rgba(7, 155, 142, .72);
+  background: linear-gradient(90deg, rgba(7, 155, 142, .84), rgba(7, 155, 142, .62)) !important;
+  box-shadow: none;
+}
+
+.home-review {
+  max-width: 1240px;
+  gap: 18px;
+}
+
+.home-review .home-v21__hero {
+  padding: 4px 2px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.home-review .home-v21__hero::after { display: none; }
+.home-review .home-v21__hero h1 { font-size: clamp(1.65rem, 2.3vw, 2.15rem); }
+.home-review .home-eyebrow { color: var(--phase15-teal); }
+
+.home-review .home-launcher,
+.home-review .home-exceptions,
+.home-review .home-readiness,
+.home-review .home-status-strip {
+  border-color: var(--phase15-line);
+  border-radius: 10px;
+  box-shadow: 0 5px 18px rgba(8, 36, 67, .035);
+}
+
+.home-review .home-v21__section-heading {
+  min-height: 58px;
+  padding: 15px 18px 12px;
+  border-bottom: 1px solid #edf1f4;
+}
+
+.home-review .home-v21__section-heading h2,
+.home-review .home-readiness h2 {
+  color: var(--phase15-navy);
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.home-review__operations .home-launcher__grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+.home-review__operations .home-launcher__grid button {
+  min-height: 70px;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 0;
+  border-inline-end: 1px solid var(--phase15-line);
+  border-radius: 0;
+  background: #fff;
+}
+
+.home-review__operations .home-launcher__grid button:nth-child(4n) { border-inline-end: 0; }
+.home-review__operations .home-launcher__grid button:hover { background: #f3faf8; }
+
+.home-review__action-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 1px solid rgba(7, 155, 142, .18);
+  border-radius: 8px;
+  background: linear-gradient(145deg, #e7f7f4, #f8fcfb);
+}
+
+.home-review__arrow { margin-inline-start: auto; color: #8795a5; }
+[dir="ltr"] .home-review__arrow { transform: rotate(90deg); }
+
+.home-review__snapshot .home-review__metric-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+.home-review__metric {
+  min-height: 102px;
+  padding: 18px;
+  border-inline-end: 1px solid var(--phase15-line);
+}
+
+.home-review__metric:last-child { border-inline-end: 0; }
+.home-review__metric h3 { margin: 0 0 13px; color: #6e7c8b; font-size: .75rem; font-weight: 700; }
+.home-review__metric > strong { color: var(--phase15-navy); font-size: 1.08rem; }
+.home-review__metric p { display: flex; justify-content: space-between; gap: 8px; margin: 7px 0 0; color: #536173; font-size: .75rem; }
+
+.home-review__alerts > div:last-child { padding: 4px 18px 16px; }
+.home-review__alert-group { padding-top: 12px; }
+.home-review__alert-group + .home-review__alert-group { border-top: 1px solid var(--phase15-line); }
+.home-review__alert-group > h3 { margin: 0 0 9px; color: #667585; font-size: .74rem; }
+.home-review__alert-group .home-launcher__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; }
+
+.home-review__close-status { border-inline-start: 3px solid var(--phase15-teal); }
+.home-review__close-workspace { grid-template-columns: minmax(0, 1fr) 270px; }
+.home-review .home-exceptions__table th { background: #f5f7f9; }
+.home-review .home-exceptions__table tbody tr:hover { background: #fbfdfd; }
+.home-review .home-readiness { border-top: 3px solid var(--phase15-gold); }
+
+@media (max-width: 75em) {
+  .home-review__operations .home-launcher__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-review__operations .home-launcher__grid button:nth-child(4n) { border-inline-end: 1px solid var(--phase15-line); }
+  .home-review__operations .home-launcher__grid button:nth-child(3n) { border-inline-end: 0; }
+  .home-review__snapshot .home-review__metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 62em) {
+  .home-review__snapshot .home-review__metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-review__close-workspace { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 48em) {
+  .home-review { gap: 12px; }
+  .home-review .home-v21__hero { padding: 2px 0 8px; }
+  .home-review__operations .home-launcher__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-review__operations .home-launcher__grid button:nth-child(3n) { border-inline-end: 1px solid var(--phase15-line); }
+  .home-review__operations .home-launcher__grid button:nth-child(2n) { border-inline-end: 0; }
+  .home-review__snapshot .home-review__metric-grid { grid-template-columns: 1fr; }
+  .home-review__metric { min-height: 82px; border-inline-end: 0; border-bottom: 1px solid var(--phase15-line); }
+  .home-review__metric:last-child { border-bottom: 0; }
+  .home-review__alert-group .home-launcher__grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 25em) {
+  .home-review__operations .home-launcher__grid { grid-template-columns: 1fr; }
+  .home-review__operations .home-launcher__grid button { border-inline-end: 0 !important; border-bottom: 1px solid var(--phase15-line); }
+}
