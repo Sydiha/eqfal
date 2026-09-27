@@ -102,7 +102,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
-        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
+        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', followUpList: 'قائمة المهام التي تتطلب متابعة', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -124,7 +124,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
-        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
+        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', followUpList: 'Tasks requiring follow-up', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -300,26 +300,23 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     <section className="home-modern home-v21 home-financial-overview" aria-labelledby="home-title">
       <header className="home-hero home-v21__hero">
         <div className="home-hero-copy">
-          <p className="home-eyebrow">{t('home.workspace')}</p>
-          <h1 id="home-title">{t('home.welcome')}</h1>
+          <h1 id="home-title">{homeLabels.overview}</h1>
           <p className="home-intro">{homeLabels.overviewIntro}</p>
+          {selected && <p className="home-heading-period"><span>{t('monthlyClose.title')}</span><strong>{periodRange}</strong></p>}
         </div>
-      </header>
-
-      {dailyOperations.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
-          <div className="home-v21__section-heading">
+        {dailyOperations.length > 0 && (
+          <div className="home-heading-actions" aria-labelledby="home-daily-operations-title">
             <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
+            <div className="home-quick-actions">
+              {dailyOperations.map((action) => (
+                <button key={action.key} type="button" onClick={action.open}>
+                  <span className="home-action-icon" aria-hidden="true">＋</span><span>{action.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="home-launcher__grid home-quick-actions">
-            {dailyOperations.map((action) => (
-              <button key={action.key} type="button" onClick={action.open}>
-                <span className="home-action-icon" aria-hidden="true">＋</span><span>{action.label}</span><span className="home-action-arrow" aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+        )}
+      </header>
 
       {canViewSnapshot && (
         <section className="home-exceptions home-financial-summary" aria-labelledby="home-financial-snapshot-title">
@@ -359,7 +356,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
 
       {canViewAlerts && (
         <section className="home-exceptions home-follow-up" aria-labelledby="home-alerts-title">
-          <div className="home-v21__section-heading"><div><p className="home-eyebrow">{homeLabels.followUp}</p><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div></div>
+          <div className="home-v21__section-heading"><div><p className="home-eyebrow">{homeLabels.followUp}</p><h2 id="home-alerts-title">{homeLabels.followUpList}</h2></div></div>
           {alertsLoading ? <div className="home-state" role="status"><span className="home-state__pulse" aria-hidden="true" />{homeLabels.alertsLoading}</div> : alertsError ? (
             <div className="home-state home-state--error" role="alert"><span>{homeLabels.alertsError}</span><button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></div>
           ) : alerts.length === 0 ? <div className="home-state home-state--empty" role="status">{homeLabels.alertsEmpty}</div> : (

@@ -77,7 +77,7 @@ describe('Home v2.1', () => {
     renderHome(['fiscal_year.view', 'document.view']);
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/monthly-close-periods', expect.anything());
-    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
     expect(screen.queryByText('Loading monthly close periods…')).not.toBeInTheDocument();
   });
@@ -211,7 +211,7 @@ describe('Home v2.1', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['obligation.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Alerts' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
     const row = screen.getByRole('row', { name: /Overdue obligations/ });
     expect(row).toHaveTextContent('Waiting for accountant');
     expect(row).toHaveTextContent('Action required');
@@ -242,7 +242,7 @@ describe('Home v2.1', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     renderHome([]);
-    expect(screen.queryByRole('heading', { name: 'Alerts' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Tasks requiring follow-up' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
