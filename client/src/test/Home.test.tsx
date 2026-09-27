@@ -212,9 +212,12 @@ describe('Home v2.1', () => {
     renderHome(['obligation.view']);
 
     expect(await screen.findByRole('heading', { name: 'Alerts' })).toBeInTheDocument();
-    const alert = await screen.findByRole('button', { name: /Overdue obligations/ });
-    expect(alert).toHaveTextContent('2');
-    alert.click();
+    const alertLabel = await screen.findByText('Overdue obligations');
+    const alertRow = alertLabel.closest('tr');
+    expect(alertRow).not.toBeNull();
+    expect(within(alertRow!).getByText('Waiting for accountant')).toBeInTheDocument();
+    expect(within(alertRow!).getByText('2')).toBeInTheDocument();
+    within(alertRow!).getByRole('button', { name: 'Overdue obligations' }).click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { overdue: '1' });
   });
 
@@ -226,11 +229,12 @@ describe('Home v2.1', () => {
     ] }), { status: 200 })));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Current user action' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Waiting for accountant' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Waiting for team' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Documents needing review/ })).toBeInTheDocument();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Current user action')).toBeInTheDocument();
+    expect(within(table).getByText('Upcoming')).toBeInTheDocument();
+    expect(within(table).getByText('Waiting for accountant')).toBeInTheDocument();
+    expect(within(table).queryByText('Waiting for team')).not.toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: 'Documents needing review' })).toBeInTheDocument();
   });
 
   it('does not request or render alerts without a supported module view capability', () => {
