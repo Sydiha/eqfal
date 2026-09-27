@@ -102,7 +102,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
-        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', viewDetails: 'عرض التفاصيل',
+        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -124,7 +124,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
-        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', viewDetails: 'View details',
+        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -136,6 +136,10 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     documents_uploaded: 'Uploaded documents to review', documents_needs_review: 'Documents needing review', documents_incomplete: 'Incomplete documents',
     bank_transactions_unmatched: 'Unmatched bank transactions', bank_transactions_matched: 'Bank transactions awaiting reconciliation',
   };
+
+  const alertClassLabels: Record<HomeAlert['class'], string> = isArabic
+    ? { needs_action_now: 'يتطلب إجراء', upcoming_due: 'قادم', needs_review_completion: 'يحتاج مراجعة' }
+    : { needs_action_now: 'Action required', upcoming_due: 'Upcoming', needs_review_completion: 'Needs review' };
 
   const load = async () => {
     if (!canViewClose) return;
@@ -300,7 +304,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           <h1 id="home-title">{t('home.welcome')}</h1>
           <p className="home-intro">{homeLabels.overviewIntro}</p>
         </div>
-        <div className="home-hero__accent" aria-hidden="true"><span /><span /><span /></div>
       </header>
 
       {dailyOperations.length > 0 && (
@@ -336,12 +339,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
                 ['amounts_to_pay', homeLabels.amountsToPay],
-                ['current_month_sales', homeLabels.monthSales],
-                ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
                 return <article className={`home-kpi-card home-kpi-card--${key}`} key={key}><span className="home-kpi-card__mark" aria-hidden="true" /><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
               })}
+              <article className="home-kpi-card home-kpi-card--activity">
+                <span className="home-kpi-card__mark" aria-hidden="true" /><h3>{homeLabels.monthlyActivity}</h3>
+                <div className="home-monthly-activity">
+                  {([['current_month_sales', homeLabels.monthSales], ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses]] as const).map(([key, label]) => {
+                    const metric = snapshot.metrics[key];
+                    return <div key={key}><span>{label}</span><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></div>;
+                  })}
+                </div>
+              </article>
             </div>
           )}
         </section>
@@ -353,19 +363,21 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           {alertsLoading ? <div className="home-state" role="status"><span className="home-state__pulse" aria-hidden="true" />{homeLabels.alertsLoading}</div> : alertsError ? (
             <div className="home-state home-state--error" role="alert"><span>{homeLabels.alertsError}</span><button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></div>
           ) : alerts.length === 0 ? <div className="home-state home-state--empty" role="status">{homeLabels.alertsEmpty}</div> : (
-            <div className="home-alert-groups">
-              {alertGroups.map(group => (
-                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
-                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="home-alert-list">
-                    {group.alerts.map(alert => (
-                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                        <span className="home-alert-dot" aria-hidden="true" /><span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><small>{homeLabels.viewDetails}</small><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+            <div className="home-follow-up__table-wrap">
+              <table className="home-follow-up__table">
+                <thead><tr><th>{homeLabels.item}</th><th>{homeLabels.responsibility}</th><th>{homeLabels.count}</th><th>{homeLabels.status}</th><th>{homeLabels.action}</th></tr></thead>
+                <tbody>
+                  {alertGroups.flatMap(group => group.alerts.map(alert => (
+                    <tr key={alert.key}>
+                      <td><span className={`home-alert-dot home-alert-dot--${alert.class}`} aria-hidden="true" /><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
+                      <td>{homeLabels.ownership[alert.ownership]}</td>
+                      <td><span className="home-alert-count" dir="ltr">{alert.count}</span></td>
+                      <td><span className={`home-alert-status home-alert-status--${alert.class}`}>{alertClassLabels[alert.class]}</span></td>
+                      <td><button type="button" className="home-alert-open" aria-label={`${homeLabels.viewDetails}: ${alertLabels[alert.key] ?? alert.key}`} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{homeLabels.viewDetails}<span aria-hidden="true">↗</span></button></td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -445,6 +457,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
 
           <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
             <p className="home-eyebrow">{homeLabels.readiness}</p>
+            <div className={`home-readiness__visual ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-hidden="true"><span>{selected.status === 'closed' || selected.ready ? '✓' : '!'}</span></div>
             <h2 id="home-readiness-title">{closeSummary}</h2>
             <p className="home-readiness__period">{periodRange}</p>
             <div className="home-readiness__summary" style={{ marginTop: 0 }}>

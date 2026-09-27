@@ -212,8 +212,11 @@ describe('Home v2.1', () => {
     renderHome(['obligation.view']);
 
     expect(await screen.findByRole('heading', { name: 'Alerts' })).toBeInTheDocument();
+    const row = screen.getByRole('row', { name: /Overdue obligations/ });
+    expect(row).toHaveTextContent('Waiting for accountant');
+    expect(row).toHaveTextContent('Action required');
+    expect(row).toHaveTextContent('2');
     const alert = await screen.findByRole('button', { name: /Overdue obligations/ });
-    expect(alert).toHaveTextContent('2');
     alert.click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { overdue: '1' });
   });
@@ -226,10 +229,12 @@ describe('Home v2.1', () => {
     ] }), { status: 200 })));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Current user action' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Waiting for accountant' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Waiting for team' })).not.toBeInTheDocument();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Responsibility' })).toBeInTheDocument();
+    expect(within(table).getByText('Current user action')).toBeInTheDocument();
+    expect(within(table).getAllByText('Upcoming').length).toBeGreaterThan(0);
+    expect(within(table).getByText('Waiting for accountant')).toBeInTheDocument();
+    expect(within(table).queryByText('Waiting for team')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Documents needing review/ })).toBeInTheDocument();
   });
 
