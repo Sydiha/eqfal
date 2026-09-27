@@ -324,22 +324,26 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
-            <div className="home-launcher__grid home-review__metric-grid">
-              <article className="home-review__metric home-review__metric--bank">
+            <div className="home-review__financial-summary">
+              <article className="home-review__bank-band">
                 <h3>{homeLabels.bankBalances}</h3>
-                {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
-                  : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                <div className="home-review__bank-accounts">
+                  {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
+                    : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
+                      : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                </div>
               </article>
-              {([
-                ['amounts_to_collect', homeLabels.amountsToCollect],
-                ['amounts_to_pay', homeLabels.amountsToPay],
-                ['current_month_sales', homeLabels.monthSales],
-                ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
-              ] as const).map(([key, label]) => {
-                const metric = snapshot.metrics[key];
-                return <article className="home-review__metric" key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
-              })}
+              <div className="home-review__metric-grid">
+                {([
+                  ['amounts_to_collect', homeLabels.amountsToCollect],
+                  ['amounts_to_pay', homeLabels.amountsToPay],
+                  ['current_month_sales', homeLabels.monthSales],
+                  ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
+                ] as const).map(([key, label]) => {
+                  const metric = snapshot.metrics[key];
+                  return <article className="home-review__metric" key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+                })}
+              </div>
             </div>
           )}
         </section>
@@ -351,19 +355,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
-            <div>
-              {alertGroups.map(group => (
-                <section className="home-review__alert-group" key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
-                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="home-launcher__grid">
-                    {group.alerts.map(alert => (
-                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                        <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+            <div className="home-review__alert-table-wrap">
+              <table className="home-review__alert-table">
+                <tbody>
+                  {alertGroups.flatMap(group => group.alerts.map(alert => (
+                    <tr key={alert.key}>
+                      <td><span className="home-review__alert-dot" aria-hidden="true" /><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
+                      <td>{homeLabels.ownership[group.ownership]}</td>
+                      <td><span className="home-review__alert-count">{alert.count}</span></td>
+                      <td><button type="button" aria-label={alertLabels[alert.key] ?? alert.key} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}><span aria-hidden="true">↗</span></button></td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
