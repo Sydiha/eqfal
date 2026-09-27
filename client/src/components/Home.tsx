@@ -118,7 +118,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         periodState: 'حالة الفترة',
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
-         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.', overview: 'نظرة عامة مالية', asOf: 'حتى تاريخ', activePeriod: 'الفترة الحالية', alertClass: { needs_action_now: 'إجراء مطلوب', upcoming_due: 'مستحق قريباً', needs_review_completion: 'يحتاج مراجعة' },
+         snapshot: 'اللقطة المالية', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.', overview: 'نظرة عامة مالية', asOf: 'حتى تاريخ', activePeriod: 'الفترة الحالية', alertClass: { needs_action_now: 'إجراء مطلوب', upcoming_due: 'مستحق قريباً', needs_review_completion: 'يحتاج مراجعة' },
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -314,7 +314,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       <header className="home-hero home-v21__hero">
         <div className="home-hero-copy">
           <p className="home-eyebrow">{t('home.workspace')}</p>
-            <h1 id="home-title">{homeLabels.overview}</h1>
+            <h1 id="home-title" aria-label={homeLabels.overview}>{isArabic ? 'مرحبًا بك في إقفال' : homeLabels.overview}</h1>
             <p className="home-intro">{t('home.context')}</p>
             <div className="home-review__context" aria-label={homeLabels.overview}>
               {overviewDate && <span><small>{homeLabels.asOf}</small><strong dir="ltr">{stripDirectionalMarks(formatDisplayDate(overviewDate, i18n.language))}</strong></span>}
@@ -322,6 +322,34 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             </div>
         </div>
       </header>
+
+      {canViewClose && (
+        <section className="home-status-strip home-review__close-status" aria-label={t('monthlyClose.title')}>
+          {loading ? (
+            <span role="status">{t('monthlyClose.loading')}</span>
+          ) : error ? (
+            <>
+              <span role="alert">{t('monthlyClose.error')}</span>
+              <button type="button" onClick={() => void load()}>{t('common.retry')}</button>
+            </>
+          ) : selected ? (
+            <>
+              <div className="home-status-strip__period">
+                <span>{t('monthlyClose.title')}</span>
+                <strong>{periodRange}</strong>
+              </div>
+              <span className={`home-status-pill home-status-pill--${selected.status}`}>
+                {t(`monthlyClose.${selected.status}`)}
+              </span>
+              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
+                {closeSummary}
+              </span>
+            </>
+          ) : (
+            <span role="status">{t('monthlyClose.empty')}</span>
+          )}
+        </section>
+      )}
 
       {dailyOperations.length > 0 && (
         <section className="home-launcher home-review__operations" aria-labelledby="home-daily-operations-title">
@@ -342,7 +370,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       {canViewSnapshot && (
         <section className="home-exceptions home-review__snapshot" aria-labelledby="home-financial-snapshot-title">
           <div className="home-v21__section-heading">
-            <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
+            <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{overviewDate ? `${homeLabels.asOf} ${stripDirectionalMarks(formatDisplayDate(overviewDate, i18n.language))}` : homeLabels.operationalView}</p></div>
           </div>
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
@@ -392,34 +420,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                 </tbody>
               </table>
             </div>
-          )}
-        </section>
-      )}
-
-      {canViewClose && (
-        <section className="home-status-strip home-review__close-status" aria-label={t('monthlyClose.title')}>
-          {loading ? (
-            <span role="status">{t('monthlyClose.loading')}</span>
-          ) : error ? (
-            <>
-              <span role="alert">{t('monthlyClose.error')}</span>
-              <button type="button" onClick={() => void load()}>{t('common.retry')}</button>
-            </>
-          ) : selected ? (
-            <>
-              <div className="home-status-strip__period">
-                <span>{t('monthlyClose.title')}</span>
-                <strong>{periodRange}</strong>
-              </div>
-              <span className={`home-status-pill home-status-pill--${selected.status}`}>
-                {t(`monthlyClose.${selected.status}`)}
-              </span>
-              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {closeSummary}
-              </span>
-            </>
-          ) : (
-            <span role="status">{t('monthlyClose.empty')}</span>
           )}
         </section>
       )}

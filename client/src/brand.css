@@ -1016,3 +1016,243 @@
   .home-review__operations .home-launcher__grid { grid-template-columns: 1fr; }
   .home-review__operations .home-launcher__grid button { border-inline-end: 0 !important; }
 }
+
+/* Phase 15A fidelity correction: match Home — Arabic RTL at 1440px. */
+@media (min-width: 62.01em) {
+  .app-shell--v2 .topbar {
+    min-height: 72px;
+    height: 72px;
+    padding-inline: 32px;
+  }
+
+  .app-shell--v2 .page-context,
+  .app-shell--v2 .logout-action,
+  .app-shell--v2 .top-divider {
+    display: none;
+  }
+
+  .app-shell--v2 .sidebar {
+    width: 260px !important;
+    padding: 18px 18px 24px !important;
+  }
+
+  .app-shell--v2 .sidebar-brand {
+    min-height: 62px;
+    padding: 3px 0 10px;
+  }
+
+  .app-shell--v2 .sidebar-divider {
+    margin-block: 10px 14px !important;
+  }
+
+  .app-shell--v2 .eqfal-workspace {
+    min-height: calc(100vh - 72px);
+  }
+
+  .app-shell--v2 .workspace-content {
+    padding: 28px 34px 36px;
+  }
+
+  .home-review {
+    max-width: none;
+    gap: 0;
+  }
+
+  .home-review .home-v21__hero {
+    min-height: 96px;
+    padding: 0 12px 20px;
+  }
+
+  .home-review .home-v21__hero h1 {
+    margin-top: 4px;
+    font-size: 28px;
+    line-height: 1.35;
+  }
+
+  .home-review .home-v21__hero .home-intro {
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .home-review__context {
+    display: none;
+  }
+
+  .home-review__close-status {
+    order: 1;
+    min-height: 62px;
+    margin-bottom: 14px;
+    padding: 10px 18px;
+    border: 1px solid var(--phase15-line) !important;
+    border-inline-start: 5px solid var(--phase15-teal) !important;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+
+  .home-review__close-status .home-status-strip__period {
+    justify-content: flex-start;
+  }
+
+  .home-review__operations {
+    order: 2;
+    margin-bottom: 18px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .home-review__operations .home-v21__section-heading {
+    min-height: 31px;
+    padding: 0 0 10px;
+    border: 0;
+  }
+
+  .home-review__operations .home-v21__section-heading h2 {
+    font-size: 18px;
+  }
+
+  .home-review__operations .home-launcher__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    padding: 0;
+  }
+
+  .home-review__operations .home-launcher__grid button {
+    min-height: 48px;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 8px 14px;
+    border: 1px solid var(--phase15-line);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 14px;
+  }
+
+  .home-review__operations .home-launcher__grid button:nth-child(4n),
+  .home-review__operations .home-launcher__grid button:nth-last-child(-n + 4) {
+    border-inline-end: 1px solid var(--phase15-line);
+    border-bottom: 1px solid var(--phase15-line);
+  }
+
+  .home-review__action-icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    border: 0;
+    border-radius: 6px;
+  }
+
+  .home-review__action-svg { width: 14px; height: 14px; }
+  .home-review__arrow { display: none; }
+
+  .home-review__snapshot {
+    order: 3;
+    margin-bottom: 26px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .home-review__snapshot .home-v21__section-heading {
+    min-height: 48px;
+    padding: 0 0 10px;
+    border: 0;
+  }
+
+  .home-review__snapshot .home-v21__section-heading h2 {
+    font-size: 18px;
+  }
+
+  .home-review__snapshot .home-v21__section-heading p {
+    display: block;
+    margin: 3px 0 0;
+    font-size: 11px;
+    color: #7c8997;
+  }
+
+  .home-review__financial-summary {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .home-review__bank-band,
+  .home-review__metric {
+    min-height: 112px;
+    box-sizing: border-box;
+    padding: 14px 16px;
+    border: 1px solid var(--phase15-line);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .home-review__bank-band {
+    display: block;
+    border-inline-start: 4px solid var(--phase15-navy);
+    background: #fff;
+  }
+
+  .home-review__bank-band h3 {
+    min-width: 0;
+    margin: 0 0 12px;
+    font-size: 13px;
+  }
+
+  .home-review__bank-accounts { display: block; }
+  .home-review__bank-accounts p { min-width: 0; gap: 5px; font-size: 11px; }
+  .home-review__bank-accounts strong { font-size: 20px; }
+
+  .home-review__metric {
+    border-inline-end: 1px solid var(--phase15-line);
+  }
+
+  .home-review__metric:nth-child(1) { border-inline-start: 4px solid var(--phase15-teal); }
+  .home-review__metric:nth-child(2) { border-inline-start: 4px solid var(--phase15-gold); }
+  .home-review__metric:nth-child(3),
+  .home-review__metric:nth-child(4) { border-inline-start: 4px solid var(--phase15-navy); }
+  .home-review__metric h3 { margin-bottom: 14px; font-size: 12px; }
+  .home-review__metric > strong { font-size: 20px; }
+
+  .home-review__alerts {
+    order: 4;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(8, 36, 67, .03);
+  }
+
+  .home-review__alerts .home-v21__section-heading {
+    min-height: 58px;
+    padding: 14px 18px 10px;
+  }
+
+  .home-review__alert-table-wrap { padding: 0 16px 12px; }
+  .home-review__alert-table { font-size: 13px; }
+  .home-review__alert-table td { height: 48px; padding: 8px 10px; }
+
+  .home-review__close-workspace {
+    order: 5;
+    grid-template-columns: minmax(0, 1fr) 388px;
+    gap: 24px;
+    margin-bottom: 0;
+  }
+
+  .home-review__close-workspace .home-exceptions,
+  .home-review__close-workspace .home-readiness {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(8, 36, 67, .03);
+  }
+
+  .home-review .home-exceptions__table th,
+  .home-review .home-exceptions__table td { height: 42px; padding: 10px 16px; }
+
+  .home-review .home-readiness {
+    min-height: 380px;
+    padding: 18px;
+    border-top: 0;
+    border-inline-start: 4px solid var(--phase15-teal);
+  }
+
+  .home-review .home-readiness h2 { margin-top: 8px; font-size: 20px; }
+  .home-review .home-readiness__period { margin: 5px 0 12px; font-size: 12px; }
+  .home-review .home-readiness__summary { min-height: 48px; font-size: 12px; }
+  .home-review .home-readiness__open { min-height: 38px; margin-top: 12px; font-size: 13px; }
+}
