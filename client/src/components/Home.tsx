@@ -384,17 +384,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                       : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
                 </div>
               </article>
-              <div className="home-review__metric-grid">
-                {([
-                  ['amounts_to_collect', homeLabels.amountsToCollect],
-                  ['amounts_to_pay', homeLabels.amountsToPay],
-                  ['current_month_sales', homeLabels.monthSales],
-                  ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
-                ] as const).map(([key, label]) => {
-                  const metric = snapshot.metrics[key];
-                  return <article className="home-review__metric" key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
-                })}
-              </div>
+              {([
+                ['amounts_to_collect', homeLabels.amountsToCollect],
+                ['amounts_to_pay', homeLabels.amountsToPay],
+                ['current_month_sales', homeLabels.monthSales],
+                ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
+              ] as const).map(([key, label]) => {
+                const metric = snapshot.metrics[key];
+                return <article className="home-review__metric" key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+              })}
             </div>
           )}
         </section>

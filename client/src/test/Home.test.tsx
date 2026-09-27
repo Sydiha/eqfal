@@ -279,4 +279,28 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('heading', { name: 'Manager Financial Snapshot' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('keeps the five financial cards structurally stable across zero, large, and unavailable values', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/manager-financial-snapshot') return new Response(JSON.stringify({ metrics: {
+        bank_balances: { state: 'available', accounts: [{ id: 'b1', display_name: 'Operating account', currency_code: 'SAR', balance: { state: 'unavailable' } }] },
+        amounts_to_collect: { state: 'available', amount: '0.00' },
+        amounts_to_pay: { state: 'available', amount: '999999999999.99' },
+        current_month_sales: { state: 'hidden' },
+        current_month_purchases_expenses: { state: 'available', amount: '12.50' },
+      } }), { status: 200 });
+      if (url === '/api/home-alerts') return new Response(JSON.stringify({ alerts: [] }), { status: 200 });
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderHome(['bank.view', 'obligation.view']);
+
+    await screen.findByRole('heading', { name: 'Manager Financial Snapshot' });
+    const summary = document.querySelector('.home-review__financial-summary');
+    expect(summary?.querySelectorAll(':scope > article')).toHaveLength(5);
+    expect(summary).toHaveTextContent('0.00');
+    expect(summary).toHaveTextContent('999999999999.99');
+    expect(summary).toHaveTextContent('Unavailable');
+    expect(summary).toHaveTextContent('Restricted by permissions');
+  });
 });

@@ -1173,10 +1173,12 @@
   .home-review__financial-summary {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 16px;
+    align-items: stretch;
   }
 
   .home-review__bank-band,
   .home-review__metric {
+    min-width: 0;
     min-height: 112px;
     box-sizing: border-box;
     padding: 14px 16px;
@@ -1199,7 +1201,14 @@
 
   .home-review__bank-accounts { display: block; }
   .home-review__bank-accounts p { min-width: 0; gap: 5px; font-size: 11px; }
-  .home-review__bank-accounts strong { font-size: 20px; }
+  .home-review__bank-accounts strong {
+    display: block;
+    overflow: hidden;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .home-review__metric {
     border-inline-end: 1px solid var(--phase15-line);
@@ -1209,8 +1218,21 @@
   .home-review__metric:nth-child(2) { border-inline-start: 4px solid var(--phase15-gold); }
   .home-review__metric:nth-child(3),
   .home-review__metric:nth-child(4) { border-inline-start: 4px solid var(--phase15-navy); }
-  .home-review__metric h3 { margin-bottom: 14px; font-size: 12px; }
-  .home-review__metric > strong { font-size: 20px; }
+  .home-review__metric h3 {
+    min-height: 30px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .home-review__metric > strong {
+    display: block;
+    overflow: hidden;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .home-review__alerts {
     order: 4;
