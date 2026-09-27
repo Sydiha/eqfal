@@ -77,7 +77,7 @@ describe('Home v2.1', () => {
     renderHome(['fiscal_year.view', 'document.view']);
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/monthly-close-periods', expect.anything());
-    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
     expect(screen.queryByText('Loading monthly close periods…')).not.toBeInTheDocument();
   });

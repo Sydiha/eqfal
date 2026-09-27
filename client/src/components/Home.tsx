@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
@@ -46,6 +46,8 @@ type HomeAlert = {
 
 type SnapshotMetric = { state: 'available'; amount: string } | { state: 'hidden' };
 type FinancialSnapshot = {
+  as_of?: string;
+  month?: { start: string; end_exclusive: string };
   metrics: {
     bank_balances: { state: 'hidden' } | { state: 'available'; accounts: Array<{ id: string; display_name: string; currency_code: string; balance: { state: 'available'; amount: string } | { state: 'unavailable' } }> };
     amounts_to_collect: SnapshotMetric;
@@ -63,6 +65,21 @@ type Props = {
   startSalesEntry: () => void;
   onUnauthorized: () => void;
 };
+
+type HomeActionIconName = 'sale' | 'purchase' | 'expense' | 'document' | 'sales' | 'bank' | 'obligation';
+
+function HomeActionIcon({ name }: { name: HomeActionIconName }) {
+  const paths: Record<HomeActionIconName, ReactNode> = {
+    sale: <><path d="M4 5h16v14H4z"/><path d="M7 9h10M7 13h6M16 16h3"/></>,
+    purchase: <><path d="M4 5h16v14H4z"/><path d="M7 9h10M7 13h7M16 16h3"/></>,
+    expense: <><path d="M5 3h14v18H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
+    document: <><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h8M8 16h6"/></>,
+    sales: <><path d="M4 18V6M4 18h16"/><path d="m7 14 4-4 3 2 5-6"/></>,
+    bank: <><path d="M3 9h18M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 18h18M2 21h20M12 3 3 7h18L12 3Z"/></>,
+    obligation: <><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></>,
+  };
+  return <svg className="home-review__action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
@@ -101,7 +118,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         periodState: 'حالة الفترة',
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
-        snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
+         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.', overview: 'نظرة عامة مالية', asOf: 'حتى تاريخ', activePeriod: 'الفترة الحالية', alertClass: { needs_action_now: 'إجراء مطلوب', upcoming_due: 'مستحق قريباً', needs_review_completion: 'يحتاج مراجعة' },
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -122,7 +139,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         periodState: 'Period status',
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
-        snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
+         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.', overview: 'Financial overview', asOf: 'As of', activePeriod: 'Active period', alertClass: { needs_action_now: 'Action required', upcoming_due: 'Due soon', needs_review_completion: 'Needs review' },
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -210,14 +227,14 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   const canViewSalesPurchases = can('document.view') && can('obligation.view');
   const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
   const dailyOperations = [
-    { key: 'add-sale', label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
-    { key: 'add-purchase', label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
-    { key: 'add-expense', label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
-    { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
-    { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
-    { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
-    { key: 'open-banking', label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
-    { key: 'open-obligations', label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
+    { key: 'add-sale', icon: 'sale' as const, label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
+    { key: 'add-purchase', icon: 'purchase' as const, label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
+    { key: 'add-expense', icon: 'expense' as const, label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
+    { key: 'upload-document', icon: 'document' as const, label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
+    { key: 'open-sales', icon: 'sales' as const, label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
+    { key: 'open-purchases', icon: 'purchase' as const, label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
+    { key: 'open-banking', icon: 'bank' as const, label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
+    { key: 'open-obligations', icon: 'obligation' as const, label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
   ].filter((action) => action.visible);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
@@ -289,14 +306,20 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       <span>{stripDirectionalMarks(formatDisplayDate(selected.period_end, i18n.language))}</span>
     </span>
   ) : null;
+  const overviewDate = snapshot?.as_of ?? selected?.period_end ?? null;
+  const overviewYear = selected?.period_start.slice(0, 4) ?? snapshot?.month?.start.slice(0, 4) ?? null;
 
   return (
     <section className="home-modern home-v21 home-review" aria-labelledby="home-title">
       <header className="home-hero home-v21__hero">
         <div className="home-hero-copy">
           <p className="home-eyebrow">{t('home.workspace')}</p>
-          <h1 id="home-title">{t('home.welcome')}</h1>
-          <p className="home-intro">{t('home.context')}</p>
+            <h1 id="home-title">{homeLabels.overview}</h1>
+            <p className="home-intro">{t('home.context')}</p>
+            <div className="home-review__context" aria-label={homeLabels.overview}>
+              {overviewDate && <span><small>{homeLabels.asOf}</small><strong dir="ltr">{stripDirectionalMarks(formatDisplayDate(overviewDate, i18n.language))}</strong></span>}
+              {overviewYear && <span><small>{homeLabels.activePeriod}</small><strong dir="ltr">{overviewYear}</strong></span>}
+            </div>
         </div>
       </header>
 
@@ -308,7 +331,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           <div className="home-launcher__grid">
             {dailyOperations.map((action) => (
               <button key={action.key} type="button" onClick={action.open} data-operation={action.key}>
-                <span className="home-review__action-icon" aria-hidden="true" />
+                <span className="home-review__action-icon"><HomeActionIcon name={action.icon} /></span>
                 <span>{action.label}</span><span className="home-review__arrow" aria-hidden="true">↗</span>
               </button>
             ))}
@@ -361,7 +384,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                   {alertGroups.flatMap(group => group.alerts.map(alert => (
                     <tr key={alert.key}>
                       <td><span className="home-review__alert-dot" aria-hidden="true" /><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
-                      <td>{homeLabels.ownership[group.ownership]}</td>
+                      <td><span className={`home-review__alert-class home-review__alert-class--${alert.class}`}>{homeLabels.alertClass[alert.class]}</span><span className="home-review__alert-owner">{homeLabels.ownership[group.ownership]}</span></td>
                       <td><span className="home-review__alert-count">{alert.count}</span></td>
                       <td><button type="button" aria-label={alertLabels[alert.key] ?? alert.key} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}><span aria-hidden="true">↗</span></button></td>
                     </tr>
