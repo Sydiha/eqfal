@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
-import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 
 type HomePage =
   | 'fiscalYears'
@@ -66,7 +65,7 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
+export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -102,7 +101,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
-        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', followUpList: 'قائمة المهام التي تتطلب متابعة', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
+        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', followUpList: 'قائمة المهام التي تتطلب متابعة', followUpIntro: 'بنود تشغيلية ومالية تحتاج إلى إجراء أو مراجعة.', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -124,7 +123,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
-        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', followUpList: 'Tasks requiring follow-up', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
+        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', followUpList: 'Tasks requiring follow-up', followUpIntro: 'Operational and financial items requiring action or review.', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -213,18 +212,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     .map(ownership => ({ ownership, alerts: alerts.filter(alert => alert.ownership === ownership) }))
     .filter(group => group.alerts.length > 0);
   const can = (capability: string) => capabilities.includes(capability);
-  const canViewSalesPurchases = can('document.view') && can('obligation.view');
-  const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
-  const dailyOperations = [
-    { key: 'add-sale', label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
-    { key: 'add-purchase', label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
-    { key: 'add-expense', label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
-    { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
-    { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
-    { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
-    { key: 'open-banking', label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
-    { key: 'open-obligations', label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
-  ].filter((action) => action.visible);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
@@ -304,18 +291,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           <p className="home-intro">{homeLabels.overviewIntro}</p>
           {selected && <p className="home-heading-period"><span>{t('monthlyClose.title')}</span><strong>{periodRange}</strong></p>}
         </div>
-        {dailyOperations.length > 0 && (
-          <div className="home-heading-actions" aria-labelledby="home-daily-operations-title">
-            <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
-            <div className="home-quick-actions">
-              {dailyOperations.map((action) => (
-                <button key={action.key} type="button" onClick={action.open}>
-                  <span className="home-action-icon" aria-hidden="true">＋</span><span>{action.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </header>
 
       {canViewSnapshot && (
@@ -356,7 +331,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
 
       {canViewAlerts && (
         <section className="home-exceptions home-follow-up" aria-labelledby="home-alerts-title">
-          <div className="home-v21__section-heading"><div><p className="home-eyebrow">{homeLabels.followUp}</p><h2 id="home-alerts-title">{homeLabels.followUpList}</h2></div></div>
+          <div className="home-v21__section-heading"><div><p className="home-eyebrow">{homeLabels.followUp}</p><h2 id="home-alerts-title">{homeLabels.followUpList}</h2><p>{homeLabels.followUpIntro}</p></div></div>
           {alertsLoading ? <div className="home-state" role="status"><span className="home-state__pulse" aria-hidden="true" />{homeLabels.alertsLoading}</div> : alertsError ? (
             <div className="home-state home-state--error" role="alert"><span>{homeLabels.alertsError}</span><button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></div>
           ) : alerts.length === 0 ? <div className="home-state home-state--empty" role="status">{homeLabels.alertsEmpty}</div> : (
@@ -414,7 +389,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             <div className="home-v21__section-heading">
               <div>
                 <p className="home-eyebrow">{t('monthlyClose.title')}</p>
-                <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
+                <h2 id="home-exceptions-title">{homeLabels.readiness}</h2>
               </div>
               <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
                 {closeSummary}

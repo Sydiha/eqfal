@@ -49,35 +49,35 @@
 
 /* Phase 15A — approved global shell and financial-overview surface. */
 .app-shell--v2 {
-  --shell-topbar-height: 72px;
-  --shell-sidebar-width: 272px;
+  --shell-topbar-height: 64px;
+  --shell-sidebar-width: 248px;
 }
 
 .app-shell--v2 .topbar {
-  min-height: 72px;
-  padding-inline: 30px;
+  min-height: 64px;
+  padding-inline: 20px;
   border-bottom: 1px solid #e7ebef;
   background: rgba(255, 255, 255, .98);
   box-shadow: none;
 }
 
 .app-shell--v2 .sidebar {
-  padding: 24px 16px !important;
+  padding: 18px 12px !important;
   border-inline-end: 0;
   background: #0a1b30 !important;
 }
 
 .app-shell--v2 .sidebar-brand {
-  min-height: 54px;
-  padding-inline: 10px;
+  min-height: 48px;
+  padding-inline: 8px;
 }
 
 .app-shell--v2 .sidebar-divider {
-  margin-block: 18px !important;
+  margin-block: 12px !important;
   border-color: rgba(255, 255, 255, .09);
 }
 
-.app-shell--v2 .eqfal-nav-groups { gap: 15px; }
+.app-shell--v2 .eqfal-nav-groups { gap: 12px; }
 .app-shell--v2 .eqfal-nav-group { gap: 4px; }
 .app-shell--v2 .eqfal-nav-group__label {
   padding-inline: 12px;
@@ -87,8 +87,8 @@
 }
 
 .app-shell--v2 .eqfal-nav-link {
-  min-height: 38px;
-  padding-inline: 10px;
+  min-height: 36px;
+  padding-inline: 8px;
   color: #b7c6d4;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -105,7 +105,7 @@
 .app-shell--v2 .eqfal-nav-link[data-active] .nav-icon { background: rgba(255, 255, 255, .12); }
 .app-shell--v2 .page-context-title { font-size: 1.08rem; }
 .app-shell--v2 .user-avatar { background: #eef7f5; color: #087e70; }
-.app-shell--v2 .workspace-content { padding: 20px 28px 30px; }
+.app-shell--v2 .workspace-content { padding: 14px 24px 22px; }
 
 .home-financial-overview {
   width: min(100%, 1280px);
@@ -120,7 +120,7 @@
 .home-financial-overview .home-hero {
   position: relative;
   min-height: 0;
-  padding: 16px 20px;
+  padding: 10px 2px 13px;
   overflow: hidden;
   align-items: center;
   border: 0;
@@ -142,8 +142,6 @@
 .home-financial-overview .home-intro { margin: 0; color: #6b7887; font-size: .82rem; }
 .home-heading-period { display: flex; align-items: center; gap: 8px; margin: 7px 0 0; color: #71808e; font-size: .7rem; }
 .home-heading-period strong { color: #354a5f; font-size: .72rem; }
-.home-heading-actions { display: flex; max-width: 58%; align-items: center; gap: 10px; }
-.home-heading-actions h2 { margin: 0; color: #71808e; font-size: .68rem; white-space: nowrap; }
 
 .home-financial-overview .home-eyebrow {
   margin: 0 0 5px;
@@ -153,7 +151,7 @@
   letter-spacing: .06em;
 }
 
-.home-financial-overview .home-v21__section-heading { margin: 0; padding: 12px 14px 10px; }
+.home-financial-overview .home-v21__section-heading { margin: 0; padding: 9px 12px 8px; }
 .home-financial-overview .home-v21__section-heading h2 { margin: 0; color: #12243a; font-size: 1.14rem; }
 .home-financial-overview .home-v21__section-heading p:not(.home-eyebrow) { margin: 4px 0 0; color: #75818d; font-size: .78rem; }
 
@@ -172,7 +170,7 @@
 .home-financial-summary .home-kpi-grid,
 .home-financial-summary > .home-state,
 .home-follow-up .home-follow-up__table-wrap,
-.home-follow-up > .home-state { margin: 0 14px 12px; }
+.home-follow-up > .home-state { margin: 0 12px 10px; }
 
 .home-quick-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 0; }
 .home-quick-actions button {
@@ -223,6 +221,7 @@
 @media (prefers-reduced-motion: reduce) { .home-state__pulse { animation: none; } }
 
 .home-follow-up__table-wrap { overflow-x: auto; border: 1px solid #e4e9ed; border-radius: 6px; }
+.home-follow-up { min-height: 196px; }
 .home-follow-up__table { min-width: 690px; }
 .home-follow-up__table th { padding: 7px 10px; background: #f6f8f9; color: #71808e; font-size: .65rem; font-weight: 700; text-transform: none; }
 .home-follow-up__table td { height: 44px; padding: 7px 10px; color: #61707d; font-size: .73rem; vertical-align: middle; }
@@ -238,7 +237,7 @@
 .home-alert-open { min-height: 30px; gap: 5px; padding: 3px 8px; border-color: #dce6e4; color: #087e70; background: #f7fbfa; font-size: .68rem; white-space: nowrap; }
 .home-alert-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #d69c56; }
 
-.home-close-strip { min-height: 52px; margin-bottom: -8px; padding: 7px 14px; border: 1px solid #dfe7e9; border-radius: 8px 8px 0 0; background: #fff; box-shadow: none; }
+.home-close-strip { min-height: 48px; margin-bottom: -8px; padding: 5px 12px; border: 1px solid #dfe7e9; border-radius: 7px 7px 0 0; background: #fff; box-shadow: none; }
 .home-financial-overview .home-v21__workspace-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, .62fr); gap: 12px; }
 .home-close-strip + .home-v21__workspace-grid > .home-exceptions,
 .home-close-strip + .home-v21__workspace-grid > .home-readiness { border-radius: 0 0 8px 8px; }
@@ -257,7 +256,6 @@
 
 @media (max-width: 72em) {
   .home-quick-actions, .home-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .home-heading-actions { max-width: 54%; }
 }
 
 @media (max-width: 48em) {
@@ -267,8 +265,6 @@
   .home-financial-overview > * + * { margin-top: 14px; }
   .home-financial-overview .home-hero { min-height: 0; padding: 16px; }
   .home-financial-overview .home-hero { align-items: stretch; flex-direction: column; }
-  .home-heading-actions { width: 100%; max-width: none; align-items: flex-start; flex-direction: column; }
-  .home-quick-actions { justify-content: flex-start; }
   .home-kpi-card { border-inline-end: 0; border-bottom: 1px solid #e4eaee; }
   .home-kpi-card:last-child { border-bottom: 0; }
   .home-financial-overview .home-launcher, .home-financial-overview .home-exceptions, .home-financial-overview .home-readiness { padding: 17px 15px; }

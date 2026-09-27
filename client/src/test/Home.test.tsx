@@ -31,24 +31,15 @@ describe('Home v2.1', () => {
     vi.clearAllMocks();
   });
 
-  it('shows only authorized daily operations and opens their existing workflows', () => {
+  it('keeps operational quick actions out of the financial-overview composition', () => {
     vi.stubGlobal('fetch', vi.fn());
     renderHome(['document.upload', 'document.view', 'document.edit', 'obligation.view', 'bank.view']);
 
-    expect(screen.getByRole('heading', { name: 'Daily Operations' })).toBeInTheDocument();
-    screen.getByRole('button', { name: 'Add sale' }).click();
-    screen.getByRole('button', { name: 'Add purchase' }).click();
-    screen.getByRole('button', { name: 'Add expense' }).click();
-    screen.getByRole('button', { name: 'Upload document' }).click();
-    screen.getByRole('button', { name: 'Open sales' }).click();
-    screen.getByRole('button', { name: 'Open banking' }).click();
-
-    expect(startSalesEntry).toHaveBeenCalledOnce();
-    expect(startPurchaseEntry).toHaveBeenNthCalledWith(1, 'purchase');
-    expect(startPurchaseEntry).toHaveBeenNthCalledWith(2, 'expense');
-    expect(navigate).toHaveBeenCalledWith('documents');
-    expect(navigate).toHaveBeenCalledWith('sales');
-    expect(navigate).toHaveBeenCalledWith('banks');
+    expect(screen.queryByRole('heading', { name: 'Daily Operations' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
+    expect(startSalesEntry).not.toHaveBeenCalled();
+    expect(startPurchaseEntry).not.toHaveBeenCalled();
   });
 
 
@@ -59,7 +50,7 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add purchase' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add expense' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Upload document' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
   });
 
   it('hides daily operations when their required capabilities are absent', () => {
@@ -121,7 +112,7 @@ describe('Home v2.1', () => {
     ]);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/monthly-close-periods', { credentials: 'same-origin' }));
-    expect(await screen.findByRole('heading', { name: 'Close blockers' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Close readiness' })).toBeInTheDocument();
     const table = screen.getByRole('table');
     expect(within(table).getByText('Blockers: 2')).toBeInTheDocument();
     expect(within(table).getByText('Blockers: 1')).toBeInTheDocument();
