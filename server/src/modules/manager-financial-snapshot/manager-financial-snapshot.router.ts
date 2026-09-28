@@ -3,10 +3,12 @@ import { Pool } from 'pg';
 import pool from '../../db/pool';
 import { operationalDate } from '../../operational-date';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth } from '../auth/auth.middleware';
+import { FinancialStatementsService } from '../accounting/financial-statements';
 
 export const managerFinancialSnapshotRouter = Router();
 
 type Metric = { state: 'available'; amount: string } | { state: 'hidden' };
+type TotalAssetsMetric = Metric | { state: 'unavailable' };
 type BankAccountMetric = {
   id: string;
   display_name: string;
@@ -35,6 +37,7 @@ export class ManagerFinancialSnapshotService {
     let payables: Metric = { state: 'hidden' };
     let sales: Metric = { state: 'hidden' };
     let purchasesExpenses: Metric = { state: 'hidden' };
+    let totalAssets: TotalAssetsMetric = { state: 'hidden' };
 
     if (capabilities.includes('bank.view')) {
       const { rows } = await this.db.query<{ id: string; display_name: string; currency_code: string; running_balance: string | null }>(`SELECT a.id,a.display_name,a.currency_code,b.running_balance::text
@@ -85,6 +88,19 @@ export class ManagerFinancialSnapshotService {
       purchasesExpenses = { state: 'available', amount: rows[0]?.purchases_expenses ?? '0' };
     }
 
+    if (capabilities.includes('accounting.view')) {
+      const fiscalYear = (await this.db.query<{ id: string }>(
+        'SELECT id FROM fiscal_years WHERE company_id=$1 AND start_date<=$2 AND end_date>=$2 ORDER BY start_date DESC LIMIT 1',
+        [companyId, asOf],
+      )).rows[0];
+      if (fiscalYear) {
+        const position = await new FinancialStatementsService(this.db).financialPosition(companyId, fiscalYear.id, asOf);
+        totalAssets = { state: 'available', amount: position.total_assets };
+      } else {
+        totalAssets = { state: 'unavailable' };
+      }
+    }
+
     return {
       as_of: asOf,
       month: { start, end_exclusive: next },
@@ -92,6 +108,7 @@ export class ManagerFinancialSnapshotService {
         bank_balances: bankAccounts === null ? { state: 'hidden' as const } : { state: 'available' as const, accounts: bankAccounts },
         amounts_to_collect: receivables,
         amounts_to_pay: payables,
+        total_assets: totalAssets,
         current_month_sales: sales,
         current_month_purchases_expenses: purchasesExpenses,
       },

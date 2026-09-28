@@ -16,6 +16,7 @@ export type HomeAlert = {
   count: number;
   destination: Destination;
   parameters: Record<string, string>;
+  amount?: string;
 };
 
 const route = (handler: (req: Request, res: Response) => Promise<void>): RequestHandler =>
@@ -39,7 +40,7 @@ export class HomeAlertsService {
     const dueThrough = addDays(today, 30);
 
     if (capabilities.includes('obligation.view')) {
-      const { rows } = await this.db.query<{ overdue: string; upcoming: string; unconfirmed: string }>(`WITH remaining AS (
+      const { rows } = await this.db.query<{ overdue: string; upcoming: string; unconfirmed: string; overdue_amount: string; upcoming_amount: string; unconfirmed_amount: string }>(`WITH remaining AS (
         SELECT o.id,o.due_on,o.verification_status,o.is_cancelled,
           o.original_amount-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0) remaining
         FROM obligations o
@@ -51,13 +52,16 @@ export class HomeAlertsService {
       ) SELECT
         COUNT(*) FILTER (WHERE NOT is_cancelled AND remaining>0 AND due_on<$2)::text overdue,
         COUNT(*) FILTER (WHERE NOT is_cancelled AND remaining>0 AND due_on BETWEEN $2 AND $3)::text upcoming,
-        COUNT(*) FILTER (WHERE NOT is_cancelled AND remaining>0 AND verification_status='unconfirmed')::text unconfirmed
+        COUNT(*) FILTER (WHERE NOT is_cancelled AND remaining>0 AND verification_status='unconfirmed')::text unconfirmed,
+        COALESCE(SUM(remaining) FILTER (WHERE NOT is_cancelled AND remaining>0 AND due_on<$2),0)::text overdue_amount,
+        COALESCE(SUM(remaining) FILTER (WHERE NOT is_cancelled AND remaining>0 AND due_on BETWEEN $2 AND $3),0)::text upcoming_amount,
+        COALESCE(SUM(remaining) FILTER (WHERE NOT is_cancelled AND remaining>0 AND verification_status='unconfirmed'),0)::text unconfirmed_amount
       FROM remaining`, [companyId, today, dueThrough]);
-      const counts = rows[0] ?? { overdue: '0', upcoming: '0', unconfirmed: '0' };
+      const counts = rows[0] ?? { overdue: '0', upcoming: '0', unconfirmed: '0', overdue_amount: '0', upcoming_amount: '0', unconfirmed_amount: '0' };
       alerts.push(
-        { key: 'overdue_obligations', class: 'needs_action_now', ownership: ownsAction(capabilities, 'obligation.settlement.create', 'waiting_for_accountant'), count: Number(counts.overdue), destination: 'obligations', parameters: { overdue: '1' } },
-        { key: 'upcoming_obligations', class: 'upcoming_due', ownership: 'upcoming', count: Number(counts.upcoming), destination: 'obligations', parameters: { dueFrom: today, dueTo: dueThrough } },
-        { key: 'unconfirmed_obligations', class: 'needs_review_completion', ownership: ownsAction(capabilities, 'obligation.confirm', 'waiting_for_team'), count: Number(counts.unconfirmed), destination: 'obligations', parameters: { confirmation: 'unconfirmed' } },
+        { key: 'overdue_obligations', class: 'needs_action_now', ownership: ownsAction(capabilities, 'obligation.settlement.create', 'waiting_for_accountant'), count: Number(counts.overdue), amount: counts.overdue_amount, destination: 'obligations', parameters: { overdue: '1' } },
+        { key: 'upcoming_obligations', class: 'upcoming_due', ownership: 'upcoming', count: Number(counts.upcoming), amount: counts.upcoming_amount, destination: 'obligations', parameters: { dueFrom: today, dueTo: dueThrough } },
+        { key: 'unconfirmed_obligations', class: 'needs_review_completion', ownership: ownsAction(capabilities, 'obligation.confirm', 'waiting_for_team'), count: Number(counts.unconfirmed), amount: counts.unconfirmed_amount, destination: 'obligations', parameters: { confirmation: 'unconfirmed' } },
       );
     }
 

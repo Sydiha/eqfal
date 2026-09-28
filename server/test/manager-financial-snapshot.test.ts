@@ -70,3 +70,29 @@ describe('ManagerFinancialSnapshotService', () => {
     expect(result.metrics.current_month_purchases_expenses).toEqual({ state: 'available', amount: '999999999999999.99' });
   });
 });
+
+it('uses the active fiscal year and authoritative financial-position service for total assets', async () => {
+  const { pool, query } = poolWithRows(
+    [{ id: 'fy-current' }],
+    [{ start_date: '2026-01-01', end_date: '2026-12-31' }],
+    [
+      { account_id: 'asset-1', code: '1000', name: 'Cash', account_type: 'asset', statement_category: 'current_asset', is_contra: false, debit: '125.00', credit: '0', opening_debit: '0', opening_credit: '0' },
+      { account_id: 'asset-2', code: '1500', name: 'Equipment', account_type: 'asset', statement_category: 'non_current_asset', is_contra: false, debit: '75.00', credit: '0', opening_debit: '0', opening_credit: '0' },
+    ],
+  );
+  const result = await new ManagerFinancialSnapshotService(pool).get('company-a', ['accounting.view']);
+
+  expect(query.mock.calls[0]?.[0]).toContain('FROM fiscal_years WHERE company_id=$1');
+  expect(query.mock.calls[0]?.[1]).toEqual(['company-a', result.as_of]);
+  expect(query.mock.calls[1]?.[1]).toEqual(['fy-current', 'company-a']);
+  expect(String(query.mock.calls[2]?.[0])).toContain("j.status='posted'");
+  expect(result.metrics.total_assets).toEqual({ state: 'available', amount: '200.00' });
+  expect(result.metrics.amounts_to_collect).toEqual({ state: 'hidden' });
+});
+
+it('keeps total assets hidden without accounting access and unavailable when no fiscal year covers the as-of date', async () => {
+  const hidden = await new ManagerFinancialSnapshotService(poolWithRows().pool).get('company-a', []);
+  expect(hidden.metrics.total_assets).toEqual({ state: 'hidden' });
+  const unavailable = await new ManagerFinancialSnapshotService(poolWithRows([]).pool).get('company-a', ['accounting.view']);
+  expect(unavailable.metrics.total_assets).toEqual({ state: 'unavailable' });
+});

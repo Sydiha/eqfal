@@ -128,3 +128,22 @@ describe('home alerts', () => {
     expect(response.body.alerts.every((alert: { ownership?: string }) => alert.ownership)).toBe(true);
   });
 });
+
+describe('home alert obligation summaries', () => {
+  it('aggregates the same remaining unsettled population used by each count', async () => {
+    const query = vi.fn(async (sql: string, args: unknown[]) => {
+      expect(args).toEqual([COMPANY, '2026-09-17', '2026-10-17']);
+      expect(sql).toContain("o.original_amount-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0) remaining");
+      expect(sql).toContain('SUM(remaining) FILTER (WHERE NOT is_cancelled AND remaining>0 AND due_on<$2)');
+      return { rows: [{ overdue: '2', upcoming: '1', unconfirmed: '1', overdue_amount: '75.25', upcoming_amount: '20.00', unconfirmed_amount: '11.50' }] };
+    });
+    mocks.pool = { query };
+    mocks.context = { activeCompanyId: COMPANY, capabilities: ['obligation.view'], user: { id: 'user' } };
+    const response = await request(app).get('/api/home-alerts');
+    expect(response.body.alerts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'overdue_obligations', count: 2, amount: '75.25' }),
+      expect.objectContaining({ key: 'upcoming_obligations', count: 1, amount: '20.00' }),
+      expect.objectContaining({ key: 'unconfirmed_obligations', count: 1, amount: '11.50' }),
+    ]));
+  });
+});
