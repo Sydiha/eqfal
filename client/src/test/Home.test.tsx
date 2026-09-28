@@ -221,12 +221,31 @@ describe('Home v2.1', () => {
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
     const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Type' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Description' })).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Responsibility' })).toBeInTheDocument();
+    expect(within(table).getByText('Documents')).toBeInTheDocument();
     expect(within(table).getByText('Current user action')).toBeInTheDocument();
     expect(within(table).getAllByText('Upcoming').length).toBeGreaterThan(0);
     expect(within(table).getByText('Waiting for accountant')).toBeInTheDocument();
     expect(within(table).queryByText('Waiting for team')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Documents needing review/ })).toBeInTheDocument();
+  });
+
+  it('keeps readiness and the close checklist in one coherent monthly-close region', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      periods: [{
+        id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
+        status: 'open', ready: false, disclosed_total: 1, has_hidden_blockers: false,
+        blockers: { documents: 1, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0 },
+      }],
+    }), { status: 200 })));
+    renderHome(['monthly_close.view', 'document.view']);
+
+    const closeRegion = await screen.findByRole('region', { name: 'Close readiness' });
+    expect(within(closeRegion).getByRole('heading', { name: 'Close blockers' })).toBeInTheDocument();
+    expect(within(closeRegion).getByRole('heading', { name: 'Blockers: 1' })).toBeInTheDocument();
+    expect(within(closeRegion).getByRole('table')).toBeInTheDocument();
   });
 
   it('does not request or render alerts without a supported module view capability', () => {

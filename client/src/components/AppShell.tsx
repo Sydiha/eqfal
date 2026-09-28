@@ -63,8 +63,8 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   return (
     <MantineAppShell
       className="app-shell app-shell--v2"
-      header={{ height: 64 }}
-      navbar={{ width: 248, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      header={{ height: 60 }}
+      navbar={{ width: 233, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >

@@ -101,7 +101,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
-        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', followUpList: 'قائمة المهام التي تتطلب متابعة', followUpIntro: 'بنود تشغيلية ومالية تحتاج إلى إجراء أو مراجعة.', viewDetails: 'عرض التفاصيل', item: 'البند', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
+        overview: 'نظرة عامة مالية', overviewIntro: 'تابع وضع المنشأة المالي والمهام التي تحتاج إلى اهتمامك.', followUp: 'المتابعة والإجراءات', followUpList: 'قائمة المهام التي تتطلب متابعة', followUpIntro: 'بنود تشغيلية ومالية تحتاج إلى إجراء أو مراجعة.', viewDetails: 'عرض التفاصيل', type: 'النوع', description: 'الوصف', responsibility: 'المسؤولية', count: 'العدد', status: 'الحالة', action: 'الإجراء', monthlyActivity: 'حركة الشهر الحالي',
       }
     : {
         dailyOperations: 'Daily Operations',
@@ -123,7 +123,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
-        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', followUpList: 'Tasks requiring follow-up', followUpIntro: 'Operational and financial items requiring action or review.', viewDetails: 'View details', item: 'Item', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
+        overview: 'Financial overview', overviewIntro: 'Monitor your organization’s financial position and the work requiring attention.', followUp: 'Follow-up and actions', followUpList: 'Tasks requiring follow-up', followUpIntro: 'Operational and financial items requiring action or review.', viewDetails: 'View details', type: 'Type', description: 'Description', responsibility: 'Responsibility', count: 'Count', status: 'Status', action: 'Action', monthlyActivity: 'Current-month activity',
       };
 
   const alertLabels: Record<string, string> = isArabic ? {
@@ -139,6 +139,11 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
   const alertClassLabels: Record<HomeAlert['class'], string> = isArabic
     ? { needs_action_now: 'يتطلب إجراء', upcoming_due: 'قادم', needs_review_completion: 'يحتاج مراجعة' }
     : { needs_action_now: 'Action required', upcoming_due: 'Upcoming', needs_review_completion: 'Needs review' };
+
+  const destinationLabels: Record<DiscoveryPage, string> = {
+    documents: t('nav.documents'), banks: t('nav.banks'), obligations: t('nav.obligations'),
+    vat: t('nav.vat'), accounting: t('nav.accounting'),
+  };
 
   const load = async () => {
     if (!canViewClose) return;
@@ -337,13 +342,14 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
           ) : alerts.length === 0 ? <div className="home-state home-state--empty" role="status">{homeLabels.alertsEmpty}</div> : (
             <div className="home-follow-up__table-wrap">
               <table className="home-follow-up__table">
-                <thead><tr><th>{homeLabels.item}</th><th>{homeLabels.responsibility}</th><th>{homeLabels.count}</th><th>{homeLabels.status}</th><th>{homeLabels.action}</th></tr></thead>
+                <thead><tr><th>{homeLabels.type}</th><th>{homeLabels.description}</th><th>{homeLabels.count}</th><th>{homeLabels.responsibility}</th><th>{homeLabels.status}</th><th>{homeLabels.action}</th></tr></thead>
                 <tbody>
                   {alertGroups.flatMap(group => group.alerts.map(alert => (
                     <tr key={alert.key}>
+                      <td><span className={`home-alert-type home-alert-type--${alert.class}`}>{destinationLabels[alert.destination]}</span></td>
                       <td><span className={`home-alert-dot home-alert-dot--${alert.class}`} aria-hidden="true" /><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
-                      <td>{homeLabels.ownership[alert.ownership]}</td>
                       <td><span className="home-alert-count" dir="ltr">{alert.count}</span></td>
+                      <td>{homeLabels.ownership[alert.ownership]}</td>
                       <td><span className={`home-alert-status home-alert-status--${alert.class}`}>{alertClassLabels[alert.class]}</span></td>
                       <td><button type="button" className="home-alert-open" aria-label={`${homeLabels.viewDetails}: ${alertLabels[alert.key] ?? alert.key}`} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{homeLabels.viewDetails}<span aria-hidden="true">↗</span></button></td>
                     </tr>
@@ -356,44 +362,27 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       )}
 
       {canViewClose && (
-        <section className="home-status-strip home-close-strip" aria-label={t('monthlyClose.title')}>
-          {loading ? (
-            <span className="home-state" role="status">{t('monthlyClose.loading')}</span>
-          ) : error ? (
-            <>
-              <span role="alert">{t('monthlyClose.error')}</span>
-              <button type="button" onClick={() => void load()}>{t('common.retry')}</button>
-            </>
-          ) : selected ? (
-            <>
-              <div className="home-status-strip__period">
-                <span>{t('monthlyClose.title')}</span>
-                <strong>{periodRange}</strong>
-              </div>
-              <span className={`home-status-pill home-status-pill--${selected.status}`}>
-                {t(`monthlyClose.${selected.status}`)}
-              </span>
-              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {closeSummary}
-              </span>
-            </>
-          ) : (
-            <span role="status">{t('monthlyClose.empty')}</span>
-          )}
-        </section>
-      )}
-
-      {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
+        <section className="home-monthly-close" aria-labelledby="home-monthly-close-title">
+          <div className="home-monthly-close__heading">
+            <div>
+              <p className="home-eyebrow">{t('monthlyClose.title')}</p>
+              <h2 id="home-monthly-close-title">{homeLabels.readiness}</h2>
+              {selected && <p>{periodRange}</p>}
+            </div>
+            {selected && <div className="home-monthly-close__status">
+              <span className={`home-status-pill home-status-pill--${selected.status}`}>{t(`monthlyClose.${selected.status}`)}</span>
+              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>{closeSummary}</span>
+            </div>}
+          </div>
+          {loading ? <div className="home-state" role="status">{t('monthlyClose.loading')}</div> : error ? (
+            <div className="home-state home-state--error" role="alert"><span>{t('monthlyClose.error')}</span><button type="button" onClick={() => void load()}>{t('common.retry')}</button></div>
+          ) : !selected ? <div className="home-state" role="status">{t('monthlyClose.empty')}</div> : (
+        <div className="home-v21__workspace-grid">
           <section className="home-exceptions home-close-blockers" aria-labelledby="home-exceptions-title">
             <div className="home-v21__section-heading">
               <div>
-                <p className="home-eyebrow">{t('monthlyClose.title')}</p>
-                <h2 id="home-exceptions-title">{homeLabels.readiness}</h2>
+                <h3 id="home-exceptions-title">{homeLabels.closeBlockers}</h3>
               </div>
-              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {closeSummary}
-              </span>
             </div>
             <div className="home-exceptions__table-wrap">
               <table className="home-exceptions__table">
@@ -427,10 +416,10 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             </div>
           </section>
 
-          <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+          <aside className="home-readiness" aria-labelledby="home-readiness-title">
             <p className="home-eyebrow">{homeLabels.readiness}</p>
             <div className={`home-readiness__visual ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-hidden="true"><span>{selected.status === 'closed' || selected.ready ? '✓' : '!'}</span></div>
-            <h2 id="home-readiness-title">{closeSummary}</h2>
+            <h3 id="home-readiness-title">{closeSummary}</h3>
             <p className="home-readiness__period">{periodRange}</p>
             <div className="home-readiness__summary" style={{ marginTop: 0 }}>
               <span>{homeLabels.periodState}</span>
@@ -448,7 +437,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
               {t('nav.monthlyClose')}
             </button>
           </aside>
-        </div>
+        </div>)}
+        </section>
       )}
     </section>
   );
