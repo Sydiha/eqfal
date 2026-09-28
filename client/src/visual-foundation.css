@@ -1,0 +1,46 @@
+/* Phase 15A — approved EQFAL visual foundation.
+   Visual source of truth: approved Work/Figma masters.
+   Functional source of truth remains the existing application. */
+:root {
+  --app-bg: #fafcfd;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafb;
+  --border: #e4e8ec;
+  --primary: #00b894;
+  --primary-hover: #009f80;
+  --primary-soft: #e8f8f4;
+  --brand-navy: #0b1d33;
+  --brand-teal: #00b894;
+  --brand-gold: #d4af37;
+  --text: #1e293b;
+  --muted: #94a3b8;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shell-topbar-height: 80px;
+  --shell-sidebar-width: 240px;
+  --workspace-gutter: 36px;
+}
+
+/* Mantine AppShell exposes these variables from component props. Override only
+   the desktop shell geometry so the existing navigation and behavior remain intact. */
+@media (min-width: 48em) {
+  .app-shell--v2 {
+    --app-shell-header-height: var(--shell-topbar-height) !important;
+    --app-shell-navbar-width: var(--shell-sidebar-width) !important;
+  }
+}
+
+.app-shell--v2 .topbar {
+  min-height: var(--shell-topbar-height);
+  padding-inline: var(--workspace-gutter);
+}
+
+.app-shell--v2 .workspace-content {
+  padding: var(--workspace-gutter);
+}
+
+.eqfal-workspace,
+.workspace-content {
+  background: var(--app-bg);
+}
