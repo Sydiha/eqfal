@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@mantine/core/styles.css';
 import App from './App';
+import './visual-foundation.css';
 import { AuthProvider } from './context/AuthContext';
 
 const rootEl = document.getElementById('root');
