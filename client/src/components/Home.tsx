@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
+import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 import '../home-master.css';
 
 type HomePage =
@@ -66,7 +67,7 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
+export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -204,6 +205,18 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
 
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
+  const canViewSalesPurchases = can('document.view') && can('obligation.view');
+  const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
+  const dailyOperations = [
+    { key: 'add-sale', label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
+    { key: 'add-purchase', label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
+    { key: 'add-expense', label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
+    { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
+    { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
+    { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
+    { key: 'open-banking', label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
+    { key: 'open-obligations', label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
+  ].filter(action => action.visible);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
@@ -303,6 +316,12 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
           <p>{isArabic ? 'ملخص تشغيلي للوضع المالي والإجراءات التي تتطلب المتابعة' : 'Operational financial summary and items requiring follow-up'}</p>
         </div>
       </header>
+
+      {dailyOperations.length > 0 && (
+        <nav className="home-master__quick-actions" aria-label={homeLabels.dailyOperations}>
+          {dailyOperations.map(action => <button key={action.key} type="button" onClick={action.open}>{action.label}</button>)}
+        </nav>
+      )}
 
       {canViewSnapshot && (
         <section aria-labelledby="home-financial-snapshot-title">
