@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './HomeApproved.css';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
@@ -291,21 +292,21 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   ) : null;
 
   return (
-    <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
-      <header className="home-hero home-v21__hero">
-        <div className="home-hero-copy">
-          <p className="home-eyebrow">{t('home.workspace')}</p>
+    <section className="eqfal-home" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
+      <header className="eqfal-home__header">
+        <div className="eqfal-home__header-copy">
+          <p className="eqfal-home__eyebrow">{t('home.workspace')}</p>
           <h1 id="home-title">{t('home.welcome')}</h1>
-          <p className="home-intro">{t('home.context')}</p>
+          <p className="eqfal-home__intro">{t('home.context')}</p>
         </div>
       </header>
 
       {dailyOperations.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
-          <div className="home-v21__section-heading">
+        <section className="eqfal-home__quick-actions" aria-labelledby="home-daily-operations-title">
+          <div className="eqfal-home__section-heading">
             <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
           </div>
-          <div className="home-launcher__grid">
+          <div className="eqfal-home__grid">
             {dailyOperations.map((action) => (
               <button key={action.key} type="button" onClick={action.open}>
                 <span>{action.label}</span><span aria-hidden="true">↗</span>
@@ -316,14 +317,14 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewSnapshot && (
-        <section className="home-exceptions" aria-labelledby="home-financial-snapshot-title">
-          <div className="home-v21__section-heading">
+        <section className="eqfal-home__panel" aria-labelledby="home-financial-snapshot-title">
+          <div className="eqfal-home__section-heading">
             <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
           </div>
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
-            <div className="home-launcher__grid">
+            <div className="eqfal-home__grid">
               <article>
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
@@ -345,8 +346,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewAlerts && (
-        <section className="home-exceptions" aria-labelledby="home-alerts-title">
-          <div className="home-v21__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
+        <section className="eqfal-home__panel" aria-labelledby="home-alerts-title">
+          <div className="eqfal-home__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
@@ -354,7 +355,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               {alertGroups.map(group => (
                 <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
                   <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="home-launcher__grid">
+                  <div className="eqfal-home__grid">
                     {group.alerts.map(alert => (
                       <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
                         <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
@@ -369,7 +370,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewClose && (
-        <section className="home-status-strip" aria-label={t('monthlyClose.title')}>
+        <section className="eqfal-home__status-strip" aria-label={t('monthlyClose.title')}>
           {loading ? (
             <span role="status">{t('monthlyClose.loading')}</span>
           ) : error ? (
@@ -397,19 +398,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
-          <section className="home-exceptions" aria-labelledby="home-exceptions-title">
-            <div className="home-v21__section-heading">
+        <div className="eqfal-home__close-grid" style={{ alignItems: 'start' }}>
+          <section className="eqfal-home__panel" aria-labelledby="home-exceptions-title">
+            <div className="eqfal-home__section-heading">
               <div>
-                <p className="home-eyebrow">{t('monthlyClose.title')}</p>
+                <p className="eqfal-home__eyebrow">{t('monthlyClose.title')}</p>
                 <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
               </div>
               <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
                 {closeSummary}
               </span>
             </div>
-            <div className="home-exceptions__table-wrap">
-              <table className="home-exceptions__table">
+            <div className="eqfal-home__table-wrap">
+              <table className="eqfal-home__table">
                 <thead>
                   <tr>
                     <th>{homeLabels.area}</th>
@@ -428,7 +429,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                       </td>
                       <td>
                         {item.canOpen && (
-                          <button type="button" className="home-exception-open" aria-label={item.label} onClick={item.open}>
+                          <button type="button" className="eqfal-home__link-action" aria-label={item.label} onClick={item.open}>
                             <span aria-hidden="true">↗</span>
                           </button>
                         )}
@@ -440,15 +441,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             </div>
           </section>
 
-          <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
-            <p className="home-eyebrow">{homeLabels.readiness}</p>
+          <aside className="eqfal-home__readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+            <p className="eqfal-home__eyebrow">{homeLabels.readiness}</p>
             <h2 id="home-readiness-title">{closeSummary}</h2>
-            <p className="home-readiness__period">{periodRange}</p>
-            <div className="home-readiness__summary" style={{ marginTop: 0 }}>
+            <p className="eqfal-home__readiness-period">{periodRange}</p>
+            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0 }}>
               <span>{homeLabels.periodState}</span>
               <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
             </div>
-            <div className="home-readiness__summary" style={{ marginTop: 0, borderTop: 0 }}>
+            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0, borderTop: 0 }}>
               <span>{homeLabels.closeBlockers}</span>
               <strong>
                 {selected.has_hidden_blockers
@@ -456,7 +457,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                   : selected.disclosed_total}
               </strong>
             </div>
-            <button type="button" className="home-readiness__open" onClick={() => navigate('monthlyClose')}>
+            <button type="button" className="eqfal-home__primary-action" onClick={() => navigate('monthlyClose')}>
               {t('nav.monthlyClose')}
             </button>
           </aside>
