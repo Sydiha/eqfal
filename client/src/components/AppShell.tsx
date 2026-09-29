@@ -1,8 +1,9 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
+import { useCompany } from '../context/CompanyContext';
 import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
 import '../mobile.css';
@@ -31,7 +32,39 @@ const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar'
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
+  const { activeCompanyId, allowedCompanies } = useCompany();
+  const activeCompany = allowedCompanies.find(company => company.id === activeCompanyId);
+  const [fiscalYearLabel, setFiscalYearLabel] = useState<string>('—');
+  const [periodLabel, setPeriodLabel] = useState<string>('—');
   useEffect(close, [page, close]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadContext = async () => {
+      try {
+        const [yearsResponse, periodsResponse] = await Promise.all([
+          fetch('/api/fiscal-years', { credentials: 'same-origin' }),
+          fetch('/api/monthly-close-periods', { credentials: 'same-origin' }),
+        ]);
+        if (yearsResponse.ok) {
+          const body = await yearsResponse.json() as { fiscalYears?: Array<{ name: string; status: string }> };
+          const years = Array.isArray(body.fiscalYears) ? body.fiscalYears : [];
+          const current = years.find(year => year.status === 'open') ?? years[0];
+          if (!cancelled && current) setFiscalYearLabel(current.name);
+        }
+        if (periodsResponse.ok) {
+          const body = await periodsResponse.json() as { periods?: Array<{ period_start: string; status: string }> };
+          const periods = Array.isArray(body.periods) ? body.periods : [];
+          const current = periods.find(period => period.status === 'open') ?? periods[0];
+          if (!cancelled && current) {
+            const date = new Date(`${current.period_start}T00:00:00`);
+            setPeriodLabel(new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(date));
+          }
+        }
+      } catch { /* Context pills fail closed to em dash; page functionality remains available. */ }
+    };
+    void loadContext();
+    return () => { cancelled = true; };
+  }, [activeCompanyId, i18n.language]);
   const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
@@ -72,40 +105,22 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Group h="100%" wrap="nowrap" gap="md">
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
-          <Stack gap={0} className="page-context">
-            <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
-            <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
-          </Stack>
+          <div className="figma-topbar-left">
+            <button type="button" className="figma-notification" aria-label={isNaN(0) ? '' : (i18n.language === 'ar' ? 'التنبيهات' : 'Notifications')}><span aria-hidden="true">♧</span></button>
+            <div className="figma-profile">
+              <span className="user-avatar" aria-hidden="true">{userInitial}</span>
+              <span className="figma-profile-copy"><strong>{email}</strong><small>{t('home.currentUser')}</small></span>
+            </div>
+            <Button className="figma-utility" variant="subtle" size="compact-xs" onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}>{i18n.language === 'ar' ? 'EN' : 'AR'}</Button>
+            <Button className="figma-utility" variant="subtle" size="compact-xs" onClick={() => void onLogout()}>{mobileLogoutLabel}</Button>
+          </div>
           <Box className="topbar-spacer" />
-          <CompanySwitcher onSwitch={onSwitch} />
-          <Button
-            className="header-action language-action"
-            aria-label={t('app.switchLanguage')}
-            variant="subtle"
-            size="compact-md"
-            onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
-          >
-            <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
-            <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
-          </Button>
-          <Divider orientation="vertical" className="top-divider" />
-          <Group gap="sm" wrap="nowrap" className="user-summary">
-            <span className="user-avatar" aria-hidden="true">{userInitial}</span>
-            <Stack gap={0} className="user-copy">
-              <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
-              <Text size="sm" fw={650}>{email}</Text>
-            </Stack>
-          </Group>
-          <Button
-            className="header-action logout-action"
-            aria-label={t('auth.logout')}
-            variant="subtle"
-            size="compact-md"
-            onClick={() => void onLogout()}
-          >
-            <span className="desktop-action-label">{t('auth.logout')}</span>
-            <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
-          </Button>
+          <div className="figma-topbar-context">
+            <button type="button" className="figma-search" aria-label={i18n.language === 'ar' ? 'بحث' : 'Search'}>⌕</button>
+            <div className="figma-company-pill" title={activeCompany?.name ?? ''}><CompanySwitcher onSwitch={onSwitch} /></div>
+            <button type="button" className="figma-context-pill" onClick={() => setPage('fiscalYears')}><span aria-hidden="true">▣</span><strong>{i18n.language === 'ar' ? `السنة المالية ${fiscalYearLabel}` : `Fiscal year ${fiscalYearLabel}`}</strong><span aria-hidden="true">⌄</span></button>
+            <button type="button" className="figma-context-pill figma-context-pill--period" onClick={() => setPage('monthlyClose')}><span aria-hidden="true">◷</span><strong>{periodLabel}</strong><span aria-hidden="true">⌄</span></button>
+          </div>
         </Group>
       </MantineAppShell.Header>
 
