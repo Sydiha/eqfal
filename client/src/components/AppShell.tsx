@@ -101,7 +101,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
           <div className="figma-topbar-left">
-            <button type="button" className="figma-notification" aria-label={i18n.language === 'ar' ? 'التنبيهات' : 'Notifications'}><span aria-hidden="true">♧</span></button>
+            <button type="button" className="figma-notification" aria-label={i18n.language === 'ar' ? 'التنبيهات' : 'Notifications'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></button>
             <div className="figma-profile">
               <span className="user-avatar" aria-hidden="true">{userInitial}</span>
               <span className="figma-profile-copy"><strong>{email}</strong><small>{t('home.currentUser')}</small></span>
@@ -111,10 +111,10 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           </div>
           <Box className="topbar-spacer" />
           <div className="figma-topbar-context">
-            <button type="button" className="figma-search" aria-label={i18n.language === 'ar' ? 'بحث' : 'Search'}>⌕</button>
+            <button type="button" className="figma-search" aria-label={i18n.language === 'ar' ? 'بحث' : 'Search'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></button>
             <div className="figma-company-pill" title={activeCompany?.name ?? ''}><CompanySwitcher onSwitch={onSwitch} /></div>
-            <button type="button" className="figma-context-pill" onClick={() => setPage('fiscalYears')}><span aria-hidden="true">▣</span><strong>{i18n.language === 'ar' ? `السنة المالية ${fiscalYearLabel}` : `Fiscal year ${fiscalYearLabel}`}</strong><span aria-hidden="true">⌄</span></button>
-            <button type="button" className="figma-context-pill figma-context-pill--period" onClick={() => setPage('monthlyClose')}><span aria-hidden="true">◷</span><strong>{periodLabel}</strong><span aria-hidden="true">⌄</span></button>
+            <button type="button" className="figma-context-pill" onClick={() => setPage('fiscalYears')}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><strong>{i18n.language === 'ar' ? `السنة المالية ${fiscalYearLabel}` : `Fiscal year ${fiscalYearLabel}`}</strong><svg className="figma-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
+            <button type="button" className="figma-context-pill figma-context-pill--period" onClick={() => setPage('monthlyClose')}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><strong>{periodLabel}</strong><svg className="figma-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
           </div>
         </Group>
       </MantineAppShell.Header>
