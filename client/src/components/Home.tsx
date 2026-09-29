@@ -379,7 +379,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                     <td><button className="home-master__alert-action" type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}><strong>{alertLabels[alert.key] ?? alert.key}</strong><span className="home-master__semantic-heading">{alert.count}</span></button></td>
                     <td><span className="home-master__badge">{homeLabels.ownership[alert.ownership]}</span></td>
                     <td dir="ltr">{alert.count}</td>
-                    <td><button type="button" aria-label={alertLabels[alert.key] ?? alert.key} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{isArabic ? 'فتح' : 'Open'}</button></td>
+                    <td aria-hidden="true"><span>{isArabic ? 'فتح' : 'Open'}</span></td>
                   </tr>
                     ))}
                   </Fragment>;
@@ -407,7 +407,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                     <tr key={item.key}>
                       <td><strong>{item.label}</strong></td>
                       <td><span className={`home-master__badge ${item.count === 0 ? 'is-clear' : ''}`}>{item.count > 0 ? homeLabels.blockers(item.count) : homeLabels.noBlockers}</span></td>
-                      <td>{item.canOpen && <button type="button" onClick={item.open}>{isArabic ? 'فتح' : 'Open'}</button>}</td>
+                      <td>{item.canOpen && <button type="button" aria-label={item.label} onClick={item.open}>{isArabic ? 'فتح' : 'Open'}</button>}</td>
                     </tr>
                   ))}</tbody>
                 </table>
