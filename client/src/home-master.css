@@ -75,3 +75,16 @@
 
 @media(max-width:1050px){.home-master{max-width:100%}.home-master__kpis{height:auto;grid-template-columns:repeat(2,minmax(0,1fr))}.home-master__kpi{min-height:72px;border-bottom:1px solid #e4e8ec}.home-master__close-bento{grid-template-columns:1fr;direction:rtl}.home-master__followup,.home-master__close-checklist{overflow-x:auto}.home-master__followup .home-master__table{min-width:900px}.home-master__close-checklist .home-master__table{min-width:720px}}
 @media(max-width:640px){.home-master{padding-top:14px}.home-master__header-meta{align-items:flex-start;flex-direction:column}.home-master__kpis{grid-template-columns:1fr}.home-master__section-head{padding-inline:12px}.home-master__table-wrap,.home-master__close-bento{margin-inline:12px}}
+
+
+/* Figma 5:4 geometry lock — desktop canvas 1200px content area */
+@media(min-width:1051px){
+  .home-master__header{height:43px;margin:0 0 16px}
+  .home-master__financial-section{height:109px;margin-bottom:16px}
+  .home-master__financial-section .home-master__section-head{height:27px;min-height:27px;padding:0 0 8px;box-sizing:border-box}
+  .home-master__kpis{height:82px}
+  .home-master__kpi{padding-block:12px}
+  .home-master__alerts-section{min-height:397px;margin-bottom:16px}
+  .home-master__alerts-section .home-master__section-head{height:62px;min-height:62px;padding:16px;box-sizing:border-box}
+  .home-master__alerts-section .home-master__table-wrap{min-height:319px;margin-bottom:16px}
+}
