@@ -100,7 +100,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
-        alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
+        alerts: 'المهام التي تتطلب متابعة', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
       }
@@ -121,7 +121,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: 'Close readiness',
         periodState: 'Period status',
-        alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
+        alerts: 'Tasks requiring follow-up', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
       };
@@ -292,7 +292,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   ) : null;
 
   return (
-    <section className="eqfal-home" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
+    <section className="eqfal-home" aria-labelledby="home-title">
       <header className="eqfal-home__header">
         <div className="eqfal-home__header-copy">
           <p className="eqfal-home__eyebrow">{t('home.workspace')}</p>
@@ -300,21 +300,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           <p className="eqfal-home__intro">{t('home.context')}</p>
         </div>
       </header>
-
-      {dailyOperations.length > 0 && (
-        <section className="eqfal-home__quick-actions" aria-labelledby="home-daily-operations-title">
-          <div className="eqfal-home__section-heading">
-            <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
-          </div>
-          <div className="eqfal-home__grid">
-            {dailyOperations.map((action) => (
-              <button key={action.key} type="button" onClick={action.open}>
-                <span>{action.label}</span><span aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       {canViewSnapshot && (
         <section className="eqfal-home__panel" aria-labelledby="home-financial-snapshot-title">
@@ -351,19 +336,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
-            <div>
-              {alertGroups.map(group => (
-                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
-                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="eqfal-home__grid">
-                    {group.alerts.map(alert => (
-                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                        <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+            <div className="eqfal-home__tasks">
+              {alertGroups.flatMap(group => group.alerts.map(alert => (
+                <button key={alert.key} type="button" className="eqfal-home__task-row" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+                  <span className="eqfal-home__task-name">{alertLabels[alert.key] ?? alert.key}</span>
+                  <span className="eqfal-home__task-owner">{homeLabels.ownership[group.ownership]}</span>
+                  <strong className="eqfal-home__task-count">{alert.count}</strong>
+                  <span className="eqfal-home__task-open" aria-hidden="true">↗</span>
+                </button>
+              )))}
             </div>
           )}
         </section>
