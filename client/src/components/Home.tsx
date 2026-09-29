@@ -333,10 +333,24 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             <p className="home-master__error" role="alert">{homeLabels.snapshotError} <button className="home-master__retry" type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
             <div className="home-master__kpis">
-              {kpis.map(([label,value]) => (
+              {kpis.map(([label,value], index) => (
                 <article className="home-master__kpi" key={label}>
                   <span className="home-master__kpi-label">{label}</span>
-                  <strong className={`home-master__kpi-value ${value === '—' ? 'is-muted' : ''}`} dir="ltr">{value}</strong>
+                  {index === 0 && snapshot?.metrics.bank_balances.state === 'available' ? (
+                    snapshot.metrics.bank_balances.accounts.length === 0 ? <span>{homeLabels.noBankAccounts}</span> :
+                    snapshot.metrics.bank_balances.accounts.map((account, accountIndex) => (
+                      <p key={account.id} className={accountIndex > 0 ? 'home-master__semantic-detail' : undefined}>
+                        <span className={accountIndex > 0 ? undefined : 'home-master__semantic-heading'}>{account.display_name}</span>
+                        <strong className={`home-master__kpi-value ${account.balance.state !== 'available' ? 'is-muted' : ''}`} dir="ltr">
+                          {account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}
+                        </strong>
+                      </p>
+                    ))
+                  ) : (
+                    <strong className={`home-master__kpi-value ${value === '—' ? 'is-muted' : ''}`} dir="ltr">
+                      {value === '—' && index > 0 && index < 5 ? homeLabels.restricted : value}
+                    </strong>
+                  )}
                 </article>
               ))}
             </div>
@@ -362,10 +376,10 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                     <tr className="home-master__semantic-row"><td colSpan={4}><h3>{homeLabels.ownership[ownership]}</h3></td></tr>
                     {groupAlerts.map(alert => (
                   <tr key={alert.key}>
-                    <td><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
+                    <td><button className="home-master__alert-action" type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}><strong>{alertLabels[alert.key] ?? alert.key}</strong><span className="home-master__semantic-heading">{alert.count}</span></button></td>
                     <td><span className="home-master__badge">{homeLabels.ownership[alert.ownership]}</span></td>
                     <td dir="ltr">{alert.count}</td>
-                    <td><button type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{isArabic ? 'فتح' : 'Open'}</button></td>
+                    <td><button type="button" aria-label={alertLabels[alert.key] ?? alert.key} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{isArabic ? 'فتح' : 'Open'}</button></td>
                   </tr>
                     ))}
                   </Fragment>;
@@ -400,7 +414,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               </div>
             )}
           </div>
-          <aside className="home-master__close-side" aria-labelledby="home-readiness-title"><h2 id="home-readiness-title" className="home-master__semantic-heading">{closeSummary}</h2>
+          <aside className="home-master__close-side" aria-labelledby="home-readiness-title"><h2 id="home-readiness-title" className="home-master__semantic-heading">{closeSummary}</h2>{selected && !selected.has_hidden_blockers && <span className="home-master__semantic-heading">{selected.disclosed_total}</span>}
             <div className={`home-master__ring ${selected && selected.status !== 'closed' && !selected.ready ? 'is-blocked' : ''}`}>
               {selected ? (selected.status === 'closed' ? t('monthlyClose.closed') : selected.ready ? t('monthlyClose.ready') : (isArabic ? 'قيد العمل' : 'In progress')) : '—'}
             </div>
