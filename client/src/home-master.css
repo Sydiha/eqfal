@@ -285,3 +285,48 @@
 .home-master__followup .home-master__table{min-width:1096px}
 .home-master__followup th:nth-child(1){width:130px}.home-master__followup th:nth-child(2){width:307px}.home-master__followup th:nth-child(3){width:50px}.home-master__followup th:nth-child(4){width:130px}.home-master__followup th:nth-child(5){width:110px}.home-master__followup th:nth-child(6){width:100px}.home-master__followup th:nth-child(7){width:88px}.home-master__followup th:nth-child(8){width:88px}
 .home-master__table tfoot td{height:36px;padding:0 14px;border-top:1px solid #e4e8ec;background:#f8fafb;font-size:11px;font-weight:600}
+
+
+/* Approved screenshot lock — 2026-09-29 */
+.home-master{padding-top:8px}
+.home-master__header{margin-bottom:16px}
+.home-master__financial-section{border:0!important;border-radius:0!important;background:transparent!important;overflow:visible!important}
+.home-master__financial-section .home-master__section-head{min-height:27px!important;padding:0 0 8px!important}
+.home-master__alerts-section{min-height:381px}
+.home-master__alerts-section .home-master__section-head{min-height:61px;padding:16px 16px 11px}
+.home-master__alerts-section .home-master__table-wrap{min-height:319px;margin-top:0}
+.home-master__followup{overflow:hidden}
+.home-master__followup .home-master__table{width:100%;min-width:0;table-layout:fixed}
+.home-master__followup th,.home-master__followup td{padding-inline:8px}
+.home-master__followup th:nth-child(1){width:12%}
+.home-master__followup th:nth-child(2){width:27%}
+.home-master__followup th:nth-child(3){width:5%}
+.home-master__followup th:nth-child(4){width:12%}
+.home-master__followup th:nth-child(5){width:10%}
+.home-master__followup th:nth-child(6){width:10%}
+.home-master__followup th:nth-child(7){width:12%}
+.home-master__followup th:nth-child(8){width:12%}
+.home-master__kpi{padding-inline-end:48px!important}
+.home-master__kpi>i{position:absolute;inset-inline-end:16px;top:18px;width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:#f1f5f9;color:#64748b;font:700 16px/1 Inter,sans-serif;font-style:normal}
+.home-master__kpi--profit{background:#ecfdf8}
+.home-master__kpi--profit>i{background:#c9f7e8;color:#00a77e}
+.home-master__kpi--cash{background:#eef8ff}
+.home-master__kpi--cash>i{background:#bdeaff;color:#0785bd}
+.home-master__status--needs_action_now{background:#fee2e2;color:#dc2626}
+.home-master__status--needs_review_completion{background:#fef3c7;color:#b45309}
+.home-master__status--upcoming_due{background:#eef2f7;color:#64748b}
+.home-master__close-bento{grid-template-columns:220px minmax(0,1fr)}
+.home-master__close-checklist{min-width:0;width:100%;height:222px;overflow:hidden;box-sizing:border-box}
+.home-master__close-checklist .home-master__table{width:100%;min-width:0;table-layout:fixed}
+.home-master__close-checklist th:nth-child(1){width:10%}
+.home-master__close-checklist th:nth-child(2){width:12%}
+.home-master__close-checklist th:nth-child(3){width:16%}
+.home-master__close-checklist th:nth-child(4){width:22%}
+.home-master__close-checklist th:nth-child(5){width:40%}
+.home-master__close-checklist th,.home-master__close-checklist td{padding-inline:8px}
+.home-master__close-checklist .home-master__table td{height:37px}
+@media(max-width:1050px){
+ .home-master__followup,.home-master__close-checklist{overflow-x:auto}
+ .home-master__followup .home-master__table{min-width:900px}
+ .home-master__close-checklist .home-master__table{min-width:720px}
+}
