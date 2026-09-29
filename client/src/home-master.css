@@ -88,3 +88,17 @@
   .home-master__alerts-section .home-master__section-head{height:62px;min-height:62px;padding:16px;box-sizing:border-box}
   .home-master__alerts-section .home-master__table-wrap{min-height:319px;margin-bottom:16px}
 }
+
+
+/* Figma 5:4 exact horizontal anchors inside the 1200px workspace.
+   The workspace content box is 1128px after 36px side gutters. */
+@media(min-width:1440px){
+  .home-master{width:1128px;max-width:1128px}
+  .home-master__header,
+  .home-master__financial-section,
+  .home-master__alerts-section,
+  .home-master__close-section{width:1128px}
+  .home-master__kpis{grid-template-columns:repeat(6,188px)}
+  .home-master__alerts-section .home-master__section-head{width:100%}
+  .home-master__alerts-section .home-master__table-wrap{width:1096px;box-sizing:border-box}
+}
