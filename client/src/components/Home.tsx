@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
@@ -312,21 +312,21 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     <section className="home-master" aria-labelledby="home-title">
       <header className="home-master__head">
         <div>
-          <h1 id="home-title">{isArabic ? 'نظرة عامة مالية' : 'Financial overview'}</h1>
+          <h1 id="home-title">{t('home.welcome')}</h1>
           <p>{isArabic ? 'ملخص تشغيلي للوضع المالي والإجراءات التي تتطلب المتابعة' : 'Operational financial summary and items requiring follow-up'}</p>
         </div>
       </header>
 
       {dailyOperations.length > 0 && (
-        <nav className="home-master__quick-actions" aria-label={homeLabels.dailyOperations}>
+        <section className="home-master__quick-actions" aria-labelledby="home-daily-operations-title"><h2 id="home-daily-operations-title" className="home-master__semantic-heading">{homeLabels.dailyOperations}</h2>
           {dailyOperations.map(action => <button key={action.key} type="button" onClick={action.open}>{action.label}</button>)}
-        </nav>
+        </section>
       )}
 
       {canViewSnapshot && (
         <section aria-labelledby="home-financial-snapshot-title">
           <div className="home-master__sectionbar">
-            <span id="home-financial-snapshot-title">{homeLabels.snapshot}</span>
+            <h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2>
             <span className="home-master__period">{periodLabel}</span>
           </div>
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
@@ -347,7 +347,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       {canViewAlerts && (
         <section className="home-master__card" aria-labelledby="home-alerts-title">
           <div className="home-master__cardhead">
-            <div><h2 id="home-alerts-title">{isArabic ? 'المهام التي تتطلب متابعة' : 'Items requiring follow-up'}</h2><p>{isArabic ? 'الإجراءات التشغيلية المفتوحة حسب البيانات الحالية' : 'Open operational actions from current data'}</p></div>
+            <div><h2 id="home-alerts-title">{homeLabels.alerts}</h2><span className="home-master__visual-title">{isArabic ? 'المهام التي تتطلب متابعة' : 'Items requiring follow-up'}</span><p>{isArabic ? 'الإجراءات التشغيلية المفتوحة حسب البيانات الحالية' : 'Open operational actions from current data'}</p></div>
           </div>
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p className="home-master__error" role="alert">{homeLabels.alertsError} <button className="home-master__retry" type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
@@ -355,14 +355,21 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             <div className="home-master__tablewrap">
               <table className="home-master__table">
                 <thead><tr><th>{isArabic ? 'المهمة' : 'Item'}</th><th>{isArabic ? 'الحالة' : 'Status'}</th><th>{isArabic ? 'العدد' : 'Count'}</th><th>{isArabic ? 'الإجراء' : 'Action'}</th></tr></thead>
-                <tbody>{alerts.map(alert => (
+                <tbody>{(['current_user', 'upcoming', 'waiting_for_accountant', 'waiting_for_team'] as const).map(ownership => {
+                  const groupAlerts = alerts.filter(alert => alert.ownership === ownership);
+                  if (groupAlerts.length === 0) return null;
+                  return <Fragment key={ownership}>
+                    <tr className="home-master__semantic-row"><td colSpan={4}><h3>{homeLabels.ownership[ownership]}</h3></td></tr>
+                    {groupAlerts.map(alert => (
                   <tr key={alert.key}>
                     <td><strong>{alertLabels[alert.key] ?? alert.key}</strong></td>
                     <td><span className="home-master__badge">{homeLabels.ownership[alert.ownership]}</span></td>
                     <td dir="ltr">{alert.count}</td>
                     <td><button type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{isArabic ? 'فتح' : 'Open'}</button></td>
                   </tr>
-                ))}</tbody>
+                    ))}
+                  </Fragment>;
+                })}</tbody>
               </table>
             </div>
           )}
@@ -373,7 +380,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         <section className="home-master__card home-master__close" aria-labelledby="home-close-title">
           <div className="home-master__close-main">
             <div className="home-master__cardhead">
-              <div><h2 id="home-close-title">{isArabic ? 'جاهزية إقفال الفترة الشهرية' : 'Monthly close readiness'}</h2><p>{selected ? periodRange : (isArabic ? 'لا توجد فترة متاحة' : 'No period available')}</p></div>
+              <div><h2 id="home-close-title">{homeLabels.closeBlockers}</h2><span className="home-master__visual-title">{isArabic ? 'جاهزية إقفال الفترة الشهرية' : 'Monthly close readiness'}</span><p>{selected ? periodRange : (isArabic ? 'لا توجد فترة متاحة' : 'No period available')}</p></div>
               {selected && <span className={`home-master__badge ${selected.status === 'closed' || selected.ready ? 'is-clear' : ''}`}>{closeSummary}</span>}
             </div>
             {loading ? <p role="status">{t('monthlyClose.loading')}</p> : error ? (
@@ -393,7 +400,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
               </div>
             )}
           </div>
-          <aside className="home-master__close-side">
+          <aside className="home-master__close-side" aria-labelledby="home-readiness-title"><h2 id="home-readiness-title" className="home-master__semantic-heading">{closeSummary}</h2>
             <div className={`home-master__ring ${selected && selected.status !== 'closed' && !selected.ready ? 'is-blocked' : ''}`}>
               {selected ? (selected.status === 'closed' ? t('monthlyClose.closed') : selected.ready ? t('monthlyClose.ready') : (isArabic ? 'قيد العمل' : 'In progress')) : '—'}
             </div>
