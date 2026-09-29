@@ -129,12 +129,42 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         {alertsLoading ? <div className="home-master__state" role="status">{labels.alertsLoading}</div> : alertsError ? <div className="home-master__state" role="alert">{labels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{labels.retry}</button></div> : alerts.length === 0 ? <div className="home-master__empty" role="status">{labels.noAlerts}</div> : <div className="home-master__table-wrap home-master__followup"><table className="home-master__table"><thead><tr><th>{isArabic?'التصنيف':'Category'}</th><th>{isArabic?'العنصر':'Item'}</th><th>{labels.count}</th><th>{isArabic?'المبلغ (ر.س)':'Amount'}</th><th>{isArabic?'المسؤول':'Owner'}</th><th>{isArabic?'الحالة':'Status'}</th><th>{isArabic?'الأولوية':'Priority'}</th><th>{labels.action}</th></tr></thead><tbody>{alerts.map(alert => <tr key={alert.key}><td>{alert.destination}</td><td><strong>{alertLabels[alert.key] ?? alert.key}</strong></td><td><strong>{alert.count}</strong></td><td>—</td><td>{labels.ownership[alert.ownership]}</td><td><span className={`home-master__status home-master__status--${alert.ownership}`}>{labels.ownership[alert.ownership]}</span></td><td>{alert.class === 'needs_action_now' ? (isArabic?'عاجل':'Urgent') : alert.class === 'upcoming_due' ? (isArabic?'متابعة':'Follow-up') : (isArabic?'يحتاج إجراء':'Action needed')}</td><td><button type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{labels.open}</button></td></tr>)}</tbody><tfoot><tr><td colSpan={2}>{isArabic?'الإجمالي':'Total'}</td><td><strong>{alerts.reduce((sum, alert) => sum + alert.count, 0)}</strong></td><td>—</td><td colSpan={4}></td></tr></tfoot></table></div>}
       </section>}
 
-      {canViewClose && <section className="home-master__section" aria-labelledby="close-title">
-        <div className="home-master__section-head"><div><h2 id="close-title">{labels.close}</h2>{selected && <p>{labels.period}: {periodRange}</p>}</div>{selected && <span className={`home-master__status ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>{closeSummary}</span>}</div>
-        {loading ? <div className="home-master__state" role="status">{t('monthlyClose.loading')}</div> : error ? <div className="home-master__state" role="alert">{t('monthlyClose.error')} <button type="button" onClick={() => void loadClose()}>{t('common.retry')}</button></div> : !selected ? <div className="home-master__empty">{t('monthlyClose.empty')}</div> : <div className="home-master__close-grid">
-          <div className="home-master__table-wrap"><table className="home-master__table"><thead><tr><th>{labels.area}</th><th>{labels.state}</th><th>{labels.action}</th></tr></thead><tbody>{exceptions.map(item => <tr key={item.key}><td><strong>{item.label}</strong></td><td><span className={`home-master__status ${item.count > 0 ? 'is-blocked' : 'is-ready'}`}>{item.count > 0 ? labels.blockersCount(item.count) : labels.noBlockers}</span></td><td>{item.canOpen && <button type="button" onClick={item.open}>{labels.open}</button>}</td></tr>)}</tbody></table></div>
-          <aside className="home-master__readiness"><span>{labels.close}</span><strong>{closeSummary}</strong><dl><div><dt>{labels.periodState}</dt><dd>{t(`monthlyClose.${selected.status}`)}</dd></div><div><dt>{labels.blockers}</dt><dd>{selected.has_hidden_blockers ? t('monthlyClose.blockedHidden') : selected.disclosed_total}</dd></div></dl><button type="button" onClick={() => navigate('monthlyClose')}>{t('nav.monthlyClose')}</button></aside>
-        </div>}
+      {canViewClose && <section className="home-master__section home-master__close-section" aria-labelledby="close-title">
+        <div className="home-master__close-head">
+          <div className="home-master__close-actions">
+            {selected && <span>{labels.period}: {periodRange}</span>}
+            <button type="button" onClick={() => navigate('monthlyClose')}>{isArabic ? 'عرض معوقات الإقفال' : 'View close blockers'}</button>
+          </div>
+          <div>
+            <h2 id="close-title">{labels.close}</h2>
+            <p>{isArabic ? 'حالة المعوقات الرئيسية للفترة الشهرية الحالية' : 'Status of the main blockers for the current monthly period'}</p>
+          </div>
+        </div>
+        {loading ? <div className="home-master__state" role="status">{t('monthlyClose.loading')}</div> : error ? <div className="home-master__state" role="alert">{t('monthlyClose.error')} <button type="button" onClick={() => void loadClose()}>{t('common.retry')}</button></div> : !selected ? <div className="home-master__empty">{t('monthlyClose.empty')}</div> : <>
+          <div className={`home-master__close-message ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>{closeSummary}</div>
+          <div className="home-master__close-bento">
+            <aside className="home-master__readiness">
+              <div className={`home-master__readiness-ring ${selected.status === 'closed' || selected.ready ? 'is-ready' : selected.has_hidden_blockers ? 'is-hidden' : 'is-blocked'}`}>
+                <strong>{selected.status === 'closed' || selected.ready ? '✓' : selected.has_hidden_blockers ? '—' : selected.disclosed_total}</strong>
+              </div>
+              <strong>{selected.status === 'closed' || selected.ready ? (isArabic ? 'جاهز للإقفال' : 'Ready to close') : selected.has_hidden_blockers ? labels.restricted : (isArabic ? 'المعوقات المعلنة' : 'Disclosed blockers')}</strong>
+              <span>{labels.periodState}: {t(`monthlyClose.${selected.status}`)}</span>
+              <div className="home-master__readiness-legend">
+                <span><i className="is-ready"></i>{isArabic ? 'بلا معوقات' : 'No blockers'}</span>
+                <span><i className="is-blocked"></i>{isArabic ? 'يوجد معوق' : 'Blocked'}</span>
+              </div>
+            </aside>
+            <div className="home-master__table-wrap home-master__close-checklist"><table className="home-master__table">
+              <thead><tr><th>{labels.action}</th><th>{isArabic ? 'التاريخ' : 'Date'}</th><th>{isArabic ? 'المسؤول' : 'Owner'}</th><th>{labels.state}</th><th>{isArabic ? 'المهمة' : 'Task'}</th></tr></thead>
+              <tbody>{exceptions.map(item => <tr key={item.key}>
+                <td>{item.canOpen && <button type="button" onClick={item.open}>{labels.open}</button>}</td>
+                <td>—</td><td>—</td>
+                <td><span className={`home-master__status ${item.count > 0 ? 'is-blocked' : 'is-ready'}`}>{item.count > 0 ? labels.blockersCount(item.count) : labels.noBlockers}</span></td>
+                <td><strong>{item.label}</strong></td>
+              </tr>)}</tbody>
+            </table></div>
+          </div>
+        </>}
       </section>}
     </main>
   );
