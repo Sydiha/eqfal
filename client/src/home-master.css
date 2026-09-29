@@ -1,7 +1,7 @@
 /* Phase 15B — approved Figma node 5:4 (1440×1095).
    Presentation only. Functional data, permissions and navigation remain in Home.tsx. */
 
-.home-master{width:100%;max-width:1128px;margin:0 auto;padding:20px 0 28px;color:#1e293b;font-family:Tajawal,Inter,sans-serif}
+.home-master{width:100%;max-width:none;margin:0;padding:0;color:#1e293b;font-family:Tajawal,Inter,sans-serif}
 .home-master__header{margin:0 0 16px;background:transparent}
 .home-master__eyebrow,.home-master__quick-actions{display:none!important}
 .home-master__header h1{margin:0;color:#1e293b;font-size:22px;line-height:28px;font-weight:800}
@@ -19,11 +19,11 @@
 .home-master__context-pill{order:-1;display:inline-flex;min-width:88px;height:25px;padding:0 10px;align-items:center;justify-content:center;border:1px solid #e4e8ec;border-radius:5px;background:#fff;color:#64748b;font-size:11px;font-weight:700;white-space:nowrap}
 
 .home-master__kpis{height:80px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid #e4e8ec;border-radius:10px;background:#fff;overflow:hidden}
-.home-master__kpi{position:relative;min-width:0;padding:14px 54px 14px 16px;display:flex;flex-direction:column;justify-content:center;gap:3px;border-inline-start:1px solid #e4e8ec}
+.home-master__kpi{position:relative;min-width:0;padding:14px 46px 14px 12px;display:flex;flex-direction:column;justify-content:center;gap:3px;border-inline-start:1px solid #e4e8ec}
 .home-master__kpi:first-child{border-inline-start:0}
 .home-master__kpi span{color:#64748b;font-size:11px;line-height:14px;font-weight:400}
-.home-master__kpi strong{color:#1e293b;font-family:Inter,Tajawal,sans-serif;font-size:14px;line-height:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.home-master__kpi>i{position:absolute;inset-inline-end:16px;top:50%;transform:translateY(-50%);width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:#f1f5f9;color:#64748b;font:700 15px/1 Inter,sans-serif;font-style:normal}
+.home-master__kpi strong{color:#1e293b;font-family:Inter,Tajawal,sans-serif;font-size:14px;line-height:20px;font-weight:700;white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.home-master__kpi>i{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:#f1f5f9;color:#64748b;font:700 15px/1 Inter,sans-serif;font-style:normal}
 .home-master__kpi--profit{background:#f0fdf9}
 .home-master__kpi--profit span{color:#047857}.home-master__kpi--profit strong{color:#065f46;font-size:16px;font-weight:800}
 .home-master__kpi--profit>i{background:#d1fae5;color:#00b894}
