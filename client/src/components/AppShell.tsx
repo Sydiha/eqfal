@@ -106,7 +106,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
           <div className="figma-topbar-left">
-            <button type="button" className="figma-notification" aria-label={isNaN(0) ? '' : (i18n.language === 'ar' ? 'التنبيهات' : 'Notifications')}><span aria-hidden="true">♧</span></button>
+            <button type="button" className="figma-notification" aria-label={i18n.language === 'ar' ? 'التنبيهات' : 'Notifications'}><span aria-hidden="true">♧</span></button>
             <div className="figma-profile">
               <span className="user-avatar" aria-hidden="true">{userInitial}</span>
               <span className="figma-profile-copy"><strong>{email}</strong><small>{t('home.currentUser')}</small></span>
