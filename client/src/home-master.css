@@ -91,7 +91,7 @@
 .home-master__kpis {
   height: 82px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   border: 1px solid #e4e8ec;
   border-radius: 8px;
   background: #fff;
@@ -277,3 +277,9 @@
   .home-master__section-head { padding-inline: 12px; }
   .home-master__table-wrap, .home-master__close-grid { margin-inline: 12px; }
 }
+
+/* Figma 5:4 exact structural refinements */
+.home-master__context-pill{order:-1;display:inline-flex!important;min-width:90px!important;height:19px!important;padding:0 10px!important;align-items:center;justify-content:center;border:1px solid #e4e8ec;border-radius:999px;background:#fff!important;color:#64748b!important;font-size:10px!important;font-weight:600!important}
+.home-master__followup .home-master__table{min-width:1096px}
+.home-master__followup th:nth-child(1){width:130px}.home-master__followup th:nth-child(2){width:307px}.home-master__followup th:nth-child(3){width:50px}.home-master__followup th:nth-child(4){width:130px}.home-master__followup th:nth-child(5){width:110px}.home-master__followup th:nth-child(6){width:100px}.home-master__followup th:nth-child(7){width:88px}.home-master__followup th:nth-child(8){width:88px}
+.home-master__table tfoot td{height:36px;padding:0 14px;border-top:1px solid #e4e8ec;background:#f8fafb;font-size:11px;font-weight:600}
