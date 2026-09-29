@@ -1,0 +1,49 @@
+/* Phase 15B — approved Home visual layer.
+   Visual reference: Home Desktop v4 / Home Mobile v2.
+   Functional truth remains the existing EQFAL APIs and capability model. */
+.eqfal-home{width:100%;max-width:1128px;margin:0 auto;direction:rtl;color:#1e293b;font-family:Tajawal,Inter,sans-serif}
+.eqfal-home *{box-sizing:border-box}
+.eqfal-home__header{display:flex;justify-content:space-between;align-items:flex-end;margin:0 0 16px;padding:0;background:transparent;border:0}
+.eqfal-home__header h1{margin:0;font-size:24px;line-height:1.3;font-weight:800;color:#0b1d33}
+.eqfal-home__intro{margin:4px 0 0;color:#64748b;font-size:12px}
+.eqfal-home__eyebrow{margin:0 0 4px;color:#00a982;font-size:11px;font-weight:800}
+.eqfal-home__section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.eqfal-home__section-heading h2{margin:0;color:#0b1d33;font-size:15px;line-height:1.4;font-weight:800}
+.eqfal-home__section-heading p{margin:3px 0 0;color:#64748b;font-size:11px}
+.eqfal-home__quick-actions,.eqfal-home__panel{margin-top:16px;background:#fff;border:1px solid #e4e8ec;border-radius:8px;padding:16px;box-shadow:none}
+.eqfal-home__quick-actions{padding:12px 16px}
+.eqfal-home__grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border:1px solid #e4e8ec;border-radius:7px;overflow:hidden;background:#fff}
+.eqfal-home__grid>article,.eqfal-home__grid>button{min-width:0;min-height:76px;padding:12px;border:0;border-inline-start:1px solid #e4e8ec;background:#fff;text-align:right}
+.eqfal-home__grid>article:first-child,.eqfal-home__grid>button:first-child{border-inline-start:0}
+.eqfal-home__grid h3{margin:0 0 8px;color:#64748b;font-size:11px;font-weight:700}
+.eqfal-home__grid strong{display:block;color:#0b1d33;font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.eqfal-home__grid button{min-height:42px;cursor:pointer;color:#334155;font:700 11px Tajawal,Inter,sans-serif}
+.eqfal-home__grid button:hover{background:#f4fcfa;color:#008d72}
+.eqfal-home__status-strip{margin-top:16px;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff;border:1px solid #e4e8ec;border-radius:8px}
+.eqfal-home__close-grid{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;margin-top:16px}
+.eqfal-home__close-grid>.eqfal-home__panel{margin-top:0}
+.eqfal-home__table-wrap{width:100%;overflow-x:auto;border:1px solid #e4e8ec;border-radius:6px}
+.eqfal-home__table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}
+.eqfal-home__table th{padding:8px 10px;background:#f8fafb;color:#64748b;text-align:right;border-bottom:1px solid #e4e8ec}
+.eqfal-home__table td{padding:10px;border-bottom:1px solid #edf0f2;vertical-align:middle;overflow-wrap:anywhere}
+.eqfal-home__table tr:last-child td{border-bottom:0}
+.eqfal-home__readiness{margin:0;background:#fff;border:1px solid #e4e8ec;border-radius:8px;padding:18px 16px;text-align:center}
+.eqfal-home__readiness h2{margin:4px 0;color:#0b1d33;font-size:16px}
+.eqfal-home__readiness-period{margin:0 0 12px;color:#64748b;font-size:10px}
+.eqfal-home__readiness-summary{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-top:1px solid #edf0f2;font-size:11px}
+.eqfal-home__primary-action{width:100%;margin-top:10px;border:0;border-radius:6px;background:#0b1d33;color:#fff;padding:8px 12px;font:700 11px Tajawal,Inter,sans-serif;cursor:pointer}
+.eqfal-home__link-action{border:0;background:transparent;color:#00a982;cursor:pointer}
+.eqfal-home__badge,.home-status-pill,.home-exception-count{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:700;background:#fff4e5;color:#9a6500}
+.eqfal-home__badge.is-ready,.eqfal-home__badge.is-clear,.home-status-pill.is-ready,.home-exception-count.is-clear{background:#e8f8f4;color:#087f68}
+@media(max-width:1100px){.eqfal-home__grid{grid-template-columns:repeat(3,minmax(0,1fr))}.eqfal-home__grid>*{border-top:1px solid #e4e8ec}}
+@media(max-width:760px){
+ .eqfal-home{max-width:390px}
+ .eqfal-home__header{align-items:flex-start;flex-direction:column}
+ .eqfal-home__header h1{font-size:20px}
+ .eqfal-home__quick-actions,.eqfal-home__panel{padding:12px;margin-top:12px}
+ .eqfal-home__grid{grid-template-columns:1fr 1fr}
+ .eqfal-home__grid>article,.eqfal-home__grid>button{min-height:70px}
+ .eqfal-home__close-grid{grid-template-columns:1fr;gap:12px}
+ .eqfal-home__table{min-width:600px}
+ .eqfal-home__status-strip{align-items:flex-start;flex-wrap:wrap}
+}
