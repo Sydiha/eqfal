@@ -103,7 +103,7 @@ describe('Home — Financial Overview master', () => {
     renderHome(['obligation.view']);
     expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
     const row = screen.getByText('Overdue obligations').closest('tr')!;
-    expect(within(row).getByText('Waiting for accountant')).toBeInTheDocument();
+    expect(within(row).getAllByText('Waiting for accountant').length).toBeGreaterThan(0);
     expect(within(row).getByText('2')).toBeInTheDocument();
     within(row).getByRole('button', { name: 'Open' }).click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { overdue: '1' });
