@@ -38,7 +38,10 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   const [periodLabel, setPeriodLabel] = useState<string>('—');
   useEffect(close, [page, close]);
   useEffect(() => {
+    if (page !== 'home') return;
     let cancelled = false;
+    setFiscalYearLabel('—');
+    setPeriodLabel('—');
     const loadContext = async () => {
       try {
         const [yearsResponse, periodsResponse] = await Promise.all([
@@ -64,7 +67,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     };
     void loadContext();
     return () => { cancelled = true; };
-  }, [activeCompanyId, i18n.language]);
+  }, [activeCompanyId, i18n.language, page]);
   const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
@@ -97,7 +100,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     <MantineAppShell
       className="app-shell app-shell--v2"
       header={{ height: 60 }}
-      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >
