@@ -44,22 +44,14 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     setPeriodLabel('—');
     const loadContext = async () => {
       try {
-        const [yearsResponse, periodsResponse] = await Promise.all([
-          fetch('/api/fiscal-years', { credentials: 'same-origin' }),
-          fetch('/api/monthly-close-periods', { credentials: 'same-origin' }),
-        ]);
-        if (yearsResponse.ok) {
-          const body = await yearsResponse.json() as { fiscalYears?: Array<{ name: string; status: string }> };
-          const years = Array.isArray(body.fiscalYears) ? body.fiscalYears : [];
-          const current = years.find(year => year.status === 'open') ?? years[0];
-          if (!cancelled && current) setFiscalYearLabel(current.name);
-        }
+        const periodsResponse = await fetch('/api/monthly-close-periods', { credentials: 'same-origin' });
         if (periodsResponse.ok) {
           const body = await periodsResponse.json() as { periods?: Array<{ period_start: string; status: string }> };
           const periods = Array.isArray(body.periods) ? body.periods : [];
           const current = periods.find(period => period.status === 'open') ?? periods[0];
           if (!cancelled && current) {
             const date = new Date(`${current.period_start}T00:00:00`);
+            setFiscalYearLabel(String(date.getFullYear()));
             setPeriodLabel(new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(date));
           }
         }
