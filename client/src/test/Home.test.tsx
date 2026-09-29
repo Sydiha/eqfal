@@ -141,7 +141,7 @@ describe('Home — Financial Overview master', () => {
       return new Response('', { status: 404 });
     }));
     renderHome(['bank.view', 'obligation.view']);
-    expect(await screen.findByRole('heading', { name: 'Financial overview — current month' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Consolidated financial overview — current month' })).toBeInTheDocument();
     expect(await screen.findByText('1250.50 SAR')).toBeInTheDocument();
     expect(screen.getByText('400.25')).toBeInTheDocument();
     expect(screen.getByText('90.00')).toBeInTheDocument();
