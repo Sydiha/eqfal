@@ -45,3 +45,10 @@
 .home-master__quick-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:-7px 0 12px}
 .home-master__quick-actions button{border:1px solid #e4e8ec;background:#fff;color:#334155;border-radius:6px;padding:5px 9px;font:700 10px Tajawal,Inter,sans-serif;cursor:pointer}
 .home-master__quick-actions button:hover{border-color:#00b894;color:#008d72;background:#f4fcfa}
+
+.home-master__semantic-heading{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.home-master__visual-title{display:block;font-size:15px;line-height:20px;font-weight:800;color:#1e293b}
+.home-master__sectionbar h2{margin:0;font:800 12px Tajawal,Inter,sans-serif;color:#1e293b}
+.home-master__semantic-row{height:0!important;min-height:0!important}
+.home-master__semantic-row td{height:0!important;min-height:0!important;padding:0!important;border:0!important}
+.home-master__semantic-row h3{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
