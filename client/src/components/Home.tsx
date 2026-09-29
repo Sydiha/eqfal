@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
-import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 import '../home-master.css';
 
 type HomePage =
@@ -67,7 +66,7 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
+export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -205,8 +204,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
 
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
-  const canViewSalesPurchases = can('document.view') && can('obligation.view');
-  const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
