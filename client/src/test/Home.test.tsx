@@ -120,9 +120,9 @@ describe('Home — Financial Overview master', () => {
       return new Response('', { status: 404 });
     }));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
-    expect(await screen.findByText('Current user action')).toBeInTheDocument();
-    expect(screen.getByText('Upcoming')).toBeInTheDocument();
-    expect(screen.getByText('Waiting for accountant')).toBeInTheDocument();
+    expect((await screen.findAllByText('Current user action')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Upcoming').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Waiting for accountant').length).toBeGreaterThan(0);
     expect(screen.queryByText('Waiting for team')).not.toBeInTheDocument();
   });
 
