@@ -102,3 +102,20 @@
   .home-master__alerts-section .home-master__section-head{width:100%}
   .home-master__alerts-section .home-master__table-wrap{width:1096px;box-sizing:border-box}
 }
+
+
+/* Phase 15B final desktop visual pass — preserve real content while matching master rhythm. */
+@media(min-width:1440px){
+  .home-master__header h1{font-size:22px;line-height:28px;font-weight:800;letter-spacing:0}
+  .home-master__header-meta{height:16px;margin-top:3px}
+  .home-master__financial-section .home-master__section-head h2{font-size:13px;line-height:19px}
+  .home-master__context-pill{height:19px;min-width:90px;padding:0 8px;border-radius:5px;font-size:10px;line-height:17px}
+  .home-master__kpi{height:82px;box-sizing:border-box}
+  .home-master__kpi span{font-size:11px;line-height:14px}
+  .home-master__kpi strong{font-size:14px;line-height:18px}
+  .home-master__kpi--profit strong,.home-master__kpi--cash strong{font-size:16px;line-height:20px}
+  .home-master__alerts-section{height:397px;min-height:397px}
+  .home-master__followup{height:319px;min-height:319px}
+  .home-master__table th{height:31px;box-sizing:border-box}
+  .home-master__table td{height:42px;box-sizing:border-box}
+}
