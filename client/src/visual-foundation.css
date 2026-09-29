@@ -58,7 +58,9 @@
 
 
 /* Figma 5:6 — accounting context topbar */
-.app-shell--v2 .topbar{height:60px;min-height:60px;padding-inline:40px;background:#fafcfd;border-bottom:1px solid #e4e8ec}
+.app-shell--v2 .topbar{height:60px;min-height:60px;padding-inline:40px;background:#fafcfd;border-bottom:1px solid #e4e8ec;box-sizing:border-box}
+@media(min-width:48em){.app-shell--v2 .workspace-content{padding:20px 36px 28px}}
+@media(min-width:1440px){.app-shell--v2 .eqfal-workspace{width:1200px;max-width:1200px}.app-shell--v2 .workspace-content{width:1200px;max-width:1200px}}
 .app-shell--v2 .topbar>.mantine-Group-root{width:100%;gap:0}
 .figma-topbar-left,.figma-topbar-context{display:flex;align-items:center}
 .figma-topbar-left{gap:16px;direction:ltr}
