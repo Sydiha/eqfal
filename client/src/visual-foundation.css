@@ -17,7 +17,7 @@
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
-  --shell-topbar-height: 80px;
+  --shell-topbar-height: 60px;
   --shell-sidebar-width: 240px;
   --workspace-gutter: 36px;
 }
@@ -37,7 +37,18 @@
 }
 
 .app-shell--v2 .workspace-content {
-  padding: var(--workspace-gutter);
+  padding: 20px var(--workspace-gutter) 28px;
+}
+
+/* The approved Figma master is 1440px = 240px sidebar + 1200px workspace.
+   Keep the workspace fluid at other viewport sizes instead of centering a second fixed canvas. */
+.app-shell--v2 .eqfal-workspace {
+  min-width: 0;
+}
+.app-shell--v2 .workspace-content {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .eqfal-workspace,
