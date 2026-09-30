@@ -179,8 +179,43 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
 }
 
 function HomeDesignPreview() {
-  const previewCapabilities = ['monthly_close.view','document.view','document.upload','document.edit','obligation.view','bank.view'];
-  return <div style={{minHeight:'100vh',background:'#fafcfd'}}>
+  const previewCapabilities = [
+    'monthly_close.view','fiscal_year.view','document.view','document.upload','document.edit',
+    'obligation.view','bank.view','accounting.view','vat.view','asset.view','opening_balance.view',
+    'periodic_adjustment.view','partner.view','company_accounting_profile.view'
+  ];
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url.includes('/api/manager-financial-snapshot')) return json({ metrics: {
+      bank_balances:{state:'available',accounts:[{id:'preview-bank',display_name:'الحساب التشغيلي',currency_code:'SAR',balance:{state:'available',amount:'3530000.00'}}]},
+      amounts_to_collect:{state:'available',amount:'5420000.00'},
+      amounts_to_pay:{state:'available',amount:'3160000.00'},
+      current_month_sales:{state:'available',amount:'4280000.00'},
+      current_month_purchases_expenses:{state:'available',amount:'3150000.00'}
+    }});
+    if (url.includes('/api/home-alerts')) return json({ alerts: [
+      {key:'overdue_obligations',class:'needs_action_now',ownership:'current_user',count:3,destination:'obligations',parameters:{}},
+      {key:'documents_needs_review',class:'needs_review_completion',ownership:'current_user',count:5,destination:'documents',parameters:{}},
+      {key:'bank_transactions_unmatched',class:'needs_review_completion',ownership:'waiting_for_accountant',count:8,destination:'banks',parameters:{}},
+      {key:'upcoming_obligations',class:'upcoming_due',ownership:'upcoming',count:4,destination:'obligations',parameters:{}}
+    ]});
+    if (url.includes('/api/monthly-close-periods')) return json({ periods:[{
+      id:'preview-period',fiscal_year_id:'preview-fy',period_start:'2026-09-01',period_end:'2026-09-30',
+      status:'open',ready:false,disclosed_total:3,has_hidden_blockers:false,
+      blockers:{documents:1,obligations:1,bank_transactions:1,vat:0,ledger:0}
+    }]});
+    return originalFetch(input, init);
+  };
+  return <AppShell
+    page="home"
+    setPage={() => undefined}
+    capabilities={previewCapabilities}
+    email="أحمد المحاسب"
+    onSwitch={async () => true}
+    onLogout={async () => undefined}
+  >
     <Home
       capabilities={previewCapabilities}
       navigate={() => undefined}
@@ -189,7 +224,7 @@ function HomeDesignPreview() {
       startSalesEntry={() => undefined}
       onUnauthorized={() => undefined}
     />
-  </div>;
+  </AppShell>;
 }
 
 function AppContent() {
