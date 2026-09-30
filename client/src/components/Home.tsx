@@ -66,6 +66,15 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
+const formatFinancialAmount = (value: string) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numeric);
+};
+
 export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
@@ -301,7 +310,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
                   : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><strong dir="ltr">{account.balance.state === 'available' ? `${formatFinancialAmount(account.balance.amount)} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
               </article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
@@ -310,7 +319,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? `${formatFinancialAmount(metric.amount)}${isArabic ? ' ر.س' : ' SAR'}` : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -427,7 +436,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             </div>
           </section>
 
-          <aside className="eqfal-home__readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+          <aside className={`eqfal-home__readiness ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
             <p className="eqfal-home__eyebrow">{homeLabels.readiness}</p>
             <h2 id="home-readiness-title">{closeSummary}</h2>
             <p className="eqfal-home__readiness-period">{periodRange}</p>
