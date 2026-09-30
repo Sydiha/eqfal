@@ -45,3 +45,13 @@
 .sales-v22__actions .primary{background:var(--sales-navy)}
 @media(max-width:70em){.sales-v22__workspace.has-detail{grid-template-columns:minmax(0,1fr) 350px}.sales-v22 .sales-table th,.sales-v22 .sales-table td{padding-inline:10px}}
 @media(max-width:48em){.sales-v22__toolbar{padding:12px}.sales-v22__workspace{overflow:visible;border:0;background:transparent;box-shadow:none}.sales-v22__workspace.has-detail{grid-template-columns:1fr}.sales-v22 .sales-table .sales-summary-row{border-color:#dfe8ef;border-radius:12px}.sales-v22 .sales-table .sales-summary-row[aria-selected=true]{border-color:#66cdb8;box-shadow:inset 0 0 0 1px #66cdb8}.sales-v22 .shared-detail-pane{margin-top:12px;border:1px solid var(--sales-line);border-radius:12px}}
+
+/* Approved Vercel composition: compact primary filters + expandable secondary filters. */
+.sales-v22__toolbar .shared-workspace-toolbar__filters{align-items:end}
+.sales-v22__more-filters{min-height:42px;padding:0 14px;border:1px solid #d7e0e7;border-radius:8px;background:#fff;color:#40576d;font:inherit;font-weight:700;white-space:nowrap}
+.sales-v22__more-filters:hover{border-color:#66cdb8;background:#f8fcfb}
+.sales-v22__extra-filters{display:contents}
+@media(min-width:49em){
+ .sales-v22__toolbar .shared-workspace-toolbar__filters{display:flex;flex-wrap:wrap;gap:10px}
+ .sales-v22__toolbar .shared-workspace-toolbar__filters>label{min-width:150px}
+}
