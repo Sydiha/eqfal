@@ -374,9 +374,12 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             <>
               {!selected.ready && <div className="eqfal-close__notice">{selected.has_hidden_blockers ? t('monthlyClose.blockedHidden') : closeSummary}</div>}
               <div className="eqfal-close__body">
-                <div className="eqfal-close__summary">
-                  <div className={`eqfal-close__ring ${selected.ready ? 'is-ready' : ''}`}><strong>{selected.ready ? '100%' : '—'}</strong></div>
-                  <span>{homeLabels.periodState}</span><strong>{t(`monthlyClose.${selected.status}`)}</strong>
+                <div className={`eqfal-close__summary ${selected.ready ? 'is-ready' : 'is-blocked'}`}>
+                  <span className="eqfal-close__summary-label">{homeLabels.periodState}</span>
+                  <strong className="eqfal-close__summary-status">{t(`monthlyClose.${selected.status}`)}</strong>
+                  <span className="eqfal-close__summary-divider" aria-hidden="true" />
+                  <span className="eqfal-close__summary-label">{isArabic ? 'المعوقات الحالية' : 'Current blockers'}</span>
+                  <strong className="eqfal-close__summary-count">{selected.ready ? homeLabels.noBlockers : homeLabels.blockers(selected.disclosed_total)}</strong>
                 </div>
                 <div className="eqfal-close__blockers">
                   {exceptions.map(item => (
