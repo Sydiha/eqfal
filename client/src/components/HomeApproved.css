@@ -64,13 +64,9 @@
 
 /* Tasks — exact approved visual hierarchy */
 .eqfal-home__tasks{position:relative;padding-top:36px;overflow:hidden}
-.eqfal-home__tasks:before{
-  content:"التصنيف\Aالعنصر\Aالعدد\Aالمسؤول\Aالحالة\Aالإجراء";
-  white-space:pre;position:absolute;inset:0 0 auto 0;height:36px;padding:0 18px;
-  display:grid;grid-template-columns:150px minmax(240px,1.45fr) 72px minmax(150px,.9fr) 145px 86px;
-  align-items:center;gap:12px;background:#f5f8fb;color:#506987;font-size:0;font-weight:800;z-index:1
-}
-.eqfal-home__tasks:after{content:"";display:none}
+.eqfal-home__tasks:before,.eqfal-home__tasks:after{content:none;display:none}
+.eqfal-home__tasks-header{position:absolute;inset:0 0 auto 0;height:36px;padding:0 18px;display:grid;grid-template-columns:150px minmax(240px,1.45fr) 72px minmax(150px,.9fr) 145px 86px;align-items:center;gap:12px;background:#f5f8fb;color:#506987;font-size:10px;font-weight:800;z-index:1}
+.eqfal-home__tasks-header span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .eqfal-home__task-row{width:100%;display:grid;grid-template-columns:150px minmax(240px,1.45fr) 72px minmax(150px,.9fr) 145px 86px;align-items:center;gap:12px;min-height:48px;padding:7px 18px;border:0;border-bottom:1px solid #e7edf3;background:#fff;text-align:right;color:#405879;font:600 11px Tajawal,Inter,sans-serif;cursor:pointer}
 .eqfal-home__task-row:last-child{border-bottom:0}.eqfal-home__task-row:hover{background:#fbfdff}
 .eqfal-home__task-category{position:relative;padding-right:12px;color:#5e6f89;font-weight:600}.eqfal-home__task-category:before{content:"";position:absolute;right:0;top:50%;width:5px;height:5px;border-radius:50%;transform:translateY(-50%);background:#12b89a}.eqfal-home__task-category--needs_action_now:before{background:#ef4444}.eqfal-home__task-category--upcoming_due:before{background:#d8aa17}
@@ -78,13 +74,6 @@
 .eqfal-home__task-status{justify-self:start;padding:4px 10px;border-radius:999px;background:#eef2f6;color:#6b7f99;font-size:10px;font-weight:700}.eqfal-home__task-status--current_user{background:#ffe2e2;color:#e64c4c}.eqfal-home__task-row:nth-child(2) .eqfal-home__task-status--current_user{background:#fff0d5;color:#c47a00}.eqfal-home__task-status--waiting_for_accountant{background:#e1f0ff;color:#277fbd}
 .eqfal-home__task-open{display:grid;place-items:center;width:64px;height:30px;border:1px solid var(--teal);border-radius:6px;color:#008e73;font-size:0;background:#f5fffc}.eqfal-home__task-open:after{content:"معالجة";font-size:10px;font-weight:800}
 
-/* Real table header labels: generated per column, sharing the exact row grid. */
-.eqfal-home__tasks{counter-reset:none}
-.eqfal-home__tasks .eqfal-home__task-row:first-child:before{content:"";display:none}
-.eqfal-home[dir="ltr"] .eqfal-home__tasks:before{content:"CATEGORY\AITEM\ACOUNT\AOWNER\ASTATUS\AACTION"}
-.eqfal-home:not([dir="ltr"]) .eqfal-home__tasks:before{content:"التصنيف\Aالعنصر\Aالعدد\Aالمسؤول\Aالحالة\Aالإجراء"}
-/* Turn newline-separated content into six visual cells with an overlay grid. */
-.eqfal-home__tasks-header{display:none}
 /* Close readiness — approved reference: compact blocker cards + large status panel */
 .eqfal-home__close-grid{display:grid;grid-template-columns:minmax(430px,.82fr) minmax(0,1.55fr);gap:12px;margin-top:18px;direction:ltr}
 .eqfal-home__close-grid>.eqfal-home__panel{grid-column:1;margin:0;padding:14px;border-radius:12px;direction:rtl}
@@ -106,7 +95,7 @@
 @media(max-width:760px){
  .eqfal-home{max-width:390px;padding:18px 12px}.eqfal-home__header h1{font-size:23px}
  .eqfal-home__grid{grid-template-columns:1fr}.eqfal-home__grid>article{min-height:92px}
- .eqfal-home__tasks:before{display:none}.eqfal-home__tasks{padding-top:0}
+ .eqfal-home__tasks{padding-top:0}.eqfal-home__tasks-header{display:none}
  .eqfal-home__task-row{grid-template-columns:minmax(0,1fr) auto 24px;gap:7px;padding:9px 10px}
  .eqfal-home__task-owner{grid-column:1/2;font-size:10px}.eqfal-home__task-count{grid-column:2/3;grid-row:1/3}.eqfal-home__task-open{grid-column:3/4;grid-row:1/3;width:24px;border:0;background:transparent}.eqfal-home__task-open:after{content:"↗";font-size:13px}
  .eqfal-home__table tbody{grid-template-columns:1fr}.eqfal-home__readiness{padding:24px 18px;min-height:190px}.eqfal-home__readiness:before,.eqfal-home__readiness:after{display:none}
