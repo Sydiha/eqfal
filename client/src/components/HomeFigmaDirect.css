@@ -55,3 +55,39 @@
 .eqfal-close__summary-divider{width:100%;height:1px;background:#e4e8ec;margin:8px 0}
 .eqfal-close__summary-count{font-size:13px;color:#b45309}
 .eqfal-close__summary.is-ready .eqfal-close__summary-count{color:#047857}
+
+
+/* Creative Home direction v1 — EQFAL identity with restrained financial color coding. */
+.eqfal-figma-home{
+  background:
+    radial-gradient(circle at 82% 3%,rgba(0,184,148,.07),transparent 24%),
+    radial-gradient(circle at 42% 0%,rgba(59,130,246,.06),transparent 27%),
+    #f8fbfd;
+  gap:18px;
+}
+.eqfal-figma-home__heading{min-height:82px;position:relative;align-items:center}
+.eqfal-figma-home__heading h1{font-size:26px;color:#0b1d33}
+.eqfal-figma-home__heading p{font-size:12px}
+.eqfal-period-chip{direction:rtl;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #dbe5ee;border-radius:12px;background:rgba(255,255,255,.88);box-shadow:0 6px 18px rgba(11,29,51,.04)}
+.eqfal-period-chip__icon{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#eaf3ff;color:#2563eb;font-weight:800}
+.eqfal-period-chip span{display:flex;flex-direction:column}.eqfal-period-chip small{font-size:10px;color:#64748b}.eqfal-period-chip strong{font-size:11px;color:#334155}
+.eqfal-period-chip>b{margin-inline-start:4px;padding:4px 9px;border-radius:999px;background:#dcfce7;color:#047857;font-size:10px}
+.eqfal-kpi-grid{gap:14px;background:transparent;border:0;border-radius:0;overflow:visible}
+.eqfal-kpi{position:relative;min-height:100px;border:1px solid #dbe5ee!important;border-radius:12px;background:linear-gradient(135deg,#fff,#f8fbff);padding:15px 16px;box-shadow:0 8px 22px rgba(11,29,51,.035);justify-content:flex-end}
+.eqfal-kpi--bank{background:linear-gradient(135deg,#f0fdfa,#ecfdf5);border-color:#c9eee5!important}
+.eqfal-kpi--collect{background:linear-gradient(135deg,#f7fbff,#eff8ff);border-color:#cfe7f7!important}
+.eqfal-kpi--pay{background:linear-gradient(135deg,#fffaf5,#fff4e9);border-color:#f3d8bf!important}
+.eqfal-kpi--sales{background:linear-gradient(135deg,#fbf9ff,#f6f0ff);border-color:#e2d5f7!important}
+.eqfal-kpi--expenses{background:linear-gradient(135deg,#f8fbff,#eef7ff);border-color:#d4e7f6!important}
+.eqfal-kpi__icon{position:absolute;top:13px;inset-inline-start:14px;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#e9f2fb;color:#2563eb;font-size:16px;font-weight:800}
+.eqfal-kpi--bank .eqfal-kpi__icon{background:#d9f7ed;color:#059669}.eqfal-kpi--collect .eqfal-kpi__icon{background:#dff3ff;color:#0284c7}.eqfal-kpi--pay .eqfal-kpi__icon{background:#ffedd5;color:#ea580c}.eqfal-kpi--sales .eqfal-kpi__icon{background:#ede9fe;color:#7c3aed}.eqfal-kpi--expenses .eqfal-kpi__icon{background:#e0f2fe;color:#0284c7}
+.eqfal-kpi>span:not(.eqfal-kpi__icon){font-size:11px}.eqfal-kpi strong{font-size:17px;color:#0b1d33}
+.eqfal-figma-card{border-color:#dde6ed;box-shadow:0 8px 24px rgba(11,29,51,.025)}
+.eqfal-title-with-icon{display:flex;align-items:center;gap:10px}.eqfal-section-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#e7f4ff;color:#0284c7;font-size:15px;font-weight:800}.eqfal-section-icon--gold{background:#fff7db;color:#b7791f}
+.eqfal-task-table tbody tr:hover{background:#fbfdff}.eqfal-task-table td button{border-radius:7px;background:#f0fdfa}
+.eqfal-task-status{font-weight:500}
+.eqfal-close__notice{background:linear-gradient(90deg,#fff8db,#fff3c4)}
+.eqfal-close__summary{background:linear-gradient(135deg,#f8fbfd,#f1faf8)}
+.eqfal-close__blockers button{transition:transform .15s ease,box-shadow .15s ease;background:linear-gradient(135deg,#fff,#fbfdff)}
+.eqfal-close__blockers button:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(11,29,51,.06)}
+@media(max-width:900px){.eqfal-figma-home__heading{align-items:flex-start;gap:12px;flex-direction:column}.eqfal-period-chip{width:100%}.eqfal-kpi-grid{gap:8px}.eqfal-kpi{min-height:92px}}
