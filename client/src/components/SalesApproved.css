@@ -30,3 +30,11 @@ Presentation only. Existing EQFAL data, permissions and actions remain authorita
  .eqfal-sales__detail{padding:18px}
  .eqfal-sales__detail-card{padding:13px 14px}
 }
+
+/* Direction contract: Arabic RTL = detail left; English LTR = detail right. */
+html[dir="rtl"] .eqfal-sales__workspace.is-detail-open{grid-template-columns:320px minmax(0,1fr)}
+html[dir="rtl"] .eqfal-sales__detail{grid-column:1;border-left:0;border-right:1px solid #dce4ea}
+html[dir="rtl"] .eqfal-sales__master{grid-column:2}
+html[dir="ltr"] .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+html[dir="ltr"] .eqfal-sales__master{grid-column:1}
+html[dir="ltr"] .eqfal-sales__detail{grid-column:2;border-left:1px solid #dce4ea;border-right:0}
