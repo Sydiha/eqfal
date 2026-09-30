@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import './HomeApproved.css';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
-import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 
 type HomePage =
   | 'fiscalYears'
@@ -67,7 +66,7 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
+export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
