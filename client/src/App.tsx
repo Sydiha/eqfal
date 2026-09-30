@@ -13,8 +13,6 @@ import { BankingWorkspace } from './components/BankingWorkspace';
 import { AppShell, Page } from './components/AppShell';
 import { EqfalBrandLockup } from './components/EqfalBrand';
 import { Home } from './components/Home';
-import FigmaHomePreview from './components/FigmaHomePreview';
-import './figma-preview.css';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
 import { MonthlyClose } from './components/MonthlyClose';
@@ -182,23 +180,12 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
 
 function AppContent() {
   const { t, i18n } = useTranslation();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/auth/me').then(async (r) => {
-      if (!r.ok) return setSession(null);
-      setSession(await r.json());
-    }).catch(() => setSession(null)).finally(() => setLoading(false));
-  }, []);
-
-  if (new URLSearchParams(window.location.search).get('design-preview') === '1') return <FigmaHomePreview />;
-  if (loading) return null;
-  if (!session) return <LoginForm onSuccess={setSession} />;
-
-  return <CompanyProvider allowedCompanies={session.allowedCompanies} initialCompanyId={session.companyId}>
-    <AuthenticatedShell session={session} setSession={setSession} />
-  </CompanyProvider>;
+  const { loading, session } = useAuth();
+  const isRtl = i18n.language === 'ar';
+  const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
+  if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><h1>{t('app.title')}</h1><p role="status">{t('app.loading')}</p></main>;
+  if (!session) return <LoginForm/>;
+  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
 }
 
 export default function App() {
