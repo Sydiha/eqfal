@@ -324,6 +324,14 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
             <div className="eqfal-home__tasks">
+              <div className="eqfal-home__tasks-header" aria-hidden="true">
+                <span>{isArabic ? 'التصنيف' : 'CATEGORY'}</span>
+                <span>{isArabic ? 'العنصر' : 'ITEM'}</span>
+                <span>{isArabic ? 'العدد' : 'COUNT'}</span>
+                <span>{isArabic ? 'المسؤول' : 'OWNER'}</span>
+                <span>{isArabic ? 'الحالة' : 'STATUS'}</span>
+                <span>{isArabic ? 'الإجراء' : 'ACTION'}</span>
+              </div>
               {alertGroups.flatMap(group => group.alerts.map(alert => (
                 <button key={alert.key} type="button" className="eqfal-home__task-row" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
                   <span className={`eqfal-home__task-category eqfal-home__task-category--${alert.class}`}>
