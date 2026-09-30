@@ -91,3 +91,113 @@
 .eqfal-close__blockers button{transition:transform .15s ease,box-shadow .15s ease;background:linear-gradient(135deg,#fff,#fbfdff)}
 .eqfal-close__blockers button:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(11,29,51,.06)}
 @media(max-width:900px){.eqfal-figma-home__heading{align-items:flex-start;gap:12px;flex-direction:column}.eqfal-period-chip{width:100%}.eqfal-kpi-grid{gap:8px}.eqfal-kpi{min-height:92px}}
+
+
+/* Approved creative Home composition — reproduce the liked EQFAL direction, not the interim pastel variant. */
+.eqfal-figma-home{
+  max-width:1180px;
+  margin-inline:auto;
+  padding:24px;
+  gap:14px;
+  background:#f4f6f7;
+}
+.eqfal-figma-home__heading{
+  position:relative;
+  overflow:hidden;
+  min-height:176px;
+  align-items:flex-end;
+  padding:28px 30px 26px;
+  border:1px solid #e6ecee;
+  border-inline-start:4px solid #00b894;
+  border-radius:18px;
+  background:#fff;
+  box-shadow:0 12px 32px rgba(11,29,51,.055);
+}
+.eqfal-figma-home__heading::after{
+  content:"";
+  position:absolute;
+  inset-inline-end:-78px;
+  top:-112px;
+  width:280px;
+  height:280px;
+  border:52px solid rgba(11,29,51,.028);
+  border-radius:50%;
+  pointer-events:none;
+}
+.eqfal-figma-home__heading>div:first-child{position:relative;z-index:1;max-width:650px}
+.eqfal-figma-home__heading>div:first-child::before{
+  content:"EQFAL • FINANCIAL OPERATIONS";
+  display:block;
+  margin-bottom:8px;
+  color:#0e8f7a;
+  font-family:Inter,Tajawal,sans-serif;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.08em;
+}
+[dir="rtl"].eqfal-figma-home .eqfal-figma-home__heading>div:first-child::before{content:"إقفال • العمليات المالية";letter-spacing:0}
+.eqfal-figma-home__heading h1{font-size:32px;line-height:1.2;color:#0b1d33}
+.eqfal-figma-home__heading p{max-width:610px;margin-top:9px;color:#667488;font-size:13px;line-height:1.7}
+.eqfal-period-chip{
+  position:relative;z-index:1;
+  min-width:250px;
+  padding:12px 14px;
+  border-color:rgba(0,184,148,.24);
+  background:rgba(0,184,148,.055);
+  box-shadow:none;
+}
+.eqfal-period-chip__icon{background:#fff;color:#0e8f7a;border:1px solid rgba(0,184,148,.18)}
+.eqfal-period-chip>b{background:#e2f4ec;color:#16724a}
+.eqfal-figma-section{
+  padding:0;
+  gap:8px;
+}
+.eqfal-figma-section__title{padding:0 2px}
+.eqfal-kpi-grid{
+  gap:0;
+  overflow:hidden;
+  border:1px solid #e6ecee;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 7px 22px rgba(11,29,51,.035);
+}
+.eqfal-kpi{
+  min-height:92px;
+  border:0!important;
+  border-inline-start:1px solid #e6ecee!important;
+  border-radius:0;
+  background:#fff!important;
+  box-shadow:none;
+  padding:14px 15px;
+}
+.eqfal-kpi:first-child{border-inline-start:0!important}
+.eqfal-kpi::after{content:"";position:absolute;inset-inline:0;bottom:0;height:3px;background:#dbe5ee}
+.eqfal-kpi--bank::after{background:#00b894}.eqfal-kpi--collect::after{background:#38a7d8}.eqfal-kpi--pay::after{background:#d4af37}.eqfal-kpi--sales::after{background:#6f7fc7}.eqfal-kpi--expenses::after{background:#8aa5b8}
+.eqfal-kpi__icon{width:28px;height:28px;border-radius:7px;top:12px;inset-inline-start:13px;background:#f2f6f8!important;color:#64748b!important}
+.eqfal-kpi--bank .eqfal-kpi__icon{background:#e8f5f2!important;color:#0e8f7a!important}
+.eqfal-kpi strong{font-size:17px}
+.eqfal-figma-card{border-radius:16px;border-color:#e6ecee;background:#fff;box-shadow:0 8px 24px rgba(11,29,51,.03)}
+.eqfal-figma-card__header{padding:15px 18px}
+.eqfal-section-icon{width:32px;height:32px;border-radius:8px;background:#e8f5f2;color:#0e8f7a}
+.eqfal-section-icon--gold{background:#fff5df;color:#9a6500}
+.eqfal-task-table th{background:#f7f9fa;color:#667483}
+.eqfal-task-table td{height:46px}
+.eqfal-task-table tbody tr:hover{background:#f8fbfa}
+.eqfal-task-table td button{background:#fff;border-color:#0e8f7a;color:#0e8f7a}
+.eqfal-close__header{padding:16px 18px}
+.eqfal-close__notice{margin:0 18px 14px;background:#fff8e6;border-color:#e7c66f;color:#9a6500}
+.eqfal-close__body{grid-template-columns:minmax(0,1fr) 330px;gap:14px;padding:0 18px 18px}
+.eqfal-close__summary{min-height:178px;border:1px solid #e6ecee;border-radius:12px;background:#f8faf9;padding:22px 24px}
+.eqfal-close__summary::before{top:20px;bottom:20px;background:#d4af37}
+.eqfal-close__summary.is-ready::before{background:#00b894}
+.eqfal-close__blockers{gap:8px}
+.eqfal-close__blockers button{min-height:82px;border-color:#e6ecee;border-radius:10px;background:#fff}
+.eqfal-close__open{background:#0b1d33;border-radius:8px;padding:9px 14px}
+@media(max-width:900px){
+ .eqfal-figma-home{padding:16px}
+ .eqfal-figma-home__heading{min-height:auto;align-items:flex-start;flex-direction:column;padding:22px}
+ .eqfal-period-chip{width:100%;min-width:0}
+ .eqfal-kpi-grid{grid-template-columns:1fr 1fr;gap:0}
+ .eqfal-kpi{border-top:1px solid #e6ecee!important}
+ .eqfal-close__body{grid-template-columns:1fr}
+}
