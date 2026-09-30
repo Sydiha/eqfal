@@ -295,8 +295,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       <header className="eqfal-figma-home__heading">
         <div>
           <h1 id="home-title">{isArabic ? 'نظرة عامة مالية' : 'Financial overview'}</h1>
-          <p>{isArabic ? 'أهم المؤشرات والمهام التي تتطلب اهتمامك اليوم' : 'Key indicators and tasks requiring your attention today'}</p>
+          <p>{isArabic ? 'أهم المؤشرات والأرقام التي تتطلب اهتمامك اليوم' : 'Key indicators and figures requiring your attention today'}</p>
         </div>
+        {selected && (
+          <div className="eqfal-period-chip">
+            <span className="eqfal-period-chip__icon" aria-hidden="true">▣</span>
+            <span><small>{isArabic ? 'الفترة الحالية' : 'Current period'}</small><strong>{periodRange}</strong></span>
+            <b>{selected.status === 'open' ? (isArabic ? 'مفتوحة' : 'Open') : (isArabic ? 'مغلقة' : 'Closed')}</b>
+          </div>
+        )}
       </header>
 
       {canViewSnapshot && (
@@ -309,7 +316,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             <p className="eqfal-state eqfal-state--error" role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
             <div className="eqfal-kpi-grid">
-              <article className="eqfal-kpi eqfal-kpi--bank"><span>{homeLabels.bankBalances}</span><strong dir="ltr">{bankTotal === null ? homeLabels.restricted : money(String(bankTotal))}</strong></article>
+              <article className="eqfal-kpi eqfal-kpi--bank"><span className="eqfal-kpi__icon" aria-hidden="true">▤</span><span>{homeLabels.bankBalances}</span><strong dir="ltr">{bankTotal === null ? homeLabels.restricted : money(String(bankTotal))}</strong></article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
                 ['amounts_to_pay', homeLabels.amountsToPay],
@@ -317,7 +324,9 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article className="eqfal-kpi" key={key}><span>{label}</span><strong dir="ltr">{metric.state === 'available' ? money(metric.amount) : homeLabels.restricted}</strong></article>;
+                const tone = key === 'amounts_to_collect' ? 'collect' : key === 'amounts_to_pay' ? 'pay' : key === 'current_month_sales' ? 'sales' : 'expenses';
+                const icon = key === 'amounts_to_collect' ? '↗' : key === 'amounts_to_pay' ? '▣' : key === 'current_month_sales' ? '▥' : '↗';
+                return <article className={`eqfal-kpi eqfal-kpi--${tone}`} key={key}><span className="eqfal-kpi__icon" aria-hidden="true">{icon}</span><span>{label}</span><strong dir="ltr">{metric.state === 'available' ? money(metric.amount) : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -327,7 +336,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       {canViewAlerts && (
         <section className="eqfal-figma-card" aria-labelledby="home-alerts-title">
           <div className="eqfal-figma-card__header">
-            <div><h2 id="home-alerts-title">{isArabic ? 'المهام التي تتطلب متابعة' : 'Tasks requiring follow-up'}</h2><p>{isArabic ? 'العناصر التشغيلية التي تحتاج معالجة أو مراجعة' : 'Operational items requiring action or review'}</p></div>
+            <div className="eqfal-title-with-icon"><span className="eqfal-section-icon" aria-hidden="true">✓</span><div><h2 id="home-alerts-title">{isArabic ? 'المهام التي تتطلب متابعة' : 'Tasks requiring follow-up'}</h2><p>{isArabic ? 'العناصر التشغيلية التي تحتاج معالجة أو مراجعة' : 'Operational items requiring action or review'}</p></div></div>
           </div>
           {alertsLoading ? <p className="eqfal-state" role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p className="eqfal-state eqfal-state--error" role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
@@ -352,7 +361,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       {canViewClose && (
         <section className="eqfal-figma-card eqfal-close" aria-labelledby="home-readiness-title">
           <div className="eqfal-figma-card__header eqfal-close__header">
-            <div><h2 id="home-readiness-title">{isArabic ? 'جاهزية إقفال الفترة الشهرية' : 'Monthly close readiness'}</h2><p>{selected ? periodRange : t('monthlyClose.empty')}</p></div>
+            <div className="eqfal-title-with-icon"><span className="eqfal-section-icon eqfal-section-icon--gold" aria-hidden="true">▣</span><div><h2 id="home-readiness-title">{isArabic ? 'جاهزية إقفال الفترة الشهرية' : 'Monthly close readiness'}</h2><p>{selected ? periodRange : t('monthlyClose.empty')}</p></div></div>
             {selected && <button className="eqfal-close__open" type="button" onClick={() => navigate('monthlyClose')}>{isArabic ? 'عرض معوقات الإقفال' : 'View close blockers'}</button>}
           </div>
           {loading ? <p className="eqfal-state" role="status">{t('monthlyClose.loading')}</p> : error ? (
