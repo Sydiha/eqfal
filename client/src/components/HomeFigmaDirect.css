@@ -256,3 +256,35 @@
 .eqfal-close__open{border-radius:8px;padding:9px 16px}
 @media(max-width:1100px){.eqfal-close__body{grid-template-columns:1fr}.eqfal-period-chip{min-width:280px}}
 @media(max-width:900px){.eqfal-figma-home{padding:18px}.eqfal-figma-home__heading{flex-direction:column;align-items:stretch;gap:14px}.eqfal-period-chip{width:100%;min-width:0}.eqfal-kpi-grid{grid-template-columns:1fr 1fr;gap:10px}.eqfal-kpi{border:1px solid!important}.eqfal-close__blockers{grid-template-columns:1fr 1fr}}
+
+
+/* Final polish pass — preserve behavior/data; refine hierarchy, state colors and close-readiness detail. */
+.eqfal-figma-home{padding-top:22px}
+.eqfal-figma-home__heading{min-height:92px}
+.eqfal-figma-home__heading h1{letter-spacing:-.01em}
+.eqfal-kpi{transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.eqfal-kpi:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(27,74,118,.07)}
+.eqfal-kpi strong{letter-spacing:.01em}
+.eqfal-figma-card__header h2{color:#0b1d33}
+.eqfal-task-table tbody tr:nth-child(1) .eqfal-task-status{background:#fee2e2;color:#dc4545}
+.eqfal-task-table tbody tr:nth-child(2) .eqfal-task-status{background:#fff1d6;color:#b76a00}
+.eqfal-task-table tbody tr:nth-child(3) .eqfal-task-status{background:#e4f1ff;color:#2475ad}
+.eqfal-task-table tbody tr:nth-child(4) .eqfal-task-status{background:#eef2f6;color:#66758b}
+.eqfal-task-table td button{transition:background .15s ease,box-shadow .15s ease}
+.eqfal-task-table td button:hover{background:#e5faf4;box-shadow:0 4px 12px rgba(0,184,148,.08)}
+.eqfal-close{overflow:hidden}
+.eqfal-close__header h2{color:#0b1d33}
+.eqfal-close__notice{font-weight:800}
+.eqfal-close__summary{box-shadow:inset 0 0 0 1px rgba(0,184,148,.025)}
+.eqfal-close__summary-status{font-weight:800}
+.eqfal-close__blockers button{position:relative;padding-top:34px}
+.eqfal-close__blockers button::before{content:"";position:absolute;top:11px;inset-inline-start:12px;width:22px;height:22px;border-radius:7px;background:#f3f6f8}
+.eqfal-close__blockers button:nth-child(1)::before{background:#fff0ea;box-shadow:inset 0 0 0 1px #f7d8cb}
+.eqfal-close__blockers button:nth-child(2)::before{background:#f2edff;box-shadow:inset 0 0 0 1px #e2d7fb}
+.eqfal-close__blockers button:nth-child(3)::before{background:#eaf5ff;box-shadow:inset 0 0 0 1px #d2e9fb}
+.eqfal-close__blockers button:nth-child(4)::before,.eqfal-close__blockers button:nth-child(5)::before{background:#e9f8f2;box-shadow:inset 0 0 0 1px #d0eee2}
+.eqfal-close__blockers .is-blocked strong{font-size:13px;color:#c15a00}
+.eqfal-close__blockers .is-clear strong{font-size:12px;color:#07865f}
+.eqfal-close__open{transition:transform .15s ease,box-shadow .15s ease}
+.eqfal-close__open:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(11,29,51,.14)}
+@media(min-width:1200px){.eqfal-figma-home{padding-inline:38px}.eqfal-close__body{grid-template-columns:minmax(0,1fr) 430px}}
