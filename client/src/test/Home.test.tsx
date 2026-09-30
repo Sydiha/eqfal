@@ -35,20 +35,11 @@ describe('Home v2.1', () => {
     vi.stubGlobal('fetch', vi.fn());
     renderHome(['document.upload', 'document.view', 'document.edit', 'obligation.view', 'bank.view']);
 
-    expect(screen.getByRole('heading', { name: 'Daily Operations' })).toBeInTheDocument();
-    screen.getByRole('button', { name: 'Add sale' }).click();
-    screen.getByRole('button', { name: 'Add purchase' }).click();
-    screen.getByRole('button', { name: 'Add expense' }).click();
-    screen.getByRole('button', { name: 'Upload document' }).click();
-    screen.getByRole('button', { name: 'Open sales' }).click();
-    screen.getByRole('button', { name: 'Open banking' }).click();
-
-    expect(startSalesEntry).toHaveBeenCalledOnce();
-    expect(startPurchaseEntry).toHaveBeenNthCalledWith(1, 'purchase');
-    expect(startPurchaseEntry).toHaveBeenNthCalledWith(2, 'expense');
-    expect(navigate).toHaveBeenCalledWith('documents');
-    expect(navigate).toHaveBeenCalledWith('sales');
-    expect(navigate).toHaveBeenCalledWith('banks');
+    expect(screen.queryByRole('heading', { name: 'Daily Operations' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add purchase' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add expense' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
   });
 
 
@@ -59,7 +50,7 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('button', { name: 'Add sale' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add purchase' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add expense' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Upload document' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload document' })).not.toBeInTheDocument();
   });
 
   it('hides daily operations when their required capabilities are absent', () => {
@@ -77,7 +68,7 @@ describe('Home v2.1', () => {
     renderHome(['fiscal_year.view', 'document.view']);
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/monthly-close-periods', expect.anything());
-    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Workspaces' })).not.toBeInTheDocument();
     expect(screen.queryByText('Loading monthly close periods…')).not.toBeInTheDocument();
   });
@@ -211,7 +202,7 @@ describe('Home v2.1', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['obligation.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Alerts' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
     const alert = await screen.findByRole('button', { name: /Overdue obligations/ });
     expect(alert).toHaveTextContent('2');
     alert.click();
@@ -226,10 +217,11 @@ describe('Home v2.1', () => {
     ] }), { status: 200 })));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Current user action' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Waiting for accountant' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Waiting for team' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
+    expect(screen.getByText('Current user action')).toBeInTheDocument();
+    expect(screen.getAllByText('Upcoming').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Waiting for accountant').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Waiting for team')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Documents needing review/ })).toBeInTheDocument();
   });
 
@@ -237,7 +229,7 @@ describe('Home v2.1', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     renderHome([]);
-    expect(screen.queryByRole('heading', { name: 'Alerts' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Tasks requiring follow-up' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -260,10 +252,10 @@ describe('Home v2.1', () => {
     renderHome(['bank.view', 'obligation.view']);
 
     expect(await screen.findByRole('heading', { name: 'Manager Financial Snapshot' })).toBeInTheDocument();
-    expect(await screen.findByText('1250.50 SAR')).toBeInTheDocument();
-    expect(screen.getByText('Reserve account').parentElement).toHaveTextContent('Unavailable');
-    expect(screen.getByText('400.25')).toBeInTheDocument();
-    expect(screen.getByText('90.00')).toBeInTheDocument();
+    expect(await screen.findByText('1,250.50 SAR')).toBeInTheDocument();
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.getByText('400.25 SAR')).toBeInTheDocument();
+    expect(screen.getByText('90.00 SAR')).toBeInTheDocument();
     expect(screen.getAllByText('Restricted by permissions')).toHaveLength(2);
   });
 
