@@ -283,8 +283,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       <header className="eqfal-home__header">
         <div className="eqfal-home__header-copy">
           <p className="eqfal-home__eyebrow">{t('home.workspace')}</p>
-          <h1 id="home-title">{t('home.welcome')}</h1>
-          <p className="eqfal-home__intro">{t('home.context')}</p>
+          <h1 id="home-title">{isArabic ? 'نظرة عامة مالية' : 'Financial overview'}</h1>
+          <p className="eqfal-home__intro">{isArabic ? 'أهم المؤشرات والأرقام التي تتطلب اهتمامك اليوم' : 'Key indicators and figures requiring your attention today'}</p>
         </div>
       </header>
 
@@ -301,7 +301,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
                   : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
               </article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
@@ -326,9 +326,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             <div className="eqfal-home__tasks">
               {alertGroups.flatMap(group => group.alerts.map(alert => (
                 <button key={alert.key} type="button" className="eqfal-home__task-row" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+                  <span className={`eqfal-home__task-category eqfal-home__task-category--${alert.class}`}>
+                    {isArabic
+                      ? alert.class === 'needs_action_now' ? 'عاجل' : alert.class === 'upcoming_due' ? 'قادم' : 'مراجعة'
+                      : alert.class === 'needs_action_now' ? 'Action now' : alert.class === 'upcoming_due' ? 'Upcoming' : 'Review'}
+                  </span>
                   <span className="eqfal-home__task-name">{alertLabels[alert.key] ?? alert.key}</span>
-                  <span className="eqfal-home__task-owner">{homeLabels.ownership[group.ownership]}</span>
                   <strong className="eqfal-home__task-count">{alert.count}</strong>
+                  <span className="eqfal-home__task-owner">{homeLabels.ownership[group.ownership]}</span>
+                  <span className={`eqfal-home__task-status eqfal-home__task-status--${alert.ownership}`}>
+                    {isArabic
+                      ? alert.ownership === 'waiting_for_accountant' ? 'بانتظار المحاسب' : alert.ownership === 'upcoming' ? 'قادم' : 'يتطلب إجراء'
+                      : alert.ownership === 'waiting_for_accountant' ? 'Waiting for accountant' : alert.ownership === 'upcoming' ? 'Upcoming' : 'Action required'}
+                  </span>
                   <span className="eqfal-home__task-open" aria-hidden="true">↗</span>
                 </button>
               )))}
