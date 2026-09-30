@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
+import './HomeApproved.css';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
-import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
 
 type HomePage =
   | 'fiscalYears'
@@ -66,7 +66,16 @@ type Props = {
 
 const stripDirectionalMarks = (value: string) => value.replace(/[\u061c\u200e\u200f]/g, '');
 
-export function Home({ capabilities, navigate, navigateToDiscovery, startPurchaseEntry, startSalesEntry, onUnauthorized }: Props) {
+const formatFinancialAmount = (value: string) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numeric);
+};
+
+export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const canViewClose = capabilities.includes('monthly_close.view');
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -99,7 +108,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
-        alerts: 'التنبيهات', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
+        alerts: 'المهام التي تتطلب متابعة', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
       }
@@ -120,7 +129,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: 'Close readiness',
         periodState: 'Period status',
-        alerts: 'Alerts', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
+        alerts: 'Tasks requiring follow-up', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
       };
@@ -207,18 +216,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     .map(ownership => ({ ownership, alerts: alerts.filter(alert => alert.ownership === ownership) }))
     .filter(group => group.alerts.length > 0);
   const can = (capability: string) => capabilities.includes(capability);
-  const canViewSalesPurchases = can('document.view') && can('obligation.view');
-  const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
-  const dailyOperations = [
-    { key: 'add-sale', label: homeLabels.addSale, visible: canStartOperationalEntry, open: startSalesEntry },
-    { key: 'add-purchase', label: homeLabels.addPurchase, visible: canStartOperationalEntry, open: () => startPurchaseEntry('purchase') },
-    { key: 'add-expense', label: homeLabels.addExpense, visible: canStartOperationalEntry, open: () => startPurchaseEntry('expense') },
-    { key: 'upload-document', label: homeLabels.uploadDocument, visible: can('document.upload'), open: () => navigate('documents') },
-    { key: 'open-sales', label: homeLabels.openSales, visible: canViewSalesPurchases, open: () => navigate('sales') },
-    { key: 'open-purchases', label: homeLabels.openPurchases, visible: canViewSalesPurchases, open: () => navigate('purchases') },
-    { key: 'open-banking', label: homeLabels.openBanking, visible: can('bank.view'), open: () => navigate('banks') },
-    { key: 'open-obligations', label: homeLabels.openObligations, visible: can('obligation.view'), open: () => navigate('obligations') },
-  ].filter((action) => action.visible);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
@@ -291,44 +288,29 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   ) : null;
 
   return (
-    <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
-      <header className="home-hero home-v21__hero">
-        <div className="home-hero-copy">
-          <p className="home-eyebrow">{t('home.workspace')}</p>
-          <h1 id="home-title">{t('home.welcome')}</h1>
-          <p className="home-intro">{t('home.context')}</p>
+    <section className="eqfal-home" aria-labelledby="home-title">
+      <header className="eqfal-home__header">
+        <div className="eqfal-home__header-copy">
+          <p className="eqfal-home__eyebrow">{t('home.workspace')}</p>
+          <h1 id="home-title">{isArabic ? 'نظرة عامة مالية' : 'Financial overview'}</h1>
+          <p className="eqfal-home__intro">{isArabic ? 'أهم المؤشرات والأرقام التي تتطلب اهتمامك اليوم' : 'Key indicators and figures requiring your attention today'}</p>
         </div>
       </header>
 
-      {dailyOperations.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
-          <div className="home-v21__section-heading">
-            <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
-          </div>
-          <div className="home-launcher__grid">
-            {dailyOperations.map((action) => (
-              <button key={action.key} type="button" onClick={action.open}>
-                <span>{action.label}</span><span aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       {canViewSnapshot && (
-        <section className="home-exceptions" aria-labelledby="home-financial-snapshot-title">
-          <div className="home-v21__section-heading">
+        <section className="eqfal-home__panel" aria-labelledby="home-financial-snapshot-title">
+          <div className="eqfal-home__section-heading">
             <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
           </div>
           {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
-            <div className="home-launcher__grid">
+            <div className="eqfal-home__grid">
               <article>
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
                   : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><strong dir="ltr">{account.balance.state === 'available' ? `${formatFinancialAmount(account.balance.amount)} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
               </article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
@@ -337,7 +319,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? `${formatFinancialAmount(metric.amount)}${isArabic ? ' ر.س' : ' SAR'}` : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -345,31 +327,45 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewAlerts && (
-        <section className="home-exceptions" aria-labelledby="home-alerts-title">
-          <div className="home-v21__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
+        <section className="eqfal-home__panel" aria-labelledby="home-alerts-title">
+          <div className="eqfal-home__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
           ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
-            <div>
-              {alertGroups.map(group => (
-                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
-                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="home-launcher__grid">
-                    {group.alerts.map(alert => (
-                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                        <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+            <div className="eqfal-home__tasks">
+              <div className="eqfal-home__tasks-header" aria-hidden="true">
+                <span>{isArabic ? 'التصنيف' : 'CATEGORY'}</span>
+                <span>{isArabic ? 'العنصر' : 'ITEM'}</span>
+                <span>{isArabic ? 'العدد' : 'COUNT'}</span>
+                <span>{isArabic ? 'المسؤول' : 'OWNER'}</span>
+                <span>{isArabic ? 'الحالة' : 'STATUS'}</span>
+                <span>{isArabic ? 'الإجراء' : 'ACTION'}</span>
+              </div>
+              {alertGroups.flatMap(group => group.alerts.map(alert => (
+                <button key={alert.key} type="button" className="eqfal-home__task-row" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+                  <span className={`eqfal-home__task-category eqfal-home__task-category--${alert.class}`}>
+                    {isArabic
+                      ? alert.class === 'needs_action_now' ? 'عاجل' : alert.class === 'upcoming_due' ? 'قادم' : 'مراجعة'
+                      : alert.class === 'needs_action_now' ? 'Action now' : alert.class === 'upcoming_due' ? 'Upcoming' : 'Review'}
+                  </span>
+                  <span className="eqfal-home__task-name">{alertLabels[alert.key] ?? alert.key}</span>
+                  <strong className="eqfal-home__task-count">{alert.count}</strong>
+                  <span className="eqfal-home__task-owner">{homeLabels.ownership[group.ownership]}</span>
+                  <span className={`eqfal-home__task-status eqfal-home__task-status--${alert.ownership}`}>
+                    {isArabic
+                      ? alert.ownership === 'waiting_for_accountant' ? 'بانتظار المحاسب' : alert.ownership === 'upcoming' ? 'قادم' : 'يتطلب إجراء'
+                      : alert.ownership === 'waiting_for_accountant' ? 'Waiting for accountant' : alert.ownership === 'upcoming' ? 'Upcoming' : 'Action required'}
+                  </span>
+                  <span className="eqfal-home__task-open" aria-hidden="true">↗</span>
+                </button>
+              )))}
             </div>
           )}
         </section>
       )}
 
       {canViewClose && (
-        <section className="home-status-strip" aria-label={t('monthlyClose.title')}>
+        <section className="eqfal-home__status-strip" aria-label={t('monthlyClose.title')}>
           {loading ? (
             <span role="status">{t('monthlyClose.loading')}</span>
           ) : error ? (
@@ -397,19 +393,19 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
-          <section className="home-exceptions" aria-labelledby="home-exceptions-title">
-            <div className="home-v21__section-heading">
+        <div className="eqfal-home__close-grid" style={{ alignItems: 'start' }}>
+          <section className="eqfal-home__panel" aria-labelledby="home-exceptions-title">
+            <div className="eqfal-home__section-heading">
               <div>
-                <p className="home-eyebrow">{t('monthlyClose.title')}</p>
+                <p className="eqfal-home__eyebrow">{t('monthlyClose.title')}</p>
                 <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
               </div>
               <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
                 {closeSummary}
               </span>
             </div>
-            <div className="home-exceptions__table-wrap">
-              <table className="home-exceptions__table">
+            <div className="eqfal-home__table-wrap">
+              <table className="eqfal-home__table">
                 <thead>
                   <tr>
                     <th>{homeLabels.area}</th>
@@ -428,7 +424,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                       </td>
                       <td>
                         {item.canOpen && (
-                          <button type="button" className="home-exception-open" aria-label={item.label} onClick={item.open}>
+                          <button type="button" className="eqfal-home__link-action" aria-label={item.label} onClick={item.open}>
                             <span aria-hidden="true">↗</span>
                           </button>
                         )}
@@ -440,15 +436,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
             </div>
           </section>
 
-          <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
-            <p className="home-eyebrow">{homeLabels.readiness}</p>
+          <aside className={`eqfal-home__readiness ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+            <p className="eqfal-home__eyebrow">{homeLabels.readiness}</p>
             <h2 id="home-readiness-title">{closeSummary}</h2>
-            <p className="home-readiness__period">{periodRange}</p>
-            <div className="home-readiness__summary" style={{ marginTop: 0 }}>
+            <p className="eqfal-home__readiness-period">{periodRange}</p>
+            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0 }}>
               <span>{homeLabels.periodState}</span>
               <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
             </div>
-            <div className="home-readiness__summary" style={{ marginTop: 0, borderTop: 0 }}>
+            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0, borderTop: 0 }}>
               <span>{homeLabels.closeBlockers}</span>
               <strong>
                 {selected.has_hidden_blockers
@@ -456,7 +452,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                   : selected.disclosed_total}
               </strong>
             </div>
-            <button type="button" className="home-readiness__open" onClick={() => navigate('monthlyClose')}>
+            <button type="button" className="eqfal-home__primary-action" onClick={() => navigate('monthlyClose')}>
               {t('nav.monthlyClose')}
             </button>
           </aside>

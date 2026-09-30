@@ -108,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
+
   return (
     <AuthContext.Provider value={{ loading, session, login, logout, switchCompany, handleUnauthorized }}>
       {children}

@@ -813,3 +813,50 @@
   .company-switcher { max-width: 142px; }
   .home-launcher__grid { grid-template-columns: 1fr; }
 }
+
+/* Phase 15B Home acceptance — compact desktop command bar */
+@media (min-width:48.01em){
+  .app-shell--v2{--shell-topbar-height:54px}
+  .app-shell--v2 .topbar{min-height:54px;padding-inline:18px}
+  .app-shell--v2 .topbar>[class*="mantine-Group-root"]{gap:10px}
+  .app-shell--v2 .page-context{min-width:112px}
+  .app-shell--v2 .page-context-label{font-size:.6rem!important}
+  .app-shell--v2 .page-context-title{font-size:.88rem}
+  .app-shell--v2 .company-switcher{min-width:190px}
+  .app-shell--v2 .company-switcher label{font-size:.64rem}
+  .app-shell--v2 .company-switcher input{height:32px;min-height:32px;border-radius:8px}
+  .app-shell--v2 .header-action{min-height:32px!important;padding-inline:8px!important}
+  .app-shell--v2 .language-action{min-width:36px}
+  .app-shell--v2 .top-divider{height:26px}
+  .app-shell--v2 .user-avatar{width:30px;height:30px;flex-basis:30px;font-size:.72rem}
+  .app-shell--v2 .user-copy p:first-child{font-size:.64rem}
+  .app-shell--v2 .user-copy p:last-child{font-size:.76rem}
+}
+
+/* Phase 15B topbar composition — three coherent groups */
+@media (min-width:48.01em){
+ .app-shell--v2 .topbar-layout{width:100%}
+ .app-shell--v2 .page-context{display:grid;min-width:118px;padding-inline:4px}
+ .app-shell--v2 .topbar-spacer{min-width:24px}
+ .app-shell--v2 .topbar-company-group{
+   flex:0 0 auto;
+   align-items:center;
+   padding-inline:12px;
+   border-inline:1px solid #e7ecf1;
+ }
+ .app-shell--v2 .topbar-company-group .company-switcher{min-width:188px;max-width:205px}
+ .app-shell--v2 .topbar-company-group .language-action{margin-inline-start:2px}
+ .app-shell--v2 .top-divider{display:none}
+ .app-shell--v2 .topbar-user-group{
+   flex:0 0 auto;
+   align-items:center;
+   margin-inline-start:12px;
+ }
+ .app-shell--v2 .user-summary{max-width:215px}
+ .app-shell--v2 .logout-action{
+   min-width:auto;
+   color:#536174!important;
+   font-size:.76rem!important;
+   font-weight:650!important;
+ }
+}

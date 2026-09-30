@@ -63,13 +63,13 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   return (
     <MantineAppShell
       className="app-shell app-shell--v2"
-      header={{ height: 60 }}
+      header={{ height: 54 }}
       navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >
       <MantineAppShell.Header className="topbar">
-        <Group h="100%" wrap="nowrap" gap="md">
+        <Group h="100%" wrap="nowrap" gap={0} className="topbar-layout">
           <Burger opened={menuOpen} onClick={toggle} hiddenFrom="sm" size="sm" aria-label={t('nav.openMenu')} />
           <span className="mobile-brand" aria-label="إقفال | EQFAL"><EqfalBrandMark compact /></span>
           <Stack gap={0} className="page-context">
@@ -77,7 +77,8 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
           </Stack>
           <Box className="topbar-spacer" />
-          <CompanySwitcher onSwitch={onSwitch} />
+          <Group gap={10} wrap="nowrap" className="topbar-company-group">
+            <CompanySwitcher onSwitch={onSwitch} />
           <Button
             className="header-action language-action"
             aria-label={t('app.switchLanguage')}
@@ -88,8 +89,10 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
             <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
           </Button>
+          </Group>
           <Divider orientation="vertical" className="top-divider" />
-          <Group gap="sm" wrap="nowrap" className="user-summary">
+          <Group gap={8} wrap="nowrap" className="topbar-user-group">
+          <Group gap={8} wrap="nowrap" className="user-summary">
             <span className="user-avatar" aria-hidden="true">{userInitial}</span>
             <Stack gap={0} className="user-copy">
               <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
@@ -106,6 +109,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <span className="desktop-action-label">{t('auth.logout')}</span>
             <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
           </Button>
+          </Group>
         </Group>
       </MantineAppShell.Header>
 
