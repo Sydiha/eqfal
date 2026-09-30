@@ -40,3 +40,18 @@
   .eqfal-figma-actions>div{justify-content:flex-start;flex:1}
   .eqfal-figma-actions button{padding:8px 13px}
 }
+
+
+/* Home visual refinement: compact financial snapshot and replace the non-informative readiness ring with a factual status block. */
+.eqfal-figma-section{gap:6px}
+.eqfal-figma-section__title{min-height:20px}
+.eqfal-kpi-grid{min-height:68px}
+.eqfal-kpi{padding:10px 14px}
+.eqfal-close__summary{position:relative;border:1px solid #e4e8ec;background:#f8fafc;min-height:156px;padding:20px 24px;align-items:flex-start;justify-content:center;gap:4px}
+.eqfal-close__summary::before{content:"";position:absolute;inset-inline-start:0;top:18px;bottom:18px;width:4px;border-radius:0 4px 4px 0;background:#d4af37}
+.eqfal-close__summary.is-ready::before{background:#00b894}
+.eqfal-close__summary-label{font-size:11px;color:#64748b}
+.eqfal-close__summary-status{font-size:20px;color:#0b1d33;line-height:1.4}
+.eqfal-close__summary-divider{width:100%;height:1px;background:#e4e8ec;margin:8px 0}
+.eqfal-close__summary-count{font-size:13px;color:#b45309}
+.eqfal-close__summary.is-ready .eqfal-close__summary-count{color:#047857}
