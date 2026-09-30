@@ -23,7 +23,7 @@ describe('authenticated application shell', () => {
     fireEvent.click(fiscal); expect(fiscal).toHaveAttribute('aria-current', 'page');
     fireEvent.click(documents); expect(documents).toHaveAttribute('aria-current', 'page');
     fireEvent.click(within(navigation).getByRole('button', { name: 'Home' }));
-    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeInTheDocument();
   });
   it('shows Sales navigation only with both required read capabilities', async () => {
     render(<AuthProvider><App/></AuthProvider>);
