@@ -180,6 +180,27 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
   </div>;
 }
 
+function AppContent() {
+  const { t, i18n } = useTranslation();
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/auth/me').then(async (r) => {
+      if (!r.ok) return setSession(null);
+      setSession(await r.json());
+    }).catch(() => setSession(null)).finally(() => setLoading(false));
+  }, []);
+
+  if (new URLSearchParams(window.location.search).get('design-preview') === '1') return <FigmaHomePreview />;
+  if (loading) return null;
+  if (!session) return <LoginForm onSuccess={setSession} />;
+
+  return <CompanyProvider allowedCompanies={session.allowedCompanies} initialCompanyId={session.companyId}>
+    <AuthenticatedShell session={session} setSession={setSession} />
+  </CompanyProvider>;
+}
+
 export default function App() {
   const { i18n } = useTranslation();
   const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
