@@ -13,6 +13,8 @@ import { BankingWorkspace } from './components/BankingWorkspace';
 import { AppShell, Page } from './components/AppShell';
 import { EqfalBrandLockup } from './components/EqfalBrand';
 import { Home } from './components/Home';
+import FigmaHomePreview from './components/FigmaHomePreview';
+import './figma-preview.css';
 import { Partners } from './components/Partners';
 import { Obligations } from './components/Obligations';
 import { MonthlyClose } from './components/MonthlyClose';
@@ -232,7 +234,7 @@ function HomeDesignPreview() {
 
 function AppContent() {
   const { t, i18n } = useTranslation();
-  if (new URLSearchParams(window.location.search).get('design-preview') === '1') return <HomeDesignPreview/>;
+  if (new URLSearchParams(window.location.search).get('design-preview') === '1') return <FigmaHomePreview/>;
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
