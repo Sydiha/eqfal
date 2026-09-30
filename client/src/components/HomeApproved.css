@@ -112,3 +112,20 @@
  .eqfal-home__tasks-header,.eqfal-home__task-row{grid-template-columns:150px minmax(260px,1.55fr) 64px minmax(160px,.9fr) 145px 86px}
  .eqfal-home__task-row{min-height:46px}
 }
+
+/* Home density polish: preserve data contracts, improve scan path */
+@media(min-width:761px){
+ .eqfal-home{padding-top:22px}
+ .eqfal-home__header{min-height:96px;padding-top:4px}
+ .eqfal-home__header h1{font-size:27px}
+ .eqfal-home__intro{margin-top:6px}
+ .eqfal-home__status-strip{top:22px;min-height:60px;padding-block:8px}
+ .eqfal-home>.eqfal-home__panel:first-of-type .eqfal-home__section-heading{margin-bottom:8px}
+ .eqfal-home>.eqfal-home__panel:first-of-type .eqfal-home__section-heading>div{display:grid;grid-template-columns:auto 1fr;align-items:end;column-gap:12px}
+ .eqfal-home>.eqfal-home__panel:first-of-type .eqfal-home__section-heading p{justify-self:start;max-width:none;padding-bottom:1px;font-size:9px;text-align:right}
+ .eqfal-home__grid{gap:14px}
+ .eqfal-home__grid>article{min-height:96px;padding-top:13px}
+ .eqfal-home__grid h3{margin-top:25px}
+ .eqfal-home__panel{margin-top:16px}
+ .eqfal-home__close-grid{margin-top:16px}
+}
