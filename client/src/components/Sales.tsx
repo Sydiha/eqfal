@@ -28,7 +28,7 @@ export function Sales({canView,canManage,canCreate=false,canEdit=false,onCreateD
  const selected=rows.find(sale=>sale.id===selectedId)??null;
  useEffect(()=>{if(selectedId&&!rows.some(sale=>sale.id===selectedId))setSelectedId(null)},[rows,selectedId]);
  const create=async(sale:Sale)=>{const response=await fetch('/api/obligations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({direction:'receivable',counterparty_id:sale.counterparty_id,document_id:sale.id,original_amount:sale.total_amount,recognized_on:sale.document_date,due_on:null,verification_status:'unconfirmed',source_type:'document',source_note:null})});if(response.status===401){onUnauthorized();return;}if(!response.ok){setError(true);return;}await load()};
- if(!canView)return <WorkspacePage><WorkspaceState>{t('sales.noAccess')}</WorkspaceState></WorkspacePage>;
+ if(!canView)return <WorkspacePage><WorkspaceState>{t('sales.noAccess')}</WorkspaceState></div>;
  const roleLabel=(type:CounterpartyType|null)=>type?(i18n.language==='ar'?({customer:'عميل',supplier:'مورد',government:'جهة حكومية',other:'أخرى'} as const)[type]:({customer:'Customer',supplier:'Supplier',government:'Government',other:'Other'} as const)[type]):'—';
  const integrityIssue=(sale:Sale)=>!!sale.counterparty_id&&sale.counterparty_type!==null&&sale.counterparty_type!=='customer';
  const eligible=(sale:Sale)=>canManage&&sale.receivable_relationship==='not_created'&&sale.status==='approved'&&!!sale.counterparty_id&&sale.counterparty_type==='customer'&&!!sale.document_date&&!!sale.total_amount;
