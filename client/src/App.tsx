@@ -178,8 +178,23 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
   </div>;
 }
 
+function HomeDesignPreview() {
+  const previewCapabilities = ['monthly_close.view','document.view','document.upload','document.edit','obligation.view','bank.view'];
+  return <div style={{minHeight:'100vh',background:'#fafcfd'}}>
+    <Home
+      capabilities={previewCapabilities}
+      navigate={() => undefined}
+      navigateToDiscovery={() => undefined}
+      startPurchaseEntry={() => undefined}
+      startSalesEntry={() => undefined}
+      onUnauthorized={() => undefined}
+    />
+  </div>;
+}
+
 function AppContent() {
   const { t, i18n } = useTranslation();
+  if (new URLSearchParams(window.location.search).get('design-preview') === '1') return <HomeDesignPreview/>;
   const { loading, session } = useAuth();
   const isRtl = i18n.language === 'ar';
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
