@@ -38,3 +38,11 @@ html[dir="rtl"] .eqfal-sales__master{grid-column:2}
 html[dir="ltr"] .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
 html[dir="ltr"] .eqfal-sales__master{grid-column:1}
 html[dir="ltr"] .eqfal-sales__detail{grid-column:2;border-left:1px solid #dce4ea;border-right:0}
+
+/* RTL source order override: :dir() follows the actual component direction. */
+.eqfal-sales:dir(rtl) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+.eqfal-sales:dir(rtl) .eqfal-sales__master{grid-column:1}
+.eqfal-sales:dir(rtl) .eqfal-sales__detail{grid-column:2;border-right:0;border-left:1px solid #dce4ea}
+.eqfal-sales:dir(ltr) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+.eqfal-sales:dir(ltr) .eqfal-sales__master{grid-column:1}
+.eqfal-sales:dir(ltr) .eqfal-sales__detail{grid-column:2;border-left:1px solid #dce4ea;border-right:0}
