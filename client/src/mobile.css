@@ -529,3 +529,24 @@
   .workspace-content { padding-inline: 10px; }
   .home-hero { padding-inline: 18px; }
 }
+
+
+/* Phase 15B: compact Figma-inspired desktop header while preserving live EQFAL controls. */
+@media (min-width: 62.01em){
+  .topbar{padding-inline:32px}
+  .topbar>[class*="mantine-Group-root"]{gap:10px}
+  .topbar-spacer{flex:1 1 auto}
+  .page-context{min-width:108px}
+  .topbar-company{display:flex;align-items:flex-end;gap:8px;padding:4px 8px;border-radius:10px;background:#f7f9fb}
+  .topbar-company .company-switcher{min-width:170px}
+  .topbar-company .company-switcher input{background:#fff}
+  .topbar-control-icon{display:grid;width:30px;height:36px;place-items:center;color:#66788d}
+  .topbar-control-icon .shell-icon{width:17px;height:17px}
+  .topbar-icon-button{position:relative;display:grid;width:36px;height:36px;padding:0;place-items:center;border:0;border-radius:9px;background:#f5f8fb;color:#53677e;cursor:pointer}
+  .topbar-icon-button:hover{background:#edf3f7;color:#0b1d33}
+  .topbar-icon-button .shell-icon{width:18px;height:18px}
+  .topbar-notification-dot{position:absolute;top:7px;inset-inline-end:7px;width:6px;height:6px;border:2px solid #fff;border-radius:50%;background:#ef4444}
+  .language-action{min-width:38px!important;padding-inline:8px!important}
+  .user-summary{max-width:210px}
+  .logout-action{padding-inline:10px!important}
+}
