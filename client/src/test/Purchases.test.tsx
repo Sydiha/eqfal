@@ -12,6 +12,25 @@ describe('Purchases workspace',()=>{
  beforeEach(async()=>{vi.restoreAllMocks();window.history.replaceState(null,'','/?page=purchases');await i18n.changeLanguage('en')})
  afterEach(()=>window.history.replaceState(null,'','/'));
 
+ it('derives the approved KPI strip from loaded rows and excludes cancelled outstanding balances',async()=>{
+  mockPurchases([base,active,{...active,id:'d3',reference_number:'INV-3',total_amount:'50.50',paid_amount:'10.25',remaining_amount:'40.25',payable_cancelled:true,payable_relationship:'linked_cancelled'}]);
+  render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);
+  await screen.findByText('INV-1');
+  expect(screen.getByText('Outstanding to suppliers').nextElementSibling).toHaveTextContent('80.00');
+  expect(screen.getByText('Total paid').nextElementSibling).toHaveTextContent('50.25');
+  expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('250.50');
+ });
+
+ it('keeps capitalisation gated to eligible approved purchase documents',async()=>{
+  const capitalise=vi.fn();mockPurchases([base,active]);
+  render(<Purchases canView canManage canCapitalise onCapitalise={capitalise} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(summaryRow(await screen.findByText('INV-1')));
+  fireEvent.click(screen.getByRole('button',{name:'Capitalise as Fixed Asset'}));
+  expect(capitalise).toHaveBeenCalledWith('d1');
+  fireEvent.click(summaryRow('INV-2'));
+  expect(screen.queryByRole('button',{name:'Capitalise as Fixed Asset'})).not.toBeInTheDocument();
+ });
+
  it('keeps a cancelled payable historical, including settlement history, without replacement creation',async()=>{
   mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);
   const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getByText('—')).toBeInTheDocument();
