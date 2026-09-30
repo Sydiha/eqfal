@@ -12,7 +12,7 @@ import '../shell-corrective.css';
 
 export type Page = NavigationPage;
 
-type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
+type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations' | 'building' | 'search' | 'bell';
 
 function ShellIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -22,6 +22,9 @@ function ShellIcon({ name }: { name: IconName }) {
     bank: <><path d="M3 9h18M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 18h18M2 21h20M12 3 3 7h18L12 3Z"/></>,
     partners: <><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c0-4 2-6 6-6s6 2 6 6M15 15c3 0 5 2 5 5"/></>,
     obligations: <><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/></>,
+    building: <><path d="M4 21h16M6 21V7l6-4 6 4v14M9 10h2M13 10h2M9 14h2M13 14h2M11 21v-4h2v4"/></>,
+    search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>,
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></>,
   };
   return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -77,7 +80,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
           </Stack>
           <Box className="topbar-spacer" />
-          <CompanySwitcher onSwitch={onSwitch} />
+          <div className="topbar-company"><span className="topbar-control-icon" aria-hidden="true"><ShellIcon name="building" /></span><CompanySwitcher onSwitch={onSwitch} /></div>
           <Button
             className="header-action language-action"
             aria-label={t('app.switchLanguage')}
@@ -88,6 +91,8 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
             <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
           </Button>
+          <button type="button" className="topbar-icon-button" aria-label={i18n.language === 'ar' ? 'بحث' : 'Search'}><ShellIcon name="search" /></button>
+          <button type="button" className="topbar-icon-button topbar-notification" aria-label={i18n.language === 'ar' ? 'التنبيهات' : 'Notifications'}><ShellIcon name="bell" /><span className="topbar-notification-dot" /></button>
           <Divider orientation="vertical" className="top-divider" />
           <Group gap="sm" wrap="nowrap" className="user-summary">
             <span className="user-avatar" aria-hidden="true">{userInitial}</span>
