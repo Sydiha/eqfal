@@ -208,23 +208,26 @@ function HomeDesignPreview() {
     }]});
     return originalFetch(input, init);
   };
-  return <AppShell
-    page="home"
-    setPage={() => undefined}
-    capabilities={previewCapabilities}
-    email="أحمد المحاسب"
-    onSwitch={async () => true}
-    onLogout={async () => undefined}
-  >
-    <Home
+  const previewCompanies = [{ id: 'preview-company', name: 'شركة الأرز' }];
+  return <CompanyProvider allowedCompanies={previewCompanies} initialCompanyId="preview-company">
+    <AppShell
+      page="home"
+      setPage={() => undefined}
       capabilities={previewCapabilities}
-      navigate={() => undefined}
-      navigateToDiscovery={() => undefined}
-      startPurchaseEntry={() => undefined}
-      startSalesEntry={() => undefined}
-      onUnauthorized={() => undefined}
-    />
-  </AppShell>;
+      email="أحمد المحاسب"
+      onSwitch={async () => true}
+      onLogout={async () => undefined}
+    >
+      <Home
+        capabilities={previewCapabilities}
+        navigate={() => undefined}
+        navigateToDiscovery={() => undefined}
+        startPurchaseEntry={() => undefined}
+        startSalesEntry={() => undefined}
+        onUnauthorized={() => undefined}
+      />
+    </AppShell>
+  </CompanyProvider>;
 }
 
 function AppContent() {
