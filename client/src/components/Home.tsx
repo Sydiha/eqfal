@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { canStartOperationalDocumentEntry } from './operationalEntryCapabilities';
+import './HomeFigmaDirect.css';
 
 type HomePage =
   | 'fiscalYears'
@@ -290,46 +291,41 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
     </span>
   ) : null;
 
+  const money = (value: string) => {
+    const amount = Number(value);
+    return Number.isFinite(amount)
+      ? new Intl.NumberFormat(isArabic ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+      : value;
+  };
+  const bankTotal = snapshot?.metrics.bank_balances.state === 'available'
+    ? snapshot.metrics.bank_balances.accounts.reduce((sum, account) => account.balance.state === 'available' ? sum + Number(account.balance.amount || 0) : sum, 0)
+    : null;
+  const taskRows = alerts.map(alert => ({
+    ...alert,
+    label: alertLabels[alert.key] ?? alert.key,
+    owner: homeLabels.ownership[alert.ownership],
+  }));
+
   return (
-    <section className="home-modern home-v21" aria-labelledby="home-title" style={{ maxWidth: 1360 }}>
-      <header className="home-hero home-v21__hero">
-        <div className="home-hero-copy">
-          <p className="home-eyebrow">{t('home.workspace')}</p>
-          <h1 id="home-title">{t('home.welcome')}</h1>
-          <p className="home-intro">{t('home.context')}</p>
+    <section className="eqfal-figma-home" aria-labelledby="home-title" dir={isArabic ? 'rtl' : 'ltr'}>
+      <header className="eqfal-figma-home__heading">
+        <div>
+          <h1 id="home-title">{isArabic ? 'نظرة عامة مالية' : 'Financial overview'}</h1>
+          <p>{isArabic ? 'أهم المؤشرات والمهام التي تتطلب اهتمامك اليوم' : 'Key indicators and tasks requiring your attention today'}</p>
         </div>
       </header>
 
-      {dailyOperations.length > 0 && (
-        <section className="home-launcher" aria-labelledby="home-daily-operations-title">
-          <div className="home-v21__section-heading">
-            <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
-          </div>
-          <div className="home-launcher__grid">
-            {dailyOperations.map((action) => (
-              <button key={action.key} type="button" onClick={action.open}>
-                <span>{action.label}</span><span aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       {canViewSnapshot && (
-        <section className="home-exceptions" aria-labelledby="home-financial-snapshot-title">
-          <div className="home-v21__section-heading">
-            <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
+        <section className="eqfal-figma-section" aria-labelledby="home-financial-snapshot-title">
+          <div className="eqfal-figma-section__title">
+            <h2 id="home-financial-snapshot-title">{isArabic ? 'لمحة مالية مجمعة' : homeLabels.snapshot}</h2>
+            <span>{homeLabels.operationalView}</span>
           </div>
-          {snapshotLoading ? <p role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
-            <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
+          {snapshotLoading ? <p className="eqfal-state" role="status">{homeLabels.snapshotLoading}</p> : snapshotError || !snapshot ? (
+            <p className="eqfal-state eqfal-state--error" role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
-            <div className="home-launcher__grid">
-              <article>
-                <h3>{homeLabels.bankBalances}</h3>
-                {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
-                  : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><span>{account.display_name}</span>{' '}<strong dir="ltr">{account.balance.state === 'available' ? `${account.balance.amount} ${account.currency_code}` : homeLabels.unavailable}</strong></p>)}
-              </article>
+            <div className="eqfal-kpi-grid">
+              <article className="eqfal-kpi eqfal-kpi--bank"><span>{homeLabels.bankBalances}</span><strong dir="ltr">{bankTotal === null ? homeLabels.restricted : money(String(bankTotal))}</strong></article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
                 ['amounts_to_pay', homeLabels.amountsToPay],
@@ -337,7 +333,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? metric.amount : homeLabels.restricted}</strong></article>;
+                return <article className="eqfal-kpi" key={key}><span>{label}</span><strong dir="ltr">{metric.state === 'available' ? money(metric.amount) : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -345,122 +341,64 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
       )}
 
       {canViewAlerts && (
-        <section className="home-exceptions" aria-labelledby="home-alerts-title">
-          <div className="home-v21__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
-          {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
-            <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
-          ) : alerts.length === 0 ? <p role="status">{homeLabels.alertsEmpty}</p> : (
-            <div>
-              {alertGroups.map(group => (
-                <section key={group.ownership} aria-labelledby={`home-alerts-${group.ownership}`}>
-                  <h3 id={`home-alerts-${group.ownership}`}>{homeLabels.ownership[group.ownership]}</h3>
-                  <div className="home-launcher__grid">
-                    {group.alerts.map(alert => (
-                      <button key={alert.key} type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
-                        <span>{alertLabels[alert.key] ?? alert.key}</span><strong>{alert.count}</strong><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+        <section className="eqfal-figma-card" aria-labelledby="home-alerts-title">
+          <div className="eqfal-figma-card__header">
+            <div><h2 id="home-alerts-title">{isArabic ? 'المهام التي تتطلب متابعة' : 'Tasks requiring follow-up'}</h2><p>{isArabic ? 'العناصر التشغيلية التي تحتاج معالجة أو مراجعة' : 'Operational items requiring action or review'}</p></div>
+          </div>
+          {alertsLoading ? <p className="eqfal-state" role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
+            <p className="eqfal-state eqfal-state--error" role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
+          ) : taskRows.length === 0 ? <p className="eqfal-state" role="status">{homeLabels.alertsEmpty}</p> : (
+            <div className="eqfal-task-table-wrap">
+              <table className="eqfal-task-table">
+                <thead><tr><th>{isArabic ? 'التصنيف' : 'Category'}</th><th>{isArabic ? 'العنصر' : 'Item'}</th><th>{isArabic ? 'العدد' : 'Count'}</th><th>{isArabic ? 'المسؤول' : 'Owner'}</th><th>{isArabic ? 'الحالة' : 'Status'}</th><th>{isArabic ? 'الإجراء' : 'Action'}</th></tr></thead>
+                <tbody>{taskRows.map(alert => (
+                  <tr key={alert.key}>
+                    <td><span className={`eqfal-task-dot eqfal-task-dot--${alert.class}`} />{alert.class === 'needs_action_now' ? (isArabic ? 'عاجل' : 'Action now') : alert.class === 'upcoming_due' ? (isArabic ? 'قادم' : 'Upcoming') : (isArabic ? 'مراجعة' : 'Review')}</td>
+                    <td><strong>{alert.label}</strong></td><td>{alert.count}</td><td>{alert.owner}</td>
+                    <td><span className="eqfal-task-status">{alert.ownership === 'current_user' ? (isArabic ? 'يتطلب إجراء' : 'Action required') : alert.owner}</span></td>
+                    <td><button type="button" onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>{isArabic ? 'معالجة' : 'Open'}</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
             </div>
           )}
         </section>
       )}
 
       {canViewClose && (
-        <section className="home-status-strip" aria-label={t('monthlyClose.title')}>
-          {loading ? (
-            <span role="status">{t('monthlyClose.loading')}</span>
-          ) : error ? (
-            <>
-              <span role="alert">{t('monthlyClose.error')}</span>
-              <button type="button" onClick={() => void load()}>{t('common.retry')}</button>
-            </>
+        <section className="eqfal-figma-card eqfal-close" aria-labelledby="home-readiness-title">
+          <div className="eqfal-figma-card__header eqfal-close__header">
+            <div><h2 id="home-readiness-title">{isArabic ? 'جاهزية إقفال الفترة الشهرية' : 'Monthly close readiness'}</h2><p>{selected ? periodRange : t('monthlyClose.empty')}</p></div>
+            {selected && <button className="eqfal-close__open" type="button" onClick={() => navigate('monthlyClose')}>{isArabic ? 'عرض معوقات الإقفال' : 'View close blockers'}</button>}
+          </div>
+          {loading ? <p className="eqfal-state" role="status">{t('monthlyClose.loading')}</p> : error ? (
+            <p className="eqfal-state eqfal-state--error" role="alert">{t('monthlyClose.error')} <button type="button" onClick={() => void load()}>{t('common.retry')}</button></p>
           ) : selected ? (
             <>
-              <div className="home-status-strip__period">
-                <span>{t('monthlyClose.title')}</span>
-                <strong>{periodRange}</strong>
+              {!selected.ready && <div className="eqfal-close__notice">{selected.has_hidden_blockers ? t('monthlyClose.blockedHidden') : closeSummary}</div>}
+              <div className="eqfal-close__body">
+                <div className="eqfal-close__summary">
+                  <div className={`eqfal-close__ring ${selected.ready ? 'is-ready' : ''}`}><strong>{selected.ready ? '100%' : '—'}</strong></div>
+                  <span>{homeLabels.periodState}</span><strong>{t(`monthlyClose.${selected.status}`)}</strong>
+                </div>
+                <div className="eqfal-close__blockers">
+                  {exceptions.map(item => (
+                    <button key={item.key} type="button" disabled={!item.canOpen} onClick={item.open}>
+                      <span>{item.label}</span><strong className={item.count > 0 ? 'is-blocked' : 'is-clear'}>{item.count > 0 ? homeLabels.blockers(item.count) : homeLabels.noBlockers}</strong>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <span className={`home-status-pill home-status-pill--${selected.status}`}>
-                {t(`monthlyClose.${selected.status}`)}
-              </span>
-              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {closeSummary}
-              </span>
             </>
-          ) : (
-            <span role="status">{t('monthlyClose.empty')}</span>
-          )}
+          ) : <p className="eqfal-state" role="status">{t('monthlyClose.empty')}</p>}
         </section>
       )}
 
-      {canViewClose && !loading && !error && selected && (
-        <div className="home-v21__workspace-grid" style={{ alignItems: 'start' }}>
-          <section className="home-exceptions" aria-labelledby="home-exceptions-title">
-            <div className="home-v21__section-heading">
-              <div>
-                <p className="home-eyebrow">{t('monthlyClose.title')}</p>
-                <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
-              </div>
-              <span className={`home-status-pill ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`}>
-                {closeSummary}
-              </span>
-            </div>
-            <div className="home-exceptions__table-wrap">
-              <table className="home-exceptions__table">
-                <thead>
-                  <tr>
-                    <th>{homeLabels.area}</th>
-                    <th>{homeLabels.blockerState}</th>
-                    <th aria-label={t('accounting.action')} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptions.map((item) => (
-                    <tr key={item.key}>
-                      <td><strong>{item.label}</strong></td>
-                      <td>
-                        <span className={`home-exception-count ${item.count > 0 ? 'is-blocked' : 'is-clear'}`}>
-                          {item.count > 0 ? homeLabels.blockers(item.count) : homeLabels.noBlockers}
-                        </span>
-                      </td>
-                      <td>
-                        {item.canOpen && (
-                          <button type="button" className="home-exception-open" aria-label={item.label} onClick={item.open}>
-                            <span aria-hidden="true">↗</span>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <aside className="home-readiness" aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
-            <p className="home-eyebrow">{homeLabels.readiness}</p>
-            <h2 id="home-readiness-title">{closeSummary}</h2>
-            <p className="home-readiness__period">{periodRange}</p>
-            <div className="home-readiness__summary" style={{ marginTop: 0 }}>
-              <span>{homeLabels.periodState}</span>
-              <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
-            </div>
-            <div className="home-readiness__summary" style={{ marginTop: 0, borderTop: 0 }}>
-              <span>{homeLabels.closeBlockers}</span>
-              <strong>
-                {selected.has_hidden_blockers
-                  ? t('monthlyClose.blockedHidden')
-                  : selected.disclosed_total}
-              </strong>
-            </div>
-            <button type="button" className="home-readiness__open" onClick={() => navigate('monthlyClose')}>
-              {t('nav.monthlyClose')}
-            </button>
-          </aside>
-        </div>
+      {dailyOperations.length > 0 && (
+        <section className="eqfal-figma-actions" aria-labelledby="home-daily-operations-title">
+          <h2 id="home-daily-operations-title">{homeLabels.dailyOperations}</h2>
+          <div>{dailyOperations.map(action => <button key={action.key} type="button" onClick={action.open}>{action.label}</button>)}</div>
+        </section>
       )}
     </section>
   );
