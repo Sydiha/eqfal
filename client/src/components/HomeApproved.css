@@ -4,7 +4,7 @@
 .eqfal-home{
   --navy:#0b1d33;--teal:#00b894;--blue:#159bd7;--gold:#e5ad13;--red:#ef4444;
   width:100%;max-width:1400px;margin:0 auto;direction:rtl;color:#0b1d33;
-  font-family:Tajawal,Inter,sans-serif;position:relative;padding:30px 28px 28px;
+  font-family:Tajawal,Inter,sans-serif;position:relative;padding:28px 28px 28px;
   background:
     radial-gradient(ellipse 42% 28% at 15% 2%,rgba(182,216,255,.62),transparent 72%),
     radial-gradient(ellipse 34% 22% at 35% 0%,rgba(219,235,255,.68),transparent 75%),
@@ -13,9 +13,9 @@
 .eqfal-home *{box-sizing:border-box}
 
 /* Hero */
-.eqfal-home__header{min-height:118px;display:flex;align-items:flex-start;padding:7px 0 0}
+.eqfal-home__header{min-height:112px;display:flex;align-items:flex-start;padding:7px 0 0}
 .eqfal-home__header-copy{width:100%;text-align:right}
-.eqfal-home__header h1{margin:0;font-size:31px;line-height:1.25;font-weight:800;letter-spacing:-.5px;color:#071d3b}
+.eqfal-home__header h1{margin:0;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.5px;color:#071d3b}
 .eqfal-home__intro{margin:9px 0 0;color:#6f83a5;font-size:13px}
 .eqfal-home__eyebrow{margin:0 0 4px;color:#008e73;font-size:10px;font-weight:800}
 .eqfal-home__header .eqfal-home__eyebrow{display:none}
@@ -42,7 +42,7 @@
 .eqfal-home>.eqfal-home__panel:first-of-type .eqfal-home__section-heading{margin:0 0 10px}
 .eqfal-home>.eqfal-home__panel:first-of-type .eqfal-home__section-heading p{position:absolute;left:30px;margin-top:-1px}
 .eqfal-home__grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
-.eqfal-home__grid>article{position:relative;min-height:112px;padding:19px 16px 14px;border:1px solid #cce4f4!important;border-radius:11px;background:#f3faff;text-align:right;box-shadow:0 7px 18px rgba(11,29,51,.025)}
+.eqfal-home__grid>article{position:relative;min-height:102px;padding:16px 16px 12px;border:1px solid #cce4f4!important;border-radius:11px;background:#f3faff;text-align:right;box-shadow:0 7px 18px rgba(11,29,51,.025)}
 .eqfal-home__grid>article:nth-child(1){background:#effbf7;border-color:#c4eadf!important}
 .eqfal-home__grid>article:nth-child(2){background:#f2f9ff}
 .eqfal-home__grid>article:nth-child(3){background:#fff7ef;border-color:#f4d3b1!important}
@@ -52,7 +52,7 @@
 .eqfal-home__grid>article:nth-child(1):before{content:"▤";background:#ddf6ed;color:#07936f}
 .eqfal-home__grid>article:nth-child(3):before{content:"▣";background:#ffead5;color:#e67d00}
 .eqfal-home__grid>article:nth-child(4):before{content:"▥";background:#eee1ff;color:#7951d7}
-.eqfal-home__grid h3{margin:31px 0 6px;color:#526b8e;font-size:11px;font-weight:700}
+.eqfal-home__grid h3{margin:27px 0 5px;color:#526b8e;font-size:11px;font-weight:700}
 .eqfal-home__grid p{margin:2px 0}
 .eqfal-home__grid strong{display:block;color:#071d3b;font-size:20px;line-height:1.3;font-weight:800;overflow-wrap:anywhere}
 
@@ -61,48 +61,26 @@
 .eqfal-home>.eqfal-home__panel:nth-of-type(2) .eqfal-home__section-heading{min-height:63px;padding:14px 18px 10px;margin:0;border-bottom:1px solid #e7edf3}
 .eqfal-home>.eqfal-home__panel:nth-of-type(2) .eqfal-home__section-heading:before{content:"▣";display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#eaf4ff;color:#168fd3;font-size:16px}
 
-/* Tasks: table-like rows */
-.eqfal-home__tasks{position:relative;padding-top:34px;overflow:hidden}
-.eqfal-home__tasks:before{content:"التصنيف\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0 العنصر\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0 العدد\00a0\00a0\00a0\00a0\00a0\00a0 المسؤول\00a0\00a0\00a0\00a0\00a0\00a0 الحالة\00a0\00a0\00a0\00a0\00a0\00a0 الإجراء";position:absolute;inset:0 0 auto 0;height:34px;padding:10px 18px;background:#f5f8fb;border-bottom:1px solid #e3eaf2;color:#506987;font-size:10px;font-weight:800;word-spacing:28px;white-space:nowrap}
-.eqfal-home__task-row{width:100%;display:grid;grid-template-columns:minmax(220px,1.45fr) minmax(160px,.9fr) 75px 72px;align-items:center;gap:12px;min-height:48px;padding:8px 18px;border:0;border-bottom:1px solid #e7edf3;background:#fff;text-align:right;color:#405879;font:700 11px Tajawal,Inter,sans-serif;cursor:pointer}
-.eqfal-home__task-row:last-child{border-bottom:0}
-.eqfal-home__task-row:hover{background:#fbfdff}
-.eqfal-home__task-name{color:#0b1d33;font-size:12px}
-.eqfal-home__task-name:before{content:"•";color:#12b89a;margin-left:8px;font-size:15px}
-.eqfal-home__task-row:first-child .eqfal-home__task-name:before{color:#ef4444}
-.eqfal-home__task-owner{color:#526b8e;font-weight:600}
-.eqfal-home__task-count{justify-self:start;min-width:34px;padding:3px 9px;border-radius:999px;background:#fff3d9;color:#a86d00;text-align:center;font-size:10px}
-.eqfal-home__task-open{display:grid;place-items:center;width:64px;height:30px;border:1px solid var(--teal);border-radius:6px;color:#008e73;font-size:0}
-.eqfal-home__task-open:after{content:"معالجة";font-size:10px;font-weight:800}
+/* Tasks — exact approved visual hierarchy */
+.eqfal-home__tasks{position:relative;padding-top:36px;overflow:hidden}
+.eqfal-home__tasks:before{content:"التصنيف";position:absolute;right:18px;top:0;height:36px;display:flex;align-items:center;color:#506987;font-size:10px;font-weight:800;z-index:2}
+.eqfal-home__tasks:after{content:"العنصر　　　　 العدد　　　　 المسؤول　　　　 الحالة　　　　 الإجراء";position:absolute;right:19%;left:18px;top:0;height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:#f5f8fb;color:#506987;font-size:10px;font-weight:800;white-space:pre;z-index:1}
+.eqfal-home__task-row{width:100%;display:grid;grid-template-columns:150px minmax(240px,1.45fr) 72px minmax(150px,.9fr) 145px 86px;align-items:center;gap:12px;min-height:48px;padding:7px 18px;border:0;border-bottom:1px solid #e7edf3;background:#fff;text-align:right;color:#405879;font:600 11px Tajawal,Inter,sans-serif;cursor:pointer}
+.eqfal-home__task-row:last-child{border-bottom:0}.eqfal-home__task-row:hover{background:#fbfdff}
+.eqfal-home__task-category{position:relative;padding-right:12px;color:#5e6f89;font-weight:600}.eqfal-home__task-category:before{content:"";position:absolute;right:0;top:50%;width:5px;height:5px;border-radius:50%;transform:translateY(-50%);background:#12b89a}.eqfal-home__task-category--needs_action_now:before{background:#ef4444}.eqfal-home__task-category--upcoming_due:before{background:#d8aa17}
+.eqfal-home__task-name{color:#0b1d33;font-size:12px;font-weight:800}.eqfal-home__task-owner{color:#526b8e;font-weight:600}.eqfal-home__task-count{justify-self:start;color:#526b8e;background:transparent;padding:0;font-size:11px}
+.eqfal-home__task-status{justify-self:start;padding:4px 10px;border-radius:999px;background:#eef2f6;color:#6b7f99;font-size:10px;font-weight:700}.eqfal-home__task-status--current_user{background:#ffe2e2;color:#e64c4c}.eqfal-home__task-row:nth-child(2) .eqfal-home__task-status--current_user{background:#fff0d5;color:#c47a00}.eqfal-home__task-status--waiting_for_accountant{background:#e1f0ff;color:#277fbd}
+.eqfal-home__task-open{display:grid;place-items:center;width:64px;height:30px;border:1px solid var(--teal);border-radius:6px;color:#008e73;font-size:0;background:#f5fffc}.eqfal-home__task-open:after{content:"معالجة";font-size:10px;font-weight:800}
 
-/* Close readiness: cards on left + large green period panel on right */
-.eqfal-home__close-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(470px,1.75fr);gap:12px;margin-top:18px}
-.eqfal-home__close-grid>.eqfal-home__panel{grid-column:1;margin:0;padding:14px 14px 14px;border-radius:12px}
-.eqfal-home__close-grid>.eqfal-home__panel .eqfal-home__section-heading{margin-bottom:10px}
-.eqfal-home__close-grid>.eqfal-home__panel .eqfal-home__section-heading h2{font-size:14px}
-.eqfal-home__close-grid>.eqfal-home__panel .home-status-pill{background:#fff4dc;color:#b66c00;border:1px solid #f2bd3d}
-.eqfal-home__table-wrap{width:100%;overflow:visible}
-.eqfal-home__table{display:block;width:100%;font-size:11px}
-.eqfal-home__table thead{display:none}
-.eqfal-home__table tbody{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.eqfal-home__table tr{display:grid;grid-template-columns:1fr auto;align-items:center;min-height:72px;padding:11px 12px;border:1px solid #dce8f3;border-radius:10px;background:#fff}
-.eqfal-home__table tr:nth-child(1){border-color:#f3d8cb}.eqfal-home__table tr:nth-child(2){border-color:#e4d9f6}.eqfal-home__table tr:nth-child(3){border-color:#d4e8fa}.eqfal-home__table tr:nth-child(n+4){border-color:#d3ebe4;background:#fbfffd}
-.eqfal-home__table td{display:block;padding:0!important;border:0!important}
-.eqfal-home__table td:first-child{grid-column:1/2;color:#526b8e}.eqfal-home__table td:nth-child(2){grid-column:1/2;margin-top:5px}.eqfal-home__table td:nth-child(3){grid-column:2/3;grid-row:1/3}
-.eqfal-home__link-action{display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:9px;background:#edf6ff;color:#168fd3;cursor:pointer;font-size:15px}
-.home-exception-count{padding:0!important;background:transparent!important;font-size:11px!important}.home-exception-count.is-blocked{color:#c45b00!important}.home-exception-count.is-clear{color:#00845f!important}
-
-/* Existing readiness data becomes the large reference panel instead of being duplicated/hidden */
-.eqfal-home__readiness{grid-column:2;grid-row:1;position:relative;min-height:212px;padding:26px 28px 22px 180px;border:1px solid #ccebe2;border-right:6px solid var(--teal);border-radius:11px;background:linear-gradient(115deg,#effcf8,#f8fffd 70%);overflow:hidden;text-align:right}
-.eqfal-home__readiness:before{content:"✓";position:absolute;left:78px;top:76px;display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#0bbb93;color:#fff;font-size:28px;font-weight:800;box-shadow:0 8px 22px rgba(0,184,148,.22)}
-.eqfal-home__readiness:after{content:"▱";position:absolute;left:128px;top:55px;transform:rotate(9deg);font-size:88px;line-height:1;color:#dcebea;text-shadow:0 8px 16px rgba(11,29,51,.06)}
-.eqfal-home__readiness .eqfal-home__eyebrow{color:#71849f;font-size:11px;margin-bottom:8px}
-.eqfal-home__readiness h2{margin:0 0 10px;color:#0b1d33;font-size:25px;font-weight:800}
-.eqfal-home__readiness-period{display:none}
-.eqfal-home__readiness-summary{display:flex;flex-direction:column;gap:3px;padding:10px 0;border-top:1px solid #dce9e7;color:#71849f;font-size:11px}
-.eqfal-home__readiness-summary strong{color:#008c6d;font-size:14px}
-.eqfal-home__readiness-summary:nth-of-type(3) strong{color:#e46b00;font-size:20px}
-.eqfal-home__primary-action{position:absolute;left:24px;bottom:20px;z-index:3;padding:8px 13px;border:0;border-radius:7px;background:#0b1d33;color:#fff;font:800 11px Tajawal;cursor:pointer}
+/* Close readiness — approved reference: compact blocker cards + large status panel */
+.eqfal-home__close-grid{display:grid;grid-template-columns:minmax(430px,.82fr) minmax(0,1.55fr);gap:12px;margin-top:18px;direction:ltr}
+.eqfal-home__close-grid>.eqfal-home__panel{grid-column:1;margin:0;padding:14px;border-radius:12px;direction:rtl}
+.eqfal-home__close-grid>.eqfal-home__panel .eqfal-home__section-heading{margin-bottom:10px}.eqfal-home__close-grid>.eqfal-home__panel .eqfal-home__section-heading h2{font-size:14px}.eqfal-home__close-grid>.eqfal-home__panel .home-status-pill{background:#fff4dc;color:#b66c00;border:1px solid #f2bd3d}
+.eqfal-home__table-wrap{width:100%;overflow:visible}.eqfal-home__table{display:block;width:100%;font-size:11px}.eqfal-home__table thead{display:none}.eqfal-home__table tbody{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.eqfal-home__table tr{display:grid;grid-template-columns:1fr auto;align-items:center;min-height:72px;padding:11px 12px;border:1px solid #dce8f3;border-radius:10px;background:#fff}.eqfal-home__table tr:nth-child(1){border-color:#f3d8cb}.eqfal-home__table tr:nth-child(2){border-color:#e4d9f6}.eqfal-home__table tr:nth-child(3){border-color:#d4e8fa}.eqfal-home__table tr:nth-child(n+4){border-color:#d3ebe4;background:#fbfffd}
+.eqfal-home__table td{display:block;padding:0!important;border:0!important}.eqfal-home__table td:first-child{grid-column:1/2;color:#526b8e}.eqfal-home__table td:nth-child(2){grid-column:1/2;margin-top:5px}.eqfal-home__table td:nth-child(3){grid-column:2/3;grid-row:1/3}.eqfal-home__link-action{display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:9px;background:#edf6ff;color:#168fd3;cursor:pointer;font-size:15px}.home-exception-count{padding:0!important;background:transparent!important;font-size:11px!important}.home-exception-count.is-blocked{color:#c45b00!important}.home-exception-count.is-clear{color:#00845f!important}
+.eqfal-home__readiness{grid-column:2;grid-row:1;position:relative;min-height:212px;padding:26px 28px 22px 180px;border:1px solid #ccebe2;border-right:6px solid var(--teal);border-radius:11px;background:linear-gradient(115deg,#effcf8,#f8fffd 70%);overflow:hidden;text-align:right;direction:rtl}.eqfal-home__readiness:before{content:"✓";position:absolute;left:78px;top:76px;display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#0bbb93;color:#fff;font-size:28px;font-weight:800;box-shadow:0 8px 22px rgba(0,184,148,.22)}.eqfal-home__readiness:after{content:"▱";position:absolute;left:128px;top:55px;transform:rotate(9deg);font-size:88px;line-height:1;color:#dcebea;text-shadow:0 8px 16px rgba(11,29,51,.06)}
+.eqfal-home__readiness .eqfal-home__eyebrow{color:#71849f;font-size:11px;margin-bottom:8px}.eqfal-home__readiness h2{margin:0 0 10px;color:#0b1d33;font-size:25px;font-weight:800}.eqfal-home__readiness-period{display:none}.eqfal-home__readiness-summary{display:flex;flex-direction:column;gap:3px;padding:10px 0;border-top:1px solid #dce9e7;color:#71849f;font-size:11px}.eqfal-home__readiness-summary strong{color:#008c6d;font-size:14px}.eqfal-home__readiness-summary:nth-of-type(3) strong{color:#e46b00;font-size:20px}.eqfal-home__primary-action{position:absolute;left:24px;bottom:20px;z-index:3;padding:8px 13px;border:0;border-radius:7px;background:#0b1d33;color:#fff;font:800 11px Tajawal;cursor:pointer}
 
 @media(max-width:1100px){
  .eqfal-home__grid{grid-template-columns:repeat(3,minmax(0,1fr))}
