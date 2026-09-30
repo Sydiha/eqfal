@@ -6,7 +6,20 @@
 .eqfal-task-table-wrap{overflow:auto}.eqfal-task-table{width:100%;border-collapse:collapse;table-layout:fixed}.eqfal-task-table th{padding:8px 14px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;text-align:start}.eqfal-task-table td{padding:7px 14px;border-top:1px solid #e4e8ec;font-size:12px;color:#475569;vertical-align:middle}.eqfal-task-table td strong{color:#1e293b}.eqfal-task-table td button{background:#fff;border:1px solid #00b894;border-radius:5px;color:#00b894;font:inherit;font-weight:700;padding:5px 14px;cursor:pointer}.eqfal-task-dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-inline-end:6px;background:#64748b}.eqfal-task-dot--needs_action_now{background:#ef4444}.eqfal-task-dot--upcoming_due{background:#d4af37}.eqfal-task-dot--needs_review_completion{background:#00b894}.eqfal-task-status{display:inline-flex;padding:3px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px}
 .eqfal-close{padding-bottom:0}.eqfal-close__header{border-bottom:0}.eqfal-close__open{border:0;border-radius:6px;background:#0b1d33;color:#fff;padding:7px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.eqfal-close__notice{margin:0 16px 12px;padding:6px 10px;border:1px solid #f59e0b;border-radius:6px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:700}.eqfal-close__body{display:grid;grid-template-columns:1fr 220px;gap:20px;padding:0 16px 16px}.eqfal-close__summary{background:#f8fafc;border-radius:10px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:12px}.eqfal-close__ring{width:92px;height:92px;border:9px solid #e4e8ec;border-top-color:#d4af37;border-radius:50%;display:grid;place-items:center;margin-bottom:4px}.eqfal-close__ring.is-ready{border-color:#00b894}.eqfal-close__ring strong{font-size:20px}.eqfal-close__blockers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.eqfal-close__blockers button{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border:1px solid #e4e8ec;border-radius:8px;color:#475569;font:inherit;font-size:12px;text-align:start}.eqfal-close__blockers button:not(:disabled){cursor:pointer}.eqfal-close__blockers .is-blocked{color:#b45309}.eqfal-close__blockers .is-clear{color:#047857}
 .eqfal-state{margin:0;padding:16px;color:#64748b;font-size:12px}.eqfal-state--error{color:#b91c1c}.eqfal-state button{margin-inline-start:8px}.eqfal-figma-actions{background:#fff;border:1px solid #e4e8ec;border-radius:12px;padding:14px 16px}.eqfal-figma-actions h2{margin:0 0 10px;font-size:13px}.eqfal-figma-actions>div{display:flex;gap:8px;flex-wrap:wrap}.eqfal-figma-actions button{border:1px solid #e4e8ec;background:#f8fafc;border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
-@media(max-width:900px){.eqfal-figma-home{padding:16px}.eqfal-kpi-grid{grid-template-columns:1fr 1fr}.eqfal-kpi{border-top:1px solid #e4e8ec}.eqfal-close__body{grid-template-columns:1fr}.eqfal-task-table{min-width:760px}}
-/* Preview deployment trigger: Figma-direct Home review */
 
-/* Live integration: preserve the approved Figma visual language while allowing the real AppShell and API-backed Home to own the viewport. */
+/* Figma 5:4 integration geometry: AppShell remains live, but Home keeps the same visual scale as the approved desktop canvas. */
+.eqfal-figma-home{gap:16px;padding:20px 36px 28px;max-width:none}
+.eqfal-figma-home__heading h1{font-size:22px}
+.eqfal-kpi-grid{min-height:78px}
+.eqfal-kpi{justify-content:center;padding:12px 14px}
+.eqfal-kpi strong{font-size:15px}
+.eqfal-figma-card__header{padding:12px 14px}
+.eqfal-task-table th{height:34px;padding:7px 14px}
+.eqfal-task-table td{height:44px;padding:7px 14px}
+.eqfal-close__body{grid-template-columns:minmax(0,1fr) 220px}
+.eqfal-figma-actions{padding:12px 14px}
+
+@media(min-width:1200px){
+  .eqfal-figma-home{min-width:0}
+}
+@media(max-width:900px){.eqfal-figma-home{padding:16px}.eqfal-kpi-grid{grid-template-columns:1fr 1fr}.eqfal-kpi{border-top:1px solid #e4e8ec}.eqfal-close__body{grid-template-columns:1fr}.eqfal-task-table{min-width:760px}}
