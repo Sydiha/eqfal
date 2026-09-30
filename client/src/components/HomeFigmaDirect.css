@@ -23,3 +23,20 @@
   .eqfal-figma-home{min-width:0}
 }
 @media(max-width:900px){.eqfal-figma-home{padding:16px}.eqfal-kpi-grid{grid-template-columns:1fr 1fr}.eqfal-kpi{border-top:1px solid #e4e8ec}.eqfal-close__body{grid-template-columns:1fr}.eqfal-task-table{min-width:760px}}
+
+
+/* Final desktop polish: rebalance close-readiness and daily operations without changing data or behavior. */
+@media(min-width:901px){
+  .eqfal-close__body{grid-template-columns:minmax(0,1fr) 360px;gap:16px}
+  .eqfal-close__summary{min-height:156px;padding:14px}
+  .eqfal-close__ring{width:76px;height:76px;border-width:8px}
+  .eqfal-close__ring strong{font-size:18px}
+  .eqfal-close__blockers{grid-template-columns:repeat(2,minmax(0,1fr));align-content:stretch}
+  .eqfal-close__blockers button{min-height:72px;padding:10px 12px;gap:8px}
+  .eqfal-close__blockers button span{line-height:1.45}
+  .eqfal-close__blockers button strong{white-space:nowrap}
+  .eqfal-figma-actions{display:flex;align-items:center;justify-content:space-between;gap:18px}
+  .eqfal-figma-actions h2{margin:0;white-space:nowrap}
+  .eqfal-figma-actions>div{justify-content:flex-start;flex:1}
+  .eqfal-figma-actions button{padding:8px 13px}
+}
