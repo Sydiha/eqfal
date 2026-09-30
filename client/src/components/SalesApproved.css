@@ -11,3 +11,22 @@ Presentation only. Existing EQFAL data, permissions and actions remain authorita
 [dir="ltr"] .eqfal-sales{direction:ltr}[dir="ltr"] .eqfal-sales th{text-align:left}
 @media(max-width:1050px){.eqfal-sales__workspace.is-detail-open{grid-template-columns:1fr}.eqfal-sales__master,.eqfal-sales__detail{grid-column:1}.eqfal-sales__master{grid-row:1}.eqfal-sales__detail{grid-row:2;border-left:0;border-top:1px solid #dce4ea}.eqfal-sales__more{margin-inline-start:0}}
 @media(max-width:760px){.eqfal-sales{padding:16px}.eqfal-sales__header{min-height:90px}.eqfal-sales__header h1{font-size:26px}.eqfal-sales__search{flex-basis:100%}.eqfal-sales__filters select,.eqfal-sales__filters button{max-width:100%}}
+
+/* Visual parity pass — approved Vercel reference */
+@media(min-width:1051px){
+ .eqfal-sales{padding:28px 30px 34px}
+ .eqfal-sales__workspace.is-detail-open{grid-template-columns:320px minmax(0,1fr)}
+ .eqfal-sales__master{overflow:hidden}
+ .eqfal-sales__table-scroll{overflow-x:hidden}
+ .eqfal-sales table{table-layout:fixed;min-width:0}
+ .eqfal-sales th,.eqfal-sales td{padding:14px 10px;overflow:hidden;text-overflow:ellipsis}
+ .eqfal-sales th:nth-child(1),.eqfal-sales td:nth-child(1){width:20%}
+ .eqfal-sales th:nth-child(2),.eqfal-sales td:nth-child(2){width:17%}
+ .eqfal-sales th:nth-child(3),.eqfal-sales td:nth-child(3){width:13%}
+ .eqfal-sales th:nth-child(4),.eqfal-sales td:nth-child(4){width:13%}
+ .eqfal-sales th:nth-child(5),.eqfal-sales td:nth-child(5){width:14%}
+ .eqfal-sales th:nth-child(6),.eqfal-sales td:nth-child(6){width:12%}
+ .eqfal-sales th:nth-child(7),.eqfal-sales td:nth-child(7){width:11%}
+ .eqfal-sales__detail{padding:18px}
+ .eqfal-sales__detail-card{padding:13px 14px}
+}
