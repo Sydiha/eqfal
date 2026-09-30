@@ -204,9 +204,6 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   }, [canViewSnapshot]);
 
   const selected = periods[0] ?? null;
-  const alertGroups = (['current_user', 'upcoming', 'waiting_for_accountant', 'waiting_for_team'] as const)
-    .map(ownership => ({ ownership, alerts: alerts.filter(alert => alert.ownership === ownership) }))
-    .filter(group => group.alerts.length > 0);
   const can = (capability: string) => capabilities.includes(capability);
   const canViewSalesPurchases = can('document.view') && can('obligation.view');
   const canStartOperationalEntry = canStartOperationalDocumentEntry(capabilities);
