@@ -1,0 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400&family=Tajawal:wght@400;500;700;800&display=swap');
+@import "tailwindcss";
+html,body,#root{margin:0;width:1449px;height:1106px;min-width:1449px;min-height:1106px}
+*{box-sizing:border-box}
+body{overflow:hidden;background:#f4f6f8;font-family:'Tajawal',Arial,sans-serif}
+#root>div{width:1449px;height:1106px}
+[class*="Tajawal:Regular"]{font-family:'Tajawal',Arial,sans-serif!important;font-weight:400!important}
+[class*="Tajawal:Medium"]{font-family:'Tajawal',Arial,sans-serif!important;font-weight:500!important}
+[class*="Tajawal:Bold"]{font-family:'Tajawal',Arial,sans-serif!important;font-weight:700!important}
+[class*="Tajawal:ExtraBold"]{font-family:'Tajawal',Arial,sans-serif!important;font-weight:800!important}
+[class*="Inter:Regular"]{font-family:'Inter',Arial,sans-serif!important;font-weight:400!important}
