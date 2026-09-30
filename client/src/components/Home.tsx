@@ -291,7 +291,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, startPurchas
   const money = (value: string) => {
     const amount = Number(value);
     return Number.isFinite(amount)
-      ? new Intl.NumberFormat(isArabic ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+      ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
       : value;
   };
   const bankTotal = snapshot?.metrics.bank_balances.state === 'available'
