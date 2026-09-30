@@ -1,0 +1,79 @@
+/* Phase 15C — owner-approved Sales reference, 30 Sep 2026.
+Presentation only. Existing EQFAL data, permissions and actions remain authoritative. */
+.eqfal-sales{--navy:#0b1d33;--teal:#00b894;width:100%;max-width:1400px;margin:0 auto;padding:28px;direction:rtl;color:var(--navy);font-family:Tajawal,Inter,sans-serif;background:#f4f6f8;min-height:calc(100vh - 54px)}
+.eqfal-sales *{box-sizing:border-box}.eqfal-sales__header{min-height:102px;display:flex;justify-content:space-between;align-items:flex-start;padding-top:6px}.eqfal-sales__header h1{margin:0;font-size:30px;line-height:1.2;font-weight:800}.eqfal-sales__header p{margin:9px 0 0;color:#718196;font-size:13px}.eqfal-sales__header>.primary{margin-top:10px;background:var(--teal);color:#fff;border:0;border-radius:9px;padding:13px 20px;font-weight:800;box-shadow:0 4px 12px rgba(0,184,148,.12)}
+.eqfal-sales__filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px;margin-bottom:14px;background:#fff;border:1px solid #dce4ea;border-radius:13px;box-shadow:0 3px 12px rgba(11,29,51,.025)}
+.eqfal-sales__filters label{margin:0}.eqfal-sales__filters input,.eqfal-sales__filters select,.eqfal-sales__filters button{height:44px;border:1px solid #d7e0e7;background:#fff;border-radius:8px;padding:0 13px;color:#526579;font:600 12px Tajawal,Inter,sans-serif}.eqfal-sales__search{flex:1 1 320px}.eqfal-sales__search input{width:100%;font-size:13px}.eqfal-sales__more{margin-inline-start:auto}.eqfal-sales__clear{border:0!important;color:#75879a!important}.eqfal-sales__filter-count{font-size:11px;color:#728294;white-space:nowrap}.eqfal-sales__extra{flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap}.eqfal-sales__extra label{display:grid;gap:5px;font-size:10px;color:#718196}
+.eqfal-sales__workspace{display:grid;grid-template-columns:minmax(0,1fr);background:#fff;border:1px solid #dce4ea;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(11,29,51,.045)}.eqfal-sales__workspace.is-detail-open{grid-template-columns:390px minmax(650px,1fr)}.eqfal-sales__master{min-width:0;grid-column:2}.eqfal-sales__workspace:not(.is-detail-open) .eqfal-sales__master{grid-column:1}.eqfal-sales__table-head{height:58px;padding:0 20px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #e3e9ee}.eqfal-sales__table-head strong{font-size:15px}.eqfal-sales__table-head span{font-size:11px;background:#f0f4f7;color:#728294;padding:4px 8px;border-radius:12px}.eqfal-sales__table-scroll{overflow:auto}
+.eqfal-sales table{width:100%;border-collapse:collapse;font-size:12.5px}.eqfal-sales th{text-align:right;background:#f7f9fb;color:#627488;padding:14px;border-bottom:1px solid #e0e7ec;font-size:11px;white-space:nowrap;font-weight:600}.eqfal-sales td{padding:16px 14px;border-bottom:1px solid #e9eef2;white-space:nowrap;height:58px}.eqfal-sales tbody tr{cursor:pointer}.eqfal-sales tbody tr:hover{background:#f8fbfc}.eqfal-sales tbody tr.is-selected{background:#edf8fa;box-shadow:inset -4px 0 #0095a4}.eqfal-sales td small{display:block;margin-top:4px;color:#8392a1;font-size:10px}.eqfal-sales__amount{font-variant-numeric:tabular-nums;font-weight:800}
+.eqfal-sales__detail{grid-column:1;grid-row:1;background:#fbfcfd;color:#20364b;padding:22px;border-left:1px solid #dce4ea}.eqfal-sales__detail-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:1px solid #e2e9ee}.eqfal-sales__detail-header h2{font-size:18px;margin:0 0 5px;color:#0b1d33}.eqfal-sales__detail-header>button{width:32px;height:32px;border:1px solid #d8e1e7;background:#fff;border-radius:8px;font-size:17px}.eqfal-sales__badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.eqfal-sales__detail-card{background:#fff;border:1px solid #dfe7ec;border-radius:11px;padding:15px 16px;margin-top:12px}.eqfal-sales__detail-card h3{font-size:13px;margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid #e9eef2}.eqfal-sales__facts{display:grid;grid-template-columns:1fr auto;gap:10px;margin:0}.eqfal-sales__facts dt{color:#718397;font-size:11.5px}.eqfal-sales__facts dd{margin:0;text-align:left;color:#1b3248;font-size:12px;font-weight:700}.eqfal-sales__history ul{list-style:none;padding:0;margin:0}.eqfal-sales__history li{display:grid;grid-template-columns:1fr auto;gap:6px;padding:7px 0;font-size:11.5px}.eqfal-sales__actions{display:flex;gap:9px;margin-top:15px}.eqfal-sales__actions>*{flex:1;min-height:42px;display:grid;place-items:center;border:1px solid #d4dfe6;background:#fff;border-radius:8px;font-size:11.5px;font-weight:700;text-decoration:none;color:#20364b}.eqfal-sales__actions>*:first-child{background:#0b1d33;color:#fff;border-color:#0b1d33}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+[dir="ltr"] .eqfal-sales{direction:ltr}[dir="ltr"] .eqfal-sales th{text-align:left}
+@media(max-width:1050px){.eqfal-sales__workspace.is-detail-open{grid-template-columns:1fr}.eqfal-sales__master,.eqfal-sales__detail{grid-column:1}.eqfal-sales__master{grid-row:1}.eqfal-sales__detail{grid-row:2;border-left:0;border-top:1px solid #dce4ea}.eqfal-sales__more{margin-inline-start:0}}
+@media(max-width:760px){.eqfal-sales{padding:16px}.eqfal-sales__header{min-height:90px}.eqfal-sales__header h1{font-size:26px}.eqfal-sales__search{flex-basis:100%}.eqfal-sales__filters select,.eqfal-sales__filters button{max-width:100%}}
+
+/* Visual parity pass — approved Vercel reference */
+@media(min-width:1051px){
+ .eqfal-sales{padding:28px 30px 34px}
+ .eqfal-sales__workspace.is-detail-open{grid-template-columns:320px minmax(0,1fr)}
+ .eqfal-sales__master{overflow:hidden}
+ .eqfal-sales__table-scroll{overflow-x:hidden}
+ .eqfal-sales table{table-layout:fixed;min-width:0}
+ .eqfal-sales th,.eqfal-sales td{padding:14px 10px;overflow:hidden;text-overflow:ellipsis}
+ .eqfal-sales th:nth-child(1),.eqfal-sales td:nth-child(1){width:20%}
+ .eqfal-sales th:nth-child(2),.eqfal-sales td:nth-child(2){width:17%}
+ .eqfal-sales th:nth-child(3),.eqfal-sales td:nth-child(3){width:13%}
+ .eqfal-sales th:nth-child(4),.eqfal-sales td:nth-child(4){width:13%}
+ .eqfal-sales th:nth-child(5),.eqfal-sales td:nth-child(5){width:14%}
+ .eqfal-sales th:nth-child(6),.eqfal-sales td:nth-child(6){width:12%}
+ .eqfal-sales th:nth-child(7),.eqfal-sales td:nth-child(7){width:11%}
+ .eqfal-sales__detail{padding:18px}
+ .eqfal-sales__detail-card{padding:13px 14px}
+}
+
+/* Direction contract: Arabic RTL = detail left; English LTR = detail right. */
+html[dir="rtl"] .eqfal-sales__workspace.is-detail-open{grid-template-columns:320px minmax(0,1fr)}
+html[dir="rtl"] .eqfal-sales__detail{grid-column:1;border-left:0;border-right:1px solid #dce4ea}
+html[dir="rtl"] .eqfal-sales__master{grid-column:2}
+html[dir="ltr"] .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+html[dir="ltr"] .eqfal-sales__master{grid-column:1}
+html[dir="ltr"] .eqfal-sales__detail{grid-column:2;border-left:1px solid #dce4ea;border-right:0}
+
+/* RTL source order override: :dir() follows the actual component direction. */
+.eqfal-sales:dir(rtl) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+.eqfal-sales:dir(rtl) .eqfal-sales__master{grid-column:1}
+.eqfal-sales:dir(rtl) .eqfal-sales__detail{grid-column:2;border-right:0;border-left:1px solid #dce4ea}
+.eqfal-sales:dir(ltr) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 320px}
+.eqfal-sales:dir(ltr) .eqfal-sales__master{grid-column:1}
+.eqfal-sales:dir(ltr) .eqfal-sales__detail{grid-column:2;border-left:1px solid #dce4ea;border-right:0}
+
+/* Final visual parity — approved Vercel Sales reference. */
+@media(min-width:1051px){
+ .eqfal-sales{padding:28px 28px 34px}
+ .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 360px}
+ .eqfal-sales:dir(rtl) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 360px}
+ .eqfal-sales:dir(rtl) .eqfal-sales__master{grid-column:1}
+ .eqfal-sales:dir(rtl) .eqfal-sales__detail{grid-column:2}
+ .eqfal-sales:dir(ltr) .eqfal-sales__workspace.is-detail-open{grid-template-columns:minmax(0,1fr) 360px}
+ .eqfal-sales:dir(ltr) .eqfal-sales__master{grid-column:1}
+ .eqfal-sales:dir(ltr) .eqfal-sales__detail{grid-column:2}
+ .eqfal-sales__table-head{height:60px;padding-inline:20px}
+ .eqfal-sales table{font-size:13px}
+ .eqfal-sales th{padding:14px 11px;font-size:11.5px}
+ .eqfal-sales td{height:62px;padding:16px 11px}
+ .eqfal-sales td small{font-size:10.5px;margin-top:5px}
+ .eqfal-sales__detail{padding:20px}
+ .eqfal-sales__detail-header{padding-bottom:17px}
+ .eqfal-sales__detail-header h2{font-size:18px;line-height:1.35}
+ .eqfal-sales__badges{margin-top:11px}
+ .eqfal-sales__detail-card{padding:15px 16px;margin-top:12px}
+ .eqfal-sales__detail-card h3{font-size:13px;margin-bottom:13px}
+ .eqfal-sales__facts{grid-template-columns:minmax(110px,1fr) minmax(110px,auto);gap:10px 14px}
+ .eqfal-sales__facts dt{font-size:11.5px;line-height:1.45}
+ .eqfal-sales__facts dd{font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+ .eqfal-sales__history li{font-size:11.5px;line-height:1.45}
+ .eqfal-sales__actions>*{min-height:43px}
+}
+
+/* Keep advanced filters mounted for URL-state/accessibility contracts while preserving the approved collapsed toolbar. */
+.eqfal-sales__extra:not(.is-open){display:none}
