@@ -108,7 +108,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: 'جاهزية الإقفال',
         periodState: 'حالة الفترة',
-        alerts: 'المهام التي تتطلب متابعة', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
+        alerts: 'قائمة العمل', alertsLoading: 'جارٍ تحميل التنبيهات…', alertsError: 'تعذر تحميل التنبيهات.', alertsEmpty: 'لا توجد إجراءات معلقة.', retry: 'إعادة المحاولة',
         ownership: { current_user: 'مطلوب منك الآن', upcoming: 'قادم', waiting_for_accountant: 'بانتظار المحاسب', waiting_for_team: 'بانتظار الفريق' },
         snapshot: 'الملخص المالي للإدارة', bankBalances: 'أرصدة البنوك', amountsToCollect: 'مبالغ للتحصيل', amountsToPay: 'مبالغ للسداد', monthSales: 'مبيعات الشهر الحالي', monthPurchasesExpenses: 'مشتريات ومصروفات الشهر الحالي', unavailable: 'غير متاح', restricted: 'مقيّد حسب الصلاحيات', snapshotLoading: 'جارٍ تحميل الملخص المالي…', snapshotError: 'تعذر تحميل الملخص المالي.', noBankAccounts: 'لا توجد حسابات بنكية متاحة.', operationalView: 'عرض تشغيلي، وليس قائمة مالية أو مقياساً للربحية.',
       }
@@ -129,7 +129,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: 'Close readiness',
         periodState: 'Period status',
-        alerts: 'Tasks requiring follow-up', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
+        alerts: 'Work Queue', alertsLoading: 'Loading alerts…', alertsError: 'Unable to load alerts.', alertsEmpty: 'No outstanding actions.', retry: 'Try again',
         ownership: { current_user: 'Current user action', upcoming: 'Upcoming', waiting_for_accountant: 'Waiting for accountant', waiting_for_team: 'Waiting for team' },
         snapshot: 'Manager Financial Snapshot', bankBalances: 'Bank balances', amountsToCollect: 'Amounts to collect', amountsToPay: 'Amounts to pay', monthSales: 'Current-month sales', monthPurchasesExpenses: 'Current-month purchases / expenses', unavailable: 'Unavailable', restricted: 'Restricted by permissions', snapshotLoading: 'Loading financial snapshot…', snapshotError: 'Unable to load financial snapshot.', noBankAccounts: 'No bank accounts available.', operationalView: 'Operational view — not a financial statement or profitability measure.',
       };
@@ -288,7 +288,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
   ) : null;
 
   return (
-    <section className="eqfal-home" aria-labelledby="home-title">
+    <section className="eqfal-home" dir={isArabic ? 'rtl' : 'ltr'} data-language={isArabic ? 'ar' : 'en'} aria-labelledby="home-title">
       <header className="eqfal-home__header">
         <div className="eqfal-home__header-copy">
           <p className="eqfal-home__eyebrow">{t('home.workspace')}</p>
@@ -298,7 +298,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       </header>
 
       {canViewSnapshot && (
-        <section className="eqfal-home__panel" aria-labelledby="home-financial-snapshot-title">
+        <section className="eqfal-home__panel eqfal-home__panel--snapshot" aria-labelledby="home-financial-snapshot-title">
           <div className="eqfal-home__section-heading">
             <div><h2 id="home-financial-snapshot-title">{homeLabels.snapshot}</h2><p>{homeLabels.operationalView}</p></div>
           </div>
@@ -306,11 +306,11 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             <p role="alert">{homeLabels.snapshotError} <button type="button" onClick={() => void loadSnapshot()}>{homeLabels.retry}</button></p>
           ) : (
             <div className="eqfal-home__grid">
-              <article>
+              <article className="eqfal-home__metric eqfal-home__metric--banks">
                 <h3>{homeLabels.bankBalances}</h3>
                 {snapshot.metrics.bank_balances.state === 'hidden' ? <p>{homeLabels.restricted}</p>
                   : snapshot.metrics.bank_balances.accounts.length === 0 ? <p>{homeLabels.noBankAccounts}</p>
-                    : snapshot.metrics.bank_balances.accounts.map(account => <p key={account.id}><strong dir="ltr">{account.balance.state === 'available' ? `${formatFinancialAmount(account.balance.amount)} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
+                    : snapshot.metrics.bank_balances.accounts.map(account => <p className="eqfal-home__bank-account" key={account.id}><span>{account.display_name}</span><strong dir="ltr">{account.balance.state === 'available' ? `${formatFinancialAmount(account.balance.amount)} ${isArabic && account.currency_code === 'SAR' ? 'ر.س' : account.currency_code}` : homeLabels.unavailable}</strong></p>)}
               </article>
               {([
                 ['amounts_to_collect', homeLabels.amountsToCollect],
@@ -319,7 +319,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
                 ['current_month_purchases_expenses', homeLabels.monthPurchasesExpenses],
               ] as const).map(([key, label]) => {
                 const metric = snapshot.metrics[key];
-                return <article key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? `${formatFinancialAmount(metric.amount)}${isArabic ? ' ر.س' : ' SAR'}` : homeLabels.restricted}</strong></article>;
+                return <article className={`eqfal-home__metric eqfal-home__metric--${key}`} key={key}><h3>{label}</h3><strong dir="ltr">{metric.state === 'available' ? `${formatFinancialAmount(metric.amount)}${isArabic ? ' ر.س' : ' SAR'}` : homeLabels.restricted}</strong></article>;
               })}
             </div>
           )}
@@ -327,7 +327,7 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       )}
 
       {canViewAlerts && (
-        <section className="eqfal-home__panel" aria-labelledby="home-alerts-title">
+        <section className="eqfal-home__panel eqfal-home__panel--queue" aria-labelledby="home-alerts-title">
           <div className="eqfal-home__section-heading"><h2 id="home-alerts-title">{homeLabels.alerts}</h2></div>
           {alertsLoading ? <p role="status">{homeLabels.alertsLoading}</p> : alertsError ? (
             <p role="alert">{homeLabels.alertsError} <button type="button" onClick={() => void loadAlerts()}>{homeLabels.retry}</button></p>
@@ -393,8 +393,8 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
       )}
 
       {canViewClose && !loading && !error && selected && (
-        <div className="eqfal-home__close-grid" style={{ alignItems: 'start' }}>
-          <section className="eqfal-home__panel" aria-labelledby="home-exceptions-title">
+        <div className="eqfal-home__close-grid">
+          <section className="eqfal-home__panel eqfal-home__panel--blockers" aria-labelledby="home-exceptions-title">
             <div className="eqfal-home__section-heading">
               <div>
                 <p className="eqfal-home__eyebrow">{t('monthlyClose.title')}</p>
@@ -436,15 +436,15 @@ export function Home({ capabilities, navigate, navigateToDiscovery, onUnauthoriz
             </div>
           </section>
 
-          <aside className={`eqfal-home__readiness ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-labelledby="home-readiness-title" style={{ alignSelf: 'start' }}>
+          <aside className={`eqfal-home__readiness ${selected.status === 'closed' || selected.ready ? 'is-ready' : 'is-blocked'}`} aria-labelledby="home-readiness-title">
             <p className="eqfal-home__eyebrow">{homeLabels.readiness}</p>
             <h2 id="home-readiness-title">{closeSummary}</h2>
             <p className="eqfal-home__readiness-period">{periodRange}</p>
-            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0 }}>
+            <div className="eqfal-home__readiness-summary">
               <span>{homeLabels.periodState}</span>
               <strong style={{ fontSize: '.8rem' }}>{t(`monthlyClose.${selected.status}`)}</strong>
             </div>
-            <div className="eqfal-home__readiness-summary" style={{ marginTop: 0, borderTop: 0 }}>
+            <div className="eqfal-home__readiness-summary eqfal-home__readiness-summary--blockers">
               <span>{homeLabels.closeBlockers}</span>
               <strong>
                 {selected.has_hidden_blockers
