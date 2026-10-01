@@ -25,7 +25,7 @@ function renderHome(capabilities: string[]) {
   );
 }
 
-describe('Home v2.1', () => {
+describe('Owner-approved Home financial overview', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
     vi.clearAllMocks();
@@ -202,7 +202,7 @@ describe('Home v2.1', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['obligation.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Work Queue' })).toBeInTheDocument();
     const alert = await screen.findByRole('button', { name: /Overdue obligations/ });
     expect(alert).toHaveTextContent('2');
     alert.click();
@@ -217,7 +217,7 @@ describe('Home v2.1', () => {
     ] }), { status: 200 })));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Tasks requiring follow-up' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Work Queue' })).toBeInTheDocument();
     expect(screen.getByText('Current user action')).toBeInTheDocument();
     expect(screen.getAllByText('Upcoming').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Waiting for accountant').length).toBeGreaterThan(0);
@@ -229,7 +229,7 @@ describe('Home v2.1', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     renderHome([]);
-    expect(screen.queryByRole('heading', { name: 'Tasks requiring follow-up' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Work Queue' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -252,6 +252,7 @@ describe('Home v2.1', () => {
     renderHome(['bank.view', 'obligation.view']);
 
     expect(await screen.findByRole('heading', { name: 'Manager Financial Snapshot' })).toBeInTheDocument();
+    expect(await screen.findByText('Operating account')).toBeInTheDocument();
     expect(await screen.findByText('1,250.50 SAR')).toBeInTheDocument();
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
     expect(screen.getByText('400.25 SAR')).toBeInTheDocument();
@@ -267,4 +268,59 @@ describe('Home v2.1', () => {
     expect(screen.queryByRole('heading', { name: 'Manager Financial Snapshot' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('uses one structure with true English LTR and Arabic RTL direction', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const english = renderHome([]);
+    const englishHome = english.container.querySelector('.eqfal-home');
+    expect(englishHome).toHaveAttribute('dir', 'ltr');
+    expect(englishHome).toHaveAttribute('data-language', 'en');
+    expect(screen.getByRole('heading', { name: 'Financial overview' })).toBeInTheDocument();
+    expect(english.container.querySelectorAll('.eqfal-home')).toHaveLength(1);
+
+    english.unmount();
+    await i18n.changeLanguage('ar');
+    const arabic = renderHome([]);
+    const arabicHome = arabic.container.querySelector('.eqfal-home');
+    expect(arabicHome).toHaveAttribute('dir', 'rtl');
+    expect(arabicHome).toHaveAttribute('data-language', 'ar');
+    expect(screen.getByRole('heading', { name: 'نظرة عامة مالية' })).toBeInTheDocument();
+    expect(arabic.container.querySelectorAll('.eqfal-home')).toHaveLength(1);
+  });
+
+  it('contains no persistent Home sidebar or fabricated financial indicators', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const { container } = renderHome([]);
+
+    expect(container.querySelector('nav')).not.toBeInTheDocument();
+    expect(container.querySelector('[class*="sidebar"]')).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/net profit|gross margin|budget variance|cash-flow forecast|previous month|AI recommendation/i);
+  });
+
+  it('shows empty Work Queue and supports retry after an alerts error', async () => {
+    let alertRequests = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/manager-financial-snapshot') {
+        return new Response(JSON.stringify({ metrics: {
+          bank_balances: { state: 'hidden' },
+          amounts_to_collect: { state: 'hidden' },
+          amounts_to_pay: { state: 'hidden' },
+          current_month_sales: { state: 'hidden' },
+          current_month_purchases_expenses: { state: 'hidden' },
+        } }), { status: 200 });
+      }
+      alertRequests += 1;
+      return alertRequests === 1
+        ? new Response('', { status: 500 })
+        : new Response(JSON.stringify({ alerts: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderHome(['obligation.view']);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load alerts.');
+    screen.getByRole('button', { name: 'Try again' }).click();
+    expect(await screen.findByRole('status')).toHaveTextContent('No outstanding actions.');
+    expect(alertRequests).toBe(2);
+  });
+
 });
