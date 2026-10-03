@@ -355,6 +355,8 @@ Replit Agent مسموح فقط في **FREE MODE**، subject to successful **Repl
 
 ## 2026-09-11 — EQFAL Autonomous Operating Model
 
+> **Status: SUPERSEDED — current governance is defined by AGENTS.md** (see decision 2026-10-03 below). The text of this decision is kept as history only.
+
 **القرار:** اعتماد نموذج حوكمة يجعل **EQFAL Project = Product Owner + Lead PM + Roadmap Authority** فوق أدوار التنفيذ، بحيث يقرر WHAT / WHY / WHEN، يقرأ `GitHub/main` والRoadmap، يختار المهمة التالية تلقائيًا من dependency order، ينفذ Read-only Design Check، ويصدر Execution Contract. لا يكتب EQFAL Project Product code بنفسه.
 
 ### Superseded routine approvals
@@ -497,3 +499,19 @@ Replit يبقى runtime/practical validation target only وممنوع من Produ
 - Replit Shell لا يُستخدم لتجاوز Owner Approval أو GitHub/PR/CI governance أو لإعادة بناء تغييرات Product غير معتمدة.
 - لا Production ولا تكلفة مدفوعة جديدة دون موافقة صريحة من Owner.
 
+
+---
+
+## 2026-10-03 — توحيد الحوكمة: AGENTS.md هو المرجع الحاكم، وAutonomous Operating Model أصبح SUPERSEDED
+
+**القرار:** `AGENTS.md` هو المرجع الحاكم الحالي للحوكمة. قرار **2026-09-11 — EQFAL Autonomous Operating Model** وما يرتبط به من **Automatic Merge Gate** و**Orchestrator / Builder Role / Independent Reviewer** و**Autonomous Agent PoC** أصبح **SUPERSEDED — current governance is defined by AGENTS.md**.
+
+**الحوكمة الحالية (ملخص؛ المرجع الكامل `AGENTS.md`):**
+- قرار الدمج النهائي يبقى للمالك (Owner) وحده؛ لا automatic merge، ولا يُعد نجاح CI وحده موافقة دمج.
+- لا autonomous أو multi-agent workflow؛ لا سلسلة Orchestrator/Builder/Reviewer autonomous كسلوك حاكم حالي.
+- Codex Cloud مسموح فقط كـ Coding Engine محدود بعد اجتياز بوابات ما قبل البرمجة.
+- Workflow: READ-ONLY → PLAN → OWNER APPROVAL → CODEX PREFLIGHT → CODEX EXECUTION → EQFAL REVIEW → TESTS / CI → GITHUB HANDOFF → REPLIT SAME-SHA VALIDATION → OWNER UAT → OWNER MERGE DECISION.
+
+**الأثر:** نص قرار 2026-09-11 يبقى في هذا الملف كسجل تاريخي فقط ولا يُعد تعليمات تشغيلية سارية. أي تعارض بينه وبين `AGENTS.md` يُحسم لصالح `AGENTS.md`. هذا القرار لا يغيّر قرار 2026-09-20 (حظر Replit Agent) ولا نطاق Product.
+
+**الحدود المستمرة:** GitHub/main يبقى Source of Truth؛ لا Production ولا تكلفة مدفوعة جديدة دون موافقة صريحة من Owner.
