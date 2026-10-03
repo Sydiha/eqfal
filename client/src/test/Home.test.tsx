@@ -93,6 +93,9 @@ describe('Owner-approved Home financial overview', () => {
                 bank_transactions: 0,
                 vat: 0,
                 ledger: 0,
+                assets: 0,
+                opening_balances: 0,
+                periodic_adjustments: 0,
               },
             },
           ],
@@ -116,7 +119,10 @@ describe('Owner-approved Home financial overview', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Blockers: 2')).toBeInTheDocument();
     expect(within(table).getByText('Blockers: 1')).toBeInTheDocument();
-    expect(within(table).getAllByText('No blockers')).toHaveLength(3);
+    expect(within(table).getAllByText('No blockers')).toHaveLength(6);
+    expect(within(table).getByText('Fixed Assets')).toBeInTheDocument();
+    expect(within(table).getByText('Opening Balances')).toBeInTheDocument();
+    expect(within(table).getByText('Periodic Adjustments')).toBeInTheDocument();
     expect(screen.getAllByText('Blockers: 3').length).toBeGreaterThan(0);
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('undefined');
@@ -141,7 +147,7 @@ describe('Owner-approved Home financial overview', () => {
             ready: true,
             disclosed_total: 0,
             has_hidden_blockers: false,
-            blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0 },
+            blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 },
           },
         ],
       }), { status: 200 }),
@@ -158,7 +164,7 @@ describe('Owner-approved Home financial overview', () => {
       periods: [{
         id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
         status: 'open', ready: false, disclosed_total: 2, has_hidden_blockers: true,
-        blockers: { documents: 2, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, total: 99 },
+        blockers: { documents: 2, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0, total: 99 },
       }],
     }), { status: 200 })));
     renderHome(['monthly_close.view', 'document.view']);
@@ -174,7 +180,7 @@ describe('Owner-approved Home financial overview', () => {
       periods: [{
         id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
         status: 'open', ready: true, disclosed_total: 0, has_hidden_blockers: false,
-        blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0 },
+        blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 },
       }],
     }), { status: 200 })));
     renderHome(['monthly_close.view']);
