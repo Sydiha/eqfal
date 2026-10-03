@@ -39,6 +39,19 @@
 
 .eqfal-home__status-strip { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--home-line); border-radius: 10px; background: #fff; color: var(--home-muted); font-size: 0.78rem; }
 
+/* status bar & KPI tiles */
+.eqfal-home__status-bar { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--home-navy); color: #fff; }
+.eqfal-home__status-bar-content { display: flex; flex-direction: column; gap: 6px; }
+.eqfal-home__status-bar h2 { margin: 0; font-size: 0.95rem; font-weight: 700; line-height: 1.3; }
+.eqfal-home__status-bar-period { margin: 0; color: #afc0d8; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.eqfal-home__primary-action--compact { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: #fff; color: var(--home-navy); font: 700 0.72rem Tajawal, Inter, sans-serif; cursor: pointer; margin-top: 2px; }
+.eqfal-home__primary-action--compact:hover { background: var(--home-teal-soft); }
+
+.eqfal-home__kpi-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; padding: 0; }
+.eqfal-home__kpi-tile { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--home-line); border-radius: 10px; background: var(--home-surface-subtle); }
+.eqfal-home__kpi-tile span { color: var(--home-muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+.eqfal-home__kpi-tile strong { font-size: 1.1rem; line-height: 1.3; font-weight: 700; color: var(--home-text); }
+
 /* hero */
 .eqfal-home__hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 16px 18px; overflow: hidden; border-radius: 14px; background: var(--home-navy); color: #fff; box-shadow: var(--home-shadow); }
 .eqfal-home__hero::before { content: ""; position: absolute; inset-inline-end: -80px; inset-block-start: -120px; width: 280px; height: 280px; border-radius: 50%; background: radial-gradient(circle, rgba(14, 143, 122, 0.3), transparent 65%); pointer-events: none; }
@@ -106,12 +119,18 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 .eqfal-home__ring-label { fill: var(--home-muted); font-size: 11px; }
 .eqfal-home__bars { display: flex; flex-direction: column; gap: 6px; }
 .eqfal-home__bar { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr) 26px; align-items: center; gap: 8px; font-size: 0.75rem; }
-.eqfal-home__bar span:first-child { overflow: hidden; color: var(--home-muted); text-overflow: ellipsis; white-space: nowrap; }
+.eqfal-home__bar span:first-child { overflow: hidden; color: var(--home-muted); text-overflow: ellipsis; word-break: break-word; line-height: 1.2; max-height: 2.4em; }
 .eqfal-home__bar-track { position: relative; height: 8px; overflow: hidden; border-radius: 3px; background: #eef1f5; }
 .eqfal-home__bar-track b { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 3px; background: #e5604e; }
 .eqfal-home__bar.is-clear { display: none; }
 .eqfal-home__bar.is-clear strong { color: var(--home-muted); font-weight: 400; }
 .eqfal-home__bar strong { text-align: end; font-variant-numeric: tabular-nums; font-size: 0.78rem; }
+
+/* charts row - inline visualizations */
+.eqfal-home__panel--charts { padding: 12px 0; background: transparent; border: none; box-shadow: none; }
+.eqfal-home__charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; padding: 0 16px; }
+.eqfal-home__chart-col { display: flex; flex-direction: column; gap: 8px; }
+.eqfal-home__chart-col h3 { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--home-text); }
 
 /* history columns - more compact */
 .eqfal-home__columns { display: flex; align-items: flex-end; gap: 10px; height: 160px; padding: 6px 16px 16px; }
@@ -173,4 +192,24 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__task-owner { grid-column: 1; font-size: 0.68rem; }
   .eqfal-home__task-count { grid-column: 2; grid-row: 1 / 3; justify-self: center; font-size: 0.7rem; }
   .eqfal-home__task-open { grid-column: 3; grid-row: 1 / 3; width: 24px; height: 24px; border: 0; }
+  .eqfal-home__kpi-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .eqfal-home__table { min-width: 100%; }
+  .eqfal-home__table th { display: none; }
+  .eqfal-home__table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--home-line); border-radius: 10px; background: #fff; }
+  .eqfal-home__table td { display: contents; }
+  .eqfal-home__table td:first-child { grid-column: 1 / -1; }
+  .eqfal-home__table td:nth-child(2) { grid-column: 1; }
+  .eqfal-home__table td:nth-child(3) { grid-column: 1; }
+  .eqfal-home__table td:nth-child(4) { grid-column: 2; grid-row: 1 / 4; align-self: flex-start; }
+  .eqfal-home__area { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .eqfal-home__area strong { font-size: 0.8rem; word-break: break-word; }
+  .eqfal-home__share { grid-column: 1; display: none; }
+  .eqfal-home__link-action { min-height: 28px; padding: 0 10px; font-size: 0.68rem; }
+  .eqfal-home__kpi-tiles { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .eqfal-home__kpi-tile { padding: 8px 10px; }
+  .eqfal-home__kpi-tile span { font-size: 0.65rem; }
+  .eqfal-home__kpi-tile strong { font-size: 1rem; }
 }
