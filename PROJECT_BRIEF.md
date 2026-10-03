@@ -88,6 +88,8 @@ Developing permission features inside the approved roadmap does not by itself re
 - `HUMAN DECISION REQUIRED` — explicit Owner Approval required.
 - `USER VALIDATION REQUIRED` — practical validation after a Phase or meaningful testable increment, with exact steps and expected result.
 
+The project owner is the final authority for merge and high-risk decisions, but routine Git/branch/PR/CI execution should be handled by the implementation workflow whenever safely permitted.
+
 
 ## Replit Current State
 
