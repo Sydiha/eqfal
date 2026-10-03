@@ -177,10 +177,14 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home[dir="rtl"] .eqfal-home__tabs::after { background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(0, 0, 0, 0.1)); }
   .eqfal-home__hero { grid-template-columns: minmax(0, 1fr); padding: 20px; }
   .eqfal-home__col-share { display: none; }
-  .eqfal-home__table { min-width: 0; max-width: 100%; width: 100%; }
-  .eqfal-home__table-wrap { padding-inline-end: 8px; overflow-x: auto; }
-  .eqfal-home__table th, .eqfal-home__table td { padding-inline: 8px; padding-block: 9px; }
-  .eqfal-home__area { gap: 6px; }
+  .eqfal-home__table { width: 100%; min-width: 0; border-collapse: collapse; }
+  .eqfal-home__table thead { display: none; }
+  .eqfal-home__table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: start; padding: 12px; margin-block: 8px; border: 1px solid var(--home-line); border-radius: 12px; background: #fff; }
+  .eqfal-home__table th, .eqfal-home__table td { border: 0; padding: 0; }
+  .eqfal-home__table tbody td:first-child { grid-column: 1; grid-row: 1; }
+  .eqfal-home__table tbody td:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .eqfal-home__table tbody td:last-child { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .eqfal-home__area { gap: 6px; flex-shrink: 1; }
   .eqfal-home__area strong { font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .eqfal-home__table td { font-size: 0.75rem; }
   .eqfal-home__link-action { min-height: 28px; padding: 0 8px; font-size: 0.7rem; flex-shrink: 0; }
