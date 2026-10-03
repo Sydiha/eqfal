@@ -281,6 +281,7 @@ A merge may occur only after the prior gates are satisfied and the Owner explici
 - `docs/WORKFLOW_GOVERNANCE.md` — detailed gates and operating lifecycle.
 - `DEVELOPMENT_WORKFLOW.md` — concise day-to-day development procedure.
 - `docs/CODEX_GITHUB_DELIVERY_GATE.md` — Codex preflight and GitHub handoff rules.
+- `docs/CODEX_TRIGGER_VERIFICATION.md` — Codex trigger and execution-evidence verification (specialized operational playbook).
 - `docs/TOOLING_RECOVERY_PLAYBOOK.md` — tooling-failure diagnosis and bounded recovery.
 - `docs/EXECUTION_ROADMAP.md` — product roadmap scope and phase sequencing where consistent with higher-priority operating governance.
 - Historical/superseded documents — evidence only, never current execution authority.

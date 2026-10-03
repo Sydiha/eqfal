@@ -5,8 +5,8 @@
 **Branch:** main
 
 ## Current Baseline
-- **Main SHA:** `f5b305a2abf3f3e73842962d3230cc2faf134a39`
-- **Last merge:** PR #317 (EQFAL persistent state + low-credit skills)
+- **Last reconciled main:** `b04ef363eced64a2351016584ef75b44401212d3`
+- **Last merge:** PR #214 (Codex trigger verification playbook)
 - **CI status:** ✅ passing
 
 ## Phase Status
@@ -21,13 +21,11 @@
 - **PR:** —
 
 ## Last Completed Task
-- **Task:** PR #317 — EQFAL persistent state + low-credit skills
-- **SHA:** `f5b305a2abf3f3e73842962d3230cc2faf134a39`
+- **Task:** PR backlog cleanup — PR #307 merged (Phase 15D Purchases visual); PR #214 merged (Codex trigger verification playbook); PR #229 closed without merge, superseded by #231
+- **SHA:** `b04ef363eced64a2351016584ef75b44401212d3`
 
 ## Open PRs
-- **#307** — Phase 15D: apply approved Purchases Locofy visual
-- **#229** — Phase 9A.2 correction: make Monthly Close creation capability-independent
-- **#214** — Docs: verify Codex triggers before reporting execution
+- None
 
 ## Open Blockers
 - None confirmed
@@ -36,8 +34,6 @@
 - Owner selects the next EQFAL task
 
 ## Attention Points
-- #307 and #214 require diagnosis before any future merge decision.
-- #229 targets a non-main branch; verify intended base before acting on it.
 - Phase 15 readiness must be verified before future Phase 15 merges.
 
 ---

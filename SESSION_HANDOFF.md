@@ -1,7 +1,7 @@
 # EQFAL Session Handoff
 
 **Date:** 2026-10-03
-**Session:** State reconciliation + Arabic workflow rules
+**Session:** PR backlog cleanup + state reconciliation
 
 ## Current Objective
 Maintain synchronized EQFAL project context with minimal token/credit usage
@@ -10,10 +10,11 @@ Maintain synchronized EQFAL project context with minimal token/credit usage
 idle
 
 ## Completed This Session
-- Persistent-context workflow (PROJECT_STATE.md, SESSION_HANDOFF.md, three project skills) merged through PR #317
-- Verified main at `f5b305a2abf3f3e73842962d3230cc2faf134a39`
-- Reconciled project state to PR #317
-- Approved automatic recovery for failures caused by the current task and contained within approved scope
+- PR #307 merged (Phase 15D Purchases visual)
+- PR #214 merged (Codex trigger verification playbook), now referenced from AGENTS.md §15
+- PR #229 closed without merge (superseded by #231)
+- Open PRs: none
+- Last reconciled main: `b04ef363eced64a2351016584ef75b44401212d3`
 
 ## Current Decisions
 - GitHub repository state is authoritative over conversation memory.
@@ -32,7 +33,7 @@ Owner selects the next EQFAL task
 
 ## Do Not Repeat
 - Do not redesign this workflow.
-- Do not reopen completed PR #314, #315, #316, or #317 work.
+- Do not reopen completed PR #214, #229, #307, #314, #315, #316, #317, or #318 work.
 - Do not reconsider GitHub Actions unless the Owner explicitly asks.
 
 **Last updated:** 2026-10-03
