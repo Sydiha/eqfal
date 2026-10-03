@@ -5,6 +5,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
 import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
+import { IconHome, IconSales, IconPurchases, IconDocuments, IconBanks, IconObligations, IconAccounting, IconOpeningBalances, IconPeriodicAdjustments, IconFixedAssets, IconVAT, IconMonthlyClose, IconAnnualClose, IconFiscalYears, IconPartners, IconCompanyProfile } from './EqfalIcons';
 import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
@@ -12,21 +13,34 @@ import '../shell-corrective.css';
 
 export type Page = NavigationPage;
 
-type IconName = 'home' | 'calendar' | 'document' | 'bank' | 'partners' | 'obligations';
+type IconComponent = React.FC<{ size?: number; stroke?: number; className?: string }>;
+type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile';
+
+const iconMap: Record<IconName, IconComponent> = {
+  home: IconHome,
+  sales: IconSales,
+  purchases: IconPurchases,
+  documents: IconDocuments,
+  banks: IconBanks,
+  obligations: IconObligations,
+  accounting: IconAccounting,
+  openingBalances: IconOpeningBalances,
+  periodicAdjustments: IconPeriodicAdjustments,
+  fixedAssets: IconFixedAssets,
+  vat: IconVAT,
+  monthlyClose: IconMonthlyClose,
+  annualClose: IconAnnualClose,
+  fiscalYears: IconFiscalYears,
+  partners: IconPartners,
+  companyProfile: IconCompanyProfile,
+};
 
 function ShellIcon({ name }: { name: IconName }) {
-  const paths: Record<IconName, ReactNode> = {
-    home: <><path d="M3.5 10.5 12 3l8.5 7.5"/><path d="M5.5 9.5V21h13V9.5"/><path d="M9.5 21v-6h5v6"/></>,
-    calendar: <><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3v5M16.5 3v5M3.5 10h17"/><path d="M8 14h2M14 14h2M8 17.5h2M14 17.5h2"/></>,
-    document: <><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h8M8 16h8"/></>,
-    bank: <><path d="M3 9h18M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 18h18M2 21h20M12 3 3 7h18L12 3Z"/></>,
-    partners: <><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c0-4 2-6 6-6s6 2 6 6M15 15c3 0 5 2 5 5"/></>,
-    obligations: <><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/></>,
-  };
-  return <svg className="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+  const Icon = iconMap[name];
+  return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'calendar', monthlyClose:'calendar', annualClosing:'calendar', vat:'document', documents: 'document', banks: 'bank', partners: 'partners', obligations:'obligations', accounting:'document',openingBalances:'document',periodicAdjustments:'document',sales:'document',purchases:'document',assets:'document',companyProfile:'document' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile' };
 
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
