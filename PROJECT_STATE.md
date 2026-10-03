@@ -6,7 +6,7 @@
 
 ## Current Baseline
 - **Last reconciled main:** `2162eeff2a7e1f2061df73c03d156c518d5dead6`
-- **Last merge:** PR #214 (Codex trigger verification playbook)
+- **Last merge:** PR #320 (2026-10-03)
 - **CI status:** ✅ passing
 
 ## Phase Status
