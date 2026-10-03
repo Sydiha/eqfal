@@ -96,7 +96,7 @@ type FinancialSnapshot = {
   };
 };
 
-type HomeTab = "byArea" | "history" | "amounts" | "banks" | "queue";
+type HomeTab = "byArea" | "history" | "amounts" | "banks" | "queue" | "kpis";
 
 const AREA_ICONS: Record<string, typeof IconDocuments> = {
   documents: IconDocuments,
@@ -121,6 +121,15 @@ const ListIcon = () => (
   </svg>
 );
 
+const GridIcon = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="7" height="7"></rect>
+    <rect x="14" y="3" width="7" height="7"></rect>
+    <rect x="14" y="14" width="7" height="7"></rect>
+    <rect x="3" y="14" width="7" height="7"></rect>
+  </svg>
+);
+
 type Props = {
   capabilities: readonly string[];
   navigate: (page: HomePage) => void;
@@ -134,7 +143,7 @@ type Props = {
 };
 
 const stripDirectionalMarks = (value: string) =>
-  value.replace(/[\u061c\u200e\u200f]/g, "");
+  value.replace(/[؜‎‏]/g, "");
 
 const formatFinancialAmount = (value: string) => {
   const numeric = Number(value);
@@ -151,7 +160,9 @@ export function Home({
   navigateToDiscovery,
   onUnauthorized,
 }: Props) {
-  const { t, i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const isArabic = i18n.language.startsWith("ar");
+
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
@@ -169,7 +180,47 @@ export function Home({
   const [snapshotLoading, setSnapshotLoading] = useState(canViewSnapshot);
   const [snapshotError, setSnapshotError] = useState(false);
   const [tab, setTab] = useState<HomeTab | null>(null);
-  const isArabic = i18n.language.startsWith("ar");
+
+  // Figma KPI config: Available and unavailable metrics
+  const kpiMetrics = [
+    {
+      key: "bank_balances",
+      labelAr: "أرصدة بنكية",
+      labelEn: "Bank Balances",
+      available: true,
+    },
+    {
+      key: "amounts_to_collect",
+      labelAr: "الذمم المدينة",
+      labelEn: "Receivables",
+      available: true,
+    },
+    {
+      key: "amounts_to_pay",
+      labelAr: "الذمم الدائنة",
+      labelEn: "Payables",
+      available: true,
+    },
+    {
+      key: "current_month_sales",
+      labelAr: "مبيعات الشهر",
+      labelEn: "Month Sales",
+      available: true,
+    },
+    {
+      key: "current_month_purchases_expenses",
+      labelAr: "مشتريات ومصروفات",
+      labelEn: "Month Purchases",
+      available: true,
+    },
+    {
+      key: "net_profit",
+      labelAr: "صافي الربح",
+      labelEn: "Net Profit",
+      available: false,
+    },
+  ];
+
   const homeLabels = isArabic
     ? {
         dailyOperations: "العمليات اليومية",
@@ -216,6 +267,7 @@ export function Home({
           history: "المعوقات في كل فترة",
           amounts: "المبالغ والمبيعات",
           banks: "أرصدة البنوك",
+          kpis: "المؤشرات الرئيسية",
           queue: "قائمة العمل",
         },
         close: "إغلاق",
@@ -278,6 +330,7 @@ export function Home({
           history: "Blockers per period",
           amounts: "Amounts and sales",
           banks: "Bank balances",
+          kpis: "Key metrics",
           queue: "Work queue",
         },
         close: "Close",
@@ -511,7 +564,6 @@ export function Home({
     </span>
   ) : null;
 
-
   const blockedTotal = exceptions.reduce((sum, item) => sum + item.count, 0);
   const clearAreas = exceptions.filter((item) => item.count === 0).length;
   const blockedAreaCount = exceptions.length - clearAreas;
@@ -533,6 +585,12 @@ export function Home({
       : new Intl.DateTimeFormat(i18n.language, { month: "short" }).format(date);
   };
   const tabs: Array<{ key: HomeTab; label: string; icon: JSX.Element; show: boolean }> = [
+    {
+      key: "kpis",
+      label: homeLabels.tabs.kpis,
+      icon: <GridIcon />,
+      show: canViewSnapshot,
+    },
     {
       key: "byArea",
       label: homeLabels.tabs.byArea,
@@ -638,6 +696,26 @@ export function Home({
         </text>
       </svg>
     );
+  };
+
+  const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
+    if (!kpi.available || !snapshot) {
+      return homeLabels.unavailable;
+    }
+
+    const metric = (snapshot.metrics as Record<string, any>)[kpi.key];
+    if (!metric) return homeLabels.unavailable;
+    if (metric.state === "hidden") return homeLabels.restricted;
+    if (metric.state === "available") {
+      if (kpi.key === "bank_balances" && metric.accounts) {
+        const total = metric.accounts
+          .filter((acc: any) => acc.balance.state === "available")
+          .reduce((sum: number, acc: any) => sum + Number(acc.balance.amount), 0);
+        return `${formatFinancialAmount(total.toString())}`;
+      }
+      return `${formatFinancialAmount(metric.amount)}`;
+    }
+    return homeLabels.unavailable;
   };
 
   return (
@@ -834,6 +912,29 @@ export function Home({
             </button>
           ))}
         </div>
+      )}
+
+      {activeTab === "kpis" && (
+        <section
+          id="home-panel-kpis"
+          className="eqfal-home__panel eqfal-home__panel--detail"
+          aria-labelledby="home-kpis-title"
+        >
+          {panelHeading("home-kpis-title", homeLabels.tabs.kpis)}
+          {snapshotState ?? (
+            <div className="eqfal-home__grid">
+              {kpiMetrics.map((kpi) => (
+                <article
+                  className={`eqfal-home__metric eqfal-home__metric--${kpi.key}`}
+                  key={kpi.key}
+                >
+                  <h3>{isArabic ? kpi.labelAr : kpi.labelEn}</h3>
+                  <strong dir="ltr">{renderKPIValue(kpi)}</strong>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {activeTab === "byArea" && selected && (
