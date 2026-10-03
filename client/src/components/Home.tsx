@@ -123,21 +123,21 @@ export function Home({
       key: "bank_balances",
       labelAr: "النقد والبنوك",
       labelEn: "Cash and Banks",
-      icon: "💰",
+      icon: "🏦",
       colorClass: "kpi-blue",
     },
     {
       key: "amounts_to_collect",
       labelAr: "الذمم المدينة",
       labelEn: "Receivables",
-      icon: "📊",
+      icon: "📥",
       colorClass: "kpi-blue-light",
     },
     {
       key: "amounts_to_pay",
       labelAr: "الذمم الدائنة",
       labelEn: "Payables",
-      icon: "📋",
+      icon: "📤",
       colorClass: "kpi-gray",
     },
     {
@@ -347,6 +347,16 @@ export function Home({
     return isArabic ? "غير متاح" : "Unavailable";
   };
 
+  const renderKPIAmount = (kpi: typeof kpiMetrics[0], value: string) => {
+    if (kpi.key === "net_profit" && value === (isArabic ? "غير متاح" : "Unavailable")) {
+      return value;
+    }
+    if (kpi.key === "net_profit") {
+      return value;
+    }
+    return `${value} ${isArabic ? "ر.س" : "SAR"}`;
+  };
+
   const ring = () => {
     const radius = 82;
     const inner = 60;
@@ -419,17 +429,94 @@ export function Home({
       {canViewSnapshot && (
         <section className="home__kpi-section">
           <div className="home__kpi-grid">
-            {kpiMetrics.map((kpi) => (
-              <div key={kpi.key} className={`home__kpi-card ${kpi.colorClass}`}>
-                <div className="home__kpi-icon">{kpi.icon}</div>
-                <div className="home__kpi-label">
-                  {isArabic ? kpi.labelAr : kpi.labelEn}
+            {kpiMetrics.map((kpi) => {
+              const value = renderKPIValue(kpi);
+              return (
+                <div key={kpi.key} className={`home__kpi-card ${kpi.colorClass}`}>
+                  <div className="home__kpi-icon">{kpi.icon}</div>
+                  <div className="home__kpi-label">
+                    {isArabic ? kpi.labelAr : kpi.labelEn}
+                  </div>
+                  <div className="home__kpi-value">
+                    {renderKPIAmount(kpi, value)}
+                  </div>
                 </div>
-                <div className="home__kpi-value">
-                  {renderKPIValue(kpi)} ر.س
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Tasks Table - BEFORE Readiness */}
+      {canViewClose && !loading && !error && selected && (
+        <section className="home__tasks-section">
+          <div className="home__tasks-card">
+            <div className="home__tasks-header-content">
+              <h2 className="home__section-title">
+                {isArabic ? "المهام التي تتطلب متابعة" : "Tasks Requiring Follow-up"}
+              </h2>
+              <p className="home__tasks-subtitle">
+                {isArabic ? `${blockerAreas.filter(a => a.count > 0).length} مجالات تتطلب معالجة` : `${blockerAreas.filter(a => a.count > 0).length} areas requiring attention`}
+              </p>
+            </div>
+            <div className="eqfal-home__table-wrap">
+              <table className="eqfal-home__table">
+                <thead>
+                  <tr>
+                    <th>{isArabic ? "التصنيف" : "Classification"}</th>
+                    <th>{isArabic ? "العنصر" : "Item"}</th>
+                    <th>{isArabic ? "العدد" : "Count"}</th>
+                    <th>{isArabic ? "المبلغ" : "Amount"}</th>
+                    <th>{isArabic ? "المسؤول" : "Responsible"}</th>
+                    <th>{isArabic ? "الحالة" : "Status"}</th>
+                    <th>{isArabic ? "الأولوية" : "Priority"}</th>
+                    <th>
+                      <span className="eqfal-home__sr-only">
+                        {isArabic ? "الإجراء" : "Action"}
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blockerAreas.map((item) => (
+                    item.count > 0 && (
+                      <tr key={item.key}>
+                        <td>{isArabic ? item.labelAr : item.labelEn}</td>
+                        <td>—</td>
+                        <td>{item.count}</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>
+                          <span className={`home__status-badge ${item.count >= 3 ? "critical" : item.count >= 1 ? "warning" : "neutral"}`}>
+                            {item.count >= 3 ? (isArabic ? "حرج" : "Critical") : item.count >= 1 ? (isArabic ? "تحذير" : "Warning") : (isArabic ? "محايد" : "Neutral")}
+                          </span>
+                        </td>
+                        <td>—</td>
+                        <td style={{ textAlign: isArabic ? "right" : "left" }}>
+                          {item.canOpen && (
+                            <button
+                              type="button"
+                              className="home__action-button"
+                              onClick={item.navigate}
+                            >
+                              {isArabic ? "معالجة" : "Handle"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  ))}
+                  {blockerAreas.filter(a => a.count > 0).length > 0 && (
+                    <tr className="home__table-totals">
+                      <td colSpan={2}><strong>{isArabic ? "الإجمالي" : "Total"}</strong></td>
+                      <td><strong>{totalBlockers}</strong></td>
+                      <td>—</td>
+                      <td colSpan={4}></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}
@@ -437,26 +524,28 @@ export function Home({
       {/* Closing Readiness Card */}
       {canViewClose && !loading && !error && selected && (
         <section className="home__readiness-section">
-          <button
-            onClick={() => navigate("monthlyClose")}
-            className="home__readiness-button"
-          >
-            {isArabic ? "عرض معوقات الإقفال" : "View Close Blockers"}
-          </button>
-
-          <h2 className="home__section-title">
-            {isArabic ? "جاهزية إقفال الفترة الشهرية" : "Monthly Close Readiness"}
-          </h2>
-
-          {totalBlockers > 0 && (
-            <div className="home__warning-banner">
-              {isArabic
-                ? `الإقفال غير متاح – يوجد ${totalBlockers} ${totalBlockers === 1 ? "معوقة" : "معوقات"}`
-                : `Close unavailable – ${totalBlockers} ${totalBlockers === 1 ? "blocker" : "blockers"}`}
-            </div>
-          )}
-
           <div className="home__readiness-card">
+            <div className="home__readiness-header">
+              <div className="home__readiness-header-content">
+                <h2 className="home__section-title">
+                  {isArabic ? "جاهزية إقفال الفترة الشهرية" : "Monthly Close Readiness"}
+                </h2>
+                {totalBlockers > 0 && (
+                  <p className="home__readiness-subtitle">
+                    {isArabic
+                      ? `الإقفال غير متاح – يوجد ${totalBlockers} ${totalBlockers === 1 ? "معوقة" : "معوقات"}`
+                      : `Close unavailable – ${totalBlockers} ${totalBlockers === 1 ? "blocker" : "blockers"}`}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => navigate("monthlyClose")}
+                className="home__readiness-button"
+              >
+                {isArabic ? "عرض معوقات الإقفال" : "View Close Blockers"}
+              </button>
+            </div>
+
             <div className="home__readiness-grid">
               {/* Ring Chart */}
               <div className="home__ring-container">
@@ -495,67 +584,6 @@ export function Home({
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Tasks Table */}
-      {canViewClose && !loading && !error && selected && (
-        <section className="home__tasks-section">
-          <h2 className="home__section-title">
-            {isArabic ? "المهام التي تتطلب متابعة" : "Tasks Requiring Follow-up"}
-          </h2>
-          <div className="eqfal-home__panel">
-            <div className="eqfal-home__table-wrap">
-              <table className="eqfal-home__table">
-                <thead>
-                  <tr>
-                    <th>{isArabic ? "التصنيف" : "Classification"}</th>
-                    <th>{isArabic ? "العنصر" : "Item"}</th>
-                    <th>{isArabic ? "العدد" : "Count"}</th>
-                    <th>{isArabic ? "المبلغ" : "Amount"}</th>
-                    <th>{isArabic ? "المسؤول" : "Responsible"}</th>
-                    <th>{isArabic ? "الحالة" : "Status"}</th>
-                    <th>{isArabic ? "الأولوية" : "Priority"}</th>
-                    <th>
-                      <span className="eqfal-home__sr-only">
-                        {isArabic ? "الإجراء" : "Action"}
-                      </span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {blockerAreas.map((item) => (
-                    item.count > 0 && (
-                      <tr key={item.key}>
-                        <td>{isArabic ? item.labelAr : item.labelEn}</td>
-                        <td>—</td>
-                        <td>{item.count}</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>
-                          <span className="home__status-badge pending">
-                            {isArabic ? "قيد المراجعة" : "Under Review"}
-                          </span>
-                        </td>
-                        <td>—</td>
-                        <td style={{ textAlign: isArabic ? "right" : "left" }}>
-                          {item.canOpen && (
-                            <button
-                              type="button"
-                              className="home__action-button"
-                              onClick={item.navigate}
-                            >
-                              {isArabic ? "معالجة" : "Handle"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         </section>
