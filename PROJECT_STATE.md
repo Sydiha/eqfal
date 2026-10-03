@@ -5,8 +5,8 @@
 **Branch:** main
 
 ## Current Baseline
-- **Last reconciled main:** `b04ef363eced64a2351016584ef75b44401212d3`
-- **Last merge:** PR #214 (Codex trigger verification playbook)
+- **Last reconciled main:** `2162eeff2a7e1f2061df73c03d156c518d5dead6`
+- **Last merge:** PR #320 (2026-10-03)
 - **CI status:** ✅ passing
 
 ## Phase Status
@@ -14,6 +14,8 @@
 |-------|--------|
 | 14 | IN PROGRESS / PARTIALLY VALIDATED |
 | 15 | PARTIALLY MERGED / IN PROGRESS |
+
+- [stated] Phase 14 Matrix reconciliation completed (PR #320, 2026-10-03) — 14B marked PASS
 
 ## Current Task
 - **Status:** idle
