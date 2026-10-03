@@ -18,10 +18,11 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 100%;
-  max-width: 1400px;
+  width: calc(100% + 72px);
+  max-width: none;
   min-width: 0;
-  margin-inline: auto;
+  margin-inline: -36px;
+  margin-block: 0;
   padding: 24px 28px 40px;
   color: var(--home-text);
   font-family: Tajawal, Inter, system-ui, sans-serif;
@@ -156,6 +157,8 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 }
 @media (max-width: 760px) {
   .eqfal-home { padding: 18px 16px 28px; }
+  .eqfal-home__tabs { position: relative; }
+  .eqfal-home__tabs::after { content: ""; position: absolute; inset-inline-end: 0; inset-block: 0; width: 20px; background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 1)); pointer-events: none; }
   .eqfal-home__hero { grid-template-columns: minmax(0, 1fr); padding: 20px; }
   .eqfal-home__col-share { display: none; }
   .eqfal-home__table { min-width: 0; }
