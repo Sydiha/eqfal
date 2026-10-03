@@ -72,7 +72,7 @@ Capability entries name a supported capability **family**, not an exhaustive per
 | 24. Annual Closing / package lifecycle | Closed prerequisite periods; reconciled statements/workpapers; applicable approvals | Create package, inspect readiness, exercise supported review/approval/lock/export or equivalent lifecycle | Annual-closing/package view/create/manage/approve family | Package, readiness result, source fingerprint/snapshot, lifecycle state | Invalid ordering/drift blocks progress; valid package preserves traceability | Package totals reconcile to approved ledger/statements/workpapers; `VERIFY AGAINST CURRENT POSTING RULE` | Every lifecycle transition, actor/reason and drift event where supported | Final readiness must use authoritative prerequisites and remain valid at action time | Annual Closing UI/API; annual-closing/package services | Create with blockers, stale fingerprint/source drift, unauthorized/out-of-order transition | Complete reconciliation pack, readiness details, fingerprint/drift check, lifecycle audit | `NOT RUN` |
 
 > ⚠ 14E (صفوف 11, 15–18): تم تنفيذ فحص واكتشاف + إصلاح 6 مشاكل (PRs #287–#292). نتائج PASS الرسمية لكل صف غير مسجلة.
-> انظر: phase14-reconciliation-2026-10-03.md
+> انظر PROJECT_STATE.md للتفاصيل الكاملة.
 
 ## 4. Cross-cutting controls
 
