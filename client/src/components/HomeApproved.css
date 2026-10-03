@@ -1,4 +1,6 @@
 /* Owner-approved Home (v7 preview): presentation only; values and actions come from existing APIs. */
+html, body { background: #fff; }
+
 .eqfal-home {
   --home-navy: var(--brand-navy, #0b1d3a);
   --home-teal: var(--brand-teal, #0e8f7a);
@@ -175,6 +177,7 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__hero { grid-template-columns: minmax(0, 1fr); padding: 20px; }
   .eqfal-home__col-share { display: none; }
   .eqfal-home__table { min-width: 0; }
+  .eqfal-home__table-wrap { padding-inline-end: 8px; }
   .eqfal-home__table th, .eqfal-home__table td { padding-inline: 10px; }
   .eqfal-home__area { gap: 8px; }
   .eqfal-home__area strong { font-size: 0.8rem; }
