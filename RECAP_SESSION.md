@@ -1,6 +1,6 @@
 # Project Recap — Current State
 **As of:** 2026-10-03
-**HEAD SHA:** 181f37ed60920cdf406155049173a9924272c0bb
+**Reference SHA at time of reconciliation — not current HEAD:** 181f37ed60920cdf406155049173a9924272c0bb
 **Branch:** main
 
 ---
