@@ -15,6 +15,7 @@
   --home-warning: var(--warning, #8f5200);
   --home-info: var(--info, #1d5fa8);
   --home-shadow: 0 1px 2px rgba(11, 29, 58, 0.04), 0 8px 24px -12px rgba(11, 29, 58, 0.14);
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -27,6 +28,17 @@
   color: var(--home-text);
   font-family: Tajawal, Inter, system-ui, sans-serif;
   background: #fff;
+  z-index: 0;
+}
+.eqfal-home::before {
+  content: "";
+  position: absolute;
+  top: -9999px;
+  bottom: -9999px;
+  left: -9999px;
+  right: -9999px;
+  background: #fff;
+  z-index: -1;
 }
 .eqfal-home * { box-sizing: border-box; }
 .eqfal-home[dir="rtl"] { text-align: right; }
@@ -158,11 +170,16 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 @media (max-width: 760px) {
   .eqfal-home { padding: 18px 16px 28px; }
   .eqfal-home__tabs { position: relative; }
-  .eqfal-home__tabs::after { content: ""; position: absolute; inset-inline-end: 0; inset-block: 0; width: 20px; background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 1)); pointer-events: none; }
+  .eqfal-home__tabs::after { content: ""; position: absolute; inset-inline-end: 0; inset-block: 0; width: 28px; background: linear-gradient(to left, rgba(255, 255, 255, 0), rgba(0, 0, 0, 0.1)); pointer-events: none; z-index: 1; }
+  .eqfal-home[dir="rtl"] .eqfal-home__tabs::after { background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(0, 0, 0, 0.1)); }
   .eqfal-home__hero { grid-template-columns: minmax(0, 1fr); padding: 20px; }
   .eqfal-home__col-share { display: none; }
   .eqfal-home__table { min-width: 0; }
-  .eqfal-home__table th, .eqfal-home__table td { padding-inline: 12px; }
+  .eqfal-home__table th, .eqfal-home__table td { padding-inline: 10px; }
+  .eqfal-home__area { gap: 8px; }
+  .eqfal-home__area strong { font-size: 0.8rem; }
+  .eqfal-home__table td { font-size: 0.78rem; }
+  .eqfal-home__link-action { min-height: 30px; padding: 0 10px; font-size: 0.72rem; }
   .eqfal-home__byarea { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .eqfal-home__bars { width: 100%; }
   .eqfal-home__grid { grid-template-columns: minmax(0, 1fr); }
