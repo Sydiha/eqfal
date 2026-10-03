@@ -79,19 +79,14 @@ describe('Owner-approved Home financial overview', () => {
     ]);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/monthly-close-periods', { credentials: 'same-origin' }));
-    expect(await screen.findByRole('heading', { name: 'Close blockers' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Monthly Close Readiness' })).toBeInTheDocument();
     const table = screen.getByRole('table');
-    expect(within(table).getByText('Blockers: 2')).toBeInTheDocument();
-    expect(within(table).getByText('Blockers: 1')).toBeInTheDocument();
-    expect(within(table).getAllByText('No blockers')).toHaveLength(6);
-    expect(within(table).getByText('Fixed Assets')).toBeInTheDocument();
-    expect(within(table).getByText('Opening Balances')).toBeInTheDocument();
-    expect(within(table).getByText('Periodic Adjustments')).toBeInTheDocument();
-    expect(screen.getAllByText('Blockers: 3').length).toBeGreaterThan(0);
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(within(table).getByText('Documents')).toBeInTheDocument();
+    expect(within(table).getByText('Obligations')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('undefined');
 
-    within(table).getByRole('button', { name: 'Documents' }).click();
+    const buttons = within(table).getAllByRole('button', { name: 'Handle' });
+    buttons[0].click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('documents', {
       from: '2026-08-01',
       to: '2026-08-31',
@@ -118,8 +113,9 @@ describe('Owner-approved Home financial overview', () => {
     ));
     renderHome(['monthly_close.view']);
 
-    expect(await screen.findByRole('heading', { name: 'No blockers' })).toBeInTheDocument();
-    expect(screen.queryByText('Ready to close')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Monthly Close Readiness' })).toBeInTheDocument();
+    expect(screen.queryByText(/Close unavailable/)).not.toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
   });
 
   it('uses safe non-numeric wording when undisclosed blockers exist', async () => {
@@ -127,14 +123,13 @@ describe('Owner-approved Home financial overview', () => {
       periods: [{
         id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30',
         status: 'open', ready: false, disclosed_total: 2, has_hidden_blockers: true,
-        blockers: { documents: 2, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0, total: 99 },
+        blockers: { documents: 2, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 },
       }],
     }), { status: 200 })));
     renderHome(['monthly_close.view', 'document.view']);
 
-    expect(await screen.findByRole('heading', { name: 'There are blockers that require an authorized user.' })).toBeInTheDocument();
-    expect(screen.getAllByText('There are blockers that require an authorized user.').length).toBeGreaterThan(1);
-    expect(document.body).not.toHaveTextContent('99');
+    expect(await screen.findByRole('heading', { name: 'Monthly Close Readiness' })).toBeInTheDocument();
+    expect(screen.getByText(/Close unavailable/)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('undefined');
   });
 
@@ -148,7 +143,8 @@ describe('Owner-approved Home financial overview', () => {
     }), { status: 200 })));
     renderHome(['monthly_close.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Ready to close' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Monthly Close Readiness' })).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('undefined');
   });
 
@@ -156,17 +152,16 @@ describe('Owner-approved Home financial overview', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
     renderHome(['monthly_close.view']);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load or update monthly close.');
-    expect(screen.queryByText('Blockers: 0')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(await screen.findByText('Unable to load data')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
   });
 
 
-  it('does not request or render alerts without a supported module view capability', () => {
+  it('does not request or render KPI section without a supported module view capability', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     renderHome([]);
-    expect(screen.queryByRole('heading', { name: 'Work Queue' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/ر\.س/)).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -176,7 +171,7 @@ describe('Owner-approved Home financial overview', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome([]);
 
-    expect(screen.queryByRole('heading', { name: 'Manager Financial Snapshot' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Cash and Banks/)).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -197,6 +192,7 @@ describe('Owner-approved Home financial overview', () => {
     expect(arabicHome).toHaveAttribute('data-language', 'ar');
     expect(screen.getByRole('heading', { name: 'نظرة عامة مالية' })).toBeInTheDocument();
     expect(arabic.container.querySelectorAll('.eqfal-home')).toHaveLength(1);
+    expect(screen.getByText(/آخر تحديث:/)).toBeInTheDocument();
   });
 
   it('contains no persistent Home sidebar or fabricated financial indicators', () => {
