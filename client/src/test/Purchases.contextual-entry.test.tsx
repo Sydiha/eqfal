@@ -9,7 +9,7 @@ describe('Purchases contextual entry points',()=>{
  it('offers purchase and expense entry from one Add action when document upload is allowed',async()=>{
   const onCreateDocument=vi.fn();
   render(<Purchases canView canManage={false} canCreate onCreateDocument={onCreateDocument} onUnauthorized={vi.fn()}/>);
-  const actions=await screen.findAllByRole('button',{name:'Add'});
+  const actions=await screen.findAllByRole('button',{name:'Add purchase document +'});
   expect(screen.getByText('No purchases or expenses yet.')).toBeInTheDocument();
   fireEvent.click(actions[0]!);
   expect(screen.getByRole('dialog',{name:'Add purchase or expense'})).toBeInTheDocument();
@@ -20,7 +20,7 @@ describe('Purchases contextual entry points',()=>{
  it('starts an expense with the same contextual entry flow',async()=>{
   const onCreateDocument=vi.fn();
   render(<Purchases canView canManage={false} canCreate onCreateDocument={onCreateDocument} onUnauthorized={vi.fn()}/>);
-  const actions=await screen.findAllByRole('button',{name:'Add'});
+  const actions=await screen.findAllByRole('button',{name:'Add purchase document +'});
   fireEvent.click(actions[0]!);
   fireEvent.click(screen.getByRole('button',{name:'Expense'}));
   expect(onCreateDocument).toHaveBeenCalledWith('expense');
@@ -29,6 +29,6 @@ describe('Purchases contextual entry points',()=>{
  it('keeps the workspace read-only when document upload is not allowed',async()=>{
   render(<Purchases canView canManage={false} onUnauthorized={vi.fn()}/>);
   await screen.findByText('No purchases or expenses yet.');
-  expect(screen.queryByRole('button',{name:'Add'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Add purchase document +'})).not.toBeInTheDocument();
  });
 });

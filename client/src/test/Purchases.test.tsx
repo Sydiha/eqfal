@@ -12,9 +12,28 @@ describe('Purchases workspace',()=>{
  beforeEach(async()=>{vi.restoreAllMocks();window.history.replaceState(null,'','/?page=purchases');await i18n.changeLanguage('en')})
  afterEach(()=>window.history.replaceState(null,'','/'));
 
+ it('derives the approved KPI strip from loaded rows and excludes cancelled outstanding balances',async()=>{
+  mockPurchases([base,active,{...active,id:'d3',reference_number:'INV-3',total_amount:'50.50',paid_amount:'10.25',remaining_amount:'40.25',payable_cancelled:true,payable_relationship:'linked_cancelled'}]);
+  render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);
+  await screen.findByText('INV-1');
+  expect(screen.getByText('Outstanding to suppliers').nextElementSibling).toHaveTextContent('80.00');
+  expect(screen.getByText('Total paid').nextElementSibling).toHaveTextContent('50.25');
+  expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('250.50');
+ });
+
+ it('keeps capitalisation gated to eligible approved purchase documents',async()=>{
+  const capitalise=vi.fn();mockPurchases([base,active]);
+  render(<Purchases canView canManage canCapitalise onCapitalise={capitalise} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(summaryRow(await screen.findByText('INV-1')));
+  fireEvent.click(screen.getByRole('button',{name:'Capitalise as Fixed Asset'}));
+  expect(capitalise).toHaveBeenCalledWith('d1');
+  fireEvent.click(summaryRow('INV-2'));
+  expect(screen.queryByRole('button',{name:'Capitalise as Fixed Asset'})).not.toBeInTheDocument();
+ });
+
  it('keeps a cancelled payable historical, including settlement history, without replacement creation',async()=>{
   mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);
-  const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getByText('—')).toBeInTheDocument();
+  const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText('Confirmed')).toHaveClass('purchases-verification--confirmed');expect(within(row).getAllByText('—').length).toBeGreaterThan(0);
   fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create payable'})).not.toBeInTheDocument();
  });
 
@@ -34,7 +53,7 @@ describe('Purchases workspace',()=>{
  });
 
  it('shows active financial state and formatted document and due dates, while preserving null display',async()=>{
-  mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));expect(within(first).getByText('01/08/2026')).toBeInTheDocument();expect(within(second).getAllByText('Partial').length).toBeGreaterThan(0);expect(within(second).getAllByText(/15\/08\/2026/)[0]).toBeInTheDocument();fireEvent.click(first);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getAllByText('—').length).toBeGreaterThan(0);
+  mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));expect(within(first).getByText('01/08/2026')).toBeInTheDocument();expect(within(second).getByText('80.00')).toBeInTheDocument();expect(within(second).getByText(/15\/08\/2026/)).toBeInTheDocument();fireEvent.click(first);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getAllByText('—').length).toBeGreaterThan(0);
  });
 
  it('creates only an eligible approved complete unlinked purchase through the obligation path',async()=>{
@@ -59,8 +78,8 @@ describe('Purchases workspace',()=>{
   mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);fireEvent.change(await screen.findByRole('searchbox',{name:'Search purchases'}),{target:{value:'INV-2'}});expect(screen.queryByText('INV-1')).not.toBeInTheDocument();expect(screen.getByText('INV-2')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.change(screen.getByRole('combobox',{name:'Financial state'}),{target:{value:'partial'}});expect(screen.queryByText('INV-1')).not.toBeInTheDocument();expect(screen.getByText('INV-2')).toBeInTheDocument();
  });
 
- it('uses seven desktop columns, distinguishes purchase and expense badges, and renders every active financial state',async()=>{
-  const states=['open','partial','paid','overdue'] as const;mockPurchases(states.map((financial_state,index)=>({...active,id:`state-${index}`,reference_number:`STATE-${index}`,financial_state,document_type:index%2?'expense':'purchase'})));render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);expect(await screen.findAllByRole('columnheader')).toHaveLength(7);expect(screen.getAllByText('Purchase').length).toBeGreaterThan(0);expect(screen.getAllByText('Expense').length).toBeGreaterThan(0);for(const label of ['Open','Partial','Paid','Overdue'])expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+ it('uses the approved ten-column register with real totals and document type badges',async()=>{
+  mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);expect(await screen.findAllByRole('columnheader')).toHaveLength(11);for(const label of ['Reference','Supplier','Invoice date','Due date','Taxable amount','Input VAT','Total amount','Paid','Remaining amount','Verification status'])expect(screen.getByRole('columnheader',{name:label})).toBeInTheDocument();expect(screen.getAllByText('Purchase').length).toBeGreaterThan(0);expect(screen.getAllByText('Expense').length).toBeGreaterThan(0);const totals=screen.getByText('Totals').closest('tr')!;expect(within(totals).getAllByText('200.00')).toHaveLength(2);expect(within(totals).getByText('30.00')).toBeInTheDocument();
  });
 
  it('shows read-only VAT context and responsive card hooks in the shared row truth',async()=>{
@@ -68,11 +87,11 @@ describe('Purchases workspace',()=>{
  });
 
  it('renders required Arabic labels and localized Purchases dates',async()=>{
-  await i18n.changeLanguage('ar');mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('مدفوعة').length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'الدفع'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(row);expect(screen.getByText('المدفوع')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل المشتريات'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل المشتريات'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+  await i18n.changeLanguage('ar');mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText('مؤكد')).toBeInTheDocument();expect(screen.getByRole('columnheader',{name:'المسدد'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(row);expect(screen.getAllByText('المسدد')).toHaveLength(2);expect(within(screen.getByRole('complementary',{name:'تفاصيل المشتريات'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل المشتريات'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
  });
 
  it('keeps the English paid amount label in expanded details',async()=>{
-  mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Paid').length).toBeGreaterThan(0);fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getAllByText('Paid')).toHaveLength(2);
+  mockPurchases([{...base,payable_cancelled:false,financial_state:'paid'}]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText('Confirmed')).toBeInTheDocument();fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Purchase details'})).getAllByText('Paid')).toHaveLength(2);
  });
  it('restores validated URL state and combines type, inclusive dates, payable, verification, and VAT filters',async()=>{
   window.history.replaceState(null,'','/?page=purchases&purchaseSearch=INV&purchaseSupplier=c1&purchaseFinancial=partial&purchaseReview=approved&purchaseType=expense&purchaseFrom=2026-08-01&purchaseTo=2026-08-01&purchasePayable=linked_active&purchaseVerification=confirmed&purchaseVatReview=reviewed&salesSearch=INV-1');mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);
@@ -90,8 +109,8 @@ describe('Purchases workspace',()=>{
  });
 
  it('distinguishes empty and no-results states while keeping purchase, expense, and edit entry actions compatible',async()=>{
-  mockPurchases([]);const create=vi.fn();const {unmount}=render(<Purchases canView canManage canCreate onCreateDocument={create} onUnauthorized={vi.fn()}/>);expect((await screen.findByText('No purchases or expenses yet.')).closest('[data-state]')).toHaveAttribute('data-state','empty');fireEvent.click(screen.getAllByRole('button',{name:'Add'})[0]);fireEvent.click(screen.getByRole('button',{name:'Purchase'}));expect(create).toHaveBeenCalledWith('purchase');unmount();
-  const edit=vi.fn();mockPurchases([{...base,status:'uploaded'}]);render(<Purchases canView canManage canCreate canEdit onCreateDocument={create} onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.click((await screen.findAllByRole('button',{name:'Add'}))[0]);fireEvent.click(screen.getByRole('button',{name:'Expense'}));expect(create).toHaveBeenCalledWith('expense');fireEvent.change(screen.getByRole('searchbox',{name:'Search purchases'}),{target:{value:'missing'}});expect(screen.getByText('0 purchases')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
+  mockPurchases([]);const create=vi.fn();const {unmount}=render(<Purchases canView canManage canCreate onCreateDocument={create} onUnauthorized={vi.fn()}/>);expect((await screen.findByText('No purchases or expenses yet.')).closest('[data-state]')).toHaveAttribute('data-state','empty');fireEvent.click(screen.getAllByRole('button',{name:'Add purchase document +'})[0]);fireEvent.click(screen.getByRole('button',{name:'Purchase'}));expect(create).toHaveBeenCalledWith('purchase');unmount();
+  const edit=vi.fn();mockPurchases([{...base,status:'uploaded'}]);render(<Purchases canView canManage canCreate canEdit onCreateDocument={create} onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.click((await screen.findAllByRole('button',{name:'Add purchase document +'}))[0]);fireEvent.click(screen.getByRole('button',{name:'Expense'}));expect(create).toHaveBeenCalledWith('expense');fireEvent.change(screen.getByRole('searchbox',{name:'Search purchases'}),{target:{value:'missing'}});expect(screen.getByText('0 purchases')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
  });
 
 });
