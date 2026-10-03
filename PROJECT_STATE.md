@@ -1,12 +1,12 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-03 02:55 UTC
+**Last updated:** 2026-10-03
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Main SHA:** `cdad46d10970e125b05f6b0b69167556016f0c1a`
-- **Last merge:** PR #316 (Documentation reconciliation)
+- **Main SHA:** `f5b305a2abf3f3e73842962d3230cc2faf134a39`
+- **Last merge:** PR #317 (EQFAL persistent state + low-credit skills)
 - **CI status:** ✅ passing
 
 ## Phase Status
@@ -21,8 +21,8 @@
 - **PR:** —
 
 ## Last Completed Task
-- **Task:** PR #316 — Documentation reconciliation
-- **SHA:** `cdad46d10970e125b05f6b0b69167556016f0c1a`
+- **Task:** PR #317 — EQFAL persistent state + low-credit skills
+- **SHA:** `f5b305a2abf3f3e73842962d3230cc2faf134a39`
 
 ## Open PRs
 - **#307** — Phase 15D: apply approved Purchases Locofy visual
@@ -30,7 +30,10 @@
 - **#214** — Docs: verify Codex triggers before reporting execution
 
 ## Open Blockers
-- None confirmed for current workflow.
+- None confirmed
+
+## Next Exact Step
+- Owner selects the next EQFAL task
 
 ## Attention Points
 - #307 and #214 require diagnosis before any future merge decision.
