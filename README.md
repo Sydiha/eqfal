@@ -1,10 +1,22 @@
 # إقفال | EQFAL · Financial Close & Operations
 
+⚠️ Last Updated: 2026-10-03
+SHA Reference: 181f37ed60920cdf406155049173a9924272c0bb
+Status: Active Development (Phase 14–15)
+
 منصة داخلية متعددة الشركات للإدارة والإقفال المالي، تُبنى كنواة صغيرة وآمنة واقتصادية وقابلة للنقل والتوسع.
+
+## Current Status
+
+Phase 14 (Full-Cycle Validation): IN PROGRESS
+Phase 15 (System-wide UI/UX): PARTIALLY MERGED
+Recent merges: #305 (2026-09-30), #309 (2026-10-01), #313 (2026-10-02)
+Open PRs: #214, #229, #307
+See: docs/EXECUTION_ROADMAP.md for full roadmap
+See: RECAP_SESSION.md for latest session state
 
 ## الحالة الحالية
 
-- المرحلة: تأسيس النواة والربط.
 - المرجع الدائم للكود: `GitHub/main`.
 - بيئة التنفيذ الأولية: Replit مع الحفاظ على قابلية النقل.
 - لا Production منشور حاليًا.
