@@ -1,158 +1,110 @@
-# RECAP_SESSION
+# Project Recap — Current State
+**As of:** 2026-10-03
+**HEAD SHA:** 181f37ed60920cdf406155049173a9924272c0bb
+**Branch:** main
 
-## آخر تحديث
-2026-08-17
+---
 
-## المرجع الحالي
-- Repository: `Sydiha/eqfal`
-- Branch: `main`
-- مرجع الإغلاق العملي لـPhase 3: `18348d67482048e6bf0edb5375936f1b23dfdea1`
-- Production: غير منشور.
+## Development Status by Phase
 
-## الحالة الحالية
-تم إغلاق **Phase 3 — البنوك والدفعات والعهد** رسميًا بعد نجاح Practical Phase 3 Sample Validation على بيئة الاختبار، بدون Production وبدون تعديل كود المنتج أثناء التحقق.
+### Phases 0–12: Completed for their currently approved scopes where verified
 
-الحالة المعتمدة:
-- Phase 2 — Documents: CLOSED.
-- UI Modernization العام: CLOSED حتى PR #42.
-- Phase 3A — Bank Import Foundation: CLOSED.
-- Phase 3B — Bank Transaction Matching / Reconciliation Foundation: CLOSED.
-- Phase 3C — Payment Settlement Foundation: CLOSED.
-- Phase 3D — Custody / Advances Foundation: CLOSED.
-- Phase 3E — Real Bank Statement Import Readiness: CLOSED.
-- **Phase 3 — البنوك والدفعات والعهد: CLOSED.**
+### Phase 13: CONDITIONAL / DEFERRED
+- Status: Awaits business need and design/owner gates
+- Note: Not dependent on Phase 14 completion; reactivation requires separate owner approval
 
-## ما تم إنجازه فعليًا
-- Core security / tenancy / auth / memberships / capabilities foundations.
-- Secure server-side session + active company switching.
-- Fiscal Years API/UI + audit/security boundaries.
-- Phase 2A Secure Document Upload.
-- Phase 2B Document Review Workflow.
-- Phase 2C Manager Document Intake.
-- Practical Phase 2 document journey validation: PASS.
-- UI Shell/Documents/Fiscal Years/Login modernization + RTL/mobile/shared states.
-- Phase 3A: CSV/XLSX bank import, mapping, preview/confirm, bank transactions, duplicate/idempotency protection, XLSX security hardening.
-- Phase 3B: manual bank transaction ↔ document matching, reconciliation states `unmatched / matched / reconciled`, independent `bank.match` / `bank.reconcile` capabilities, tenant-safe constraints, transactional locking/state validation, audit, minimal Banking UI.
-- Phase 3C: `document_settlements`, independent `payment.settle`, approved-document + exact bank-match requirement, derived `unpaid / partially_paid / paid`, overpayment rejection, create/delete audit, tenant-safe constraints, row locking, minimal settlement UI, exact integer-cent arithmetic with `BigInt`.
-- Phase 3D: custody/advance model tied to an outbound bank transaction, approved-document allocations, inbound bank returns, derived remaining balance, close/reopen workflow, independent `custody.view / custody.manage / custody.close`, shared bank-explanation boundary, custody-aware reconciliation, tenant-safe relationships, audit, row locking, minimal bilingual Banking UI, and exact integer-cent arithmetic.
-- Phase 3E: readiness for real bank XLSX import, including recovery/resume for incomplete imports.
+### Phase 14 — Full-Cycle Validation: IN PROGRESS / PARTIALLY VALIDATED
 
-## Practical Phase 3 Sample Validation — PASS
+#### 14A: Validation Matrix Design
+- Status: ✅ MERGED (2026-09-20)
+- PRs: #283, #285
+- Deliverable: docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md
 
-### Real bank statement import evidence
-تم اختبار كشف XLSX بنكي حقيقي End-to-End:
-- Preview: `289/289` صحيحة.
-- Duplicate: `0`.
-- Invalid: `0`.
-- Confirm: تم إنشاء `289` حركة فعلية في `bank_transactions`.
-- تم التحقق عمليًا من المدين/الدائن والأرصدة.
+#### 14B: Foundation & Master Data Validation
+- Status: ⚙️ IN VALIDATION (Issue #286)
+- Progress: Steps 1–5 PASS (evidence recorded in GitHub Issue #286 comments, not in `main`)
+  - Company context
+  - Accounting & Tax Profile
+  - Fiscal Year 2026
+  - Opening Balances
+  - Customers / Suppliers (Partners)
+- Pending: Steps 6+ (not yet executed)
 
-### Database readiness
-تم التحقق فعليًا من تطبيق migrations التالية في PostgreSQL الخاص ببيئة الاختبار:
-- `013_bank_transaction_reconciliation.sql`
-- `014_document_settlements.sql`
-- `015_custody_advances.sql`
+#### Phase 14 Validation Fixes by Slice:
+Slice attribution below follows the labels found in each PR's GitHub description/title/branch; slice names are from `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8.
 
-### Bank transaction ↔ Document / Reconciliation / Settlement
-عينة الدفع المسجلة:
-- Bank transaction: `EQFAL payment sample` بقيمة `-150.00`.
-- Document: `sign test.png`، الحالة `approved`، الإجمالي `200.00`.
-- Match: موجود فعليًا.
-- Reconciliation: `reconciled`.
-- Settlement: موجود فعليًا بقيمة `150.00`.
+14C — Purchase/Payment/Banking Cycle:
+- (none yet)
 
-### Custody journey
-العهدة العملية:
-- purpose: `Phase 3 validation custody`.
-- Funding transaction: `EQFAL custody funding` بقيمة `-500.00`.
-- Allocation: `350.00` إلى مستند معتمد إجماليه `350.00`.
-- Return transaction: `EQFAL custody return` بقيمة `+150.00`.
-- Remaining: `0.00`.
-- Final status: `closed`.
+14D — Sales/Collection Cycle:
+- (none yet)
 
-الحساب المثبت عمليًا:
-`500.00 - 350.00 - 150.00 = 0.00`.
+14E — Assets/Adjustments/VAT:
+- #287: Purchase-to-asset navigation (✅ MERGED — PR description: "Phase 14E-2 blocker")
+- #288: Future asset depreciation guard (✅ MERGED — PR description: "Phase 14E-2 control gap")
+- #289: Periodic adjustment future-posting guard (✅ MERGED — labeled 14E-3A)
+- #290: Manual journal future-posting guard (✅ MERGED — labeled 14E-5A)
+- #291: Tax workpaper source-drift approval guard (✅ MERGED — labeled 14E-9A)
+- #292: Source-drift blocker (✅ MERGED — labeled 14E-9B)
 
-### Audit trail
-تم التحقق من وجود الأحداث التالية فعليًا وربطها بالمستخدم والشركة والكيان:
-- `bank_transaction.match`
-- `bank_transaction.reconcile`
-- `document_settlement.create`
-- `custody.create`
-- `custody.document.allocate`
-- `custody.return.link`
-- `custody.close`
+14F — Ledger/Monthly Close/Financial Statements:
+- (none yet)
 
-كما ظهرت before/after data ذات الصلة للمسار التشغيلي.
+14G — Tax/WHT/Annual Closing:
+- #294: Tax Workpaper Reconcile action (✅ MERGED — branch `codex/github-mention-14g-expose-tax-workpaper-reconcile-action`)
 
-### Company isolation
-تم إنشاء Fixture مؤقت لشركة ثانية باسم `Phase 3 Gate Company B` وربط المستخدم الحالي بها عبر Role محدود للقراءة فقط.
+14H — Cross-cutting closeout:
+- (none yet)
 
-التحقق العملي:
-- تم التبديل إلى Company B عبر Company Switcher.
-- لم تظهر الحسابات البنكية أو الـ289 حركة أو المستندات أو العهدة الخاصة بـCompany A.
-- بعد الاختبار تم حذف Membership/Role/Company الخاصة بالـfixture بالكامل.
-- بقيت `Test Company` فقط في قاعدة الاختبار.
+**Summary:** Phase 14 validation identified issues; the fixes listed above are merged to main.
 
-### Capabilities / permissions
-الـfixture المحدود امتلك فقط:
-- `bank.view`
-- `custody.view`
+---
 
-ولإثبات enforcement على مستوى Backend، تم تشغيل اختبارات الـroutes/authorization الموجودة في `main`.
+### Phase 15 — System-wide UI/UX Redesign: PARTIALLY MERGED / IN PROGRESS
 
-النتيجة النهائية:
-- Test Files: `5 passed (5)`.
-- Tests: `31 passed (31)`.
+#### Merged Work:
+- #305: Sales visual redesign (✅ MERGED 2026-09-30)
+- #309: Home financial overview (✅ MERGED 2026-10-01)
+- #313: Home blocker categories fix (✅ MERGED 2026-10-02)
 
-الملفات المشغلة:
-- `bank-reconciliation.router.test.ts`
-- `document-settlement.router.test.ts`
-- `custody.router.test.ts`
-- `company.repository.test.ts`
-- `membership.authorization.repository.test.ts`
+#### Open Work:
+- #307: Purchases visual (🔄 OPEN — unique work stream, separate from Phase 14)
 
-لا يوجد Blocker برمجي جديد كشفه Practical Gate.
+#### Pending:
+- Remaining system-wide UI/UX components (NOT YET STARTED)
 
-## قرار الإغلاق
-بوابة Phase 3 المطلوبة في الوثيقة التشغيلية — **استيراد ومطابقة وتسويات على عينات** — اجتازت التحقق العملي.
+---
 
-**Phase 3 — CLOSED.**
+## Open PRs (Current)
 
-الحدود التي تبقى مؤجلة ولا تدخل ضمن إعادة فتح Phase 3:
-- الدفع الشخصي من مال المدير/الموظف نيابة عن الشركة.
-- multiple funding sources للمستند.
-- أكثر من Funding transfer للعهدة نفسها.
-- one bank transaction → multiple operations.
-- splitting one bank transaction across multiple documents/operations.
-- advanced overpayment/prepayment allocation.
-- المطابقة التلقائية/scoring/AI.
-- GL/VAT/accounting classification.
+| PR | Title | Status |
+|----|-------|--------|
+| #214 | Docs: verify Codex triggers before reporting execution | OPEN |
+| #229 | Phase 9A.2 correction: make Monthly Close creation capability-independent | OPEN |
+| #307 | Phase 15D follow-up: apply approved Purchases Locofy visual | OPEN |
 
-## ملاحظة UI/UX المسجلة
-بعد الإغلاق، توجد مهمة مستقلة لمراجعة UI/UX للصفحات المتأثرة، خصوصًا جداول البنوك:
-- النصوص المقطوعة.
-- عدم تساوي/اتساق الأزرار والحالات.
-- عرض الأعمدة.
-- RTL/LTR.
-- المبالغ والتواريخ.
-- responsive behavior.
+---
 
-المعالجة يجب أن تكون على مستوى النمط المشترك والصفحات المتأثرة، وليس ترقيع صفحة واحدة.
+## Governance Model
 
-## المهمة التالية المقترحة
-**UI/UX Review — Banking & Affected Operational Tables**
+Source of truth: AGENTS.md
 
-Read-only Design Check أولًا، ولا يبدأ أي تعديل قبل الاعتماد.
+### Key Constraints
+- Owner-controlled workflow (no autonomous agents)
+- No automatic merge
+- Owner approval required before coding
+- Owner-only merge decision authority
 
-بعدها أقرب مرحلة أعمال رئيسية حسب الوثيقة التشغيلية هي **Phase 4 — الشركاء والذمم**.
+### Workflow (Summary)
+READ-ONLY → PLAN → OWNER APPROVAL → CODEX PREFLIGHT → CODEX EXECUTION → EQFAL REVIEW → TESTS/CI → GITHUB HANDOFF → REPLIT SAME-SHA VALIDATION → OWNER UAT → OWNER MERGE DECISION
 
-## قواعد التشغيل المستمرة
-- `GitHub/main` المرجع الوحيد.
-- مهمة برمجية واحدة فقط في كل مرة.
-- لا تنفيذ برمجي قبل Design Check للمهمة البرمجية الجديدة.
-- One-Shot Rule وZero-Loop Rule مستمران.
-- القبول من diff الحقيقي + tests/CI + مطابقة Design Check.
-- Replit Agent محظور؛ Replit Runtime/Preview يدوي فقط عند الحاجة.
-- لا Production دون موافقة صريحة.
-- لا تكلفة تشغيلية جديدة دون موافقة.
+See AGENTS.md for full governance and role definitions.
+
+---
+
+## Next Steps
+
+1. **Phase 14B:** Continue validation (Steps 6+)
+2. **PR #307:** Complete Purchases visual redesign
+3. **Phase 15:** Continue remaining UI/UX components
+4. **Phase 13:** Reactivate when business need and design gates are met
