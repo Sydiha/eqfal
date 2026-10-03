@@ -128,8 +128,8 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 
 /* charts row - inline visualizations */
 .eqfal-home__panel--charts { padding: 12px 0; background: transparent; border: none; box-shadow: none; }
-.eqfal-home__charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; padding: 0 16px; }
-.eqfal-home__chart-col { display: flex; flex-direction: column; gap: 8px; }
+.eqfal-home__charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 20px; padding: 0 16px; }
+.eqfal-home__chart-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .eqfal-home__chart-col h3 { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--home-text); }
 
 /* history columns - more compact */
@@ -212,4 +212,5 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__kpi-tile { padding: 8px 10px; }
   .eqfal-home__kpi-tile span { font-size: 0.65rem; }
   .eqfal-home__kpi-tile strong { font-size: 1rem; }
+  .eqfal-home__charts-row { grid-template-columns: 1fr; gap: 12px; padding: 0; }
 }
