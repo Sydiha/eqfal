@@ -46,3 +46,5 @@ Next exact step:
 - Do not perform repository-wide scans without a task-specific reason.
 - Keep output concise.
 - This skill does not modify code, merge PRs, deploy, or make Owner decisions.
+- Default output language: Arabic, unless the Owner explicitly requests another language.
+- If the project skill cannot be loaded because the session starts outside the repository root, perform the same context-sync procedure manually using PROJECT_STATE.md + SESSION_HANDOFF.md + origin/main verification.

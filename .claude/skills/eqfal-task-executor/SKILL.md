@@ -61,3 +61,4 @@ Stop and request Owner approval for:
 - Do not inspect unrelated modules merely for background.
 - Prefer targeted validation over full-suite validation unless the task or CI requires more.
 - Do not generate long narrative reports.
+- All user-facing execution summaries, blockers, decisions, and handoffs must be in Arabic by default, unless the Owner explicitly requests another language.

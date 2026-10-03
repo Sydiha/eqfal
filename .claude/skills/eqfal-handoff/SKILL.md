@@ -50,3 +50,5 @@ Next exact step:
 - Clearly distinguish READY, BLOCKED, and NEEDS OWNER DECISION.
 - Do not claim CI passed unless it was actually observed.
 - Do not merge or deploy as part of handoff.
+- Default output language: Arabic, unless the Owner explicitly requests another language.
+- Handoff labels should be Arabic when practical, while preserving technical values exactly: SHA, branch names, file paths, test names, PR numbers, command names.
