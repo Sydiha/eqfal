@@ -11,7 +11,6 @@ import {
   IconObligations,
   IconOpeningBalances,
   IconPeriodicAdjustments,
-  IconSales,
   IconVAT,
 } from "./EqfalIcons";
 
@@ -58,45 +57,6 @@ type Period = {
   };
 };
 
-type HomeAlert = {
-  key: string;
-  class: "needs_action_now" | "upcoming_due" | "needs_review_completion";
-  ownership:
-    | "current_user"
-    | "waiting_for_accountant"
-    | "waiting_for_team"
-    | "upcoming";
-  count: number;
-  destination: DiscoveryPage;
-  parameters: Record<string, string>;
-};
-
-type SnapshotMetric =
-  | { state: "available"; amount: string }
-  | { state: "hidden" };
-type FinancialSnapshot = {
-  metrics: {
-    bank_balances:
-      | { state: "hidden" }
-      | {
-          state: "available";
-          accounts: Array<{
-            id: string;
-            display_name: string;
-            currency_code: string;
-            balance:
-              | { state: "available"; amount: string }
-              | { state: "unavailable" };
-          }>;
-        };
-    amounts_to_collect: SnapshotMetric;
-    amounts_to_pay: SnapshotMetric;
-    current_month_sales: SnapshotMetric;
-    current_month_purchases_expenses: SnapshotMetric;
-  };
-};
-
-type HomeTab = "byArea" | "history" | "amounts" | "banks" | "queue";
 
 const AREA_ICONS: Record<string, typeof IconDocuments> = {
   documents: IconDocuments,
@@ -108,18 +68,6 @@ const AREA_ICONS: Record<string, typeof IconDocuments> = {
   opening_balances: IconOpeningBalances,
   periodic_adjustments: IconPeriodicAdjustments,
 };
-
-const ChartIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-  </svg>
-);
-
-const ListIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-  </svg>
-);
 
 type Props = {
   capabilities: readonly string[];
@@ -136,15 +84,6 @@ type Props = {
 const stripDirectionalMarks = (value: string) =>
   value.replace(/[\u061c\u200e\u200f]/g, "");
 
-const formatFinancialAmount = (value: string) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return value;
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numeric);
-};
-
 export function Home({
   capabilities,
   navigate,
@@ -156,19 +95,6 @@ export function Home({
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
-  const canViewAlerts = capabilities.some((capability) =>
-    ["obligation.view", "document.view", "bank.view"].includes(capability),
-  );
-  const [alerts, setAlerts] = useState<HomeAlert[]>([]);
-  const [alertsLoading, setAlertsLoading] = useState(canViewAlerts);
-  const [alertsError, setAlertsError] = useState(false);
-  const canViewSnapshot = capabilities.some((capability) =>
-    ["bank.view", "obligation.view", "document.view"].includes(capability),
-  );
-  const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
-  const [snapshotLoading, setSnapshotLoading] = useState(canViewSnapshot);
-  const [snapshotError, setSnapshotError] = useState(false);
-  const [tab, setTab] = useState<HomeTab | null>(null);
   const isArabic = i18n.language.startsWith("ar");
   const homeLabels = isArabic
     ? {
@@ -295,28 +221,6 @@ export function Home({
         hiddenValue: "?",
       };
 
-  const alertLabels: Record<string, string> = isArabic
-    ? {
-        overdue_obligations: "التزامات متأخرة",
-        upcoming_obligations: "التزامات مستحقة قريباً",
-        unconfirmed_obligations: "التزامات غير مؤكدة",
-        documents_uploaded: "مستندات مرفوعة للمراجعة",
-        documents_needs_review: "مستندات تحتاج مراجعة",
-        documents_incomplete: "مستندات غير مكتملة",
-        bank_transactions_unmatched: "حركات بنكية غير مطابقة",
-        bank_transactions_matched: "حركات بنكية تحتاج تسوية",
-      }
-    : {
-        overdue_obligations: "Overdue obligations",
-        upcoming_obligations: "Obligations due soon",
-        unconfirmed_obligations: "Unconfirmed obligations",
-        documents_uploaded: "Uploaded documents to review",
-        documents_needs_review: "Documents needing review",
-        documents_incomplete: "Incomplete documents",
-        bank_transactions_unmatched: "Unmatched bank transactions",
-        bank_transactions_matched: "Bank transactions awaiting reconciliation",
-      };
-
   const load = async () => {
     if (!canViewClose) return;
     setLoading(true);
@@ -340,71 +244,9 @@ export function Home({
     if (canViewClose) void load();
   }, [canViewClose]);
 
-  const loadAlerts = async () => {
-    if (!canViewAlerts) return;
-    setAlertsLoading(true);
-    setAlertsError(false);
-    try {
-      const response = await fetch("/api/home-alerts", {
-        credentials: "same-origin",
-      });
-      if (response.status === 401) onUnauthorized();
-      if (!response.ok) throw new Error(String(response.status));
-      const payload = (await response.json()) as { alerts?: HomeAlert[] };
-      setAlerts(
-        Array.isArray(payload.alerts)
-          ? payload.alerts.filter((alert) => alert.count > 0)
-          : [],
-      );
-    } catch {
-      setAlertsError(true);
-    } finally {
-      setAlertsLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    if (canViewAlerts) void loadAlerts();
-  }, [canViewAlerts]);
-
-  const loadSnapshot = async () => {
-    if (!canViewSnapshot) return;
-    setSnapshotLoading(true);
-    setSnapshotError(false);
-    try {
-      const response = await fetch("/api/manager-financial-snapshot", {
-        credentials: "same-origin",
-      });
-      if (response.status === 401) onUnauthorized();
-      if (!response.ok) throw new Error(String(response.status));
-      const payload = (await response.json()) as Partial<FinancialSnapshot>;
-      if (!payload.metrics) throw new Error("Invalid snapshot");
-      setSnapshot(payload as FinancialSnapshot);
-    } catch {
-      setSnapshotError(true);
-    } finally {
-      setSnapshotLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (canViewSnapshot) void loadSnapshot();
-  }, [canViewSnapshot]);
 
   const selected = periods[0] ?? null;
-  const alertGroups = (
-    [
-      "current_user",
-      "upcoming",
-      "waiting_for_accountant",
-      "waiting_for_team",
-    ] as const
-  )
-    .map((ownership) => ({
-      ownership,
-      alerts: alerts.filter((alert) => alert.ownership === ownership),
-    }))
-    .filter((group) => group.alerts.length > 0);
   const can = (capability: string) => capabilities.includes(capability);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
@@ -532,68 +374,6 @@ export function Home({
       ? value
       : new Intl.DateTimeFormat(i18n.language, { month: "short" }).format(date);
   };
-  const tabs: Array<{ key: HomeTab; label: string; icon: JSX.Element; show: boolean }> = [
-    {
-      key: "byArea",
-      label: homeLabels.tabs.byArea,
-      icon: <ChartIcon />,
-      show: canViewClose && !!selected && !loading && !error,
-    },
-    {
-      key: "history",
-      label: homeLabels.tabs.history,
-      icon: <IconMonthlyClose size={17} />,
-      show: canViewClose && recentPeriods.length > 0 && !loading && !error,
-    },
-    {
-      key: "amounts",
-      label: homeLabels.tabs.amounts,
-      icon: <IconSales size={17} />,
-      show: canViewSnapshot,
-    },
-    {
-      key: "banks",
-      label: homeLabels.tabs.banks,
-      icon: <IconBanks size={17} />,
-      show: canViewSnapshot,
-    },
-    {
-      key: "queue",
-      label: homeLabels.tabs.queue,
-      icon: <ListIcon />,
-      show: canViewAlerts,
-    },
-  ];
-  const visibleTabs = tabs.filter((item) => item.show);
-  const activeTab = visibleTabs.some((item) => item.key === tab) ? tab : null;
-
-  const snapshotState = snapshotLoading ? (
-    <p role="status">{homeLabels.snapshotLoading}</p>
-  ) : snapshotError || !snapshot ? (
-    <p role="alert">
-      {homeLabels.snapshotError}{" "}
-      <button type="button" onClick={() => void loadSnapshot()}>
-        {homeLabels.retry}
-      </button>
-    </p>
-  ) : null;
-
-  const panelHeading = (id: string, title: string, subtitle?: string) => (
-    <div className="eqfal-home__section-heading">
-      <div>
-        <h2 id={id}>{title}</h2>
-        {subtitle && <p>{subtitle}</p>}
-      </div>
-      <button
-        type="button"
-        className="eqfal-home__panel-close"
-        aria-label={homeLabels.close}
-        onClick={() => setTab(null)}
-      >
-        <span aria-hidden="true">✕</span>
-      </button>
-    </div>
-  );
 
   const ring = () => {
     const radius = 82;
@@ -683,381 +463,194 @@ export function Home({
 
       {canViewClose && !loading && !error && selected && (
         <>
-          <aside
-            className={`eqfal-home__hero ${isReady ? "is-ready" : "is-blocked"}`}
+          <section
+            className={`eqfal-home__status-bar eqfal-home__status-bar--compact ${isReady ? "is-ready" : "is-blocked"}`}
             aria-labelledby="home-readiness-title"
           >
-            <div className="eqfal-home__hero-main">
-              <div className="eqfal-home__hero-meta">
-                <span className="eqfal-home__hero-rule" aria-hidden="true" />
-                <span>{homeLabels.readiness}</span>
-                <span className="eqfal-home__hero-period">{periodRange}</span>
-                <span className="eqfal-home__hero-pill">
-                  {t(`monthlyClose.${selected.status}`)}
-                </span>
-              </div>
+            <div className="eqfal-home__status-bar-content">
               <h2 id="home-readiness-title">{closeSummary}</h2>
-              {selected.status === "open" && !selected.has_hidden_blockers && (
-                <p className="eqfal-home__hero-sub">
-                  {homeLabels.areasReady(clearAreas, exceptions.length)}
-                </p>
-              )}
-              <div className="eqfal-home__hero-actions">
-                <button
-                  type="button"
-                  className="eqfal-home__primary-action"
-                  onClick={() => navigate("monthlyClose")}
-                >
-                  <IconMonthlyClose size={18} />
-                  {t("nav.monthlyClose")}
-                </button>
-              </div>
+              <p className="eqfal-home__status-bar-period">{periodRange}</p>
+              <button
+                type="button"
+                className="eqfal-home__primary-action eqfal-home__primary-action--compact"
+                onClick={() => navigate("monthlyClose")}
+              >
+                <IconMonthlyClose size={16} />
+                {t("nav.monthlyClose")}
+              </button>
             </div>
-            <div className="eqfal-home__hero-stat">
+          </section>
+
+          <section className="eqfal-home__kpi-tiles">
+            <article className="eqfal-home__kpi-tile">
+              <span>{homeLabels.readiness}</span>
+              <strong>{isReady ? "Ready" : "In Progress"}</strong>
+            </article>
+            <article className="eqfal-home__kpi-tile">
               <span>{homeLabels.closeBlockers}</span>
               <strong>
                 {selected.has_hidden_blockers
                   ? t("monthlyClose.blockedHidden")
                   : selected.disclosed_total}
               </strong>
-              <small>
-                {homeLabels.periodState}: {t(`monthlyClose.${selected.status}`)}
-              </small>
-            </div>
-          </aside>
+            </article>
+            <article className="eqfal-home__kpi-tile">
+              <span>{homeLabels.periodState}</span>
+              <strong>{t(`monthlyClose.${selected.status}`)}</strong>
+            </article>
+            {clearAreas > 0 && (
+              <article className="eqfal-home__kpi-tile">
+                <span>{homeLabels.areasRing}</span>
+                <strong>{clearAreas} / {exceptions.length}</strong>
+              </article>
+            )}
+          </section>
 
-          <section
-            className="eqfal-home__panel eqfal-home__panel--blockers"
-            aria-labelledby="home-exceptions-title"
-          >
-            <div className="eqfal-home__section-heading eqfal-home__section-heading--table">
-              <div>
-                <p className="eqfal-home__eyebrow">{t("monthlyClose.title")}</p>
-                <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
+          {blockedAreaCount > 0 && (
+            <section
+              className="eqfal-home__panel eqfal-home__panel--blockers"
+              aria-labelledby="home-exceptions-title"
+            >
+              <div className="eqfal-home__section-heading eqfal-home__section-heading--table">
+                <div>
+                  <p className="eqfal-home__eyebrow">{t("monthlyClose.title")}</p>
+                  <h2 id="home-exceptions-title">{homeLabels.closeBlockers}</h2>
+                </div>
               </div>
-            </div>
-            <div className="eqfal-home__table-wrap">
-              <table className="eqfal-home__table">
-                <thead>
-                  <tr>
-                    <th>{homeLabels.area}</th>
-                    <th>{homeLabels.blockerState}</th>
-                    <th className="eqfal-home__col-share">{homeLabels.share}</th>
-                    <th>
-                      <span className="eqfal-home__sr-only">{homeLabels.action}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptions.map((item) => {
-                    const AreaIcon = AREA_ICONS[item.key] ?? IconDocuments;
-                    const percent =
-                      blockedTotal > 0
-                        ? Math.round((item.count / blockedTotal) * 100)
-                        : 0;
-                    return (
-                      <tr
-                        key={item.key}
-                        className={item.count > 0 ? "is-blocked" : undefined}
-                      >
-                        <td>
-                          <span className="eqfal-home__area">
-                            <span className="eqfal-home__area-icon">
-                              <AreaIcon size={17} />
+              <div className="eqfal-home__table-wrap">
+                <table className="eqfal-home__table">
+                  <thead>
+                    <tr>
+                      <th>{homeLabels.area}</th>
+                      <th>{homeLabels.blockerState}</th>
+                      <th className="eqfal-home__col-share">{homeLabels.share}</th>
+                      <th>
+                        <span className="eqfal-home__sr-only">{homeLabels.action}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exceptions.filter((item) => item.count > 0).map((item) => {
+                      const AreaIcon = AREA_ICONS[item.key] ?? IconDocuments;
+                      const percent =
+                        blockedTotal > 0
+                          ? Math.round((item.count / blockedTotal) * 100)
+                          : 0;
+                      return (
+                        <tr key={item.key} className="is-blocked">
+                          <td>
+                            <span className="eqfal-home__area">
+                              <span className="eqfal-home__area-icon">
+                                <AreaIcon size={17} />
+                              </span>
+                              <strong>{item.label}</strong>
                             </span>
-                            <strong>{item.label}</strong>
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`home-exception-count ${item.count > 0 ? "is-blocked" : "is-clear"}`}
-                          >
-                            {item.count > 0
-                              ? homeLabels.blockers(item.count)
-                              : homeLabels.noBlockers}
-                          </span>
-                        </td>
-                        <td className="eqfal-home__col-share">
-                          {item.count > 0 ? (
+                          </td>
+                          <td>
+                            <span className="home-exception-count is-blocked">
+                              {homeLabels.blockers(item.count)}
+                            </span>
+                          </td>
+                          <td className="eqfal-home__col-share">
                             <span className="eqfal-home__share">
                               <span className="eqfal-home__share-track">
                                 <b style={{ width: `${percent}%` }} />
                               </span>
                               <span dir="ltr">{percent}%</span>
                             </span>
-                          ) : (
-                            <span className="eqfal-home__share">—</span>
-                          )}
-                        </td>
-                        <td className="eqfal-home__col-action">
-                          {item.canOpen && (
-                            <button
-                              type="button"
-                              className="eqfal-home__link-action"
-                              aria-label={item.label}
-                              onClick={item.open}
-                            >
-                              <span>{homeLabels.open}</span>
-                              <span aria-hidden="true">{isArabic ? "←" : "→"}</span>
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {!selected.has_hidden_blockers && (
-              <div className="eqfal-home__table-foot">
-                <span>{homeLabels.areasWithBlockers(blockedAreaCount)}</span>
-                <span>{homeLabels.total(blockedTotal)}</span>
+                          </td>
+                          <td className="eqfal-home__col-action">
+                            {item.canOpen && (
+                              <button
+                                type="button"
+                                className="eqfal-home__link-action"
+                                aria-label={item.label}
+                                onClick={item.open}
+                              >
+                                <span>{homeLabels.open}</span>
+                                <span aria-hidden="true">{isArabic ? "←" : "→"}</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </section>
+              {!selected.has_hidden_blockers && (
+                <div className="eqfal-home__table-foot">
+                  <span>{homeLabels.areasWithBlockers(blockedAreaCount)}</span>
+                  <span>{homeLabels.total(blockedTotal)}</span>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
 
-      {visibleTabs.length > 0 && (
-        <div className="eqfal-home__tabs" role="toolbar">
-          {visibleTabs.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`eqfal-home__tab${activeTab === item.key ? " is-active" : ""}`}
-              aria-expanded={activeTab === item.key}
-              aria-controls={`home-panel-${item.key}`}
-              onClick={() => setTab(activeTab === item.key ? null : item.key)}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {activeTab === "byArea" && selected && (
+      {selected && (
         <section
-          id="home-panel-byArea"
-          className="eqfal-home__panel eqfal-home__panel--detail"
-          aria-labelledby="home-byarea-title"
+          className="eqfal-home__panel eqfal-home__panel--charts"
+          aria-labelledby="home-charts-title"
         >
-          {panelHeading("home-byarea-title", homeLabels.tabs.byArea, homeLabels.byAreaSub)}
-          <div className="eqfal-home__byarea">
-            {ring()}
-            <div className="eqfal-home__bars">
-              {exceptions.map((item) => (
-                <div
-                  key={item.key}
-                  className={`eqfal-home__bar${item.count === 0 ? " is-clear" : ""}`}
-                >
-                  <span>{item.label}</span>
-                  <span className="eqfal-home__bar-track">
-                    {item.count > 0 && (
-                      <b style={{ width: `${(item.count / maxAreaCount) * 100}%` }} />
-                    )}
-                  </span>
-                  <strong>{item.count}</strong>
+          <div className="eqfal-home__charts-row">
+            <div className="eqfal-home__chart-col">
+              <h3 id="home-charts-title">{homeLabels.tabs.byArea}</h3>
+              <div className="eqfal-home__byarea">
+                {ring()}
+                <div className="eqfal-home__bars">
+                  {exceptions.map((item) => (
+                    <div
+                      key={item.key}
+                      className={`eqfal-home__bar${item.count === 0 ? " is-clear" : ""}`}
+                    >
+                      <span>{item.label}</span>
+                      <span className="eqfal-home__bar-track">
+                        {item.count > 0 && (
+                          <b style={{ width: `${(item.count / maxAreaCount) * 100}%` }} />
+                        )}
+                      </span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {activeTab === "history" && (
-        <section
-          id="home-panel-history"
-          className="eqfal-home__panel eqfal-home__panel--detail"
-          aria-labelledby="home-history-title"
-        >
-          {panelHeading("home-history-title", homeLabels.periodHistory, homeLabels.periodHistorySub)}
-          <div className="eqfal-home__columns">
-            {recentPeriods.map((period) => (
-              <div
-                key={period.id}
-                className={`eqfal-home__column${period.id === selected?.id ? " is-current" : ""}`}
-                title={`${monthLabel(period.period_start)} · ${
-                  period.has_hidden_blockers
-                    ? t("monthlyClose.blockedHidden")
-                    : homeLabels.blockers(period.disclosed_total)
-                }`}
-              >
-                <span className="eqfal-home__column-value">
-                  {period.has_hidden_blockers
-                    ? homeLabels.hiddenValue
-                    : period.disclosed_total}
-                </span>
-                <span className="eqfal-home__column-bar">
-                  <b
-                    style={{
-                      height: `${Math.max(period.disclosed_total > 0 ? 8 : 3, (period.disclosed_total / maxPeriodTotal) * 100)}%`,
-                    }}
-                  />
-                </span>
-                <span className="eqfal-home__column-label">
-                  {monthLabel(period.period_start)}
-                </span>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {activeTab === "amounts" && (
-        <section
-          id="home-panel-amounts"
-          className="eqfal-home__panel eqfal-home__panel--detail"
-          aria-labelledby="home-financial-snapshot-title"
-        >
-          {panelHeading("home-financial-snapshot-title", homeLabels.snapshot, homeLabels.operationalView)}
-          {snapshotState ?? (
-            <div className="eqfal-home__grid">
-              {(
-                [
-                  ["amounts_to_collect", homeLabels.amountsToCollect],
-                  ["amounts_to_pay", homeLabels.amountsToPay],
-                  ["current_month_sales", homeLabels.monthSales],
-                  [
-                    "current_month_purchases_expenses",
-                    homeLabels.monthPurchasesExpenses,
-                  ],
-                ] as const
-              ).map(([key, label]) => {
-                const metric = snapshot!.metrics[key];
-                return (
-                  <article
-                    className={`eqfal-home__metric eqfal-home__metric--${key}`}
-                    key={key}
-                  >
-                    <h3>{label}</h3>
-                    <strong dir="ltr">
-                      {metric.state === "available"
-                        ? `${formatFinancialAmount(metric.amount)}${isArabic ? " ر.س" : " SAR"}`
-                        : homeLabels.restricted}
-                    </strong>
-                  </article>
-                );
-              })}
             </div>
-          )}
-        </section>
-      )}
 
-      {activeTab === "banks" && (
-        <section
-          id="home-panel-banks"
-          className="eqfal-home__panel eqfal-home__panel--detail"
-          aria-labelledby="home-banks-title"
-        >
-          {panelHeading("home-banks-title", homeLabels.bankBalances, homeLabels.operationalView)}
-          {snapshotState ??
-            (snapshot!.metrics.bank_balances.state === "hidden" ? (
-              <p>{homeLabels.restricted}</p>
-            ) : snapshot!.metrics.bank_balances.accounts.length === 0 ? (
-              <p>{homeLabels.noBankAccounts}</p>
-            ) : (
-              <div className="eqfal-home__banks">
-                {snapshot!.metrics.bank_balances.accounts.map((account) => (
-                  <p className="eqfal-home__bank-account" key={account.id}>
-                    <span>{account.display_name}</span>
-                    <strong dir="ltr">
-                      {account.balance.state === "available"
-                        ? `${formatFinancialAmount(account.balance.amount)} ${isArabic && account.currency_code === "SAR" ? "ر.س" : account.currency_code}`
-                        : homeLabels.unavailable}
-                    </strong>
-                  </p>
+            <div className="eqfal-home__chart-col">
+              <h3>{homeLabels.periodHistory}</h3>
+              <div className="eqfal-home__columns">
+                {recentPeriods.map((period) => (
+                  <div
+                    key={period.id}
+                    className={`eqfal-home__column${period.id === selected?.id ? " is-current" : ""}`}
+                    title={`${monthLabel(period.period_start)} · ${
+                      period.has_hidden_blockers
+                        ? t("monthlyClose.blockedHidden")
+                        : homeLabels.blockers(period.disclosed_total)
+                    }`}
+                  >
+                    <span className="eqfal-home__column-value">
+                      {period.has_hidden_blockers
+                        ? homeLabels.hiddenValue
+                        : period.disclosed_total}
+                    </span>
+                    <span className="eqfal-home__column-bar">
+                      <b
+                        style={{
+                          height: `${Math.max(period.disclosed_total > 0 ? 8 : 3, (period.disclosed_total / maxPeriodTotal) * 100)}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="eqfal-home__column-label">
+                      {monthLabel(period.period_start)}
+                    </span>
+                  </div>
                 ))}
               </div>
-            ))}
-        </section>
-      )}
-
-      {activeTab === "queue" && (
-        <section
-          id="home-panel-queue"
-          className="eqfal-home__panel eqfal-home__panel--detail eqfal-home__panel--queue"
-          aria-labelledby="home-alerts-title"
-        >
-          {panelHeading("home-alerts-title", homeLabels.alerts)}
-          {alertsLoading ? (
-            <p role="status">{homeLabels.alertsLoading}</p>
-          ) : alertsError ? (
-            <p role="alert">
-              {homeLabels.alertsError}{" "}
-              <button type="button" onClick={() => void loadAlerts()}>
-                {homeLabels.retry}
-              </button>
-            </p>
-          ) : alerts.length === 0 ? (
-            <p role="status">{homeLabels.alertsEmpty}</p>
-          ) : (
-            <div className="eqfal-home__tasks">
-              <div className="eqfal-home__tasks-header" aria-hidden="true">
-                <span>{isArabic ? "التصنيف" : "CATEGORY"}</span>
-                <span>{isArabic ? "العنصر" : "ITEM"}</span>
-                <span>{isArabic ? "العدد" : "COUNT"}</span>
-                <span>{isArabic ? "المسؤول" : "OWNER"}</span>
-                <span>{isArabic ? "الحالة" : "STATUS"}</span>
-                <span>{isArabic ? "الإجراء" : "ACTION"}</span>
-              </div>
-              {alertGroups.flatMap((group) =>
-                group.alerts.map((alert) => (
-                  <button
-                    key={alert.key}
-                    type="button"
-                    className="eqfal-home__task-row"
-                    onClick={() =>
-                      navigateToDiscovery(alert.destination, alert.parameters)
-                    }
-                  >
-                    <span
-                      className={`eqfal-home__task-category eqfal-home__task-category--${alert.class}`}
-                    >
-                      {isArabic
-                        ? alert.class === "needs_action_now"
-                          ? "عاجل"
-                          : alert.class === "upcoming_due"
-                            ? "قادم"
-                            : "مراجعة"
-                        : alert.class === "needs_action_now"
-                          ? "Action now"
-                          : alert.class === "upcoming_due"
-                            ? "Upcoming"
-                            : "Review"}
-                    </span>
-                    <span className="eqfal-home__task-name">
-                      {alertLabels[alert.key] ?? alert.key}
-                    </span>
-                    <strong className="eqfal-home__task-count">
-                      {alert.count}
-                    </strong>
-                    <span className="eqfal-home__task-owner">
-                      {homeLabels.ownership[group.ownership]}
-                    </span>
-                    <span
-                      className={`eqfal-home__task-status eqfal-home__task-status--${alert.ownership}`}
-                    >
-                      {isArabic
-                        ? alert.ownership === "waiting_for_accountant"
-                          ? "بانتظار المحاسب"
-                          : alert.ownership === "upcoming"
-                            ? "قادم"
-                            : "يتطلب إجراء"
-                        : alert.ownership === "waiting_for_accountant"
-                          ? "Waiting for accountant"
-                          : alert.ownership === "upcoming"
-                            ? "Upcoming"
-                            : "Action required"}
-                    </span>
-                    <span className="eqfal-home__task-open" aria-hidden="true">
-                      {isArabic ? "←" : "→"}
-                    </span>
-                  </button>
-                )),
-              )}
             </div>
-          )}
+          </div>
         </section>
       )}
     </section>
