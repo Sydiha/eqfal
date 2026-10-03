@@ -93,6 +93,11 @@ const formatFinancialAmount = (value: string) => {
   }).format(numeric);
 };
 
+type SessionUser = {
+  email: string;
+  display_name?: string;
+};
+
 export function Home({
   capabilities,
   navigate,
@@ -110,6 +115,7 @@ export function Home({
     ["bank.view", "obligation.view", "document.view"].includes(capability),
   );
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
 
   // KPI metrics in Figma order with icons
   const kpiMetrics = [
@@ -199,6 +205,23 @@ export function Home({
   useEffect(() => {
     if (canViewSnapshot) void loadSnapshot();
   }, [canViewSnapshot]);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const response = await fetch("/auth/session", {
+          credentials: "same-origin",
+        });
+        if (response.ok) {
+          const data = (await response.json()) as SessionUser;
+          setUser(data);
+        }
+      } catch {
+        // User load error - will use default greeting
+      }
+    };
+    void loadUser();
+  }, []);
 
   const selected = periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
@@ -381,8 +404,8 @@ export function Home({
           </h1>
           <p className="home__greeting">
             {isArabic
-              ? `أحمد المحاسب - ${stripDirectionalMarks(fullDate)}`
-              : `Ahmed Accountant - ${fullDate}`}
+              ? `مرحباً${user?.display_name ? ` ${user.display_name}` : ""} - ${stripDirectionalMarks(fullDate)}`
+              : `Hello${user?.display_name ? ` ${user.display_name}` : ""} - ${fullDate}`}
           </p>
           <p className="home__subtitle">
             {isArabic
