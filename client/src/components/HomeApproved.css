@@ -117,7 +117,7 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 .eqfal-home__ring path.is-clear { fill: var(--home-teal); }
 .eqfal-home__ring-value { fill: var(--home-text); font-size: 32px; font-weight: 800; }
 .eqfal-home__ring-label { fill: var(--home-muted); font-size: 11px; }
-.eqfal-home__bars { display: flex; flex-direction: column; gap: 6px; }
+.eqfal-home__bars { display: flex; flex-direction: column; gap: 6px; padding-inline: 2px; }
 .eqfal-home__bar { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr) 26px; align-items: center; gap: 8px; font-size: 0.75rem; }
 .eqfal-home__bar span:first-child { overflow: hidden; color: var(--home-muted); text-overflow: ellipsis; word-break: break-word; line-height: 1.2; max-height: 2.4em; }
 .eqfal-home__bar-track { position: relative; height: 8px; overflow: hidden; border-radius: 3px; background: #eef1f5; }
@@ -133,7 +133,7 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 .eqfal-home__chart-col h3 { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--home-text); }
 
 /* history columns - more compact */
-.eqfal-home__columns { display: flex; align-items: flex-end; gap: 10px; height: 160px; padding: 6px 16px 16px; }
+.eqfal-home__columns { display: flex; align-items: flex-end; gap: 10px; height: 160px; padding: 6px 16px 16px; overflow-x: auto; }
 .eqfal-home__column { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; min-width: 0; font-size: 0.72rem; }
 .eqfal-home__column-bar { display: flex; align-items: flex-end; justify-content: center; width: 100%; max-width: 32px; height: 100%; }
 .eqfal-home__column-bar b { display: block; width: 100%; border-radius: 3px 3px 0 0; background: #c9d3e1; }
@@ -183,9 +183,9 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__table { min-width: 0; }
   .eqfal-home__table th, .eqfal-home__table td { padding-inline: 10px; }
   .eqfal-home__byarea { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 12px; padding: 4px 12px 12px; }
-  .eqfal-home__bars { width: 100%; }
+  .eqfal-home__bars { width: 100%; padding-inline: 4px; }
   .eqfal-home__grid { grid-template-columns: minmax(0, 1fr); }
-  .eqfal-home__columns { gap: 6px; padding-inline: 12px; height: 140px; }
+  .eqfal-home__columns { gap: 6px; padding-inline: 14px; height: 140px; }
   .eqfal-home__tasks-header { display: none; }
   .eqfal-home__task-row { grid-template-columns: minmax(0, 1fr) auto 24px; gap: 6px; padding: 8px 12px; }
   .eqfal-home__task-category, .eqfal-home__task-status { display: none; }

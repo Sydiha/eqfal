@@ -113,6 +113,8 @@ export function Home({
         noBlockers: "لا توجد معوقات",
         blockers: (count: number) => `المعوقات: ${count}`,
         readiness: "جاهزية الإقفال",
+        ready: "جاهز",
+        inProgress: "جارٍ العمل",
         periodState: "حالة الفترة",
         alerts: "قائمة العمل",
         alertsLoading: "جارٍ تحميل التنبيهات…",
@@ -174,6 +176,8 @@ export function Home({
         noBlockers: "No blockers",
         blockers: (count: number) => `Blockers: ${count}`,
         readiness: "Close readiness",
+        ready: "Ready",
+        inProgress: "In Progress",
         periodState: "Period status",
         alerts: "Work Queue",
         alertsLoading: "Loading alerts…",
@@ -484,7 +488,7 @@ export function Home({
           <section className="eqfal-home__kpi-tiles">
             <article className="eqfal-home__kpi-tile">
               <span>{homeLabels.readiness}</span>
-              <strong>{isReady ? "Ready" : "In Progress"}</strong>
+              <strong>{isReady ? homeLabels.ready : homeLabels.inProgress}</strong>
             </article>
             <article className="eqfal-home__kpi-tile">
               <span>{homeLabels.closeBlockers}</span>
@@ -498,12 +502,10 @@ export function Home({
               <span>{homeLabels.periodState}</span>
               <strong>{t(`monthlyClose.${selected.status}`)}</strong>
             </article>
-            {clearAreas > 0 && (
-              <article className="eqfal-home__kpi-tile">
-                <span>{homeLabels.areasRing}</span>
-                <strong>{clearAreas} / {exceptions.length}</strong>
-              </article>
-            )}
+            <article className="eqfal-home__kpi-tile">
+              <span>{homeLabels.areasRing}</span>
+              <strong>{clearAreas} / {exceptions.length}</strong>
+            </article>
           </section>
 
           {blockedAreaCount > 0 && (
