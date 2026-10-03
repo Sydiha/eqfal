@@ -259,8 +259,6 @@ The following PRs resulted from Phase 14 validation and are now merged back to m
 - #288: Future asset depreciation guard (PR description: "Phase 14E-2 control gap")
 - #289: Periodic adjustment future-posting guard (labeled 14E-3A)
 - #290: Manual journal future-posting guard (labeled 14E-5A)
-- #291: Tax workpaper source-drift approval guard (labeled 14E-9A)
-- #292: Source-drift blocker (labeled 14E-9B)
 
 14F — Ledger/Monthly Close/Financial Statements:
 
@@ -268,6 +266,8 @@ The following PRs resulted from Phase 14 validation and are now merged back to m
 
 14G — Tax/WHT/Annual Closing:
 
+- #291: Tax workpaper source-drift approval guard (labeled 14E-9A)
+- #292: Source-drift blocker (labeled 14E-9B)
 - #294: Tax Workpaper Reconcile action (branch `codex/github-mention-14g-expose-tax-workpaper-reconcile-action`)
 
 14H — Cross-cutting closeout:
