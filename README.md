@@ -1,7 +1,7 @@
 # إقفال | EQFAL · Financial Close & Operations
 
 ⚠️ Last Updated: 2026-10-03
-SHA Reference: 181f37ed60920cdf406155049173a9924272c0bb
+Reference SHA at time of reconciliation — not current HEAD: 181f37ed60920cdf406155049173a9924272c0bb
 Status: Active Development (Phase 14–15)
 
 منصة داخلية متعددة الشركات للإدارة والإقفال المالي، تُبنى كنواة صغيرة وآمنة واقتصادية وقابلة للنقل والتوسع.

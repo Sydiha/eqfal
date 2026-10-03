@@ -15,78 +15,59 @@ Current merged project state is determined by:
 - `GitHub/main` هو المرجع الدائم والوحيد للكود والحالة المدمجة.
 - Session/workspace/conversation state ليس durable authority.
 - Historical records لا تتغلب على الحالة الحالية أو القواعد الأعلى.
-- material unresolved ambiguity تستخدم Human Gate وفق الحوكمة.
+- material unresolved ambiguity تتطلب Owner Approval وفق الحوكمة (`AGENTS.md`).
 
 ## Current Project State
 
-Last reconciled against GitHub/main SHA:
-`2644c9fde0062221240409d47795ae2ee0d022e3`
+Reference SHA at time of reconciliation — not current HEAD:
+`181f37ed60920cdf406155049173a9924272c0bb`
 
 Reconciliation date:
-`2026-09-11`
+`2026-10-03`
 
-هذا SHA audit/reconciliation baseline فقط، وليس ضمانًا بأنه سيظل current HEAD مستقبلًا.
+هذا SHA audit/reconciliation reference فقط، وليس ضمانًا بأنه سيظل current HEAD مستقبلًا.
 
 EQFAL تجاوز مرحلة تأسيس النواة. التنفيذ المدمج على `main` يشمل foundations/workflows فعلية للمصادقة والعزل والصلاحيات وFiscal Years وDocuments وBanking وPartners وObligations وAccounting Ledger وSales وPurchases وFixed Assets وOpening Balances وPeriodic Adjustments وVAT وMonthly Close وAnnual Closing readiness.
 
 ### Reconciled roadmap status
 
 - Phase 1 — Company Accounting & Tax Profile: **DONE**
-- Phase 2 — Fixed Asset Depreciation Policy: **PARTIAL**
+- Phase 2 — Fixed Asset Depreciation Policy: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 3 — Opening Balance Review: **DONE**
 - Phase 4 — Accruals / Prepayments / Periodic Adjustments: **DONE**
-- Phase 5 — Financial Statement Mapping: **NOT STARTED**
+- Phase 5 — Financial Statement Mapping: **DONE**
 - Phase 6 — VAT Reconciliation Hardening: **DONE FOR CURRENTLY APPROVED SCOPE**
-- Phase 7 — Zakat / Income Tax / Withholding Tax: **PARTIAL**
-- Phase 8 — Integrated Monthly Close: **PARTIAL / STRONG FOUNDATION**
-- Phase 9 — Final Permission Model: **PARTIAL**
-- Phase 10 — Company Manager Workspace: **PARTIAL**
-- Phase 11 — Home Screen Alerts: **PARTIAL**
-- Phase 12 — Manager Financial Snapshot: **NOT STARTED**
-- Phase 13 — Conditional Modules: **DEFERRED**
-- Phase 14 — Full Operational & Accounting Cycle Validation: **NOT STARTED**
-- Phase 15 — System-wide UI/UX Redesign: **DEFERRED**
+- Phase 7 — Zakat / Income Tax / Withholding Tax: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 8 — Integrated Monthly Close: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 9 — Final Permission Model: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 10 — Company Manager Workspace: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 11 — Home Screen Alerts: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 12 — Manager Financial Snapshot: **DONE FOR CURRENTLY APPROVED SCOPE**
+- Phase 13 — Conditional Modules: **CONDITIONAL / DEFERRED**
+- Phase 14 — Full Operational & Accounting Cycle Validation: **IN PROGRESS / PARTIALLY VALIDATED** (14A merged; 14B in validation — see `docs/EXECUTION_ROADMAP.md`)
+- Phase 15 — System-wide UI/UX Redesign: **PARTIALLY MERGED / IN PROGRESS**
 
-VAT is complete only for the approved current scope. Monthly Close remains PARTIAL until its dedicated completeness gap audit is accepted.
+VAT is complete only for the approved current scope.
 
-After Agent-readiness work, the currently identified next real Product gap is **Phase 5 — Financial Statement Mapping**, subject to actual current dependencies when Product work resumes.
+Product work continues per `docs/EXECUTION_ROADMAP.md` (Phase 14 validation in progress; Phase 15 partially merged).
 
-## Autonomous Operating Model
+## Autonomous Operating Model — SUPERSEDED
 
-After the governance package is merged:
+**SUPERSEDED — current governance is defined by AGENTS.md.**
 
-**EQFAL Project = Product Owner + Lead PM + Roadmap Authority**.
-
-It decides **WHAT / WHY / WHEN**, selects the next task from current `main` + roadmap + dependencies, performs Read-only Design Check, may internally approve eligible designs, issues Execution Contracts, and decides Phase completion/Human Gates/User Validation timing. It does not write Product code.
-
-Execution path:
-
-`EQFAL Project → Orchestrator → Builder Role (Cloud Codex primary) → Independent Reviewer → GitHub/CI → Automated Merge Gate → Replit runtime/practical validation → EQFAL Project → user only when required`
-
-### Orchestrator
-Execution lifecycle manager only: baseline/preflight, Builder routing, durable checkpoints, failure classification/recovery, Reviewer routing, CI monitoring, Merge Gate, compliant merge, post-merge baseline recording, runtime validation coordination, and evidence return.
-
-It cannot change roadmap/scope/approved contract or bypass Reviewer, CI, or Human Gates.
-
-### Builder Role
-Builder is a governance role. Cloud Codex is the primary execution engine. Builder owns clean verified checkout, exact baseline, independent branch, implementation, approved migrations, tests, commit/push/PR. Builder has no design, roadmap, review, merge, Production, or cost authority.
-
-### Independent Reviewer
-Reviewer inspects the actual GitHub diff and checks scope/contract compliance plus accounting, tax, tenancy, permissions, audit, schema/migrations, regression, tests, and exact-SHA CI where relevant. Result is `PASS`, `FAIL`, or `NEEDS_CORRECTION`. Builder cannot self-review/self-merge.
+The Autonomous Operating Model (EQFAL Project as Product Owner/Lead PM; Orchestrator; Builder Role; Independent Reviewer; Automated Merge Gate; routine user approvals superseded) is kept only as project history in `DECISIONS.md` (2026-09-11). It is not an active instruction. Under current governance, `AGENTS.md` is the governing source: the workflow is owner-controlled, there is no autonomous or multi-agent workflow, and there is no automatic merge.
 
 ## Design and Merge Policy
 
-Every Product task starts with Read-only Design Check.
+Governed by `AGENTS.md`:
 
-EQFAL Project may internally approve only when the task is within approved roadmap/direct dependency, current `main` is read, scope is bounded, no material ambiguity/Human Gate exists, and Production/cost/destructive/accounting-tax/security boundaries remain inside approved governance.
+- Every Product task starts with Read-only Design Check, then Plan.
+- Owner Approval is required before coding; Codex Cloud is only a bounded Coding Engine after the pre-coding gates pass.
+- Workflow: READ-ONLY → PLAN → OWNER APPROVAL → CODEX PREFLIGHT → CODEX EXECUTION → EQFAL REVIEW → TESTS / CI → GITHUB HANDOFF → REPLIT SAME-SHA VALIDATION → OWNER UAT → OWNER MERGE DECISION.
+- Only the Owner makes the final merge decision; no automatic merge, and CI passing alone is not merge approval.
+- The Execution Contract includes baseline SHA, goal, scope, out-of-scope, affected boundaries, schema/migrations if applicable, acceptance criteria, tests, required Owner Approvals, and Definition of Done.
 
-The Execution Contract includes baseline SHA, goal, scope, out-of-scope, affected boundaries, schema/migrations if applicable, acceptance criteria, tests, Human Gates, and Definition of Done.
-
-Routine user Design Approval and routine user Merge Approval are superseded after this governance is merged. Design self-approval never means implementation self-approval.
-
-Automatic merge requires the complete Merge Gate in `docs/WORKFLOW_GOVERNANCE.md`, including an actual PR, correct lineage, scope compliance, Independent Reviewer `PASS`, required CI `PASS` on the exact intended PR head SHA, no unresolved blocker, and no Human Gate.
-
-## Human Gates
+## Owner Approval Required (formerly 'Human Gates')
 
 `HUMAN DECISION REQUIRED` is reserved for:
 - Production deployment/change;
@@ -98,16 +79,17 @@ Automatic merge requires the complete Merge Gate in `docs/WORKFLOW_GOVERNANCE.md
 - sensitive real-user access changes involving Administrator-level access, cross-company expansion, approve/post/reopen/user-administration privileges, or real-user credentials/secrets;
 - exceptional Git recovery such as force-push/history rewrite/destructive repository recovery.
 
-Developing permission features inside the approved roadmap is not automatically a Human Gate.
+Developing permission features inside the approved roadmap does not by itself require a separate Owner Approval beyond the normal workflow.
 
 ## User Communication States
 
-- `NO ACTION REQUIRED` — project proceeds autonomously.
+- `NO ACTION REQUIRED` — no Owner action is pending.
 - `SYNC ASSISTANCE REQUIRED` — temporary Replit-only operational sync assistance; not approval/acceptance/Human Decision.
-- `HUMAN DECISION REQUIRED` — Human Gate only.
+- `HUMAN DECISION REQUIRED` — explicit Owner Approval required.
 - `USER VALIDATION REQUIRED` — practical validation after a Phase or meaningful testable increment, with exact steps and expected result.
 
-The user is not a routine Git/branch/PR/CI/Codex integration operator.
+The project owner is the final authority for merge and high-risk decisions, but routine Git/branch/PR/CI execution should be handled by the implementation workflow whenever safely permitted.
+
 
 ## Replit Current State
 
@@ -122,7 +104,7 @@ Not proven:
 - full autonomous GitHub → Replit sync;
 - runtime SHA verification from the running application.
 
-Replit remains runtime/practical validation only. Replit Agent may be used only in FREE MODE within the approved operational allowlist. It remains prohibited for Product coding/refactoring, accounting/tax logic, DB/schema design/migrations, branch reconstruction, PR rescue, GitHub push/write/PR, Power, Max, and paid credits/additional paid usage.
+Replit remains runtime/practical validation only. **Replit Agent is prohibited in all circumstances** (no FREE MODE exception; see `DECISIONS.md` 2026-09-20 and `AGENTS.md`); only manual Replit Shell may be used for approved synchronization, Git-state checks, startup, Preview/basic smoke checks, runtime validation, and same-SHA verification.
 
 ## Cloud Codex / Tooling Recovery
 
@@ -130,17 +112,17 @@ Permanent principle:
 
 **GitHub = durable project state. Codex session = disposable executor.**
 
-Normal Builder recovery:
+Normal Coding Engine recovery:
 
-`Cloud Codex → one bounded tooling retry → fresh Cloud Codex session from verified GitHub state → approved Local Codex/fallback when applicable → STOP or Human Gate only when required`
+`Cloud Codex → one bounded tooling retry → fresh Cloud Codex session from verified GitHub state → approved Local Codex/fallback when applicable → STOP or Owner Approval only when required`
 
 No infinite retry loops, automatic paid credits, rebuilding valid durable work, or claims that session-local work is durable.
 
 ## مبادئ حاكمة
 
 - لا اعتماد على Workspace مؤقت أو ذاكرة المحادثة كمصدر دائم للحالة.
-- لا Production دون Human Gate.
-- لا خدمة/API/Credits/ترقية/تكلفة جديدة دون Human Gate.
+- لا Production دون Owner Approval صريح.
+- لا خدمة/API/Credits/ترقية/تكلفة جديدة دون Owner Approval صريح.
 - مهمة برمجية واحدة فقط في كل مرة.
 - أقل تعديل ممكن يحقق Execution Contract مع اختبارات قابلة للتحقق.
 - قابلية النقل خارج Replit شرط معماري دائم.
@@ -148,13 +130,6 @@ No infinite retry loops, automatic paid credits, rebuilding valid durable work, 
 - UI/API وحدها لا تثبت اكتمالًا محاسبيًا.
 - القوائم والزكاة والضرائب الحساسة لا تستبدل الحكم المهني للمحاسب/المستشار المخول.
 
-## Agent Readiness Sequence
+## Agent Readiness Sequence — SUPERSEDED
 
-بعد دمج حوكمة Autonomous Operating Model:
-1. Build/test Orchestrator.
-2. Build/test Builder Role + Cloud Codex primary integration.
-3. Build/test Independent Reviewer.
-4. Run Autonomous Agent PoC.
-5. Resume real Product roadmap only after readiness is actually proven.
-
-لا تدّعي الوثائق أن Autonomous Agents جاهزون قبل البناء والاختبار الفعلي.
+**SUPERSEDED — current governance is defined by AGENTS.md.** The former sequence (Orchestrator, Builder Role, Independent Reviewer, Autonomous Agent PoC) is not a current plan; `AGENTS.md` prohibits an autonomous or multi-agent workflow. History is kept in `DECISIONS.md`.

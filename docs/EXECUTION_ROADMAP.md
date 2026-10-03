@@ -280,7 +280,7 @@ Full slice definitions: see `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8.
 Dependencies: Phase 13 reactivation pending business need and owner gates (independent of Phase 14).
 
 Baseline SHA: `8f17258df221d15919e56487721f7d087d0a77e9` (14A design baseline)
-Current SHA: `181f37ed60920cdf406155049173a9924272c0bb` (80+ commits ahead of the 14A doc commit)
+Reference SHA at time of reconciliation — not current HEAD: `181f37ed60920cdf406155049173a9924272c0bb` (80+ commits ahead of the 14A doc commit)
 
 ## Phase 15 — System-wide UI/UX Redesign
 
