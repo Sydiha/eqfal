@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompanyProvider } from '../context/CompanyContext';
 import { Home } from '../components/Home';
@@ -9,6 +9,10 @@ const navigateToDiscovery = vi.fn();
 const onUnauthorized = vi.fn();
 const startPurchaseEntry = vi.fn();
 const startSalesEntry = vi.fn();
+
+async function openTab(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name }));
+}
 
 function renderHome(capabilities: string[]) {
   return render(
@@ -208,6 +212,7 @@ describe('Owner-approved Home financial overview', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['obligation.view']);
 
+    await openTab('Work queue');
     expect(await screen.findByRole('heading', { name: 'Work Queue' })).toBeInTheDocument();
     const alert = await screen.findByRole('button', { name: /Overdue obligations/ });
     expect(alert).toHaveTextContent('2');
@@ -223,6 +228,7 @@ describe('Owner-approved Home financial overview', () => {
     ] }), { status: 200 })));
     renderHome(['document.view', 'obligation.view', 'bank.view']);
 
+    await openTab('Work queue');
     expect(await screen.findByRole('heading', { name: 'Work Queue' })).toBeInTheDocument();
     expect(screen.getByText('Current user action')).toBeInTheDocument();
     expect(screen.getAllByText('Upcoming').length).toBeGreaterThan(0);
@@ -257,10 +263,15 @@ describe('Owner-approved Home financial overview', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['bank.view', 'obligation.view']);
 
-    expect(await screen.findByRole('heading', { name: 'Manager Financial Snapshot' })).toBeInTheDocument();
+    await openTab('Bank balances');
+    expect(await screen.findByRole('heading', { name: 'Bank balances' })).toBeInTheDocument();
     expect(await screen.findByText('Operating account')).toBeInTheDocument();
     expect(await screen.findByText('1,250.50 SAR')).toBeInTheDocument();
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
+
+    await openTab('Amounts and sales');
+    expect(await screen.findByRole('heading', { name: 'Manager Financial Snapshot' })).toBeInTheDocument();
+    expect(screen.queryByText('Operating account')).not.toBeInTheDocument();
     expect(screen.getByText('400.25 SAR')).toBeInTheDocument();
     expect(screen.getByText('90.00 SAR')).toBeInTheDocument();
     expect(screen.getAllByText('Restricted by permissions')).toHaveLength(2);
@@ -323,10 +334,43 @@ describe('Owner-approved Home financial overview', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHome(['obligation.view']);
 
+    await openTab('Work queue');
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load alerts.');
     screen.getByRole('button', { name: 'Try again' }).click();
     expect(await screen.findByRole('status')).toHaveTextContent('No outstanding actions.');
     expect(alertRequests).toBe(2);
+  });
+
+  it('shows one tab at a time in a single row and closes the open panel', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/home-alerts') return new Response(JSON.stringify({ alerts: [] }), { status: 200 });
+      return new Response('', { status: 404 });
+    }));
+    renderHome(['obligation.view']);
+
+    expect(screen.queryByRole('heading', { name: 'Work Queue' })).not.toBeInTheDocument();
+    await openTab('Work queue');
+    expect(await screen.findByRole('heading', { name: 'Work Queue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Work queue' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('heading', { name: 'Work Queue' })).not.toBeInTheDocument();
+  });
+
+  it('draws blocker history from the real close periods without inventing values', async () => {
+    const blockers = { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      periods: [
+        { id: 'p2', fiscal_year_id: 'fy1', period_start: '2026-10-01', period_end: '2026-10-31', status: 'open', ready: false, disclosed_total: 4, has_hidden_blockers: false, blockers: { ...blockers, vat: 4 } },
+        { id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-09-01', period_end: '2026-09-30', status: 'closed', ready: true, disclosed_total: 0, has_hidden_blockers: false, blockers },
+      ],
+    }), { status: 200 })));
+    renderHome(['monthly_close.view', 'vat.view']);
+
+    await openTab('Blockers per period');
+    const heading = await screen.findByRole('heading', { name: 'Blockers in recent periods' });
+    const panel = heading.closest('section') as HTMLElement;
+    expect(within(panel).getByText('4')).toBeInTheDocument();
+    expect(within(panel).getByText('0')).toBeInTheDocument();
   });
 
 });
