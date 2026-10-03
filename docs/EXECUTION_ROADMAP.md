@@ -22,7 +22,7 @@ This document is authoritative for product roadmap/status below the higher gover
 - One corrective implementation pass maximum for a real code/acceptance blocker; tooling failures follow the recovery playbook and do not create extra code-fix loops.
 - No Production change without Human Gate.
 - No paid service/API/credits/plan/infrastructure/operating cost without Human Gate.
-- Complete the system functionally/accounting-wise before system-wide UI/UX redesign; earlier UI work is limited to functional/usability blockers.
+- System-wide UI/UX redesign (Phase 15) is PARTIALLY MERGED / IN PROGRESS and proceeds in parallel with Phase 14 validation; see the Phase 15 section.
 - The owner/operator is treated as a non-accountant; EQFAL must not require unexplained professional accounting/tax judgments from the user.
 - Roles are templates; effective capabilities are authoritative and company-scoped; Backend authorization remains authoritative.
 - Sensitive changes require auditability and controlled effective dates where relevant.
@@ -33,7 +33,7 @@ This document is authoritative for product roadmap/status below the higher gover
 
 Proven:
 - GitHub/main synchronized successfully to Replit during the PoC.
-- Verified SHA during PoC: `2644c9fde0062221240409d47795ae2ee0d022e3`.
+- Verified SHA during PoC: `2644c9fde0062221240409d47795ae2ee0d022e3` (historical PoC evidence only; not a current baseline).
 - Preview startup: **PASS**.
 
 Not yet proven:
@@ -212,7 +212,7 @@ This is an operational management view, not financial statements or a profitabil
 
 ## Phase 13 — Conditional Modules
 
-**Status: DEFERRED**
+**Status: CONDITIONAL / DEFERRED**
 
 Implement only when a company genuinely needs them and after applicable Design/Human Gates:
 - inventory / COGS / stock counts and adjustments;
