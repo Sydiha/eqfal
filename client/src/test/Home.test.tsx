@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompanyProvider } from '../context/CompanyContext';
+import { AuthProvider } from '../context/AuthContext';
 import { Home } from '../components/Home';
 import i18n from '../i18n';
 
@@ -10,14 +11,16 @@ const onUnauthorized = vi.fn();
 
 function renderHome(capabilities: string[]) {
   return render(
-    <CompanyProvider allowedCompanies={[{ id: 'co-1', name: 'Company One' }]} initialCompanyId="co-1">
-      <Home
-        capabilities={capabilities}
-        navigate={navigate}
-        navigateToDiscovery={navigateToDiscovery}
-        onUnauthorized={onUnauthorized}
-      />
-    </CompanyProvider>,
+    <AuthProvider>
+      <CompanyProvider allowedCompanies={[{ id: 'co-1', name: 'Company One' }]} initialCompanyId="co-1">
+        <Home
+          capabilities={capabilities}
+          navigate={navigate}
+          navigateToDiscovery={navigateToDiscovery}
+          onUnauthorized={onUnauthorized}
+        />
+      </CompanyProvider>
+    </AuthProvider>,
   );
 }
 
@@ -30,8 +33,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('does not load monthly close data without monthly-close access', () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({ alerts: [] }), { status: 200 }));
     });
@@ -44,8 +47,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('renders API-backed blocker categories and capability-aware drilldown actions', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       if (url === '/api/monthly-close-periods') {
         return Promise.resolve(
@@ -108,8 +111,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('shows no blockers instead of ready-to-close wording for a closed period', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({
         periods: [
@@ -136,8 +139,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('uses safe non-numeric wording when undisclosed blockers exist', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({
         periods: [{
@@ -156,8 +159,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('preserves ready wording for an open period that the backend marks ready', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({
         periods: [{
@@ -176,8 +179,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('shows an error state instead of treating a failed API request as zero blockers', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response('', { status: 500 }));
     }));
@@ -190,8 +193,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('does not request or render KPI section without a supported module view capability', () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     });
@@ -204,8 +207,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('does not load or show the snapshot without any relevant view capability', () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     });
@@ -218,8 +221,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('uses one structure with true English LTR and Arabic RTL direction', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     }));
@@ -243,8 +246,8 @@ describe('Owner-approved Home financial overview', () => {
 
   it('contains no persistent Home sidebar or fabricated financial indicators', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url === '/auth/session') {
-        return Promise.resolve(new Response(JSON.stringify({ email: 'user@example.com' }), { status: 200 }));
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     }));
