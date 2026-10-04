@@ -4,6 +4,7 @@ import { formatDisplayDate } from '../date-format';
 import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 import { Dialog } from './Dialog';
 import { PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState, WorkspaceToolbar } from './SharedUI';
+import './MonthlyClose.css';
 
 type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number};
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Partial<Blockers>;disclosed_total:number;has_hidden_blockers:boolean};
