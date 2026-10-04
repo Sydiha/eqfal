@@ -146,10 +146,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
                 >
                   {periods.map((period) => {
                     const start = new Date(period.period_start);
-                    const end = new Date(period.period_end);
-                    const label = isAr
-                      ? `${start.toLocaleDateString('ar-EG')} - ${end.toLocaleDateString('ar-EG')}`
-                      : `${start.toLocaleDateString('en-US')} - ${end.toLocaleDateString('en-US')}`;
+                    const label = start.toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory' : 'en-US', { month: 'long', year: 'numeric' });
                     return (
                       <button
                         key={period.id}
