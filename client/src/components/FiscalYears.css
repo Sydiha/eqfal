@@ -1,0 +1,69 @@
+/* Fiscal Years — approved Figma frames 236:4796 / 236:4940 / 236:5109 / 236:5245 / 236:5418 (1440 RTL, content area only).
+   Presentation only; every selector is scoped to .fy-view so no other screen is affected. */
+.fy-view,.panel.fy-view{--fy-ink:#1e293b;--fy-muted:#64748b;--fy-primary:#00b894;--fy-green:#047857;--fy-navy:#0b1d3a;--fy-border:#e4e8ec;--fy-soft:#f8fafc;--fy-danger:#dc2626;display:flex;flex-direction:column;gap:16px;max-width:none;margin:0;padding:0 0 28px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--fy-ink);font-family:"Readex Pro",Tajawal,Inter,system-ui,sans-serif;font-size:12px}
+.fy-view button,.fy-view input,.fy-view textarea{font-family:inherit}
+.fy-view .fy-muted{color:var(--fy-muted);font-size:11px}
+.fy-view .fy-icon{width:14px;height:14px;flex:none}
+.fy-view .fy-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0}
+.fy-view .fy-header h2{margin:0;font-size:24px;font-weight:800;line-height:normal;color:var(--fy-ink)}
+.fy-view .fy-header p{margin:4px 0 0;color:var(--fy-muted);font-size:13px}
+.fy-view .fy-primary,.fy-view .fy-ghost,.fy-view .fy-dark{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-width:0;min-height:0;height:32px;margin:0;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;line-height:1;cursor:pointer}
+.fy-view .fy-primary{border:0;background:var(--fy-primary);color:#fff}
+.fy-view .fy-primary:hover{background:#00a383}
+.fy-view .fy-ghost{border:1px solid var(--fy-border);background:#fff;color:var(--fy-ink);font-weight:600}
+.fy-view .fy-ghost:hover{background:var(--fy-soft);border-color:#cbd5e1}
+.fy-view .fy-dark{border:0;background:var(--fy-navy);color:#fff}
+.fy-view .fy-dark:hover{background:#13294d}
+.fy-view .fy-primary:disabled,.fy-view .fy-dark:disabled{border:1px solid var(--fy-border);background:#eef2f6;color:var(--fy-muted);opacity:1;cursor:not-allowed}
+.fy-view .fy-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border:1px solid var(--fy-border);border-radius:12px;background:#fff;overflow:hidden}
+.fy-view .fy-summary>div{display:flex;flex-direction:column;gap:6px;min-width:0;padding:14px 16px;border-inline-start:1px solid var(--fy-border)}
+.fy-view .fy-summary>div:first-child{border-inline-start:0}
+.fy-view .fy-summary>div.is-open{background:#f0fdf9}
+.fy-view .fy-summary dt{color:var(--fy-muted);font-size:12px}
+.fy-view .fy-summary dd{margin:0;font-size:22px;font-weight:700;line-height:1}
+.fy-view .fy-summary>div.is-open dd{color:var(--fy-green)}
+.fy-view .fy-card{box-sizing:border-box;min-width:0;margin:0;padding:14px 12px 12px;border:1px solid var(--fy-border);border-radius:12px;background:#fff}
+.fy-view .fy-card__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.fy-view .fy-card__head h3{margin:0;font-size:15px;font-weight:800;line-height:normal}
+.fy-view .fy-table{border:1px solid var(--fy-border);border-radius:8px;overflow-x:auto}
+.fy-view .fy-table table{width:100%;border-collapse:collapse}
+.fy-view .fy-table th{padding:12px 14px;background:var(--fy-soft);border-bottom:1px solid var(--fy-border);color:var(--fy-muted);font-size:11.5px;font-weight:500;text-transform:none;text-align:start;white-space:nowrap}
+.fy-view .fy-table td{height:59px;padding:0 14px;border-bottom:1px solid var(--fy-border);font-size:12px;vertical-align:middle;white-space:nowrap}
+.fy-view .fy-table tr:last-child td{border-bottom:0}
+.fy-view .fy-table th:last-child,.fy-view .fy-table td:last-child{width:216px}
+.fy-view .fy-name{font-weight:700}
+.fy-view .fy-actions{display:flex;align-items:center;gap:8px}
+.fy-view .badge{padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600}
+.fy-view .badge.open{background:#d5f5ea;color:var(--fy-green)}
+.fy-view .badge.closed{background:#eef2f6;color:#475569}
+.fy-view .fy-table td.fy-empty{height:120px;text-align:center;white-space:normal}
+.fy-view .fy-empty strong{display:block;margin-bottom:8px;font-size:14px;font-weight:700}
+.fy-view .fy-empty span{color:var(--fy-muted);font-size:11px}
+/* Create / edit / close dialogs (rendered inside .fy-view). */
+.fy-view .modal{width:min(100%,466px);padding:20px 24px;border-radius:12px}
+.fy-view .modal>h3{margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--fy-border);font-size:17px;font-weight:800}
+.fy-view .fy-alert{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:12px}
+.fy-view .fy-close-text{margin:0 0 14px;color:var(--fy-ink);font-size:13px;line-height:1.7}
+.fy-view .fy-form{display:grid;gap:14px}
+.fy-view .fy-form label{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--fy-ink);font-size:12px;font-weight:600}
+.fy-view .fy-form input,.fy-view .fy-form textarea{width:100%;min-height:0;margin:0;padding:0 10px;border:1px solid #d6dde4;border-radius:6px;background:#fff;color:var(--fy-ink);font-size:12px;font-weight:400}
+.fy-view .fy-form input{height:34px}
+.fy-view .fy-form textarea{min-height:72px;padding:8px 10px}
+.fy-view .fy-form input[aria-invalid="true"]{border-color:var(--fy-danger);box-shadow:0 0 0 1px var(--fy-danger)}
+.fy-view .fy-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fy-view .fy-form .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin:2px 0 0;padding-top:14px;border-top:1px solid var(--fy-border)}
+.fy-view .fy-spinner{width:12px;height:12px;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;animation:fy-spin .8s linear infinite}
+@keyframes fy-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.fy-view .fy-spinner{animation:none}}
+/* Tablet: compressed register, no text shrinking; row actions wrap so status, edit and close stay visible. */
+@media(max-width:64em){.fy-view .fy-table th,.fy-view .fy-table td{padding-inline:10px}.fy-view .fy-table th:last-child,.fy-view .fy-table td:last-child{width:auto}.fy-view .fy-table td{height:auto;padding-block:12px}.fy-view .fy-actions{flex-wrap:wrap}.fy-view .fy-actions button{padding:0 10px}}
+/* Mobile: stacked header and dialog date fields; the register scrolls horizontally inside its card. */
+@media(max-width:48em){
+ .fy-view .fy-header{flex-direction:column;align-items:stretch}
+ .fy-view .fy-header .fy-primary{align-self:flex-start}
+ .fy-view .fy-summary>div{padding:12px}
+ .fy-view .fy-summary dd{font-size:20px}
+ .fy-view .fy-date-fields{grid-template-columns:1fr}
+ .fy-view .fy-table table{min-width:520px}
+ .fy-view .fy-form .modal-actions button{width:auto;flex:1}
+}

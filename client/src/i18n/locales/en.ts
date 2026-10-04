@@ -55,6 +55,9 @@ const en = {
     name: 'Name', start: 'Start date', end: 'End date', status: 'Status', actions: 'Actions',
     open: 'Open', closed: 'Closed', edit: 'Edit', close: 'Close', closeTitle: 'Close fiscal year',
     closeConfirmation: 'Close {{name}}? With the current functionality, a closed fiscal year cannot be modified.', reason: 'Reason (optional)', confirmClose: 'Confirm close',
+    summary: 'Fiscal years summary', totalCount: 'Number of fiscal years', openCount: 'Open years', closedCount: 'Closed years',
+    register: 'Fiscal years register', registerMeta_one: '1 fiscal year', registerMeta_other: '{{count}} fiscal years',
+    fiscalYear: 'Fiscal year', emptyTitle: 'No fiscal years', saving: 'Saving…',
   },
   documents: {
     title: 'Documents',

@@ -141,4 +141,58 @@ describe('FiscalYears', () => {
     render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={unauthorized}/>);
     await waitFor(() => expect(unauthorized).toHaveBeenCalledOnce());
   });
+
+  it('renders the Figma summary and register from the loaded years only', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ fiscalYears: [openYear, closedYear] }), { status: 200 })));
+    render(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
+    await screen.findByText('FY 2026');
+    const summary = screen.getByLabelText('Fiscal years summary');
+    expect(summary).toHaveTextContent('Number of fiscal years2');
+    expect(summary).toHaveTextContent('Open years1');
+    expect(summary).toHaveTextContent('Closed years1');
+    expect(screen.getByText('2 fiscal years')).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader').map(cell => cell.textContent)).toEqual(['Fiscal year', 'Start date', 'End date', 'Status', 'Actions']);
+    const closedRow = screen.getByText('FY 2025').closest('tr')!;
+    expect(closedRow).toHaveTextContent('Closed');
+    expect(closedRow.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('shows the empty register state and Arabic register count', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ fiscalYears: [openYear] }), { status: 200 })));
+    await i18n.changeLanguage('ar');
+    const view = render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByText('سنة مالية واحدة')).toBeInTheDocument();
+    view.unmount();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ fiscalYears: [] }), { status: 200 })));
+    render(<FiscalYears canView canCreate={false} canEdit={false} canClose={false} onUnauthorized={vi.fn()}/>);
+    expect(await screen.findByText('لا توجد سنوات مالية')).toBeInTheDocument();
+    expect(screen.getByText('لم يتم إنشاء أي سنة مالية بعد.')).toBeInTheDocument();
+  });
+
+  it('marks the date fields on an invalid range and shows the saving state without new rules', async () => {
+    let resolveSave!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [openYear] }), { status: 200 }))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [openYear] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FiscalYears canView canCreate canEdit canClose onUnauthorized={vi.fn()}/>);
+    await screen.findByText('FY 2026');
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
+    fireEvent.click(screen.getByText('Create fiscal year'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'FY 2027' } });
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2027-12-31' } });
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2027-01-01' } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('The end date must be after the start date.');
+    expect(screen.getByLabelText('Start date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('End date')).toHaveAttribute('aria-invalid', 'true');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2027-01-01' } });
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2027-12-31' } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!);
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    resolveSave(new Response(JSON.stringify({ fiscalYear: openYear }), { status: 201 }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
 });
