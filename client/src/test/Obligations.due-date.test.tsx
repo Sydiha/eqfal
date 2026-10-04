@@ -13,7 +13,7 @@ beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();window
 describe('obligation due-date edit guard',()=>{
  it('does not allow an edited due date before the obligation recognized date',async()=>{
   render(<Obligations canView canCreateObligation canEditObligation canCancelObligation canCreateCounterparty canEditCounterparty canDisableCounterparty onUnauthorized={vi.fn()}/>);
-  fireEvent.click(await screen.findByRole('cell',{name:'Acme'}));
+  fireEvent.click(await screen.findByRole('cell',{name:/^Acme/}));
   fireEvent.click(screen.getByRole('button',{name:'Edit obligation'}));
   const dialog=screen.getByRole('dialog',{name:'Edit obligation'});
   expect(within(dialog).getByLabelText('Due date')).toHaveAttribute('min','2026-08-24');
