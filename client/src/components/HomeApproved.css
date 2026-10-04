@@ -312,7 +312,6 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-block-end: 16px;
 }
 
 .home__readiness-button {
@@ -757,7 +756,7 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__tasks-header, .eqfal-home__task-row { grid-template-columns: 110px minmax(160px, 1.4fr) 44px minmax(110px, 0.8fr) 130px 40px; }
 }
 @media (max-width: 760px) {
-  .eqfal-home { padding: 18px 16px 28px; }
+  .eqfal-home { padding: 18px 16px 8px; }
   .eqfal-home__tabs { position: relative; }
   .eqfal-home__tabs::after { content: ""; position: absolute; inset-inline-end: 0; inset-block: 0; width: 28px; background: linear-gradient(to left, rgba(255, 255, 255, 0), rgba(0, 0, 0, 0.1)); pointer-events: none; z-index: 1; }
   .eqfal-home[dir="rtl"] .eqfal-home__tabs::after { background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(0, 0, 0, 0.1)); }
