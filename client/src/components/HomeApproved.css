@@ -28,7 +28,7 @@ body { background: #fff !important; }
   margin-inline: -36px;
   /* Pull up into the shell's 36px top padding so the title sits ~24px under the header, as in Figma. */
   margin-block: -12px 0;
-  padding: 0 28px 16px;
+  padding: 0 28px 8px;
   color: var(--home-text);
   font-family: Tajawal, Inter, system-ui, sans-serif;
   background: #fff;
