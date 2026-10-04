@@ -14,7 +14,7 @@ describe('Sales workspace',()=>{
 
  it('keeps a cancelled receivable historical, including settlement history, without replacement creation',async()=>{
   mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);
-  const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getByText('—')).toBeInTheDocument();
+  const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getAllByText('Cancelled').length).toBeGreaterThan(0);expect(within(row).getAllByText('—').length).toBeGreaterThan(0);
   fireEvent.click(row);expect(within(screen.getByRole('complementary',{name:'Sale details'})).getByText('Linked cancelled')).toBeInTheDocument();expect(screen.getByText('Transfer')).toBeInTheDocument();expect(screen.getByText('02/08/2026')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Create receivable'})).not.toBeInTheDocument();
  });
 
@@ -60,7 +60,7 @@ describe('Sales workspace',()=>{
  });
 
  it('renders required Arabic labels and localized Sales dates',async()=>{
-  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'التحصيل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
+  await i18n.changeLanguage('ar');mockSales([base]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);expect((await screen.findAllByText('ملغاة')).length).toBeGreaterThan(0);expect(screen.getByRole('columnheader',{name:'المبلغ المحصل'})).toBeInTheDocument();expect(screen.getByText('01‏/08‏/2026')).toBeInTheDocument();fireEvent.click(summaryRow('INV-1'));expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('حالة التحقق')).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'تفاصيل البيع'})).getByText('مؤكد')).toBeInTheDocument();expect(screen.queryByText('confirmed')).not.toBeInTheDocument();expect(screen.getByText('اسم الملف الأصلي')).toBeInTheDocument();
  });
  it('restores validated URL filters, applies inclusive dates and all loaded relationship fields',async()=>{
   const open={...base,id:'d3',reference_number:'OPEN',document_date:'2026-08-02',receivable_cancelled:false,receivable_relationship:'not_created' as const,financial_state:'open' as const,verification_status:'unconfirmed',status:'uploaded'};
