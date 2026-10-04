@@ -38,6 +38,7 @@
 .mc-view .mc-period__top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5}
 .mc-view .mc-period__dash{color:var(--mc-muted)}
 .mc-view .mc-period.is-selected .mc-period__month{color:var(--mc-primary);font-weight:600}
+.mc-view .mc-range{unicode-bidi:isolate;white-space:nowrap}
 .mc-view .mc-period__dates{display:block;color:var(--mc-muted);font-size:9px;font-weight:400;text-align:start}
 .mc-view .mc-empty{margin:0;padding:18px;border-radius:8px;background:var(--mc-soft);color:var(--mc-muted);font-size:12px;text-align:center}
 /* Selected period summary */
