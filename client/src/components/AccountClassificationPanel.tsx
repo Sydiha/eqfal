@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccountResponse, CashFlowCategory, CashRole, StatementCategory } from './accounting-contracts';
 
 interface Props{
   canView:boolean;
   canManage:boolean;
   onUnauthorized:()=>void;
+  autoOpen?:boolean;
 }
 
 const CATEGORY_LABELS:Record<StatementCategory,string>={
@@ -30,6 +31,8 @@ const COMPATIBLE:Record<AccountResponse['account_type'],readonly StatementCatego
   expense:['unmapped','cost_of_sales','operating_expense','finance_expense','other_expense'],
 };
 const ALL_CATEGORIES=Object.keys(CATEGORY_LABELS) as StatementCategory[];
+const shortLabel=(label:string)=>label.split(' / ')[0]!;
+const TYPE_LABELS:Record<AccountResponse['account_type'],string>={asset:'أصل',liability:'التزام',equity:'حقوق ملكية',revenue:'إيراد',expense:'مصروف'};
 const CASH_ROLE_LABELS:Record<CashRole,string>={
   non_cash:'Non-cash / غير نقدي',
   cash:'Cash / نقد',
@@ -51,9 +54,9 @@ async function request(url:string,options:RequestInit,onUnauthorized:()=>void){
   return response;
 }
 
-export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Props){
-  const [opened,setOpened]=useState(false);
-  const [filter,setFilter]=useState<StatementCategory|'all'>('unmapped');
+export function AccountClassificationPanel({canView,canManage,onUnauthorized,autoOpen=false}:Props){
+  const [opened,setOpened]=useState(autoOpen);
+  const [filter,setFilter]=useState<StatementCategory|'all'>(autoOpen?'all':'unmapped');
   const [accounts,setAccounts]=useState<AccountResponse[]>([]);
   const [drafts,setDrafts]=useState<Record<string,Draft>>({});
   const [loading,setLoading]=useState(false);
@@ -167,6 +170,11 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
     }
   };
 
+  useEffect(()=>{
+    if(autoOpen&&canView)void load('all');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[autoOpen,canView]);
+
   if(!canView)return null;
   if(!opened){
     return <section className="panel">
@@ -174,38 +182,40 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
     </section>;
   }
 
-  return <section className="panel" aria-label="Financial statement mapping">
-    <h2>Financial statement mapping / تصنيف القوائم المالية</h2>
-    <p>Presentation/reporting mapping only. Account type and posted ledger entries are unchanged. / التصنيف للعرض والتقارير فقط ولا يغيّر نوع الحساب أو القيود المرحلة.</p>
-    <label>
-      Classification filter / فلتر التصنيف
-      <select
-        aria-label="Classification filter"
-        value={filter}
-        onChange={event=>{
-          const value=event.target.value as StatementCategory|'all';
-          setFilter(value);
-          void load(value);
-        }}
-      >
-        <option value="all">All / الكل</option>
-        {ALL_CATEGORIES.map(category=><option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}
-      </select>
-    </label>
+  return <section className="panel ac-mapping" aria-label="Financial statement mapping">
+    <div className="ac-mapping__header">
+      <h2>تصنيف القوائم المالية <small lang="en" dir="ltr">Financial statement mapping</small></h2>
+      <label className="ac-mapping__filter">
+        <span className="ac-mapping__prefix">التصنيف</span>
+        <select
+          aria-label="Classification filter"
+          value={filter}
+          onChange={event=>{
+            const value=event.target.value as StatementCategory|'all';
+            setFilter(value);
+            void load(value);
+          }}
+        >
+          <option value="all">All / الكل</option>
+          {ALL_CATEGORIES.map(category=><option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}
+        </select>
+      </label>
+    </div>
+    <p className="ac-mapping__note"><span aria-hidden="true">ⓘ</span> التصنيف للعرض والتقارير فقط ولا يغيّر نوع الحساب أو القيود المرحّلة. <span className="ac-mapping__sr">Presentation/reporting mapping only. Account type and posted ledger entries are unchanged.</span></p>
     {loading&&<p role="status">Loading / جاري التحميل</p>}
     {error&&<p role="alert">Unable to load or update classification. / تعذر تحميل أو تحديث التصنيف.</p>}
     {!loading&&!error&&accounts.length===0&&<p role="status">No accounts in this classification. / لا توجد حسابات ضمن هذا التصنيف.</p>}
-    {!loading&&accounts.length>0&&<div className="table-wrap">
+    {!loading&&accounts.length>0&&<div className="table-wrap ac-mapping__table">
       <table>
         <thead><tr>
-          <th>Code / الرمز</th>
-          <th>Name / الاسم</th>
-          <th>Account type / نوع الحساب</th>
-          <th>Statement category / تصنيف القائمة</th>
-          <th>Cash role / الدور النقدي</th>
-          <th>Cash-flow activity / نشاط التدفق النقدي</th>
-          <th>Contra / مقابل</th>
-          {canManage&&<th>Action / الإجراء</th>}
+          <th>الرمز</th>
+          <th>اسم الحساب</th>
+          <th>نوع الحساب<small lang="en">Account type</small></th>
+          <th>فئة القائمة المالية<small lang="en">Statement category</small></th>
+          <th>دور النقد<small lang="en">Cash role</small></th>
+          <th>نشاط التدفقات النقدية<small lang="en">Cash-flow activity</small></th>
+          <th>حساب مقابل<small lang="en">Contra</small></th>
+          {canManage&&<th>الإجراء</th>}
         </tr></thead>
         <tbody>
           {accounts.map(account=>{
@@ -216,9 +226,9 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
               cash_flow_category:account.cash_flow_category??'unmapped',
             };
             return <tr key={account.id}>
-              <td>{account.code}</td>
-              <td>{account.name}</td>
-              <td>{account.account_type}</td>
+              <td className="ac-mapping__code">{account.code}</td>
+              <td className="ac-mapping__name">{account.name}</td>
+              <td>{TYPE_LABELS[account.account_type]}</td>
               <td>
                 {canManage?
                   <select
@@ -227,7 +237,7 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
                     onChange={event=>changeCategory(account,event.target.value as StatementCategory)}
                   >
                     {COMPATIBLE[account.account_type].map(category=>
-                      <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
+                      <option key={category} value={category} title={CATEGORY_LABELS[category]}>{shortLabel(CATEGORY_LABELS[category])}</option>
                     )}
                   </select>:
                   CATEGORY_LABELS[draft.statement_category]}
@@ -236,13 +246,13 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
                 {canManage?<select aria-label={`Cash role ${account.code}`} value={draft.cash_role}
                   onChange={event=>changeCashRole(account,event.target.value as CashRole)}>
                   {(account.account_type==='asset'?Object.keys(CASH_ROLE_LABELS):['non_cash']).map(role=>
-                    <option key={role} value={role}>{CASH_ROLE_LABELS[role as CashRole]}</option>)}
+                    <option key={role} value={role} title={CASH_ROLE_LABELS[role as CashRole]}>{shortLabel(CASH_ROLE_LABELS[role as CashRole])}</option>)}
                 </select>:CASH_ROLE_LABELS[draft.cash_role]}
               </td>
               <td>
                 {canManage?<select aria-label={`Cash-flow activity ${account.code}`} value={draft.cash_flow_category}
                   onChange={event=>changeCashFlowCategory(account,event.target.value as CashFlowCategory)}>
-                  {CASH_FLOW_CATEGORIES.map(category=><option key={category} value={category}>{CASH_FLOW_LABELS[category]}</option>)}
+                  {CASH_FLOW_CATEGORIES.map(category=><option key={category} value={category} title={CASH_FLOW_LABELS[category]}>{shortLabel(CASH_FLOW_LABELS[category])}</option>)}
                 </select>:CASH_FLOW_LABELS[draft.cash_flow_category]}
               </td>
               <td>
@@ -257,14 +267,18 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized}:Pr
                   draft.is_contra?'Yes / نعم':'No / لا'}
               </td>
               {canManage&&<td>
-                <button type="button" disabled={saving===account.id} onClick={()=>void save(account)}>
-                  Save / حفظ
+                <button type="button" className="ac-mapping__save" aria-label={`Save / حفظ ${account.code}`} disabled={saving===account.id} onClick={()=>void save(account)}>
+                  حفظ
                 </button>
               </td>}
             </tr>;
           })}
         </tbody>
       </table>
+    </div>}
+    {!loading&&accounts.length>0&&<div className="ac-mapping__footer">
+      <span>عرض 1–{accounts.length} من {accounts.length} حسابات</span>
+      <span>نوع الحساب للقراءة فقط • حفظ التصنيف لكل صف</span>
     </div>}
   </section>;
 }

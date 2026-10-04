@@ -1,5 +1,6 @@
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import "./AccountingApproved.css";
 import {
   PageHeader,
   StatusBadge,
@@ -54,6 +55,11 @@ type OperationalSource = {
   reference: string | null;
 };
 type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity" | "cashFlow";
+type AccountTypeFilter = "" | Account["account_type"];
+type AccountStatusFilter = "" | "active" | "inactive";
+type AccountPanelMode = "auto" | "add" | { accountId: string };
+const accountTypes = ["asset", "liability", "equity", "revenue", "expense"] as const;
+const ACCOUNT_PAGE_SIZE = 5;
 type JournalFilters = {
   search: string;
   status: "" | "draft" | "posted";
@@ -136,6 +142,7 @@ interface Props {
   canEditJournal: boolean;
   canPost: boolean;
   onUnauthorized: () => void;
+  accountsFooter?: ReactNode;
 }
 class ApiError extends Error {
   constructor(
@@ -186,6 +193,7 @@ export function Accounting({
   canEditJournal,
   canPost,
   onUnauthorized,
+  accountsFooter,
 }: Props) {
   const { t } = useTranslation();
   const [tab, setTabState] = useState<Tab>(() => readTab() ?? "accounts");
@@ -210,6 +218,12 @@ export function Accounting({
   >(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountTypeFilter, setAccountTypeFilter] = useState<AccountTypeFilter>("");
+  const [accountStatusFilter, setAccountStatusFilter] = useState<AccountStatusFilter>("");
+  const [accountPage, setAccountPage] = useState(1);
+  const [panelMode, setPanelMode] = useState<AccountPanelMode>("auto");
+  const [statusDraft, setStatusDraft] = useState<boolean | null>(null);
   const setTab = (value: Tab) => {
     setTabState(value);
     if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
@@ -326,6 +340,43 @@ export function Accounting({
         (!journalFilters.to || j.accounting_date <= journalFilters.to),
     );
   }, [journals, journalFilters]);
+  const visibleAccounts = useMemo(() => {
+    const search = accountSearch.trim().toLocaleLowerCase();
+    return accounts.filter(
+      (a) =>
+        (!search ||
+          [a.code, a.name].some((value) =>
+            value.toLocaleLowerCase().includes(search),
+          )) &&
+        (!accountTypeFilter || a.account_type === accountTypeFilter) &&
+        (!accountStatusFilter ||
+          a.is_active === (accountStatusFilter === "active")),
+    );
+  }, [accounts, accountSearch, accountTypeFilter, accountStatusFilter]);
+  const accountPageCount = Math.max(1, Math.ceil(visibleAccounts.length / ACCOUNT_PAGE_SIZE));
+  const currentAccountPage = Math.min(accountPage, accountPageCount);
+  const pageAccounts = visibleAccounts.slice(
+    (currentAccountPage - 1) * ACCOUNT_PAGE_SIZE,
+    currentAccountPage * ACCOUNT_PAGE_SIZE,
+  );
+  const showAddForm =
+    canCreateChart &&
+    (panelMode === "add" || (panelMode === "auto" && accounts.length === 0));
+  const activeAccount = showAddForm
+    ? null
+    : typeof panelMode === "object"
+      ? accounts.find((a) => a.id === panelMode.accountId) ?? null
+      : pageAccounts[0] ?? null;
+  const selectedStatus = statusDraft ?? activeAccount?.is_active ?? false;
+  const parentLabel = (a: Account) => {
+    if (!a.parent_account_id) return "—";
+    const parent = accounts.find((x) => x.id === a.parent_account_id);
+    return parent ? `${parent.code} — ${parent.name}` : "—";
+  };
+  const selectAccount = (a: Account) => {
+    setPanelMode({ accountId: a.id });
+    setStatusDraft(null);
+  };
   const sourceTypes = useMemo(
     () => [...new Set(sources.map((source) => source.source_type))].sort(),
     [sources],
@@ -376,6 +427,7 @@ export function Accounting({
   };
   const createAccount = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setPanelMode("add");
     const form = e.currentTarget;
     const d = new FormData(form);
     mutationStarted();
@@ -416,6 +468,11 @@ export function Accounting({
     } finally {
       setSaving(false);
     }
+  };
+  const applyStatus = async (a: Account) => {
+    if (statusDraft === null || statusDraft === a.is_active) return;
+    await toggleAccount(a);
+    setStatusDraft(null);
   };
   const createJournal = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -584,14 +641,14 @@ export function Accounting({
     }
   };
   return (
-    <section className="panel" aria-labelledby="accounting-title">
+    <section className="panel ac-approved" aria-labelledby="accounting-title">
       <PageHeader
+        className="ac-approved__header"
         titleId="accounting-title"
-        eyebrow={t("accounting.title")}
         title={t("accounting.title")}
         description={t("accounting.description")}
       />
-      <div className="workspace-tabs" role="tablist">
+      <div className="workspace-tabs ac-approved__tabs" role="tablist">
         {tabs.map((x) => (
           <button
             role="tab"
@@ -640,95 +697,200 @@ export function Accounting({
       )}
       {loading && <WorkspaceState>{t("accounting.loading")}</WorkspaceState>}
       {!loading && tab === "accounts" && (
-        <>
-          <h2>{t("accounting.accounts")}</h2>
-          {canCreateChart && (
-            <form className="form-grid compact-form" onSubmit={createAccount}>
-              <label>
-                {t("accounting.code")}
-                <input name="code" required maxLength={50} />
+        <div className="ac-approved__accounts">
+          <section className="ac-approved__card ac-approved__chart" aria-labelledby="accounting-chart-title">
+            <div className="ac-approved__card-header">
+              <h2 id="accounting-chart-title">{t("accounting.accounts")}</h2>
+              <span className="ac-approved__muted">{t("accounting.chart.count", { count: visibleAccounts.length })}</span>
+            </div>
+            <div className="ac-approved__toolbar">
+              <label className="ac-approved__search">
+                <span className="ac-approved__sr">{t("accounting.chart.search")}</span>
+                <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                <input type="search" value={accountSearch} placeholder={t("accounting.chart.searchPlaceholder")} onChange={(e) => { setAccountSearch(e.target.value); setAccountPage(1); }} />
               </label>
-              <label>
-                {t("accounting.name")}
-                <input name="name" required maxLength={200} />
-              </label>
-              <label>
-                {t("accounting.type")}
-                <select name="account_type">
-                  {(
-                    [
-                      "asset",
-                      "liability",
-                      "equity",
-                      "revenue",
-                      "expense",
-                    ] as const
-                  ).map((x) => (
-                    <option value={x} key={x}>
-                      {t(`accounting.types.${x}`)}
-                    </option>
+              <label className="ac-approved__prefixed">
+                <span className="ac-approved__prefix">{t("accounting.type")}</span>
+                <select aria-label={t("accounting.chart.typeFilter")} value={accountTypeFilter} onChange={(e) => { setAccountTypeFilter(e.target.value as AccountTypeFilter); setAccountPage(1); }}>
+                  <option value="">{t("accounting.chart.all")}</option>
+                  {accountTypes.map((x) => (
+                    <option value={x} key={x}>{t(`accounting.types.${x}`)}</option>
                   ))}
                 </select>
               </label>
-              <label>
-                {t("accounting.parent")}
-                <select name="parent_account_id">
-                  <option value="">—</option>
-                  {accounts.map((a) => (
-                    <option value={a.id} key={a.id}>
-                      {a.code} — {a.name}
-                    </option>
-                  ))}
+              <label className="ac-approved__prefixed">
+                <span className="ac-approved__prefix">{t("accounting.status")}</span>
+                <select aria-label={t("accounting.chart.statusFilter")} value={accountStatusFilter} onChange={(e) => { setAccountStatusFilter(e.target.value as AccountStatusFilter); setAccountPage(1); }}>
+                  <option value="">{t("accounting.chart.all")}</option>
+                  <option value="active">{t("accounting.active")}</option>
+                  <option value="inactive">{t("accounting.inactive")}</option>
                 </select>
               </label>
-              <button className="primary" disabled={saving}>
-                {t("accounting.addAccount")}
-              </button>
-            </form>
-          )}
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("accounting.code")}</th>
-                  <th>{t("accounting.name")}</th>
-                  <th>{t("accounting.type")}</th>
-                  <th>{t("accounting.status")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.code}</td>
-                    <td>{a.name}</td>
-                    <td>{t(`accounting.types.${a.account_type}`)}</td>
-                    <td>
-                      {canEditChart ? (
-                        <button
-                          disabled={saving}
-                          onClick={() => void toggleAccount(a)}
-                        >
-                          {t(
-                            a.is_active
-                              ? "accounting.active"
-                              : "accounting.inactive",
-                          )}
-                        </button>
-                      ) : (
-                        t(
-                          a.is_active
-                            ? "accounting.active"
-                            : "accounting.inactive",
-                        )
-                      )}
-                    </td>
+              {canCreateChart && (
+                <button type="button" className="ac-approved__create" onClick={() => { setPanelMode("add"); setStatusDraft(null); }}>
+                  <span aria-hidden="true">+</span> {t("accounting.chart.newAccount")}
+                </button>
+              )}
+            </div>
+            <div className="ac-approved__table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("accounting.code")}</th>
+                    <th>{t("accounting.chart.accountName")}</th>
+                    <th>{t("accounting.type")}</th>
+                    <th>{t("accounting.parent")}</th>
+                    <th>{t("accounting.status")}</th>
+                    <th>{t("accounting.action")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+                </thead>
+                <tbody>
+                  {pageAccounts.map((a) => (
+                    <tr key={a.id} className={activeAccount?.id === a.id ? "is-selected" : undefined} aria-selected={activeAccount?.id === a.id}>
+                      <td className="ac-approved__code">{a.code}</td>
+                      <td className="ac-approved__name">{a.name}</td>
+                      <td>{t(`accounting.types.${a.account_type}`)}</td>
+                      <td>{parentLabel(a)}</td>
+                      <td>
+                        <span className={`ac-approved__badge ${a.is_active ? "is-active" : "is-inactive"}`}>
+                          {t(a.is_active ? "accounting.active" : "accounting.inactive")}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" className="ac-approved__link" onClick={() => selectAccount(a)}>
+                          {t(canEditChart ? "accounting.chart.edit" : "accounting.chart.view")}
+                          <span className="ac-approved__sr"> {a.code}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {accounts.length === 0 && <WorkspaceState kind="empty">{t("accounting.chart.empty")}</WorkspaceState>}
+              {accounts.length > 0 && visibleAccounts.length === 0 && <WorkspaceState kind="no-results">{t("accounting.chart.noResults")}</WorkspaceState>}
+            </div>
+            {visibleAccounts.length > 0 && (
+              <div className="ac-approved__footer">
+                <span className="ac-approved__muted">
+                  {t("accounting.chart.pageSummary", { from: (currentAccountPage - 1) * ACCOUNT_PAGE_SIZE + 1, to: Math.min(currentAccountPage * ACCOUNT_PAGE_SIZE, visibleAccounts.length), total: visibleAccounts.length })}
+                </span>
+                {accountPageCount > 1 && (
+                  <nav className="ac-approved__pager" aria-label={t("accounting.chart.pagination")}>
+                    <button type="button" aria-label={t("accounting.chart.previousPage")} disabled={currentAccountPage <= 1} onClick={() => setAccountPage(currentAccountPage - 1)}>‹</button>
+                    {Array.from({ length: accountPageCount }, (_, i) => i + 1).map((n) => (
+                      <button type="button" key={n} className={n === currentAccountPage ? "is-current" : undefined} aria-current={n === currentAccountPage ? "page" : undefined} onClick={() => setAccountPage(n)}>{n}</button>
+                    ))}
+                    <button type="button" aria-label={t("accounting.chart.nextPage")} disabled={currentAccountPage >= accountPageCount} onClick={() => setAccountPage(currentAccountPage + 1)}>›</button>
+                  </nav>
+                )}
+              </div>
+            )}
+          </section>
+          <aside className="ac-approved__card ac-approved__details" aria-labelledby="accounting-details-title">
+            {showAddForm ? (
+              <>
+                <div className="ac-approved__card-header">
+                  <h2 id="accounting-details-title">{t("accounting.chart.newAccountTitle")}</h2>
+                </div>
+                <form className="ac-approved__fields" onSubmit={createAccount}>
+                  <label>
+                    <span>{t("accounting.code")}</span>
+                    <input name="code" required maxLength={50} />
+                  </label>
+                  <label>
+                    <span>{t("accounting.name")}</span>
+                    <input name="name" required maxLength={200} />
+                  </label>
+                  <label>
+                    <span>{t("accounting.type")}</span>
+                    <select name="account_type">
+                      {accountTypes.map((x) => (
+                        <option value={x} key={x}>
+                          {t(`accounting.types.${x}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t("accounting.parent")}</span>
+                    <select name="parent_account_id">
+                      <option value="">—</option>
+                      {accounts.map((a) => (
+                        <option value={a.id} key={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="ac-approved__hint">{t("accounting.chart.parentHint")}</p>
+                  <div className="ac-approved__actions">
+                    <button className="primary ac-approved__submit" disabled={saving}>
+                      {t("accounting.addAccount")}
+                    </button>
+                    {accounts.length > 0 && (
+                      <button type="button" className="ac-approved__ghost" onClick={() => setPanelMode("auto")}>
+                        {t("accounting.chart.cancel")}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </>
+            ) : activeAccount ? (
+              <>
+                <div className="ac-approved__card-header">
+                  <h2 id="accounting-details-title">{t("accounting.chart.detailsTitle")}</h2>
+                  <span className="ac-approved__muted">{activeAccount.code}</span>
+                </div>
+                <form className="ac-approved__fields" onSubmit={(e) => { e.preventDefault(); void applyStatus(activeAccount); }}>
+                  <label>
+                    <span>{t("accounting.code")}</span>
+                    <input value={activeAccount.code} disabled readOnly />
+                  </label>
+                  <label>
+                    <span>{t("accounting.name")}</span>
+                    <input value={activeAccount.name} disabled readOnly />
+                  </label>
+                  <label>
+                    <span>{t("accounting.type")}</span>
+                    <select value={activeAccount.account_type} disabled>
+                      <option value={activeAccount.account_type}>{t(`accounting.types.${activeAccount.account_type}`)}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t("accounting.parent")}</span>
+                    <select value={activeAccount.parent_account_id ?? ""} disabled>
+                      <option value={activeAccount.parent_account_id ?? ""}>{parentLabel(activeAccount)}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t("accounting.status")}</span>
+                    <select
+                      value={selectedStatus ? "active" : "inactive"}
+                      disabled={!canEditChart || saving}
+                      onChange={(e) => setStatusDraft(e.target.value === "active")}
+                    >
+                      <option value="active">{t("accounting.active")}</option>
+                      <option value="inactive">{t("accounting.inactive")}</option>
+                    </select>
+                  </label>
+                  <p className="ac-approved__hint">{t("accounting.chart.editLocked")}</p>
+                  <div className="ac-approved__actions">
+                    <button className="primary ac-approved__submit" disabled={!canEditChart || saving || selectedStatus === activeAccount.is_active}>
+                      {t("accounting.chart.updateAccount")}
+                    </button>
+                    <button type="button" className="ac-approved__ghost" disabled={selectedStatus === activeAccount.is_active} onClick={() => setStatusDraft(null)}>
+                      {t("accounting.chart.cancel")}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <WorkspaceState kind="empty">{t("accounting.chart.selectAccount")}</WorkspaceState>
+            )}
+          </aside>
+        </div>
       )}
+      {tab === "accounts" && accountsFooter}
       {!loading && tab === "sources" && (
         <>
           <h2>{t("accounting.operationalSources")}</h2>

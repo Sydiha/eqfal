@@ -12,12 +12,13 @@ interface Props {
 }
 
 export function Accounting(props:Props){
-  return <>
-    <AccountingCore {...props}/>
-    <AccountClassificationPanel
+  return <AccountingCore
+    {...props}
+    accountsFooter={<AccountClassificationPanel
       canView={props.canView}
       canManage={props.canEditChart}
       onUnauthorized={props.onUnauthorized}
-    />
-  </>;
+      autoOpen
+    />}
+  />;
 }

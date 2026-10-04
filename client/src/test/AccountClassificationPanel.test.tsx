@@ -33,7 +33,7 @@ describe('AccountClassificationPanel',()=>{
 
     render(<AccountClassificationPanel canView canManage onUnauthorized={vi.fn()}/>);
     fireEvent.click(screen.getByRole('button',{name:/Financial statement mapping/}));
-    expect(await screen.findByText('Cash')).toBeInTheDocument();
+    expect(await screen.findByRole('cell',{name:'Cash'})).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Statement category 1000'),{target:{value:'current_asset'}});
     fireEvent.change(screen.getByLabelText('Cash role 1000'),{target:{value:'cash'}});
@@ -51,7 +51,7 @@ describe('AccountClassificationPanel',()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({accounts:[liability]}))));
     render(<AccountClassificationPanel canView canManage onUnauthorized={vi.fn()}/>);
     fireEvent.click(screen.getByRole('button',{name:/Financial statement mapping/}));
-    await screen.findByText('Payable');
+    await screen.findByRole('cell',{name:'Payable'});
 
     const category=screen.getByLabelText('Statement category 2000');
     expect(category).toHaveTextContent('Current liability');
@@ -66,7 +66,7 @@ describe('AccountClassificationPanel',()=>{
       options?.method==='PATCH'?new Response(null,{status:400}):new Response(JSON.stringify({accounts:[account]}))));
     render(<AccountClassificationPanel canView canManage onUnauthorized={vi.fn()}/>);
     fireEvent.click(screen.getByRole('button',{name:/Financial statement mapping/}));
-    await screen.findByText('Cash');
+    await screen.findByRole('cell',{name:'Cash'});
     fireEvent.change(screen.getByLabelText('Cash role 1000'),{target:{value:'cash_equivalent'}});
     fireEvent.click(screen.getByRole('button',{name:/Save/}));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
