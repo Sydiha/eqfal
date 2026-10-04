@@ -1,0 +1,73 @@
+/* Partners — approved Figma frames 239:6309 / 239:6460 / 239:6623 / 239:6791 (1440 RTL). Presentation only; scoped to .pt-view. */
+.pt-view,.panel.pt-view{--pt-ink:#1e293b;--pt-muted:#64748b;--pt-primary:#00b894;--pt-green:#047857;--pt-navy:#0b1d3a;--pt-border:#e4e8ec;--pt-soft:#f8fafc;--pt-danger:#dc2626;display:flex;flex-direction:column;gap:16px;max-width:none;margin:0;padding:0 0 28px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--pt-ink);font-family:"Readex Pro",Tajawal,Inter,system-ui,sans-serif;font-size:12px}
+.pt-view button,.pt-view input,.pt-view textarea{font-family:inherit}
+.pt-view .pt-muted{color:var(--pt-muted);font-size:11px}
+.pt-view .pt-icon{width:14px;height:14px;flex:none}
+.pt-view .pt-header{display:flex;align-items:flex-start;justipt-content:space-between;gap:16px;margin:0}
+.pt-view .pt-header h2{margin:0;font-size:24px;font-weight:800;line-height:normal;color:var(--pt-ink)}
+.pt-view .pt-header p{margin:4px 0 0;color:var(--pt-muted);font-size:13px}
+.pt-view .pt-primary,.pt-view .pt-ghost,.pt-view .pt-dark{display:inline-flex;align-items:center;justipt-content:center;gap:6px;flex:none;min-width:0;min-height:0;height:32px;margin:0;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;line-height:1;cursor:pointer}
+.pt-view .pt-primary{border:0;background:var(--pt-primary);color:#fff}
+.pt-view .pt-primary:hover{background:#00a383}
+.pt-view .pt-ghost{border:1px solid var(--pt-border);background:#fff;color:var(--pt-ink);font-weight:600}
+.pt-view .pt-ghost:hover{background:var(--pt-soft);border-color:#cbd5e1}
+.pt-view .pt-dark{border:0;background:var(--pt-navy);color:#fff}
+.pt-view .pt-dark:hover{background:#13294d}
+.pt-view .pt-primary:disabled,.pt-view .pt-dark:disabled{border:1px solid var(--pt-border);background:#eef2f6;color:var(--pt-muted);opacity:1;cursor:not-allowed}
+.pt-view .pt-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border:1px solid var(--pt-border);border-radius:12px;background:#fff;overflow:hidden}
+.pt-view .pt-summary>div{display:flex;flex-direction:column;gap:6px;min-width:0;padding:14px 16px;border-inline-start:1px solid var(--pt-border)}
+.pt-view .pt-summary>div:first-child{border-inline-start:0}
+.pt-view .pt-summary>div.is-active{background:#f0fdf9}
+.pt-view .pt-summary dt{color:var(--pt-muted);font-size:12px}
+.pt-view .pt-summary dd{margin:0;font-size:22px;font-weight:700;line-height:1}
+.pt-view .pt-summary>div.is-active dd{color:var(--pt-green)}
+.pt-view .pt-card{box-sizing:border-box;min-width:0;margin:0;padding:14px 12px 12px;border:1px solid var(--pt-border);border-radius:12px;background:#fff}
+.pt-view .pt-card__head{display:flex;align-items:center;justipt-content:space-between;gap:12px;margin:0 0 10px}
+.pt-view .pt-card__head h3{margin:0;font-size:15px;font-weight:800;line-height:normal}
+.pt-view .pt-table{border:1px solid var(--pt-border);border-radius:8px;overflow-x:auto}
+.pt-view .pt-table table{width:100%;border-collapse:collapse}
+.pt-view .pt-table th{padding:12px 14px;background:var(--pt-soft);border-bottom:1px solid var(--pt-border);color:var(--pt-muted);font-size:11.5px;font-weight:500;text-transform:none;text-align:start;white-space:nowrap}
+.pt-view .pt-table td{height:59px;padding:0 14px;border-bottom:1px solid var(--pt-border);font-size:12px;vertical-align:middle;white-space:nowrap}
+.pt-view .pt-table tr:last-child td{border-bottom:0}
+.pt-view .pt-table th:last-child,.pt-view .pt-table td:last-child{width:216px}
+.pt-view .pt-name{font-weight:700}
+.pt-view .pt-actions{display:flex;align-items:center;gap:8px}
+.pt-view .badge{padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600}
+.pt-view .badge.open{background:#d5f5ea;color:var(--pt-green)}
+.pt-view .badge.closed{background:#eef2f6;color:#475569}
+.pt-view .pt-table td.pt-empty{height:120px;text-align:center;white-space:normal}
+.pt-view .pt-empty strong{display:block;margin-bottom:8px;font-size:14px;font-weight:700}
+.pt-view .pt-empty span{color:var(--pt-muted);font-size:11px}
+/* Create / edit / close dialogs (rendered inside .pt-view). */
+.pt-view .modal{width:min(100%,466px);padding:20px 24px;border-radius:12px}
+.pt-view .modal>h3{margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--pt-border);font-size:17px;font-weight:800}
+.pt-view .pt-alert{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:12px}
+.pt-view .pt-close-text{margin:0 0 14px;color:var(--pt-ink);font-size:13px;line-height:1.7}
+.pt-view .pt-form{display:grid;gap:14px}
+.pt-view .pt-form label{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--pt-ink);font-size:12px;font-weight:600}
+.pt-view .pt-form input,.pt-view .pt-form textarea{width:100%;min-height:0;margin:0;padding:0 10px;border:1px solid #d6dde4;border-radius:6px;background:#fff;color:var(--pt-ink);font-size:12px;font-weight:400}
+.pt-view .pt-form input{height:34px}
+.pt-view .pt-form textarea{min-height:72px;padding:8px 10px}
+.pt-view .pt-form input[aria-invalid="true"]{border-color:var(--pt-danger);box-shadow:0 0 0 1px var(--pt-danger)}
+.pt-view .pt-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pt-view .pt-form .modal-actions{display:flex;justipt-content:flex-end;gap:8px;margin:2px 0 0;padding-top:14px;border-top:1px solid var(--pt-border)}
+.pt-view .pt-spinner{width:12px;height:12px;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;animation:pt-spin .8s linear infinite}
+@keyframes pt-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.pt-view .pt-spinner{animation:none}}
+/* Tablet: compressed register, no text shrinking; row actions wrap so status, edit and close stay visible. */
+@media(max-width:64em){.pt-view .pt-table th,.pt-view .pt-table td{padding-inline:10px}.pt-view .pt-table th:last-child,.pt-view .pt-table td:last-child{width:auto}.pt-view .pt-table td{height:auto;padding-block:12px}.pt-view .pt-actions{flex-wrap:wrap}.pt-view .pt-actions button{padding:0 10px}}
+/* Mobile: stacked header and dialog date fields; the register scrolls horizontally inside its card. */
+@media(max-width:48em){
+ .pt-view .pt-header{flex-direction:column;align-items:stretch}
+ .pt-view .pt-header .pt-primary{align-self:flex-start}
+ .pt-view .pt-summary>div{padding:12px}
+ .pt-view .pt-summary dd{font-size:20px}
+ .pt-view .pt-date-fields{grid-template-columns:1fr}
+ .pt-view .pt-table table{min-width:520px}
+ .pt-view .pt-form .modal-actions button{width:auto;flex:1}
+}
+.pt-view .pt-note{display:block;margin-top:2px;color:var(--pt-muted);font-size:11px;font-weight:400}
+.pt-view .pt-form .pt-check{flex-direction:row;align-items:center;gap:8px}
+.pt-view .pt-form .pt-check input{width:auto;height:auto}
+.pt-view .pt-name .link-button{padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:700;cursor:pointer}
+.pt-view .subsection{padding:14px 12px;border:1px solid var(--pt-border);border-radius:12px;background:#fff}
