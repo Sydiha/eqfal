@@ -68,6 +68,8 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     </Stack>
   );
 
+  const isAr = i18n.language === 'ar';
+  const periodLabel = new Date().toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory' : 'en-US', { month: 'long', year: 'numeric' });
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
   const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
   const groupLabels = i18n.language === 'ar'
@@ -90,39 +92,50 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <Text size="xs" className="page-context-label">{t('app.shortTitle')}</Text>
             <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
           </Stack>
+          <Group gap={8} wrap="nowrap" className="topbar-context">
+            {canShowNavigationPage('documents', capabilities) && (
+              <button type="button" className="topbar-icon-button" aria-label={isAr ? 'بحث في المستندات' : 'Search documents'} onClick={() => setPage('documents')}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+              </button>
+            )}
+            <span className="topbar-company-group"><CompanySwitcher onSwitch={onSwitch} /></span>
+            <span className="topbar-chip topbar-chip--period" title={isAr ? 'الفترة الحالية' : 'Current period'}>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              {periodLabel}
+            </span>
+          </Group>
           <Box className="topbar-spacer" />
-          <Group gap={10} wrap="nowrap" className="topbar-company-group">
-            <CompanySwitcher onSwitch={onSwitch} />
-          <Button
-            className="header-action language-action"
-            aria-label={t('app.switchLanguage')}
-            variant="subtle"
-            size="compact-md"
-            onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
-          >
-            <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
-            <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
-          </Button>
-          </Group>
-          <Divider orientation="vertical" className="top-divider" />
-          <Group gap={8} wrap="nowrap" className="topbar-user-group">
-          <Group gap={8} wrap="nowrap" className="user-summary">
-            <span className="user-avatar" aria-hidden="true">{userInitial}</span>
-            <Stack gap={0} className="user-copy">
-              <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
-              <Text size="sm" fw={650}>{email}</Text>
-            </Stack>
-          </Group>
-          <Button
-            className="header-action logout-action"
-            aria-label={t('auth.logout')}
-            variant="subtle"
-            size="compact-md"
-            onClick={() => void onLogout()}
-          >
-            <span className="desktop-action-label">{t('auth.logout')}</span>
-            <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
-          </Button>
+          <Group gap={10} wrap="nowrap" className="topbar-user-group">
+            <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={isAr ? 'المهام بانتظارك' : 'Tasks waiting for you'} onClick={() => setPage('home')}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+            </button>
+            <Group gap={8} wrap="nowrap" className="user-summary">
+              <span className="user-avatar" aria-hidden="true">{userInitial}</span>
+              <Stack gap={0} className="user-copy">
+                <Text size="sm" fw={650}>{email}</Text>
+                <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
+              </Stack>
+            </Group>
+            <Button
+              className="header-action language-action"
+              aria-label={t('app.switchLanguage')}
+              variant="subtle"
+              size="compact-md"
+              onClick={() => void i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar')}
+            >
+              <span className="desktop-action-label">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
+              <span className="mobile-action-label" aria-hidden="true">{i18n.language === 'ar' ? 'EN' : 'AR'}</span>
+            </Button>
+            <Button
+              className="header-action logout-action"
+              aria-label={t('auth.logout')}
+              variant="subtle"
+              size="compact-md"
+              onClick={() => void onLogout()}
+            >
+              <span className="desktop-action-label">{t('auth.logout')}</span>
+              <span className="mobile-action-label" aria-hidden="true">{mobileLogoutLabel}</span>
+            </Button>
           </Group>
         </Group>
       </MantineAppShell.Header>

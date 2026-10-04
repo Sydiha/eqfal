@@ -95,3 +95,18 @@
   font-size: 10px;
   text-align: center;
 }
+
+/* Figma top bar parity: icon buttons and context chips. */
+.app-shell--v2 .topbar { background: #fafcfd; border-bottom: 1px solid #e4e8ec; }
+.topbar-context { margin-inline-start: 24px; }
+.topbar-icon-button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: #f1f5f9; color: #475569; cursor: pointer; }
+.topbar-icon-button--round { width: 34px; height: 34px; border-radius: 17px; }
+.topbar-icon-button:hover { background: #e2e8f0; }
+.topbar-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; background: #f1f5f9; color: #1e293b; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.topbar-chip--period { border: 1px solid #d4af37; background: #faf6e8; color: #92700a; }
+.topbar-company-group { display: inline-flex; align-items: center; }
+.topbar-company-group label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.topbar-company-group select { height: 30px; min-height: 30px; padding-block: 0; border: 0; border-radius: 6px; background-color: #f1f5f9; color: #1e293b; font-size: 13px; font-weight: 700; }
+.topbar-company-group [role="status"] { font-size: 13px; }
+@media (max-width: 62em) { .topbar-context { display: none; } }
+@media (min-width: 62.01em) { .app-shell--v2 .page-context { display: none; } }
