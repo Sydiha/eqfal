@@ -1,8 +1,23 @@
 import { useEffect, useState } from "react";
+import "@fontsource/readex-pro/400.css";
+import "@fontsource/readex-pro/500.css";
+import "@fontsource/readex-pro/600.css";
+import "@fontsource/readex-pro/700.css";
 import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
-import { IconBanks, IconDocuments, IconObligations, IconAccounting, IconFixedAssets, IconVAT } from "./EqfalIcons";
+
+// Figma Home KPI and status icons (presentation only).
+const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+const KpiIconCard = () => (<svg {...svgProps}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h4" /></svg>);
+const KpiIconPeople = () => (<svg {...svgProps}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6" /></svg>);
+const KpiIconBook = () => (<svg {...svgProps}><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z" /><path d="M5 18a2 2 0 0 1 2-2h11" /></svg>);
+const KpiIconArrowIn = () => (<svg {...svgProps}><path d="M17 7 7 17M7 9v8h8" /></svg>);
+const KpiIconArrowOut = () => (<svg {...svgProps}><path d="M7 17 17 7M9 7h8v8" /></svg>);
+const KpiIconTrend = () => (<svg {...svgProps}><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>);
+const IconFile = () => (<svg {...svgProps} width={16} height={16}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>);
+const IconCheckCircle = () => (<svg {...svgProps} width={18} height={18}><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.5 2.5L16 9.5" /></svg>);
+const IconRing = () => (<svg {...svgProps} width={18} height={18}><circle cx="12" cy="12" r="8.5" /></svg>);
 
 type HomePage =
   | "fiscalYears"
@@ -118,42 +133,42 @@ export function Home({
       key: "bank_balances",
       labelAr: "النقد والبنوك",
       labelEn: "Cash and Banks",
-      icon: IconBanks,
+      icon: KpiIconCard,
       colorClass: "kpi-blue",
     },
     {
       key: "amounts_to_collect",
       labelAr: "الذمم المدينة",
       labelEn: "Receivables",
-      icon: IconDocuments,
+      icon: KpiIconPeople,
       colorClass: "kpi-blue-light",
     },
     {
       key: "amounts_to_pay",
       labelAr: "الذمم الدائنة",
       labelEn: "Payables",
-      icon: IconObligations,
+      icon: KpiIconBook,
       colorClass: "kpi-gray",
     },
     {
       key: "current_month_sales",
       labelAr: "الإيرادات",
       labelEn: "Revenue",
-      icon: IconVAT,
+      icon: KpiIconArrowIn,
       colorClass: "kpi-gray-light",
     },
     {
       key: "current_month_purchases_expenses",
       labelAr: "المصروفات",
       labelEn: "Expenses",
-      icon: IconAccounting,
+      icon: KpiIconArrowOut,
       colorClass: "kpi-green-light",
     },
     {
       key: "net_profit",
       labelAr: "صافي الربح",
       labelEn: "Net Profit",
-      icon: IconFixedAssets,
+      icon: KpiIconTrend,
       colorClass: "kpi-green",
     },
   ];
@@ -337,14 +352,8 @@ export function Home({
 
   const ring = () => {
     const radius = 82;
-    const inner = 60;
-    const center = 105;
-    const gap = 0.05;
-    const direction = isArabic ? -1 : 1;
-    const point = (r: number, angle: number) => [
-      center + r * Math.sin(angle),
-      center - r * Math.cos(angle),
-    ];
+    const circumference = 2 * Math.PI * radius;
+    const filled = (readyPercentage / 100) * circumference;
     return (
       <svg
         className="home__ring"
@@ -352,26 +361,18 @@ export function Home({
         role="img"
         aria-label={`${readyAreas}/${blockerAreas.length}`}
       >
-        {blockerAreas.map((item, index) => {
-          const a0 = direction * ((index / blockerAreas.length) * 2 * Math.PI + gap);
-          const a1 = direction * (((index + 1) / blockerAreas.length) * 2 * Math.PI - gap);
-          const [x0, y0] = point(radius, a0);
-          const [x1, y1] = point(radius, a1);
-          const [x2, y2] = point(inner, a1);
-          const [x3, y3] = point(inner, a0);
-          const sweep = direction > 0 ? 1 : 0;
-          const arcColor = item.count === 0 ? "#0e8f7a" : item.count >= 3 ? "#b42318" : "#8f5200";
-          return (
-            <path
-              key={item.key}
-              fill={arcColor}
-              d={`M${x0} ${y0}A${radius} ${radius} 0 0 ${sweep} ${x1} ${y1}L${x2} ${y2}A${inner} ${inner} 0 0 ${1 - sweep} ${x3} ${y3}Z`}
-            >
-              <title>{item.labelAr || item.labelEn}</title>
-            </path>
-          );
-        })}
-        <text x="105" y="106" textAnchor="middle" className="home__ring-text">
+        <circle cx="105" cy="105" r={radius} fill="none" stroke="#e4e8ec" strokeWidth="22" />
+        <circle
+          cx="105"
+          cy="105"
+          r={radius}
+          fill="none"
+          stroke="#16b88f"
+          strokeWidth="22"
+          strokeDasharray={`${filled} ${circumference}`}
+          transform="rotate(-90 105 105)"
+        />
+        <text x="105" y="106" textAnchor="middle" dominantBaseline="middle" className="home__ring-text">
           {readyPercentage}%
         </text>
       </svg>
@@ -387,21 +388,24 @@ export function Home({
     >
       {/* Page Header */}
       <header className="home__header">
-        <div className="home__header-content">
-          <h1 id="home-title" className="home__title">
-            {isArabic ? "نظرة عامة مالية" : "Financial overview"}
-          </h1>
+        <h1 id="home-title" className="home__title">
+          {isArabic ? "نظرة عامة مالية" : "Financial overview"}
+        </h1>
+        <div className="home__header-row">
+          <p className="home__date">
+            {isArabic ? stripDirectionalMarks(fullDate) : fullDate}
+          </p>
           <p className="home__greeting">
             {isArabic
-              ? `مرحباً - ${stripDirectionalMarks(fullDate)}`
-              : `Hello - ${fullDate}`}
-          </p>
-          <p className="home__subtitle">
-            {isArabic
-              ? `لمحة مالية مجمعة – ${monthYear}`
-              : `Aggregate Financial Summary – ${monthYear}`}
+              ? "مرحباً. إليك أهم ما يتطلب اهتمامك اليوم"
+              : "Hello. Here is what needs your attention today"}
           </p>
         </div>
+        <p className="home__subtitle">
+          {isArabic
+            ? `لمحة مالية مجمعة – ${monthYear}`
+            : `Aggregate Financial Summary – ${monthYear}`}
+        </p>
       </header>
 
       {/* KPI Section - Always Visible */}
@@ -413,14 +417,16 @@ export function Home({
               const IconComponent = kpi.icon;
               return (
                 <div key={kpi.key} className={`home__kpi-card ${kpi.colorClass}`}>
+                  <div className="home__kpi-text">
+                    <div className="home__kpi-label">
+                      {isArabic ? kpi.labelAr : kpi.labelEn}
+                    </div>
+                    <div className="home__kpi-value">
+                      {renderKPIAmount(kpi, value)}
+                    </div>
+                  </div>
                   <div className="home__kpi-icon">
                     <IconComponent />
-                  </div>
-                  <div className="home__kpi-label">
-                    {isArabic ? kpi.labelAr : kpi.labelEn}
-                  </div>
-                  <div className="home__kpi-value">
-                    {renderKPIAmount(kpi, value)}
                   </div>
                 </div>
               );
@@ -463,7 +469,12 @@ export function Home({
                   {blockerAreas.map((item) => (
                     item.count > 0 && (
                       <tr key={item.key} className={item.count >= 3 ? "home__table-row-critical" : ""}>
-                        <td>{isArabic ? item.labelAr : item.labelEn}</td>
+                        <td>
+                          <span className="home__task-category">
+                            <IconFile />
+                            {isArabic ? item.labelAr : item.labelEn}
+                          </span>
+                        </td>
                         <td data-empty="true">—</td>
                         <td>{item.count}</td>
                         <td data-empty="true">—</td>
@@ -512,25 +523,35 @@ export function Home({
                 <h2 className="home__section-title">
                   {isArabic ? "جاهزية إقفال الفترة الشهرية" : "Monthly Close Readiness"}
                 </h2>
-                {totalBlockers > 0 && (
-                  <p className="home__readiness-subtitle">
-                    {isArabic
-                      ? `الإقفال غير متاح – يوجد ${totalBlockers} ${totalBlockers === 1 ? "معوقة" : "معوقات"}`
-                      : `Close unavailable – ${totalBlockers} ${totalBlockers === 1 ? "blocker" : "blockers"}`}
-                  </p>
-                )}
+                <p className="home__readiness-subtitle">
+                  {isArabic
+                    ? `مستوى اكتمال مجالات إقفال شهر ${monthYear}`
+                    : `Completion of close areas for ${monthYear}`}
+                </p>
               </div>
-              <button
-                onClick={() => navigate("monthlyClose")}
-                className="home__readiness-button"
-              >
-                {isArabic ? "عرض معوقات الإقفال" : "View Close Blockers"}
-              </button>
+              <div className="home__readiness-actions">
+                <span className="home__readiness-updated">
+                  {isArabic
+                    ? `آخر تحديث: ${stripDirectionalMarks(formatDisplayDate(today.toISOString().split('T')[0], i18n.language))}`
+                    : `Last updated: ${formatDisplayDate(today.toISOString().split('T')[0], i18n.language)}`}
+                </span>
+                <button
+                  onClick={() => navigate("monthlyClose")}
+                  className="home__readiness-button"
+                >
+                  {isArabic ? "عرض معوقات الإقفال" : "View Close Blockers"}
+                </button>
+              </div>
             </div>
 
             {totalBlockers > 0 && (
               <div className="home__warning-banner">
-                {isArabic ? "⚠️ يوجد معوقات تحتاج معالجة فورية" : "⚠️ There are blockers requiring immediate action"}
+                <span>
+                  {isArabic
+                    ? `الإقفال غير متاح – يوجد ${totalBlockers} ${totalBlockers === 1 ? "معوقة" : "معوقات"}`
+                    : `Close unavailable – ${totalBlockers} ${totalBlockers === 1 ? "blocker" : "blockers"}`}
+                </span>
+                <span className="home__warning-dot" aria-hidden="true"></span>
               </div>
             )}
 
@@ -553,22 +574,35 @@ export function Home({
               {/* Steps List */}
               <div className="home__steps-list">
                 {blockerAreas.map((item) => (
-                  <div key={item.key} className="home__step">
-                    <div
-                      className={`home__step-icon ${item.count === 0 ? "completed" : item.count >= 3 ? "critical" : "warning"}`}
-                    >
-                      {item.count === 0 ? "✓" : item.count}
-                    </div>
-                    <div className="home__step-content">
-                      <div className="home__step-label">
-                        {isArabic ? item.labelAr : item.labelEn}
-                      </div>
-                      {item.count > 0 && (
-                        <div className="home__step-status">
-                          {item.count >= 3 ? (isArabic ? "معوق" : "Blocked") : (isArabic ? "قيد الإنجاز" : "In Progress")}
-                        </div>
+                  <div
+                    key={item.key}
+                    className={`home__step ${item.count === 0 ? "completed" : item.count >= 3 ? "critical" : "warning"}`}
+                  >
+                    <span className="home__step-icon">
+                      {item.count === 0 ? <IconCheckCircle /> : <IconRing />}
+                    </span>
+                    <span className="home__step-label">
+                      {isArabic ? item.labelAr : item.labelEn}
+                    </span>
+                    <span className="home__step-status">
+                      {item.count === 0
+                        ? (isArabic ? "مكتملة" : "Complete")
+                        : item.count >= 3
+                          ? (isArabic ? "معوق للإقفال" : "Blocking close")
+                          : (isArabic ? "قيد التنفيذ" : "In progress")}
+                    </span>
+                    <span className="home__step-count">
+                      {item.count > 0
+                        ? (isArabic ? `${item.count} عناصر مفتوحة` : `${item.count} open items`)
+                        : "—"}
+                    </span>
+                    <span className="home__step-action">
+                      {item.canOpen && (
+                        <button type="button" className="home__step-link" onClick={item.navigate}>
+                          {item.count === 0 ? (isArabic ? "عرض" : "View") : (isArabic ? "متابعة" : "Follow up")}
+                        </button>
                       )}
-                    </div>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -585,7 +619,7 @@ export function Home({
                 </div>
                 <div className="home__legend-item">
                   <div className="home__legend-dot home__legend-critical"></div>
-                  <span>{isArabic ? "معوق" : "Blocked"}</span>
+                  <span>{isArabic ? "معوق للإقفال" : "Blocking close"}</span>
                 </div>
               </div>
             </div>
