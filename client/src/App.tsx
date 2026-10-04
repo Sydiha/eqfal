@@ -133,12 +133,27 @@ function AuthenticatedShell() {
   const [page, setPageState] = useState<Page>(pageFromUrl);
   const [documentEntry, setDocumentEntry] = useState<DocumentEntryContext | null>(null);
   const [periods, setPeriods] = useState<Period[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('selectedPeriodId');
+    } catch {
+      return null;
+    }
+  });
   useEffect(() => {
     const handleHistoryNavigation = () => { setDocumentEntry(null); setPageState(pageFromUrl()); };
     window.addEventListener('popstate', handleHistoryNavigation);
     return () => window.removeEventListener('popstate', handleHistoryNavigation);
   }, []);
+  useEffect(() => {
+    try {
+      if (selectedPeriodId) {
+        localStorage.setItem('selectedPeriodId', selectedPeriodId);
+      }
+    } catch {
+      // localStorage unavailable, continue without persistence
+    }
+  }, [selectedPeriodId]);
   const navigate = (next: Page) => {
     setDocumentEntry(null);
     setPageState(next);
