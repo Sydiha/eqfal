@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
+import { IconBanks, IconDocuments, IconObligations, IconAccounting, IconFixedAssets, IconVAT } from "./EqfalIcons";
 
 type HomePage =
   | "fiscalYears"
@@ -117,42 +118,42 @@ export function Home({
       key: "bank_balances",
       labelAr: "النقد والبنوك",
       labelEn: "Cash and Banks",
-      icon: "🏦",
+      icon: IconBanks,
       colorClass: "kpi-blue",
     },
     {
       key: "amounts_to_collect",
       labelAr: "الذمم المدينة",
       labelEn: "Receivables",
-      icon: "📥",
+      icon: IconDocuments,
       colorClass: "kpi-blue-light",
     },
     {
       key: "amounts_to_pay",
       labelAr: "الذمم الدائنة",
       labelEn: "Payables",
-      icon: "📤",
+      icon: IconObligations,
       colorClass: "kpi-gray",
     },
     {
       key: "current_month_sales",
       labelAr: "الإيرادات",
       labelEn: "Revenue",
-      icon: "📈",
+      icon: IconVAT,
       colorClass: "kpi-gray-light",
     },
     {
       key: "current_month_purchases_expenses",
       labelAr: "المصروفات",
       labelEn: "Expenses",
-      icon: "💸",
+      icon: IconAccounting,
       colorClass: "kpi-green-light",
     },
     {
       key: "net_profit",
       labelAr: "صافي الربح",
       labelEn: "Net Profit",
-      icon: "✓",
+      icon: IconFixedAssets,
       colorClass: "kpi-green",
     },
   ];
@@ -294,14 +295,14 @@ export function Home({
 
   const today = new Date();
   const dayName = isArabic
-    ? new Intl.DateTimeFormat("ar-SA", { weekday: "long" }).format(today)
+    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(today)
     : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(today);
   const fullDate = isArabic
-    ? `${dayName}، ${new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "long", year: "numeric" }).format(today)}`
+    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(today)}`
     : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(today)}`;
 
   const monthYear = isArabic
-    ? `${new Intl.DateTimeFormat("ar-SA", { month: "long", year: "numeric" }).format(today)}`
+    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(today)}`
     : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(today)}`;
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
@@ -359,10 +360,11 @@ export function Home({
           const [x2, y2] = point(inner, a1);
           const [x3, y3] = point(inner, a0);
           const sweep = direction > 0 ? 1 : 0;
+          const arcColor = item.count === 0 ? "#0e8f7a" : item.count >= 3 ? "#b42318" : "#8f5200";
           return (
             <path
               key={item.key}
-              fill={item.count > 0 ? "#e3e8ee" : "#0e8f7a"}
+              fill={arcColor}
               d={`M${x0} ${y0}A${radius} ${radius} 0 0 ${sweep} ${x1} ${y1}L${x2} ${y2}A${inner} ${inner} 0 0 ${1 - sweep} ${x3} ${y3}Z`}
             >
               <title>{item.labelAr || item.labelEn}</title>
@@ -408,9 +410,12 @@ export function Home({
           <div className="home__kpi-grid">
             {kpiMetrics.map((kpi) => {
               const value = renderKPIValue(kpi);
+              const IconComponent = kpi.icon;
               return (
                 <div key={kpi.key} className={`home__kpi-card ${kpi.colorClass}`}>
-                  <div className="home__kpi-icon">{kpi.icon}</div>
+                  <div className="home__kpi-icon">
+                    <IconComponent />
+                  </div>
                   <div className="home__kpi-label">
                     {isArabic ? kpi.labelAr : kpi.labelEn}
                   </div>
@@ -457,18 +462,18 @@ export function Home({
                 <tbody>
                   {blockerAreas.map((item) => (
                     item.count > 0 && (
-                      <tr key={item.key}>
+                      <tr key={item.key} className={item.count >= 3 ? "home__table-row-critical" : ""}>
                         <td>{isArabic ? item.labelAr : item.labelEn}</td>
-                        <td>—</td>
+                        <td data-empty="true">—</td>
                         <td>{item.count}</td>
-                        <td>—</td>
-                        <td>—</td>
+                        <td data-empty="true">—</td>
+                        <td data-empty="true">—</td>
                         <td>
                           <span className={`home__status-badge ${item.count >= 3 ? "critical" : item.count >= 1 ? "warning" : "neutral"}`}>
                             {item.count >= 3 ? (isArabic ? "حرج" : "Critical") : item.count >= 1 ? (isArabic ? "تحذير" : "Warning") : (isArabic ? "محايد" : "Neutral")}
                           </span>
                         </td>
-                        <td>—</td>
+                        <td data-empty="true">—</td>
                         <td style={{ textAlign: isArabic ? "right" : "left" }}>
                           {item.canOpen && (
                             <button
@@ -523,6 +528,12 @@ export function Home({
               </button>
             </div>
 
+            {totalBlockers > 0 && (
+              <div className="home__warning-banner">
+                {isArabic ? "⚠️ يوجد معوقات تحتاج معالجة فورية" : "⚠️ There are blockers requiring immediate action"}
+              </div>
+            )}
+
             <div className="home__readiness-grid">
               {/* Ring Chart */}
               <div className="home__ring-container">
@@ -544,7 +555,7 @@ export function Home({
                 {blockerAreas.map((item) => (
                   <div key={item.key} className="home__step">
                     <div
-                      className={`home__step-icon ${item.count === 0 ? "completed" : "pending"}`}
+                      className={`home__step-icon ${item.count === 0 ? "completed" : item.count >= 3 ? "critical" : "warning"}`}
                     >
                       {item.count === 0 ? "✓" : item.count}
                     </div>
@@ -554,12 +565,28 @@ export function Home({
                       </div>
                       {item.count > 0 && (
                         <div className="home__step-status">
-                          {isArabic ? "قيد الإنجاز" : "In Progress"}
+                          {item.count >= 3 ? (isArabic ? "معوق" : "Blocked") : (isArabic ? "قيد الإنجاز" : "In Progress")}
                         </div>
                       )}
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Legend Panel */}
+              <div className="home__readiness-legend">
+                <div className="home__legend-item">
+                  <div className="home__legend-dot home__legend-complete"></div>
+                  <span>{isArabic ? "مكتمل" : "Complete"}</span>
+                </div>
+                <div className="home__legend-item">
+                  <div className="home__legend-dot home__legend-warning"></div>
+                  <span>{isArabic ? "يحتاج إجراء" : "Needs Action"}</span>
+                </div>
+                <div className="home__legend-item">
+                  <div className="home__legend-dot home__legend-critical"></div>
+                  <span>{isArabic ? "معوق" : "Blocked"}</span>
+                </div>
               </div>
             </div>
           </div>

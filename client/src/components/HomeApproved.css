@@ -203,13 +203,20 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   margin-block-end: 16px;
 }
 .home__kpi-grid {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
   border: 1px solid var(--home-line);
   border-radius: 14px;
   overflow: hidden;
   background: #fff;
   box-shadow: var(--home-shadow);
   width: 100%;
+}
+@media (max-width: 900px) {
+  .home__kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0;
+  }
 }
 
 .home__kpi-card {
@@ -219,14 +226,29 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   justify-content: center;
   gap: 8px;
   padding: 16px 12px;
-  flex: 1;
-  border-right: 1px solid var(--home-line);
   background: #fff;
   text-align: center;
   min-width: 0;
+  border-bottom: 1px solid var(--home-line);
+  border-right: 1px solid var(--home-line);
 }
-.home__kpi-card:last-child {
+.home__kpi-card:nth-child(6n) {
   border-right: none;
+}
+.home__kpi-card:nth-last-child(-n + 6) {
+  border-bottom: none;
+}
+@media (max-width: 900px) {
+  .home__kpi-card {
+    border-bottom: 1px solid var(--home-line);
+    border-right: 1px solid var(--home-line);
+  }
+  .home__kpi-card:nth-child(2n) {
+    border-right: none;
+  }
+  .home__kpi-card:nth-last-child(-n + 2) {
+    border-bottom: none;
+  }
 }
 .home__kpi-card.kpi-blue {
   background: linear-gradient(135deg, #e8f5f2 0%, #f5fbf9 100%);
@@ -248,8 +270,19 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 }
 
 .home__kpi-icon {
-  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(14, 143, 122, 0.1);
+  color: var(--home-teal);
   line-height: 1;
+}
+.home__kpi-icon svg {
+  width: 20px;
+  height: 20px;
 }
 .home__kpi-label {
   font-size: 0.75rem;
@@ -344,16 +377,75 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 
 .home__readiness-grid {
   display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 32px;
+  grid-template-columns: 160px 1fr 140px;
+  gap: 20px;
   align-items: flex-start;
   padding: 20px;
+}
+@media (max-width: 900px) {
+  .home__readiness-grid {
+    grid-template-columns: 160px 1fr;
+    gap: 20px;
+  }
 }
 @media (max-width: 640px) {
   .home__readiness-grid {
     grid-template-columns: 1fr;
     gap: 20px;
   }
+}
+
+.home__readiness-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #f5f7f9;
+  border-radius: 10px;
+  grid-column: 3;
+  grid-row: 1;
+}
+@media (max-width: 900px) {
+  .home__readiness-legend {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+@media (max-width: 640px) {
+  .home__readiness-legend {
+    grid-column: 1;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+}
+
+.home__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--home-text);
+  font-weight: 500;
+}
+
+.home__legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.home__legend-complete {
+  background: var(--home-success);
+}
+
+.home__legend-warning {
+  background: var(--home-warning);
+}
+
+.home__legend-critical {
+  background: var(--home-danger);
 }
 
 .home__ring-container {
@@ -427,6 +519,16 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   background: var(--home-success);
   color: #fff;
   border-color: var(--home-success);
+}
+.home__step-icon.warning {
+  background: #fbf0de;
+  color: var(--home-warning);
+  border-color: var(--home-warning);
+}
+.home__step-icon.critical {
+  background: var(--home-danger-soft);
+  color: var(--home-danger);
+  border-color: var(--home-danger);
 }
 
 .home__step-content {
@@ -566,8 +668,8 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 
 /* Footer */
 .home__footer {
-  margin-block-start: 20px;
-  padding-block-start: 16px;
+  margin-block-start: 8px;
+  padding-block-start: 12px;
   border-block-start: 1px solid var(--home-line);
 }
 .home__footer-content {
@@ -585,6 +687,15 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   border-radius: 50%;
   background: var(--home-success);
   margin-inline-end: 8px;
+}
+
+/* Hide empty cells and add row tinting */
+.eqfal-home__table td[data-empty="true"] {
+  display: none;
+}
+
+.home__table-row-critical {
+  background-color: #fcebe9 !important;
 }
 
 /* Responsive adjustments for tasks table */
