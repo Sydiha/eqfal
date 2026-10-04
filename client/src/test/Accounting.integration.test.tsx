@@ -108,6 +108,7 @@ describe('Accounting integration contracts',()=>{
   });
   vi.stubGlobal('fetch',fetchMock);
   render(<Accounting canView canCreateChart canEditChart canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:/New account/}));
   let code=await screen.findByRole('textbox',{name:'Code'});
   let name=screen.getByRole('textbox',{name:'Name'});
   fireEvent.change(code,{target:{value:'1000'}});fireEvent.change(name,{target:{value:'Cash'}});
