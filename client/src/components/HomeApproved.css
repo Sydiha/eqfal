@@ -26,8 +26,9 @@ body { background: #fff !important; }
   max-width: none;
   min-width: 0;
   margin-inline: -36px;
-  margin-block: 0;
-  padding: 24px 28px 40px;
+  /* Pull up into the shell's 36px top padding so the title sits ~24px under the header, as in Figma. */
+  margin-block: -12px 0;
+  padding: 0 28px 16px;
   color: var(--home-text);
   font-family: Tajawal, Inter, system-ui, sans-serif;
   background: #fff;
@@ -86,7 +87,7 @@ body { background: #fff !important; }
 .eqfal-home__table-wrap { width: 100%; overflow-x: auto; }
 .eqfal-home__table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 0.82rem; }
 .eqfal-home__table th { padding: 10px 18px; background: var(--home-surface-subtle); border-block: 1px solid var(--home-line); color: var(--home-muted); font-size: 0.72rem; font-weight: 700; text-align: start; }
-.eqfal-home__table td { padding: 11px 18px; border-block-end: 1px solid #eef1f5; vertical-align: middle; }
+.eqfal-home__table td { padding: 8px 18px; border-block-end: 1px solid #eef1f5; vertical-align: middle; }
 .eqfal-home__table tbody tr:last-child td { border-block-end: 0; }
 .eqfal-home__table tbody tr:hover td { background: var(--home-surface-subtle); }
 .eqfal-home__col-action { text-align: end; }
@@ -377,46 +378,57 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 
 .home__readiness-grid {
   display: grid;
-  grid-template-columns: 160px 1fr 140px;
-  gap: 20px;
-  align-items: flex-start;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-rows: auto 1fr;
+  column-gap: 20px;
+  row-gap: 0;
+  align-items: stretch;
+  padding: 16px 20px 20px;
+}
+.home__readiness-grid > .home__ring-container {
+  grid-column: 2;
+  grid-row: 1;
+}
+.home__readiness-grid > .home__steps-list {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: start;
 }
 @media (max-width: 900px) {
   .home__readiness-grid {
-    grid-template-columns: 160px 1fr;
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr) 180px;
   }
 }
 @media (max-width: 640px) {
   .home__readiness-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    row-gap: 0;
+    padding: 14px;
   }
+  .home__readiness-grid > .home__ring-container { grid-column: 1; grid-row: 1; }
+  .home__readiness-grid > .home__steps-list { grid-column: 1; grid-row: 3; margin-block-start: 14px; }
 }
 
 .home__readiness-legend {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 8px;
+  padding: 4px 24px 20px;
   background: #f5f7f9;
-  border-radius: 10px;
-  grid-column: 3;
-  grid-row: 1;
-}
-@media (max-width: 900px) {
-  .home__readiness-legend {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    justify-content: center;
-  }
+  border-radius: 0 0 12px 12px;
+  grid-column: 2;
+  grid-row: 2;
 }
 @media (max-width: 640px) {
   .home__readiness-legend {
     grid-column: 1;
+    grid-row: 2;
     flex-direction: row;
-    justify-content: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 16px;
+    padding: 4px 16px 16px;
   }
 }
 
@@ -430,9 +442,9 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 }
 
 .home__legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
@@ -453,6 +465,9 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  padding: 20px 16px 12px;
+  background: #f5f7f9;
+  border-radius: 12px 12px 0 0;
 }
 
 .home__ring {
@@ -489,16 +504,24 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 .home__steps-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  border: 1px solid var(--home-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .home__step {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  background: var(--home-surface-subtle);
+  min-height: 44px;
+  padding: 8px 16px;
+  background: #fff;
+  border-block-end: 1px solid #eef1f5;
+}
+.home__step:last-child {
+  border-block-end: 0;
 }
 
 .home__step-icon {
@@ -506,8 +529,8 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   background: #fff;
   border: 1px solid var(--home-line);
@@ -533,8 +556,10 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 
 .home__step-content {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
   flex: 1;
 }
@@ -689,9 +714,9 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   margin-inline-end: 8px;
 }
 
-/* Hide empty cells and add row tinting */
+/* Empty cells keep their column so every row spans the full table width (Figma). */
 .eqfal-home__table td[data-empty="true"] {
-  display: none;
+  color: var(--home-muted);
 }
 
 .home__table-row-critical {
@@ -735,6 +760,7 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .eqfal-home__table thead { display: none; }
   .eqfal-home__table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: start; padding: 12px; margin-block: 8px; border: 1px solid var(--home-line); border-radius: 12px; background: #fff; }
   .eqfal-home__table th, .eqfal-home__table td { border: 0; padding: 0; }
+  .eqfal-home__table td[data-empty="true"] { display: none; }
   .eqfal-home__table tbody td:first-child { grid-column: 1; grid-row: 1; }
   .eqfal-home__table tbody td:nth-child(2) { grid-column: 1; grid-row: 2; }
   .eqfal-home__table tbody td:last-child { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
