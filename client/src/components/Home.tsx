@@ -92,6 +92,9 @@ type Props = {
     parameters: Record<string, string>,
   ) => void;
   onUnauthorized: () => void;
+  periods?: Period[];
+  selectedPeriodId?: string | null;
+  onPeriodsLoad?: (p: Period[]) => void;
 };
 
 const stripDirectionalMarks = (value: string) =>
@@ -111,13 +114,16 @@ export function Home({
   navigate,
   navigateToDiscovery,
   onUnauthorized,
+  periods: externalPeriods = [],
+  selectedPeriodId: externalSelectedPeriodId = null,
+  onPeriodsLoad,
 }: Props) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language.startsWith("ar");
 
   const canViewClose = capabilities.includes("monthly_close.view");
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const [periods, setPeriods] = useState<Period[]>(externalPeriods);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(externalSelectedPeriodId);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
   const canViewSnapshot = capabilities.some((capability) =>
@@ -182,7 +188,9 @@ export function Home({
       if (response.status === 401) onUnauthorized();
       if (!response.ok) throw new Error(String(response.status));
       const payload = (await response.json()) as { periods?: Period[] };
-      setPeriods(Array.isArray(payload.periods) ? payload.periods : []);
+      const fetchedPeriods = Array.isArray(payload.periods) ? payload.periods : [];
+      setPeriods(fetchedPeriods);
+      if (onPeriodsLoad) onPeriodsLoad(fetchedPeriods);
     } catch {
       setError(true);
     } finally {
@@ -219,6 +227,12 @@ export function Home({
       setSelectedPeriodId(periods[0].id);
     }
   }, [periods, selectedPeriodId]);
+
+  useEffect(() => {
+    if (externalSelectedPeriodId && externalSelectedPeriodId !== selectedPeriodId) {
+      setSelectedPeriodId(externalSelectedPeriodId);
+    }
+  }, [externalSelectedPeriodId]);
 
   const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
@@ -313,16 +327,17 @@ export function Home({
   const readyPercentage = Math.round((readyAreas / blockerAreas.length) * 100);
 
   const today = new Date();
+  const displayDate = selected ? new Date(selected.period_start) : today;
   const dayName = isArabic
-    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(today)
-    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(today);
+    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(displayDate)
+    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(displayDate);
   const fullDate = isArabic
-    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(today)}`
-    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(today)}`;
+    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`
+    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`;
 
   const monthYear = isArabic
-    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(today)}`
-    : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(today)}`;
+    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(displayDate)}`
+    : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(displayDate)}`;
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
     if (!snapshot) {

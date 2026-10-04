@@ -7,6 +7,27 @@ import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
+
+type Period = {
+  id: string;
+  fiscal_year_id: string;
+  period_start: string;
+  period_end: string;
+  status: "open" | "closed";
+  ready: boolean;
+  disclosed_total: number;
+  has_hidden_blockers: boolean;
+  blockers: {
+    documents: number;
+    obligations: number;
+    bank_transactions: number;
+    vat: number;
+    ledger: number;
+    assets: number;
+    opening_balances: number;
+    periodic_adjustments: number;
+  };
+};
 import { FiscalYears } from './components/FiscalYears';
 import { Documents } from './components/Documents';
 import { BankingWorkspace } from './components/BankingWorkspace';
@@ -111,6 +132,8 @@ function AuthenticatedShell() {
   const { logout, switchCompany, session } = useAuth();
   const [page, setPageState] = useState<Page>(pageFromUrl);
   const [documentEntry, setDocumentEntry] = useState<DocumentEntryContext | null>(null);
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   useEffect(() => {
     const handleHistoryNavigation = () => { setDocumentEntry(null); setPageState(pageFromUrl()); };
     window.addEventListener('popstate', handleHistoryNavigation);
@@ -138,17 +161,18 @@ function AuthenticatedShell() {
   const editPurchaseEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'purchases', counterpartyType: 'supplier' });
   const editSalesEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' });
   const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry}/></AppShell>;
+  const handlePeriodChange = (id: string) => { setSelectedPeriodId(id); };
+  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout} periods={periods} selectedPeriodId={selectedPeriodId} onPeriodChange={handlePeriodChange}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry} periods={periods} selectedPeriodId={selectedPeriodId} onPeriodsLoad={setPeriods}/></AppShell>;
 }
 
-function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void }) {
+function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry, periods, selectedPeriodId, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void; periods: Period[]; selectedPeriodId: string | null; onPeriodsLoad: (p: Period[]) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized } = useAuth();
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
   const canStartOperationalEntry = canStartOperationalDocumentEntry(c);
   return <div key={companyKey}>
-    {page === 'home' && <Home capabilities={c} navigate={setPage} navigateToDiscovery={navigateToDiscovery} onUnauthorized={handleUnauthorized}/>}
+    {page === 'home' && <Home capabilities={c} navigate={setPage} navigateToDiscovery={navigateToDiscovery} onUnauthorized={handleUnauthorized} periods={periods} selectedPeriodId={selectedPeriodId} onPeriodsLoad={onPeriodsLoad}/>}
     {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canCreate={c.includes('fiscal_year.create')} canEdit={c.includes('fiscal_year.edit')} canClose={c.includes('fiscal_year.close')} onUnauthorized={handleUnauthorized}/>}
     {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canEdit={c.includes('document.edit')} canSubmit={c.includes('document.submit')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('counterparty.create')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
     {page === 'banks' && <BankingWorkspace
