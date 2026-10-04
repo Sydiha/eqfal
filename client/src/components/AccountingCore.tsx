@@ -1,6 +1,7 @@
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./AccountingApproved.css";
+import "./AccountingTabs.css";
 import {
   PageHeader,
   StatusBadge,
@@ -892,538 +893,614 @@ export function Accounting({
       )}
       {tab === "accounts" && accountsFooter}
       {!loading && tab === "sources" && (
-        <>
-          <h2>{t("accounting.operationalSources")}</h2>
-          <WorkspaceToolbar
-            ariaLabel={t("accounting.discovery.sourceToolbar")}
-            search={
-              <label>
-                {t("accounting.discovery.sourceSearch")}
-                <input
-                  type="search"
-                  value={sourceFilters.search}
-                  onChange={(e) => updateSourceFilter("search", e.target.value)}
-                />
-              </label>
-            }
-            filters={
-              <>
-                <label>
-                  {t("accounting.sourceType")}
-                  <select
-                    value={
-                      sourceTypes.includes(sourceFilters.type)
-                        ? sourceFilters.type
-                        : ""
-                    }
-                    onChange={(e) => updateSourceFilter("type", e.target.value)}
-                  >
-                    <option value="">
-                      {t("accounting.discovery.allTypes")}
-                    </option>
-                    {sourceTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
+        <div className="ac-tabview">
+          <div className="ac-tab__card ac-tab__filters">
+            <WorkspaceToolbar
+              className="ac-tab__toolbar ac-tab__toolbar--sources"
+              ariaLabel={t("accounting.discovery.sourceToolbar")}
+              search={
+                <label className="ac-tab__field">
+                  <span>{t("accounting.discovery.sourceSearch")}</span>
+                  <input
+                    type="search"
+                    value={sourceFilters.search}
+                    onChange={(e) => updateSourceFilter("search", e.target.value)}
+                  />
+                </label>
+              }
+              filters={
+                <>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.sourceType")}</span>
+                    <select
+                      value={
+                        sourceTypes.includes(sourceFilters.type)
+                          ? sourceFilters.type
+                          : ""
+                      }
+                      onChange={(e) => updateSourceFilter("type", e.target.value)}
+                    >
+                      <option value="">
+                        {t("accounting.discovery.allTypes")}
+                      </option>
+                      {sourceTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.from")}</span>
+                    <input
+                      type="date"
+                      value={sourceFilters.from}
+                      onChange={(e) => updateSourceFilter("from", e.target.value)}
+                    />
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.to")}</span>
+                    <input
+                      type="date"
+                      value={sourceFilters.to}
+                      onChange={(e) => updateSourceFilter("to", e.target.value)}
+                    />
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.amountMin")}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={sourceFilters.amountMin}
+                      onChange={(e) =>
+                        updateSourceFilter("amountMin", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.amountMax")}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={sourceFilters.amountMax}
+                      onChange={(e) =>
+                        updateSourceFilter("amountMax", e.target.value)
+                      }
+                    />
+                  </label>
+                </>
+              }
+              clearAction={
+                Object.values(sourceFilters).some(Boolean) ? (
+                  <button type="button" className="ac-tab__ghost" onClick={clearSourceFilters}>
+                    {t("accounting.discovery.clear")}
+                  </button>
+                ) : undefined
+              }
+            />
+          </div>
+          <section className="ac-tab__card" aria-labelledby="accounting-sources-title">
+            <div className="ac-tab__head">
+              <h2 id="accounting-sources-title">{t("accounting.operationalSources")}</h2>
+              <span className="ac-tab__muted" role="status" aria-live="polite">
+                {t("accounting.discovery.sourceCount", { count: visibleSources.length })}
+              </span>
+            </div>
+            {sources.length === 0 ? (
+              <WorkspaceState kind="empty">
+                {t("accounting.discovery.noSources")}
+              </WorkspaceState>
+            ) : visibleSources.length === 0 ? (
+              <WorkspaceState
+                kind="no-results"
+                action={
+                  <button type="button" onClick={clearSourceFilters}>
+                    {t("accounting.discovery.clear")}
+                  </button>
+                }
+              >
+                {t("accounting.discovery.noSourceResults")}
+              </WorkspaceState>
+            ) : (
+              <div className="table-wrap ac-tab__table ac-tab__table--sources">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t("accounting.date")}</th>
+                      <th>{t("accounting.sourceType")}</th>
+                      <th>{t("accounting.descriptionLabel")}</th>
+                      <th>{t("accounting.amount")}</th>
+                      <th>{t("accounting.reference")}</th>
+                      <th>{t("accounting.action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleSources.map((source) => (
+                      <tr key={`${source.source_type}-${source.source_id}`}>
+                        <td className="ac-tab__num">{source.accounting_date}</td>
+                        <td>{source.source_type}</td>
+                        <td className="ac-tab__wide">{source.description}</td>
+                        <td className="ac-tab__num">{source.amount}</td>
+                        <td className="ac-tab__num">{source.reference ?? "—"}</td>
+                        <td>
+                          {canCreateJournal && (
+                            <button
+                              className="primary ac-tab__primary"
+                              disabled={saving}
+                              onClick={() => void createSourceJournal(source)}
+                            >
+                              {t("accounting.createDraft")}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      {!loading && tab === "journals" && (
+        <div className="ac-tabview">
+          {canCreateJournal && (
+            <section className="ac-tab__card" aria-labelledby="accounting-journals-title">
+              <div className="ac-tab__head">
+                <h2 id="accounting-journals-title">{t("accounting.journals")}</h2>
+              </div>
+              <form className="ac-tab__row ac-tab__row--create" onSubmit={createJournal}>
+                <label className="ac-tab__field">
+                  <span>{t("accounting.fiscalYear")}</span>
+                  <select name="fiscal_year_id" required>
+                    {years.map((y) => (
+                      <option key={y.id} value={y.id}>
+                        {y.name}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label>
-                  {t("accounting.discovery.from")}
-                  <input
-                    type="date"
-                    value={sourceFilters.from}
-                    onChange={(e) => updateSourceFilter("from", e.target.value)}
-                  />
+                <label className="ac-tab__field">
+                  <span>{t("accounting.date")}</span>
+                  <input name="accounting_date" type="date" required />
                 </label>
-                <label>
-                  {t("accounting.discovery.to")}
-                  <input
-                    type="date"
-                    value={sourceFilters.to}
-                    onChange={(e) => updateSourceFilter("to", e.target.value)}
-                  />
+                <label className="ac-tab__field ac-tab__field--grow">
+                  <span>{t("accounting.descriptionLabel")}</span>
+                  <input name="description" required maxLength={500} />
                 </label>
-                <label>
-                  {t("accounting.discovery.amountMin")}
-                  <input
-                    type="number"
-                    step="any"
-                    value={sourceFilters.amountMin}
-                    onChange={(e) =>
-                      updateSourceFilter("amountMin", e.target.value)
-                    }
-                  />
+                <label className="ac-tab__field">
+                  <span>{t("accounting.reference")}</span>
+                  <input name="reference" maxLength={200} />
                 </label>
-                <label>
-                  {t("accounting.discovery.amountMax")}
-                  <input
-                    type="number"
-                    step="any"
-                    value={sourceFilters.amountMax}
-                    onChange={(e) =>
-                      updateSourceFilter("amountMax", e.target.value)
-                    }
-                  />
-                </label>
-              </>
-            }
-            resultCount={t("accounting.discovery.sourceCount", {
-              count: visibleSources.length,
-            })}
-            clearAction={
-              Object.values(sourceFilters).some(Boolean) ? (
-                <button type="button" onClick={clearSourceFilters}>
-                  {t("accounting.discovery.clear")}
-                </button>
-              ) : undefined
-            }
-          />
-          {sources.length === 0 ? (
-            <WorkspaceState kind="empty">
-              {t("accounting.discovery.noSources")}
-            </WorkspaceState>
-          ) : visibleSources.length === 0 ? (
-            <WorkspaceState
-              kind="no-results"
-              action={
-                <button type="button" onClick={clearSourceFilters}>
-                  {t("accounting.discovery.clear")}
-                </button>
-              }
-            >
-              {t("accounting.discovery.noSourceResults")}
-            </WorkspaceState>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("accounting.date")}</th>
-                    <th>{t("accounting.sourceType")}</th>
-                    <th>{t("accounting.descriptionLabel")}</th>
-                    <th>{t("accounting.amount")}</th>
-                    <th>{t("accounting.reference")}</th>
-                    <th>{t("accounting.action")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleSources.map((source) => (
-                    <tr key={`${source.source_type}-${source.source_id}`}>
-                      <td>{source.accounting_date}</td>
-                      <td>{source.source_type}</td>
-                      <td>{source.description}</td>
-                      <td>{source.amount}</td>
-                      <td>{source.reference ?? "—"}</td>
-                      <td>
-                        {canCreateJournal && (
-                          <button
-                            className="primary"
-                            disabled={saving}
-                            onClick={() => void createSourceJournal(source)}
-                          >
-                            {t("accounting.createDraft")}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-      {!loading && tab === "journals" && (
-        <>
-          <h2>{t("accounting.journals")}</h2>
-          {canCreateJournal && (
-            <form className="form-grid compact-form" onSubmit={createJournal}>
-              <label>
-                {t("accounting.fiscalYear")}
-                <select name="fiscal_year_id" required>
-                  {years.map((y) => (
-                    <option key={y.id} value={y.id}>
-                      {y.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("accounting.date")}
-                <input name="accounting_date" type="date" required />
-              </label>
-              <label>
-                {t("accounting.descriptionLabel")}
-                <input name="description" required maxLength={500} />
-              </label>
-              <label>
-                {t("accounting.reference")}
-                <input name="reference" maxLength={200} />
-              </label>
-              <label>
-                {t("accounting.entryType")}
-                <select name="entry_type">
-                  <option value="standard">{t("accounting.standard")}</option>
-                  <option value="opening_balance">
-                    {t("accounting.opening")}
-                  </option>
-                </select>
-              </label>
-              <button className="primary" disabled={saving}>
-                {t("accounting.createJournal")}
-              </button>
-            </form>
-          )}
-          <WorkspaceToolbar
-            ariaLabel={t("accounting.discovery.journalToolbar")}
-            search={
-              <label>
-                {t("accounting.discovery.journalSearch")}
-                <input
-                  type="search"
-                  value={journalFilters.search}
-                  onChange={(e) =>
-                    updateJournalFilter("search", e.target.value)
-                  }
-                />
-              </label>
-            }
-            filters={
-              <>
-                <label>
-                  {t("accounting.status")}
-                  <select
-                    value={journalFilters.status}
-                    onChange={(e) =>
-                      updateJournalFilter("status", e.target.value)
-                    }
-                  >
-                    <option value="">
-                      {t("accounting.discovery.allStatuses")}
-                    </option>
-                    <option value="draft">{t("accounting.draft")}</option>
-                    <option value="posted">{t("accounting.posted")}</option>
-                  </select>
-                </label>
-                <label>
-                  {t("accounting.entryType")}
-                  <select
-                    value={journalFilters.entryType}
-                    onChange={(e) =>
-                      updateJournalFilter("entryType", e.target.value)
-                    }
-                  >
-                    <option value="">
-                      {t("accounting.discovery.allEntryTypes")}
-                    </option>
+                <label className="ac-tab__field">
+                  <span>{t("accounting.entryType")}</span>
+                  <select name="entry_type">
                     <option value="standard">{t("accounting.standard")}</option>
                     <option value="opening_balance">
                       {t("accounting.opening")}
                     </option>
                   </select>
                 </label>
-                <label>
-                  {t("accounting.discovery.from")}
+                <button className="primary ac-tab__primary" disabled={saving}>
+                  {t("accounting.createJournal")}
+                </button>
+              </form>
+            </section>
+          )}
+          <div className="ac-tab__card ac-tab__filters">
+            <WorkspaceToolbar
+              className="ac-tab__toolbar ac-tab__toolbar--journals"
+              ariaLabel={t("accounting.discovery.journalToolbar")}
+              search={
+                <label className="ac-tab__field">
+                  <span>{t("accounting.discovery.journalSearch")}</span>
                   <input
-                    type="date"
-                    value={journalFilters.from}
+                    type="search"
+                    value={journalFilters.search}
                     onChange={(e) =>
-                      updateJournalFilter("from", e.target.value)
+                      updateJournalFilter("search", e.target.value)
                     }
                   />
                 </label>
-                <label>
-                  {t("accounting.discovery.to")}
-                  <input
-                    type="date"
-                    value={journalFilters.to}
-                    onChange={(e) => updateJournalFilter("to", e.target.value)}
-                  />
-                </label>
-              </>
-            }
-            resultCount={t("accounting.discovery.journalCount", {
-              count: visibleJournals.length,
-            })}
-            clearAction={
-              Object.values(journalFilters).some(Boolean) ? (
-                <button type="button" onClick={clearJournalFilters}>
-                  {t("accounting.discovery.clear")}
-                </button>
-              ) : undefined
-            }
-          />
-          {journals.length === 0 ? (
-            <WorkspaceState kind="empty">
-              {t("accounting.discovery.noJournals")}
-            </WorkspaceState>
-          ) : visibleJournals.length === 0 ? (
-            <WorkspaceState
-              kind="no-results"
-              action={
-                <button type="button" onClick={clearJournalFilters}>
-                  {t("accounting.discovery.clear")}
-                </button>
               }
-            >
-              {t("accounting.discovery.noJournalResults")}
-            </WorkspaceState>
-          ) : (
-            <div className="accounting-journal-list">
-              {visibleJournals.map((j) => (
-                <button key={j.id} onClick={() => void openJournal(j)}>
-                  <span>
-                    {j.accounting_date} · {j.description}
-                  </span>
-                  <StatusBadge status={j.status}>
-                    {t(`accounting.${j.status}`)}
-                  </StatusBadge>
-                </button>
-              ))}
-            </div>
-          )}
-          {selected && (
-            <div className="accounting-editor">
-              <h3>{selected.description}</h3>
-              {lines.map((l, i) => (
-                <div className="journal-line" key={i}>
-                  <select
-                    value={l.account_id}
-                    disabled={selected.status === "posted" || !canEditJournal}
-                    onChange={(e) =>
-                      setLines((v) =>
-                        v.map((x, n) =>
-                          n === i ? { ...x, account_id: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="">{t("accounting.account")}</option>
-                    {accounts.map((a) => (
-                      <option disabled={!a.is_active} key={a.id} value={a.id}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    aria-label={t("accounting.debit")}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={l.debit}
-                    disabled={selected.status === "posted" || !canEditJournal}
-                    onChange={(e) =>
-                      setLines((v) =>
-                        v.map((x, n) =>
-                          n === i ? { ...x, debit: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                  <input
-                    aria-label={t("accounting.credit")}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={l.credit}
-                    disabled={selected.status === "posted" || !canEditJournal}
-                    onChange={(e) =>
-                      setLines((v) =>
-                        v.map((x, n) =>
-                          n === i ? { ...x, credit: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              <p
-                className={
-                  totals.debit === totals.credit && totals.debit > 0
-                    ? "balanced"
-                    : "unbalanced"
-                }
-              >
-                {t("accounting.totals", {
-                  debit: totals.debit.toFixed(2),
-                  credit: totals.credit.toFixed(2),
-                })}{" "}
-                ·{" "}
-                {t(
-                  totals.debit === totals.credit && totals.debit > 0
-                    ? "accounting.balanced"
-                    : "accounting.unbalanced",
-                )}
-              </p>
-              {selected.status === "draft" && canEditJournal && (
+              filters={
                 <>
-                  <button onClick={() => setLines((v) => [...v, emptyLine()])}>
-                    {t("accounting.addLine")}
-                  </button>
-                  <button
-                    className="primary"
-                    disabled={saving}
-                    onClick={() => void saveLines()}
-                  >
-                    {t("common.save")}
-                  </button>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.status")}</span>
+                    <select
+                      value={journalFilters.status}
+                      onChange={(e) =>
+                        updateJournalFilter("status", e.target.value)
+                      }
+                    >
+                      <option value="">
+                        {t("accounting.discovery.allStatuses")}
+                      </option>
+                      <option value="draft">{t("accounting.draft")}</option>
+                      <option value="posted">{t("accounting.posted")}</option>
+                    </select>
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.entryType")}</span>
+                    <select
+                      value={journalFilters.entryType}
+                      onChange={(e) =>
+                        updateJournalFilter("entryType", e.target.value)
+                      }
+                    >
+                      <option value="">
+                        {t("accounting.discovery.allEntryTypes")}
+                      </option>
+                      <option value="standard">{t("accounting.standard")}</option>
+                      <option value="opening_balance">
+                        {t("accounting.opening")}
+                      </option>
+                    </select>
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.from")}</span>
+                    <input
+                      type="date"
+                      value={journalFilters.from}
+                      onChange={(e) =>
+                        updateJournalFilter("from", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="ac-tab__field">
+                    <span>{t("accounting.discovery.to")}</span>
+                    <input
+                      type="date"
+                      value={journalFilters.to}
+                      onChange={(e) => updateJournalFilter("to", e.target.value)}
+                    />
+                  </label>
                 </>
-              )}
-              {selected.status === "draft" && canPost && (
-                <button
-                  className="primary"
-                  disabled={
-                    saving ||
-                    totals.debit !== totals.credit ||
-                    totals.debit === 0 ||
-                    lines.length < 2
+              }
+              clearAction={
+                Object.values(journalFilters).some(Boolean) ? (
+                  <button type="button" className="ac-tab__ghost" onClick={clearJournalFilters}>
+                    {t("accounting.discovery.clear")}
+                  </button>
+                ) : undefined
+              }
+            />
+          </div>
+          <div className={`ac-tab__journals${selected ? " has-selected" : ""}`}>
+            <section className="ac-tab__card" aria-labelledby="accounting-register-title">
+              <div className="ac-tab__head">
+                <h2 id="accounting-register-title">{t("accounting.journalRegister")}</h2>
+                <span className="ac-tab__muted" role="status" aria-live="polite">
+                  {t("accounting.discovery.journalCount", { count: visibleJournals.length })}
+                </span>
+              </div>
+              {journals.length === 0 ? (
+                <WorkspaceState kind="empty">
+                  {t("accounting.discovery.noJournals")}
+                </WorkspaceState>
+              ) : visibleJournals.length === 0 ? (
+                <WorkspaceState
+                  kind="no-results"
+                  action={
+                    <button type="button" onClick={clearJournalFilters}>
+                      {t("accounting.discovery.clear")}
+                    </button>
                   }
-                  onClick={() => void post()}
                 >
-                  {t("accounting.post")}
-                </button>
+                  {t("accounting.discovery.noJournalResults")}
+                </WorkspaceState>
+              ) : (
+                <div className="table-wrap ac-tab__table ac-tab__table--register">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t("accounting.date")}</th>
+                        <th>{t("accounting.descriptionLabel")}</th>
+                        <th>{t("accounting.status")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleJournals.map((j) => (
+                        <tr key={j.id} className={selected?.id === j.id ? "is-selected" : undefined}>
+                          <td className="ac-tab__num">{j.accounting_date}</td>
+                          <td className="ac-tab__wide">
+                            <button type="button" className="ac-tab__rowlink" onClick={() => void openJournal(j)}>
+                              <span className="ac-tab__sr">{j.accounting_date} · </span>
+                              {j.description}
+                            </button>
+                          </td>
+                          <td>
+                            <StatusBadge status={j.status}>
+                              {t(`accounting.${j.status}`)}
+                            </StatusBadge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </div>
-          )}
-        </>
+            </section>
+            {selected && (
+              <section className="ac-tab__card accounting-editor ac-tab__editor" aria-labelledby="accounting-selected-title">
+                <div className="ac-tab__head">
+                  <h2 id="accounting-selected-title">{t("accounting.selectedJournal")}</h2>
+                  <span className={`ac-tab__pill is-${selected.status}`}>{t(`accounting.${selected.status}`)}</span>
+                </div>
+                <h3>{selected.description}</h3>
+                {lines.map((l, i) => (
+                  <div className="journal-line ac-tab__line" key={i}>
+                    <div className="ac-tab__field ac-tab__field--full">
+                      <span aria-hidden="true">{t("accounting.account")}</span>
+                      <select
+                        value={l.account_id}
+                        disabled={selected.status === "posted" || !canEditJournal}
+                        onChange={(e) =>
+                          setLines((v) =>
+                            v.map((x, n) =>
+                              n === i ? { ...x, account_id: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">{t("accounting.account")}</option>
+                        {accounts.map((a) => (
+                          <option disabled={!a.is_active} key={a.id} value={a.id}>
+                            {a.code} — {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="ac-tab__field">
+                      <span aria-hidden="true">{t("accounting.debit")}</span>
+                      <input
+                        aria-label={t("accounting.debit")}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={l.debit}
+                        disabled={selected.status === "posted" || !canEditJournal}
+                        onChange={(e) =>
+                          setLines((v) =>
+                            v.map((x, n) =>
+                              n === i ? { ...x, debit: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="ac-tab__field">
+                      <span aria-hidden="true">{t("accounting.credit")}</span>
+                      <input
+                        aria-label={t("accounting.credit")}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={l.credit}
+                        disabled={selected.status === "posted" || !canEditJournal}
+                        onChange={(e) =>
+                          setLines((v) =>
+                            v.map((x, n) =>
+                              n === i ? { ...x, credit: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div
+                  className={`ac-tab__totals ${
+                    totals.debit === totals.credit && totals.debit > 0
+                      ? "balanced"
+                      : "unbalanced"
+                  }`}
+                >
+                  <div><span>{t("accounting.totalDebit")}</span><strong>{totals.debit.toFixed(2)}</strong></div>
+                  <div><span>{t("accounting.totalCredit")}</span><strong>{totals.credit.toFixed(2)}</strong></div>
+                  <span className={`ac-tab__pill ${totals.debit === totals.credit && totals.debit > 0 ? "is-balanced" : "is-unbalanced"}`}>
+                    {t(
+                      totals.debit === totals.credit && totals.debit > 0
+                        ? "accounting.balanced"
+                        : "accounting.unbalanced",
+                    )}
+                  </span>
+                </div>
+                {selected.status === "draft" && (canEditJournal || canPost) && (
+                  <div className="ac-tab__actions">
+                    {canEditJournal && (
+                      <>
+                        <button className="ac-tab__ghost" onClick={() => setLines((v) => [...v, emptyLine()])}>
+                          {t("accounting.addLine")}
+                        </button>
+                        <button
+                          className="primary ac-tab__primary"
+                          disabled={saving}
+                          onClick={() => void saveLines()}
+                        >
+                          {t("common.save")}
+                        </button>
+                      </>
+                    )}
+                    {canPost && (
+                      <button
+                        className="primary ac-tab__primary"
+                        disabled={
+                          saving ||
+                          totals.debit !== totals.credit ||
+                          totals.debit === 0 ||
+                          lines.length < 2
+                        }
+                        onClick={() => void post()}
+                      >
+                        {t("accounting.post")}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        </div>
       )}
       {!loading && tab === "trial" && (
-        <>
+        <div className="ac-tabview">
           <form
-            className="compact-form"
+            className="ac-tab__card ac-tab__report-form"
             onSubmit={(e) => void report("trial", e)}
           >
-            <select name="fiscal_year_id" required>
-              {years.map((y) => (
-                <option key={y.id} value={y.id}>
-                  {y.name}
-                </option>
-              ))}
-            </select>
-            <button className="primary">{t("accounting.run")}</button>
-          </form>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("accounting.account")}</th>
-                  <th>{t("accounting.debitMovement")}</th>
-                  <th>{t("accounting.creditMovement")}</th>
-                  <th>{t("accounting.balance")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trial.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      {r.code} — {r.name}
-                    </td>
-                    <td>{r.debit_movement}</td>
-                    <td>{r.credit_movement}</td>
-                    <td>
-                      {Number(r.debit_balance) > 0
-                        ? `${r.debit_balance} ${t("accounting.debit")}`
-                        : `${r.credit_balance} ${t("accounting.credit")}`}
-                    </td>
-                  </tr>
+            <label className="ac-tab__field ac-tab__field--year">
+              <span>{t("accounting.fiscalYear")}</span>
+              <select name="fiscal_year_id" required>
+                {years.map((y) => (
+                  <option key={y.id} value={y.id}>
+                    {y.name}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+              </select>
+            </label>
+            <button className="primary ac-tab__primary">{t("accounting.run")}</button>
+          </form>
+          <section className="ac-tab__card" aria-labelledby="accounting-trial-title">
+            <div className="ac-tab__head">
+              <h2 id="accounting-trial-title">{t("accounting.tabs.trial")}</h2>
+            </div>
+            <div className="table-wrap ac-tab__table ac-tab__table--trial">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("accounting.account")}</th>
+                    <th>{t("accounting.debitMovement")}</th>
+                    <th>{t("accounting.creditMovement")}</th>
+                    <th>{t("accounting.balance")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trial.map((r) => (
+                    <tr key={r.id}>
+                      <td className="ac-tab__wide">
+                        {r.code} — {r.name}
+                      </td>
+                      <td className="ac-tab__num">{r.debit_movement}</td>
+                      <td className="ac-tab__num">{r.credit_movement}</td>
+                      <td className="ac-tab__balance-cell">
+                        <span className="ac-tab__balance">
+                          {Number(r.debit_balance) > 0
+                            ? <><span>{r.debit_balance}</span> <span className="ac-tab__side">{t("accounting.debit")}</span></>
+                            : <><span>{r.credit_balance}</span> <span className="ac-tab__side">{t("accounting.credit")}</span></>}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
       {!loading && tab === "ledger" && (
-        <>
+        <div className="ac-tabview">
           <form
-            className="compact-form"
+            className="ac-tab__card ac-tab__report-form"
             onSubmit={(e) => void report("ledger", e)}
           >
-            <select name="fiscal_year_id" required>
-              {years.map((y) => (
-                <option key={y.id} value={y.id}>
-                  {y.name}
-                </option>
-              ))}
-            </select>
-            <select name="account_id" required>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code} — {a.name}
-                </option>
-              ))}
-            </select>
-            <button className="primary">{t("accounting.run")}</button>
-          </form>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("accounting.date")}</th>
-                  <th>{t("accounting.reference")}</th>
-                  <th>{t("accounting.descriptionLabel")}</th>
-                  <th>{t("accounting.debit")}</th>
-                  <th>{t("accounting.credit")}</th>
-                  <th>{t("accounting.balance")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map((r) => (
-                  <tr
-                    key={`${r.journal_id}-${r.accounting_date}-${r.running_balance}`}
-                  >
-                    <td>{r.accounting_date}</td>
-                    <td>{r.reference ?? r.journal_id.slice(0, 8)}</td>
-                    <td>{r.description}</td>
-                    <td>{r.debit}</td>
-                    <td>{r.credit}</td>
-                    <td>{r.running_balance}</td>
-                  </tr>
+            <label className="ac-tab__field ac-tab__field--year">
+              <span>{t("accounting.fiscalYear")}</span>
+              <select name="fiscal_year_id" required>
+                {years.map((y) => (
+                  <option key={y.id} value={y.id}>
+                    {y.name}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+              </select>
+            </label>
+            <label className="ac-tab__field ac-tab__field--account">
+              <span>{t("accounting.account")}</span>
+              <select name="account_id" required>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="primary ac-tab__primary">{t("accounting.run")}</button>
+          </form>
+          <section className="ac-tab__card" aria-labelledby="accounting-ledger-title">
+            <div className="ac-tab__head">
+              <h2 id="accounting-ledger-title">{t("accounting.tabs.ledger")}</h2>
+            </div>
+            <div className="table-wrap ac-tab__table ac-tab__table--ledger">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("accounting.date")}</th>
+                    <th>{t("accounting.reference")}</th>
+                    <th>{t("accounting.descriptionLabel")}</th>
+                    <th>{t("accounting.debit")}</th>
+                    <th>{t("accounting.credit")}</th>
+                    <th>{t("accounting.balance")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((r) => (
+                    <tr
+                      key={`${r.journal_id}-${r.accounting_date}-${r.running_balance}`}
+                    >
+                      <td className="ac-tab__num">{r.accounting_date}</td>
+                      <td className="ac-tab__num">{r.reference ?? r.journal_id.slice(0, 8)}</td>
+                      <td className="ac-tab__wide">{r.description}</td>
+                      <td className="ac-tab__num">{r.debit}</td>
+                      <td className="ac-tab__num">{r.credit}</td>
+                      <td className="ac-tab__num">{r.running_balance}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
       {!loading && (tab === "financialPosition" || tab === "profitOrLoss" || tab === "changesInEquity" || tab === "cashFlow") && (
-        <>
-          <form className="compact-form" onSubmit={(e) => void report(tab, e)}>
-            <label>{t("accounting.fiscalYear")}<select name="fiscal_year_id" required {...(tab === "changesInEquity" || tab === "cashFlow" ? { value: changesInEquityYear?.id ?? "", onChange: (event) => setChangesInEquityYearId(event.target.value) } : {})}>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
-            {tab === "financialPosition" ? <label>{t("accounting.statements.asOf")}<input name="as_of_date" type="date" defaultValue={years[0]?.end_date} required /></label> : <>
-              <label>{t("accounting.discovery.from")}<input key={`${tab}-${changesInEquityYear?.id}-start`} name="start_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.start_date : years[0]?.start_date} required /></label>
-              <label>{t("accounting.discovery.to")}<input key={`${tab}-${changesInEquityYear?.id}-end`} name="end_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.end_date : years[0]?.end_date} required /></label>
+        <div className="ac-tabview">
+          <form className="ac-tab__card ac-tab__report-form" onSubmit={(e) => void report(tab, e)}>
+            <label className="ac-tab__field ac-tab__field--year"><span>{t("accounting.fiscalYear")}</span><select name="fiscal_year_id" required {...(tab === "changesInEquity" || tab === "cashFlow" ? { value: changesInEquityYear?.id ?? "", onChange: (event) => setChangesInEquityYearId(event.target.value) } : {})}>{years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></label>
+            {tab === "financialPosition" ? <label className="ac-tab__field ac-tab__field--date"><span>{t("accounting.statements.asOf")}</span><input name="as_of_date" type="date" defaultValue={years[0]?.end_date} required /></label> : <>
+              <label className="ac-tab__field ac-tab__field--date"><span>{t("accounting.discovery.from")}</span><input key={`${tab}-${changesInEquityYear?.id}-start`} name="start_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.start_date : years[0]?.start_date} required /></label>
+              <label className="ac-tab__field ac-tab__field--date"><span>{t("accounting.discovery.to")}</span><input key={`${tab}-${changesInEquityYear?.id}-end`} name="end_date" type="date" defaultValue={tab === "changesInEquity" ? changesInEquityYear?.end_date : years[0]?.end_date} required /></label>
             </>}
-            <button className="primary">{t("accounting.run")}</button>
+            <button className="primary ac-tab__primary">{t("accounting.run")}</button>
           </form>
           {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
-          {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <div className="table-wrap"><table><tbody>
+          {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
+            <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2></div>
+            <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
-              <tr><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
+              <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
               {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
-              <tr><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
+              <tr className="is-total"><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
             </Fragment>)}
-            {tab === "profitOrLoss" && <tr><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
+            {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
             {tab === "financialPosition" && <>
-              <tr><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
-              <tr><th>{t("accounting.statements.equation")}</th><th>{statement.accounting_equation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.equation")}</th><td><span className={`ac-tab__pill ${statement.accounting_equation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.accounting_equation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></td></tr>
             </>}
             {tab === "changesInEquity" && <>
-              <tr><th colSpan={2}>{t("accounting.statements.directEquityMovements")}</th></tr>
-              {statement.equity_accounts?.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
-              <tr><th>{t("accounting.statements.openingEquity")}</th><th>{statement.opening_equity}</th></tr>
-              <tr><th>{t("accounting.statements.directEquityMovements")}</th><th>{statement.direct_equity_movements}</th></tr>
-              <tr><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
-              <tr><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
-              <tr><th>{t("accounting.statements.reconciliation")}</th><th>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference}) — {statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
+              <tr><td>{t("accounting.statements.openingEquity")}</td><td>{statement.opening_equity}</td></tr>
+              <tr><td>{t("accounting.statements.directEquityMovements")}</td><td>{statement.direct_equity_movements}</td></tr>
+              {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
+              <tr><td>{t("accounting.statements.currentPeriodEarnings")}</td><td>{statement.current_period_earnings}</td></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
+              <tr className="is-strong is-recon"><th>{t("accounting.statements.reconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
             </>}
             {tab === "cashFlow" && <>
-              <tr><th>{t("accounting.statements.openingCash")}</th><th>{statement.opening_cash_and_cash_equivalents}</th></tr>
-              <tr><th>{t("accounting.statements.netCashChange")}</th><th>{statement.net_change_in_cash_and_cash_equivalents}</th></tr>
-              <tr><th>{t("accounting.statements.closingCash")}</th><th>{statement.closing_cash_and_cash_equivalents}</th></tr>
-              <tr><th>{t("accounting.statements.cashReconciliation")}</th><th>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference}) — {statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</th></tr>
+              <tr><td>{t("accounting.statements.openingCash")}</td><td>{statement.opening_cash_and_cash_equivalents}</td></tr>
+              <tr><td>{t("accounting.statements.netCashChange")}</td><td>{statement.net_change_in_cash_and_cash_equivalents}</td></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.closingCash")}</th><th>{statement.closing_cash_and_cash_equivalents}</th></tr>
+              <tr className="is-strong is-recon"><th>{t("accounting.statements.cashReconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
             </>}
-          </tbody></table></div>}
-        </>
+          </tbody></table></div></section>}
+        </div>
       )}
     </section>
   );

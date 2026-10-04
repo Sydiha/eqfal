@@ -1,0 +1,136 @@
+/* Accounting — journals, sources, trial balance, ledger and the four statements.
+   Approved Figma frames 246:9008 … 246:10495 (1440 RTL, content area only).
+   Every selector is scoped to .ac-tabview so the locked Chart of Accounts tab is not affected. */
+.ac-tabview{--ac-ink:#1e293b;--ac-muted:#64748b;--ac-green:#047857;--ac-primary:#00b894;--ac-border:#e4e8ec;--ac-soft:#f8fafc;display:flex;flex-direction:column;gap:12px;min-width:0;color:var(--ac-ink);font-size:12px}
+.ac-approved>.ac-tabview{margin-top:-4px}
+.ac-tabview .ac-tab__sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ac-tabview .ac-tab__muted{color:var(--ac-muted);font-size:11px;white-space:nowrap}
+
+/* Cards */
+.ac-tabview .ac-tab__card{box-sizing:border-box;min-width:0;margin:0;padding:14px 12px 12px;border:1px solid var(--ac-border);border-radius:12px;background:#fff;box-shadow:none}
+.ac-tabview .ac-tab__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+.ac-tabview .ac-tab__head h2{margin:0;font-size:15px;font-weight:800;line-height:normal;color:var(--ac-ink)}
+
+/* Fields: label above control */
+.ac-tabview .ac-tab__field{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0;color:var(--ac-muted);font-size:11.5px;line-height:normal}
+.ac-tabview .ac-tab__field>span{white-space:nowrap}
+.ac-tabview .ac-tab__field input,.ac-tabview .ac-tab__field select{width:100%;min-width:0;max-width:none;min-height:0;height:30px;box-sizing:border-box;margin:0;padding:0 10px;border:1px solid var(--ac-border);border-radius:6px;background-color:#fff;color:var(--ac-ink);font-family:inherit;font-size:12px;box-shadow:none}
+.ac-tabview .ac-tab__field select{appearance:none;padding-inline-end:28px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat;background-size:10px;background-position:left 10px center}
+[dir=ltr] .ac-tabview .ac-tab__field select{background-position:right 10px center}
+.ac-tabview .ac-tab__field input:disabled,.ac-tabview .ac-tab__field select:disabled{background-color:#fff;color:var(--ac-ink);opacity:1;cursor:default}
+.ac-tabview .ac-tab__field input[type=search]{appearance:none}
+
+/* Buttons */
+.ac-tabview .ac-tab__primary{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:0;min-height:0;height:30px;margin:0;padding:0 12px;border:0;border-radius:6px;background:var(--ac-primary);color:#fff;font-family:inherit;font-size:12px;font-weight:700;line-height:normal;white-space:nowrap;box-shadow:none;cursor:pointer}
+.ac-tabview .ac-tab__primary:hover{background:#00a383}
+.ac-tabview .ac-tab__primary:disabled{background:#a7e3d4;opacity:1;cursor:not-allowed}
+.ac-tabview .ac-tab__ghost{flex:none;min-width:0;min-height:0;height:30px;margin:0;padding:0 12px;border:1px solid var(--ac-border);border-radius:6px;background:#fff;color:var(--ac-ink);font-family:inherit;font-size:12px;line-height:normal;white-space:nowrap;box-shadow:none;cursor:pointer}
+
+/* Filter cards (shared toolbar, restyled locally) */
+.ac-tabview .ac-tab__filters{padding:14px 12px 12px}
+.ac-tabview .ac-tab__toolbar.shared-workspace-toolbar{display:flex;flex-wrap:nowrap;align-items:flex-end;gap:8px;margin:0;padding:0;border:0;border-radius:0;background:transparent}
+.ac-tabview .ac-tab__toolbar label{min-width:0}
+.ac-tabview .ac-tab__toolbar .shared-workspace-toolbar__search{flex:308 1 0;min-width:0}
+.ac-tabview .ac-tab__toolbar .shared-workspace-toolbar__filters{display:grid;flex:812 1 0;gap:8px;min-width:0}
+.ac-tabview .ac-tab__toolbar--sources .shared-workspace-toolbar__filters{grid-template-columns:148fr 170fr 170fr 134fr 134fr}
+.ac-tabview .ac-tab__toolbar--journals .shared-workspace-toolbar__search{flex:390 1 0}
+.ac-tabview .ac-tab__toolbar--journals .shared-workspace-toolbar__filters{flex:714 1 0;grid-template-columns:154fr 180fr 174fr 174fr}
+.ac-tabview .ac-tab__toolbar .shared-workspace-toolbar__meta{flex:none;margin:0}
+
+/* Journal create row */
+.ac-tabview .ac-tab__row{display:grid;grid-template-columns:minmax(0,160fr) minmax(0,156fr) minmax(0,343fr) minmax(0,166fr) minmax(0,120fr) auto;align-items:end;gap:10px;margin:0}
+
+/* Report parameter forms */
+.ac-tabview .ac-tab__report-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.ac-tabview .ac-tab__field--year{width:184px}
+.ac-tabview .ac-tab__field--date{width:216px}
+.ac-tabview .ac-tab__field--account{width:320px}
+.ac-tabview .ac-tab__report-form>.ac-tab__primary{margin-inline-start:auto}
+
+/* Tables */
+.ac-tabview .ac-tab__table{overflow-x:auto;margin:0;border:1px solid var(--ac-border);border-radius:8px;background:#fff}
+.ac-tabview .ac-tab__table table{width:100%;margin:0;border-collapse:collapse;font-size:12px}
+.ac-tabview .ac-tab__table th{height:36px;padding:0 12px;border-bottom:1px solid var(--ac-border);background:var(--ac-soft);color:var(--ac-muted);font-size:11px;font-weight:600;text-align:start;text-transform:none;white-space:nowrap}
+.ac-tabview .ac-tab__table td{height:44px;padding:0 12px;border-bottom:1px solid var(--ac-border);color:var(--ac-ink);text-align:start;white-space:nowrap}
+.ac-tabview .ac-tab__table tbody tr:last-child>*{border-bottom:0}
+.ac-tabview .ac-tab__table td.ac-tab__wide{width:100%;white-space:normal}
+.ac-tabview .ac-tab__num{direction:ltr;text-align:end;font-family:Inter,"Readex Pro",sans-serif;font-variant-numeric:tabular-nums}
+[dir=rtl] .ac-tabview .ac-tab__table td.ac-tab__num,[dir=rtl] .ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{text-align:right}
+[dir=ltr] .ac-tabview .ac-tab__table td.ac-tab__num,[dir=ltr] .ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{text-align:left}
+.ac-tabview .ac-tab__table .shared-workspace-state{margin:0;border:0;border-radius:0}
+
+.ac-tabview .ac-tab__table--sources td{height:67px}
+.ac-tabview .ac-tab__table--sources td:nth-child(4){min-width:60px}
+.ac-tabview .ac-tab__table--sources td:nth-child(5){min-width:142px}
+.ac-tabview .ac-tab__table--sources td:nth-child(6){width:1%}
+
+.ac-tabview .ac-tab__table--register th{height:28px;font-size:11px}
+.ac-tabview .ac-tab__table--register td{height:31px}
+.ac-tabview .ac-tab__table--register tr.is-selected td{background:#e9f8f3}
+.ac-tabview .ac-tab__rowlink{display:block;width:100%;min-width:0;min-height:0;margin:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:start;box-shadow:none;cursor:pointer}
+.ac-tabview .ac-tab__rowlink:hover{color:var(--ac-green)}
+.ac-tabview tr.is-selected .ac-tab__rowlink{color:var(--ac-green);font-weight:700}
+.ac-tabview .ac-tab__table .badge{display:inline-block;padding:2px 8px;border:0;border-radius:5px;font-size:10px;font-weight:700;line-height:normal}
+.ac-tabview .ac-tab__table .badge.posted{background:#d1fae5;color:var(--ac-green)}
+.ac-tabview .ac-tab__table .badge.draft{background:#fef3c7;color:#b45309}
+
+.ac-tabview .ac-tab__table--trial td:nth-child(2),.ac-tabview .ac-tab__table--trial td:nth-child(3){min-width:146px}
+.ac-tabview .ac-tab__table--trial td:nth-child(4){min-width:120px;padding-inline-end:108px}
+.ac-tabview .ac-tab__balance{display:flex;align-items:center;justify-content:space-between;gap:24px}
+
+.ac-tabview .ac-tab__table--ledger td{height:47px}
+.ac-tabview .ac-tab__table--ledger td:nth-child(2){min-width:118px}
+.ac-tabview .ac-tab__table--ledger td:nth-child(n+4){min-width:124px}
+
+/* Statements */
+.ac-tabview .ac-tab__statement td,.ac-tabview .ac-tab__statement th{height:31px;padding:0 15px;border-bottom:1px solid var(--ac-border);background:#fff;color:var(--ac-ink);font-size:12px;font-weight:400;text-align:start}
+.ac-tabview .ac-tab__statement tr:not(.is-section)>:first-child{width:auto}
+.ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{width:210px;direction:ltr;unicode-bidi:isolate;font-family:Inter,"Readex Pro",sans-serif;font-variant-numeric:tabular-nums}
+.ac-tabview .ac-tab__statement tr.is-section th{background:var(--ac-soft);font-weight:700}
+.ac-tabview .ac-tab__statement tr.is-total th{font-weight:700}
+.ac-tabview .ac-tab__statement tr.is-strong>*{background:var(--ac-soft);font-weight:700}
+.ac-tabview .ac-tab__statement tr.is-detail td{color:var(--ac-muted);font-size:11.5px}
+.ac-tabview .ac-tab__statement tr.is-detail td:first-child{padding-inline-start:31px}
+.ac-tabview .ac-tab__statement.is-roomy td,.ac-tabview .ac-tab__statement.is-roomy th{height:39px}
+.ac-tabview .ac-tab__statement tr.is-strong:not(.is-section)>td:last-child,[dir] .ac-tabview .ac-tab__statement tr.is-strong:not(.is-section)>td:last-child{direction:inherit;text-align:end}
+.ac-tabview .ac-tab__statement tr.is-recon td{font-weight:400}
+.ac-tabview .ac-tab__recon>span:first-child,.ac-tabview .ac-tab__balance>span:first-child{direction:ltr;unicode-bidi:isolate;font-family:Inter,"Readex Pro",sans-serif;font-variant-numeric:tabular-nums}
+.ac-tabview .ac-tab__recon{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-inline-start:-210px}
+
+/* Pills */
+.ac-tabview .ac-tab__pill{display:inline-block;padding:2px 8px;border-radius:5px;font-family:"Readex Pro",Tajawal,sans-serif;font-size:10.5px;font-weight:700;line-height:normal;white-space:nowrap}
+.ac-tabview .ac-tab__pill.is-posted,.ac-tabview .ac-tab__pill.is-balanced{background:#d1fae5;color:var(--ac-green)}
+.ac-tabview .ac-tab__pill.is-draft{background:#fef3c7;color:#b45309}
+.ac-tabview .ac-tab__pill.is-unbalanced{background:#fee2e2;color:#b91c1c}
+
+/* Journals: register + selected journal */
+.ac-tabview .ac-tab__journals{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.ac-tabview .ac-tab__journals.has-selected{grid-template-columns:minmax(0,1fr) 412px}
+.ac-tabview .ac-tab__editor{display:flex;flex-direction:column;gap:12px;padding:16px 16px}
+.ac-tabview .ac-tab__editor .ac-tab__head{margin:0}
+.ac-tabview .ac-tab__editor h3{margin:0;color:var(--ac-ink);font-size:12px;font-weight:700;line-height:1.5}
+.ac-tabview .ac-tab__line{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;margin:0;padding:14px 12px 12px;border:1px solid var(--ac-border);border-radius:8px;background:var(--ac-soft)}
+.ac-tabview .ac-tab__field--full{grid-column:1/-1}
+.ac-tabview .ac-tab__line select{height:32px}
+.ac-tabview .ac-tab__totals{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin:0;padding:14px 12px 10px;border-radius:8px;background:var(--ac-soft);font-size:12px}
+.ac-tabview .ac-tab__totals>div{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ac-tabview .ac-tab__totals strong{font-family:Inter,"Readex Pro",sans-serif;font-weight:500;font-variant-numeric:tabular-nums}
+.ac-tabview .ac-tab__totals .ac-tab__pill{align-self:flex-start}
+.ac-tabview .ac-tab__actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+
+@media (max-width:1100px){
+  .ac-tabview .ac-tab__journals.has-selected{grid-template-columns:minmax(0,1fr)}
+  .ac-tabview .ac-tab__toolbar.shared-workspace-toolbar{flex-wrap:wrap}
+  .ac-tabview .ac-tab__toolbar .shared-workspace-toolbar__search{flex:1 1 100%}
+  .ac-tabview .ac-tab__toolbar .shared-workspace-toolbar__filters{flex:1 1 100%;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .ac-tabview .ac-tab__row{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .ac-tabview .ac-tab__row>.ac-tab__primary{justify-self:start}
+}
+@media (max-width:800px){
+  .ac-tabview .ac-tab__report-form>.ac-tab__field{width:100%}
+  .ac-tabview .ac-tab__report-form>.ac-tab__primary{margin-inline-start:0}
+  .ac-tabview .ac-tab__recon{margin-inline-start:0}
+  .ac-tabview .ac-tab__table .badge{align-self:center}
+  .ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{width:auto}
+  .ac-tabview .ac-tab__table--trial td:nth-child(4){padding-inline-end:12px}
+}
