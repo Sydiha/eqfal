@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { AnnualClosing } from '../components/AnnualClosing';
 
+const openPackageTab=async()=>fireEvent.click(await screen.findByRole('tab',{name:/closing package|حزمة الإقفال/i}));
 const readiness={
   fiscal_year:{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'},
   ready:true,blocker_count:0,
@@ -26,6 +27,7 @@ describe('Annual Close Package granular capabilities',()=>{
   it('does not expose package creation without create capability',async()=>{
     mockAnnualClosingFetch(null);
     render(<AnnualClosing canView canViewPackage canCreatePackage={false} canCreatePackageSnapshot={false} onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByText('No annual package has been created.')).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Create package'})).not.toBeInTheDocument();
   });
@@ -33,6 +35,7 @@ describe('Annual Close Package granular capabilities',()=>{
   it('keeps preview snapshot permission independent from finalize',async()=>{
     mockAnnualClosingFetch({id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]});
     render(<AnnualClosing canView canViewPackage canCreatePackage={false} canCreatePackageSnapshot canFinalizePackage={false} onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByRole('button',{name:'Create preview snapshot'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Finalize package'})).not.toBeInTheDocument();
   });
@@ -40,6 +43,7 @@ describe('Annual Close Package granular capabilities',()=>{
   it('gates professional review independently by lifecycle and capability',async()=>{
     mockAnnualClosingFetch({id:'p',status:'handed_off',version:3,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_at:null,review_note:null,approved_at:null,approval_note:null,snapshots:[]});
     render(<AnnualClosing canView canViewPackage canReviewPackage canApprovePackage={false} onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByRole('button',{name:'Record professional review'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Record professional approval'})).not.toBeInTheDocument();
   });
@@ -47,6 +51,7 @@ describe('Annual Close Package granular capabilities',()=>{
   it('gates professional approval independently by lifecycle and capability',async()=>{
     mockAnnualClosingFetch({id:'p',status:'reviewed',version:4,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_by_user_id:'reviewer',reviewed_at:'2026-01-03',review_note:'Checked',approved_at:null,approval_note:null,snapshots:[]});
     render(<AnnualClosing canView canViewPackage canReviewPackage={false} canApprovePackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByRole('button',{name:'Record professional approval'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Record professional review'})).not.toBeInTheDocument();
     expect(screen.getByText(/Professionally reviewed by reviewer/)).toBeInTheDocument();
@@ -56,6 +61,7 @@ describe('Annual Close Package granular capabilities',()=>{
     const prompt=vi.spyOn(window,'prompt');
     const fetchMock=mockAnnualClosingFetch({id:'p',status:'handed_off',version:3,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_at:null,review_note:null,approved_at:null,approval_note:null,snapshots:[]});
     render(<AnnualClosing canView canViewPackage canReviewPackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     fireEvent.click(await screen.findByRole('button',{name:'Record professional review'}));
     expect(screen.getByRole('dialog',{name:'Professional review'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Cancel'}));
@@ -72,6 +78,7 @@ describe('Annual Close Package granular capabilities',()=>{
     await i18n.changeLanguage('ar');
     const fetchMock=mockAnnualClosingFetch({id:'p',status:'reviewed',version:4,final_snapshot_id:'s',finalized_at:'2026-01-01',handed_off_at:'2026-01-02',handoff_note:null,handoff_reference:null,reviewed_by_user_id:'reviewer',reviewed_at:'2026-01-03',review_note:null,approved_at:null,approval_note:null,snapshots:[]});
     render(<AnnualClosing canView canViewPackage canApprovePackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     fireEvent.click(await screen.findByRole('button',{name:'تسجيل الاعتماد المهني'}));
     expect(screen.getByRole('dialog',{name:'تسجيل الاعتماد المهني'})).toBeInTheDocument();
     expect(screen.getByRole('textbox',{name:'ملاحظة (اختيارية)'})).toHaveAttribute('maxlength','2000');
