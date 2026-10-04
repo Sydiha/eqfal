@@ -80,6 +80,5 @@
 @media(max-width:48em){.fa-view .shared-workspace-page__content{padding:0}.fa-view .fa-field dd{white-space:normal}}
 .fa-view .fa-field dd{white-space:normal}.fa-view .fa-field dd .fa-amount{white-space:nowrap}.fa-view .fa-field dt{flex:1 1 auto}
 .fa-view .fa-range{unicode-bidi:isolate;white-space:nowrap}
-@media(min-width:64.01em){.fa-view .fa-field dt{white-space:nowrap}}
 .fa-view .badge.reviewed{background:#e0ecff;color:#1d4ed8}
 @media(max-width:48em){.fa-view .fa-field{flex-direction:column;align-items:flex-start;gap:2px}.fa-view .fa-field dd{text-align:start}.fa-view .fa-table table{min-width:640px}.fa-view .fa-schedule table{min-width:420px}}
