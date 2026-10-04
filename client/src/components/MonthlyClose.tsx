@@ -9,10 +9,10 @@ type Blockers={documents:number;obligations:number;bank_transactions:number;vat:
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Partial<Blockers>;disclosed_total:number;has_hidden_blockers:boolean};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
 type DestinationPage='documents'|'banks'|'obligations'|'vat'|'accounting'|'assets'|'openingBalances'|'periodicAdjustments';
-interface Props{canView:boolean;canViewFiscalYears:boolean;canCreate:boolean;canClose:boolean;canReopen:boolean;viewCapabilities:{documents:boolean;obligations:boolean;bank:boolean;vat:boolean;accounting:boolean;assets:boolean;openingBalances:boolean;periodicAdjustments:boolean};onNavigate?:(page:DestinationPage,parameters:Record<string,string>)=>void;onUnauthorized:()=>void}
+interface Props{canView:boolean;canViewFiscalYears:boolean;canCreate:boolean;canClose:boolean;canReopen:boolean;viewCapabilities:{documents:boolean;obligations:boolean;bank:boolean;vat:boolean;accounting:boolean;assets:boolean;openingBalances:boolean;periodicAdjustments:boolean};onNavigate?:(page:DestinationPage,parameters:Record<string,string>)=>void;onUnauthorized:()=>void;selectedPeriodId?:string|null}
 async function api(url:string,options:RequestInit,onUnauthorized:()=>void){const response=await fetch(url,{credentials:'same-origin',...options});if(response.status===401)onUnauthorized();if(!response.ok)throw new Error(String(response.status));return response;}
 
-export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized}:Props){
+export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId}:Props){
  const {t,i18n}=useTranslation();
  const [periods,setPeriods]=useState<Period[]>([]),[years,setYears]=useState<FiscalYear[]>([]);
  const [selectedId,setSelectedId]=useState<string|null>(null),[yearFilter,setYearFilter]=useState('');
@@ -20,6 +20,7 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
  const load=async()=>{setLoading(true);setError(false);try{const p=await api('/api/monthly-close-periods',{},onUnauthorized);const next=((await p.json()) as {periods:Period[]}).periods;const fiscalYearsUrl=canViewFiscalYears?'/api/fiscal-years':canCreate?'/api/monthly-close-fiscal-years':null;const nextYears=fiscalYearsUrl?((await (await api(fiscalYearsUrl,{},onUnauthorized)).json()) as {fiscalYears:FiscalYear[]}).fiscalYears:[];const requestedYear=readQueryParameter('closeYear');const requestedPeriod=readQueryParameter('closePeriod');const validYear=requestedYear&&(nextYears.some(year=>year.id===requestedYear)||(!canViewFiscalYears&&next.some(period=>period.fiscal_year_id===requestedYear)))?requestedYear:'';const available=validYear?next.filter(period=>period.fiscal_year_id===validYear):next;const restored=requestedPeriod&&available.some(period=>period.id===requestedPeriod)?requestedPeriod:(available[0]?.id??null);setPeriods(next);setYears(nextYears);setYearFilter(validYear);setSelectedId(restored);writeQueryParameters({closeYear:validYear||null,closePeriod:restored},'replace');}catch{setError(true)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void load();// eslint-disable-next-line react-hooks/exhaustive-deps
  },[canView]);
+ useEffect(()=>{if(selectedPeriodId&&periods.length>0){const globalPeriod=periods.find(p=>p.id===selectedPeriodId);if(globalPeriod&&selectedId!==globalPeriod.id){selectPeriod(globalPeriod.id);}}},[selectedPeriodId,periods]);
  if(!canView)return <WorkspacePage><WorkspaceState>{t('monthlyClose.noAccess')}</WorkspaceState></WorkspacePage>;
  const availablePeriods=yearFilter?periods.filter(period=>period.fiscal_year_id===yearFilter):periods,selected=periods.find(period=>period.id===selectedId)??null;
  const selectPeriod=(id:string)=>{setSelectedId(id);writeQueryParameters({closePeriod:id});};
