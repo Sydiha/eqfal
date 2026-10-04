@@ -92,6 +92,10 @@ type Props = {
     parameters: Record<string, string>,
   ) => void;
   onUnauthorized: () => void;
+  periods?: Period[];
+  selectedPeriodId?: string | null;
+  onSelectedPeriodChange?: (periodId: string) => void;
+  onPeriodsLoad?: (p: Period[]) => void;
 };
 
 const stripDirectionalMarks = (value: string) =>
@@ -111,12 +115,16 @@ export function Home({
   navigate,
   navigateToDiscovery,
   onUnauthorized,
+  periods: externalPeriods = [],
+  selectedPeriodId = null,
+  onSelectedPeriodChange,
+  onPeriodsLoad,
 }: Props) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language.startsWith("ar");
 
   const canViewClose = capabilities.includes("monthly_close.view");
-  const [periods, setPeriods] = useState<Period[]>([]);
+  const [periods, setPeriods] = useState<Period[]>(externalPeriods);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
   const canViewSnapshot = capabilities.some((capability) =>
@@ -181,7 +189,9 @@ export function Home({
       if (response.status === 401) onUnauthorized();
       if (!response.ok) throw new Error(String(response.status));
       const payload = (await response.json()) as { periods?: Period[] };
-      setPeriods(Array.isArray(payload.periods) ? payload.periods : []);
+      const fetchedPeriods = Array.isArray(payload.periods) ? payload.periods : [];
+      setPeriods(fetchedPeriods);
+      if (onPeriodsLoad) onPeriodsLoad(fetchedPeriods);
     } catch {
       setError(true);
     } finally {
@@ -213,7 +223,13 @@ export function Home({
     if (canViewSnapshot) void loadSnapshot();
   }, [canViewSnapshot]);
 
-  const selected = periods[0] ?? null;
+  useEffect(() => {
+    if (periods.length > 0 && !selectedPeriodId) {
+      onSelectedPeriodChange?.(periods[0].id);
+    }
+  }, [periods, selectedPeriodId, onSelectedPeriodChange]);
+
+  const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
@@ -306,16 +322,17 @@ export function Home({
   const readyPercentage = Math.round((readyAreas / blockerAreas.length) * 100);
 
   const today = new Date();
+  const displayDate = selected ? new Date(selected.period_start) : today;
   const dayName = isArabic
-    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(today)
-    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(today);
+    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(displayDate)
+    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(displayDate);
   const fullDate = isArabic
-    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(today)}`
-    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(today)}`;
+    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`
+    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`;
 
   const monthYear = isArabic
-    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(today)}`
-    : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(today)}`;
+    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(displayDate)}`
+    : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(displayDate)}`;
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
     if (!snapshot) {
@@ -404,6 +421,34 @@ export function Home({
             : `Aggregate Financial Summary – ${monthYear}`}
         </p>
       </header>
+
+      {/* Period Selector */}
+      {periods.length > 1 && (
+        <div className="home__period-selector">
+          <label htmlFor="period-select" className="home__period-label">
+            {isArabic ? "الفترة:" : "Period:"}
+          </label>
+          <select
+            id="period-select"
+            className="home__period-select"
+            value={selectedPeriodId || ""}
+            onChange={(e) => onSelectedPeriodChange?.(e.target.value)}
+          >
+            {periods.map((period) => {
+              const start = new Date(period.period_start);
+              const end = new Date(period.period_end);
+              const label = isArabic
+                ? `${start.toLocaleDateString("ar-EG")} - ${end.toLocaleDateString("ar-EG")}`
+                : `${start.toLocaleDateString("en-US")} - ${end.toLocaleDateString("en-US")}`;
+              return (
+                <option key={period.id} value={period.id}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
 
       {/* KPI Section - Always Visible */}
       {canViewSnapshot && (
