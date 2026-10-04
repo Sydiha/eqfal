@@ -52,7 +52,7 @@ describe('Sales workspace',()=>{
  });
 
  it('shows intake note and identifies a legacy supplier-linked sale instead of presenting it as a customer',async()=>{
-  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);const detail=screen.getByRole('complementary',{name:'Sale details'});expect(within(detail).getByText('Legacy note')).toBeInTheDocument();expect(within(detail).getByText(/Data integrity warning/)).toBeInTheDocument();expect(within(detail).getByText(/Supplier/)).toBeInTheDocument();
+  mockSales([{...base,intake_note:'Legacy note',counterparty_type:'supplier'}]);render(<Sales canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));expect(within(row).getByText(/Supplier/)).toBeInTheDocument();fireEvent.click(row);const detail=screen.getByRole('complementary',{name:'Sale details'});expect(within(detail).getByText('Legacy note')).toBeInTheDocument();expect(within(detail).getByText(/Data integrity warning/)).toBeInTheDocument();expect(within(detail).getAllByText(/Supplier/).length).toBeGreaterThan(0);
  });
 
  it('keeps search and financial filtering behavior',async()=>{
@@ -82,7 +82,7 @@ describe('Sales workspace',()=>{
  });
 
  it('distinguishes a genuinely empty sales dataset from filtered no-results and keeps entry actions compatible',async()=>{
-  mockSales([]);const create=vi.fn();const {unmount}=render(<Sales canView canManage canCreate onCreateDocument={create} onUnauthorized={vi.fn()}/>);expect((await screen.findByText('No sales yet.')).closest('[data-state]')).toHaveAttribute('data-state','empty');fireEvent.click(screen.getAllByRole('button',{name:/Sale/})[0]);expect(create).toHaveBeenCalled();unmount();
+  mockSales([]);const create=vi.fn();const {unmount}=render(<Sales canView canManage canCreate onCreateDocument={create} onUnauthorized={vi.fn()}/>);expect((await screen.findByText('No sales invoices yet.')).closest('[data-state]')).toHaveAttribute('data-state','empty');fireEvent.click(screen.getAllByRole('button',{name:'Add sales invoice +'})[0]);expect(create).toHaveBeenCalled();unmount();
   const edit=vi.fn();mockSales([{...base,status:'uploaded'}]);render(<Sales canView canManage canEdit onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.change(await screen.findByRole('searchbox',{name:'Search sales'}),{target:{value:'missing'}});expect(screen.getByText('0 sales')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
  });
 
