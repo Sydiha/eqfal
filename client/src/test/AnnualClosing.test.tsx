@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { AnnualClosing } from '../components/AnnualClosing';
 
+const openPackageTab=async()=>fireEvent.click(await screen.findByRole('tab',{name:/closing package|حزمة الإقفال/i}));
 describe('Annual Closing Center', () => {
   beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
   it('is capability gated', () => { render(<AnnualClosing canView={false} onUnauthorized={vi.fn()}/>); expect(screen.getByText(/permission to view annual closing/i)).toBeInTheDocument(); });
@@ -81,7 +82,7 @@ describe('Annual Closing Center', () => {
     expect(within(readinessRow!).queryByText('34')).not.toBeInTheDocument();
     expect(screen.queryByText('العوائق الجوهرية')).not.toBeInTheDocument();
   });
-  it('renders capability-sensitive package actions and internal-handoff wording',async()=>{const fetchMock=vi.spyOn(globalThis,'fetch');fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'Ready for financial statement preparation',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[{section:'cash_flow',status:'ready',blocker_count:0,blockers:[],source:'financial-statements',summary:{}}],source_fingerprint:'x'},drift:false}),{status:200}));render(<AnnualClosing canView canViewPackage canCreatePackageSnapshot canFinalizePackage onUnauthorized={vi.fn()}/>);expect(await screen.findByRole('button',{name:'Create preview snapshot'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Finalize package'})).toBeInTheDocument();expect(screen.getByText(/not government or ZATCA filing/i)).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Mark accountant handoff'})).not.toBeInTheDocument();});
+  it('renders capability-sensitive package actions and internal-handoff wording',async()=>{const fetchMock=vi.spyOn(globalThis,'fetch');fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({fiscalYears:[{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'}]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'Ready for financial statement preparation',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[{section:'cash_flow',status:'ready',blocker_count:0,blockers:[],source:'financial-statements',summary:{}}],source_fingerprint:'x'},drift:false}),{status:200}));render(<AnnualClosing canView canViewPackage canCreatePackageSnapshot canFinalizePackage onUnauthorized={vi.fn()}/>);await openPackageTab();expect(await screen.findByRole('button',{name:'Create preview snapshot'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Finalize package'})).toBeInTheDocument();expect(screen.getByText(/not government or ZATCA filing/i)).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Mark accountant handoff'})).not.toBeInTheDocument();});
   it('renders friendly Arabic package sources and blocker messages without technical identifiers',async()=>{
     await i18n.changeLanguage('ar');
     const sources=['fiscal-years','monthly-close','accounting','financial-statements','tax-working-papers','vat','banking','obligations','documents','partners','fixed-assets','periodic-adjustments','opening-balances'];
@@ -93,6 +94,7 @@ describe('Annual Closing Center', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:false,blocker_count:1,financial_statements_readiness:{status:'needs_review',label:'',label_ar:'جاهزية القوائم المالية'},zakat_readiness:{status:'needs_review'},domains:{},package_manifest:[]}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest,source_fingerprint:'x'},drift:false}),{status:200}));
     const {container}=render(<AnnualClosing canView canViewPackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByRole('heading',{name:'حزمة الإقفال السنوي'})).toBeInTheDocument();
     expect(await screen.findByText('السنوات المالية')).toBeInTheDocument();
     expect(screen.getByText('القوائم المالية')).toBeInTheDocument();
@@ -110,6 +112,7 @@ describe('Annual Closing Center', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close:blocked','monthly_close:monthly_close_not_ready','cash_flow:blocked','cash_flow:cash_flow_not_ready']}),{status:409}));
     render(<AnnualClosing canView canViewPackage canFinalizePackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     fireEvent.click(await screen.findByRole('button',{name:'اعتماد الحزمة نهائياً'}));
     const warning=await screen.findByRole('alert');
     expect(warning).toHaveClass('warning-alert');
@@ -128,6 +131,7 @@ describe('Annual Closing Center', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({error:'package_not_ready',blockers:['monthly_close:blocked','monthly_close:monthly_close_not_ready','cash_flow:needs_review','cash_flow:cash_flow_not_ready']}),{status:409}));
     render(<AnnualClosing canView canViewPackage canFinalizePackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     fireEvent.click(await screen.findByRole('button',{name:'Finalize package'}));
     const warning=await screen.findByRole('alert');
     expect(within(warning).getByText('Package could not be finalized')).toBeInTheDocument();
@@ -148,6 +152,7 @@ describe('Annual Closing Center', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'',label_ar:'جاهزة'},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]}),{status:200}));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({package:{id:'p',status:'handed_off',version:3,final_snapshot_id:'s2',finalized_at:finalAt,handed_off_at:handoffAt,handoff_note:null,handoff_reference:null,snapshots:[{id:'s1',snapshot_no:1,snapshot_type:'preview',manifest:[],source_fingerprint:'a',created_at:previewAt},{id:'s2',snapshot_no:2,snapshot_type:'final',manifest:[],source_fingerprint:'b',created_at:finalAt}]},live:{manifest:[],source_fingerprint:'b'},drift:false}),{status:200}));
     const {container}=render(<AnnualClosing canView canViewPackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
     expect(await screen.findByText(/\(معاينة\)/)).toBeInTheDocument();
     expect(screen.getByText(/\(نهائية\)/)).toBeInTheDocument();
     for(const value of [previewAt,finalAt,handoffAt])expect(container).not.toHaveTextContent(value);
