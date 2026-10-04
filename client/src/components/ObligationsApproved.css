@@ -64,3 +64,4 @@
 @media(max-width:64em){.ob-approved .ob-approved__toolbar .ob-approved__select--state,.ob-approved .ob-approved__toolbar .ob-approved__select--party,.ob-approved .ob-approved__toolbar .ob-approved__select--direction,.ob-approved .ob-approved__toolbar .ob-approved__select--due{width:auto;min-width:120px}}
 .ob-approved .ob-approved__select--prefixed{width:150px}
 .ob-approved__months{flex:1}.ob-approved__month{flex:none}.ob-approved .ob-approved__toolbar .ob-approved__select--direction{min-width:132px;width:auto}
+.ob-approved__primary-actions .primary:disabled{opacity:.55;cursor:not-allowed}
