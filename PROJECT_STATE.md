@@ -1,13 +1,13 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-04
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Last reconciled main:** `2162eeff2a7e1f2061df73c03d156c518d5dead6`
-- **Last merge:** PR #320 (2026-10-03)
-- **CI status:** ✅ passing
+- **Last reconciled main:** `c0f45c2d72713bcf82e340e0ab3402896a3c46aa`
+- **Last merge:** Home component design implementation (2026-10-04)
+- **CI status:** ✅ passing (339 tests, build successful)
 
 ## Phase Status
 | Phase | Status |
@@ -23,8 +23,10 @@
 - **PR:** —
 
 ## Last Completed Task
-- **Task:** PR backlog cleanup — PR #307 merged (Phase 15D Purchases visual); PR #214 merged (Codex trigger verification playbook); PR #229 closed without merge, superseded by #231
-- **SHA:** `b04ef363eced64a2351016584ef75b44401212d3`
+- **Task:** Home component: Implement Figma design priorities 2-8 (Owner approval received 2026-10-03)
+- **Implementation:** 7 design fixes merged to main (responsive KPI grid, EqfalIcons, Gregorian Arabic dates, readiness legend, severity tinting, footer spacing, empty cell hiding)
+- **SHA:** `c0f45c2d72713bcf82e340e0ab3402896a3c46aa`
+- **Validation:** 339/339 tests passing, build successful
 
 ## Open PRs
 - None

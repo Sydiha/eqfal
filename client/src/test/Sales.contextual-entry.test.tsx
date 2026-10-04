@@ -11,7 +11,7 @@ describe('Sales contextual entry point',()=>{
   vi.stubGlobal('fetch',fetchMock);
   const onCreateDocument=vi.fn();
   render(<Sales canView canManage canCreate onCreateDocument={onCreateDocument} onUnauthorized={vi.fn()}/>);
-  const buttons=await screen.findAllByRole('button',{name:'+ Sale'});
+  const buttons=await screen.findAllByRole('button',{name:'Add sales invoice +'});
   fireEvent.click(buttons[0]!);
   expect(onCreateDocument).toHaveBeenCalledTimes(1);
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -22,14 +22,14 @@ describe('Sales contextual entry point',()=>{
  it('hides sale entry when document upload capability is absent',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({sales:[]}))));
   render(<Sales canView canManage canCreate={false} onCreateDocument={vi.fn()} onUnauthorized={vi.fn()}/>);
-  await screen.findByText('No sales yet.');
-  expect(screen.queryByRole('button',{name:'+ Sale'})).not.toBeInTheDocument();
+  await screen.findByText('No sales invoices yet.');
+  expect(screen.queryByRole('button',{name:'Add sales invoice +'})).not.toBeInTheDocument();
  });
 
  it('uses the localized sale label in Arabic',async()=>{
   await i18n.changeLanguage('ar');
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({sales:[]}))));
   render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} onUnauthorized={vi.fn()}/>);
-  expect((await screen.findAllByRole('button',{name:'+ بيع'})).length).toBeGreaterThan(0);
+  expect((await screen.findAllByRole('button',{name:'إضافة فاتورة مبيعات +'})).length).toBeGreaterThan(0);
  });
 });
