@@ -63,8 +63,8 @@ describe('BankTransactionsView', () => {
     render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
 
     const description = await screen.findByText('Vendor payment with mixed بيان عربي');
-    expect(screen.getByText('16/08/2026')).toBeInTheDocument();
-    expect(screen.getByText('-350.00 SAR')).toBeInTheDocument();
+    expect(screen.getByText('2026/08/16')).toBeInTheDocument();
+    expect(screen.getByText('-350.00')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Match' })).toBeInTheDocument();
     expect(screen.getByText('BANK-REF-001')).toBeInTheDocument();
     expect(screen.queryByText('12500.00 SAR')).not.toBeInTheDocument();

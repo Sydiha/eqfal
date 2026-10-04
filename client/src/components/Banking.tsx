@@ -95,8 +95,10 @@ export function Banking({canView,canImport,canManage,canMatch,canReconcile,onUna
     {error&&<Alert color="red" role="alert">{error}</Alert>}
     {confirmResult&&<BankConfirmSummary result={confirmResult}/>} 
 
-    <Card withBorder padding="lg"><Stack gap="md"><Title order={2} size="h3">{t('banks.accounts')}</Title>
-      {canManage&&<form onSubmit={createAccount}><Group align="end"><TextInput name="display_name" label={t('banks.accountName')} required/><TextInput name="bank_name" label={t('banks.bankName')}/><TextInput name="currency_code" label={t('banks.currency')} defaultValue="SAR" maxLength={3} required/><Button type="submit">{t('banks.createAccount')}</Button></Group></form>}
+    {canManage&&<Card withBorder padding="lg" className="bank-accounts-card bank-accounts-card--create"><Stack gap="md"><Title order={2} size="h3">{t('banks.addAccount')}</Title>
+      <form onSubmit={createAccount}><Group align="end"><TextInput name="display_name" label={t('banks.accountName')} placeholder={t('banks.accountNamePlaceholder')} required/><TextInput name="bank_name" label={t('banks.bankName')} placeholder={t('banks.bankNamePlaceholder')}/><TextInput name="currency_code" label={t('banks.currency')} defaultValue="SAR" maxLength={3} required/><Button type="submit">{t('banks.createAccount')}</Button></Group></form>
+    </Stack></Card>}
+    <Card withBorder padding="lg" className="bank-accounts-card bank-accounts-card--list"><Stack gap="md"><Title order={2} size="h3">{t('banks.accounts')}</Title>
       {accounts.length===0?<Text c="dimmed">{t('banks.noAccounts')}</Text>:<Table.ScrollContainer minWidth={620}><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>{t('banks.accountName')}</Table.Th><Table.Th>{t('banks.bankName')}</Table.Th><Table.Th>{t('banks.currency')}</Table.Th><Table.Th>{t('banks.status')}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{accounts.map(a=><Table.Tr key={a.id}><Table.Td>{a.display_name}</Table.Td><Table.Td>{a.bank_name||'—'}</Table.Td><Table.Td>{a.currency_code}</Table.Td><Table.Td><Badge>{a.is_active?t('banks.active'):t('banks.inactive')}</Badge></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
     </Stack></Card>
 

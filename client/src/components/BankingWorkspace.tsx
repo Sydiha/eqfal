@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Badge, Group, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Stack, Tabs } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Banking } from './Banking';
 import { BankTransactionsView } from './BankTransactionsView';
 import { SettlementPanel } from './SettlementPanel';
 import { CustodyPanel } from './CustodyPanel';
 import './banking-workspace.css';
+import './BankingApproved.css';
 import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 
 type Props = {
@@ -28,28 +29,50 @@ const readSection = (): BankingSection => (readQueryParameter('section', { allow
 
 const copy = {
   ar: {
-    eyebrow: 'BANKING WORKSPACE',
-    title: 'مساحة عمل البنوك',
-    description: 'الحركات البنكية والمطابقة والاستيراد والتسويات والعهد في مساحة تشغيل واحدة منظمة.',
     transactions: 'الحركات البنكية',
     import: 'الاستيراد',
     accounts: 'الحسابات',
     settlements: 'التسويات',
     custody: 'العهد والسلف',
-    primary: 'العمل اليومي',
-    secondary: 'الإدارة والمتابعة',
+    titles: {
+      transactions: 'مطابقة الحركات البنكية',
+      import: 'استيراد الكشوف البنكية',
+      accounts: 'الحسابات البنكية',
+      settlements: 'التسويات',
+      custody: 'العهد والسلف',
+    } as Record<BankingSection, string>,
+    descriptions: {
+      transactions: 'مراجعة ومطابقة حركات كشف الحساب البنكي مع قيود إقفال للتأكد من اكتمال التسويات البنكية',
+      import: 'استيراد كشوف الحسابات البنكية ومراجعة الدفعات المستوردة',
+      accounts: 'إدارة الحسابات البنكية المستخدمة في الاستيراد والمطابقة والتسويات',
+      settlements: 'تسوية المستندات والالتزامات بالمدفوعات البنكية',
+      custody: 'متابعة العهد والسلف وإغلاقها',
+    } as Record<BankingSection, string>,
+    tabsLabel: 'أقسام البنوك',
+    locale: 'ar-SA-u-ca-gregory',
   },
   en: {
-    eyebrow: 'BANKING WORKSPACE',
-    title: 'Banking workspace',
-    description: 'Bank transactions, matching, imports, settlements, and custody in one focused operating workspace.',
     transactions: 'Transactions',
     import: 'Import',
     accounts: 'Accounts',
     settlements: 'Settlements',
     custody: 'Custody & advances',
-    primary: 'Daily work',
-    secondary: 'Administration',
+    titles: {
+      transactions: 'Bank transaction reconciliation',
+      import: 'Bank statement import',
+      accounts: 'Bank accounts',
+      settlements: 'Settlements',
+      custody: 'Custody & advances',
+    } as Record<BankingSection, string>,
+    descriptions: {
+      transactions: 'Review and match bank statement transactions against ledger entries to confirm bank settlements are complete',
+      import: 'Import bank statements and review imported batches',
+      accounts: 'Manage the bank accounts used for import, matching, and settlements',
+      settlements: 'Settle documents and obligations against bank payments',
+      custody: 'Track and close custody and advances',
+    } as Record<BankingSection, string>,
+    tabsLabel: 'Banking sections',
+    locale: 'en-US',
   },
 };
 
@@ -69,28 +92,25 @@ export function BankingWorkspace(props: Props) {
     writeQueryParameters({ section: value });
   };
 
-  return <Stack gap="lg" className="banking-workspace">
-    <section className="banking-workspace__hero">
-      <div>
-        <Text className="banking-workspace__eyebrow">{s.eyebrow}</Text>
-        <Title order={1}>{s.title}</Title>
-        <Text c="dimmed" maw={760}>{s.description}</Text>
-      </div>
-      <Group gap="xs" className="banking-workspace__hero-badges">
-        <Badge variant="light" size="lg">{s.primary}</Badge>
-        <Badge variant="outline" size="lg">{s.secondary}</Badge>
-      </Group>
-    </section>
+  const today = new Date().toLocaleDateString(s.locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    <Tabs value={section} onChange={changeSection} variant="pills" className="banking-workspace__tabs">
-      <Tabs.List grow>
-        <Tabs.Tab value="transactions">{s.transactions}</Tabs.Tab>
-        {props.canImport && <Tabs.Tab value="import">{s.import}</Tabs.Tab>}
-        <Tabs.Tab value="accounts">{s.accounts}</Tabs.Tab>
-        {props.canSettle && <Tabs.Tab value="settlements">{s.settlements}</Tabs.Tab>}
-        {props.canViewCustody && <Tabs.Tab value="custody">{s.custody}</Tabs.Tab>}
+  return <Stack gap="md" className="banking-workspace banking-approved">
+    <Tabs value={section} onChange={changeSection} variant="unstyled" className="banking-workspace__tabs banking-approved__tabs">
+      <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+      <Tabs.List aria-label={s.tabsLabel}>
+        <Tabs.Tab value="transactions"><i aria-hidden="true"/>{s.transactions}</Tabs.Tab>
+        {props.canImport && <Tabs.Tab value="import"><i aria-hidden="true"/>{s.import}</Tabs.Tab>}
+        <Tabs.Tab value="accounts"><i aria-hidden="true"/>{s.accounts}</Tabs.Tab>
+        {props.canSettle && <Tabs.Tab value="settlements"><i aria-hidden="true"/>{s.settlements}</Tabs.Tab>}
+        {props.canViewCustody && <Tabs.Tab value="custody"><i aria-hidden="true"/>{s.custody}</Tabs.Tab>}
       </Tabs.List>
+      <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6"/></svg></span>
     </Tabs>
+
+    <header className="banking-approved__header">
+      <h1>{s.titles[section]}</h1>
+      <div><p>{s.descriptions[section]}</p><time>{today}</time></div>
+    </header>
 
     {section === 'transactions' && <BankTransactionsView canView={props.canView} canMatch={props.canMatch} canReconcile={props.canReconcile} onUnauthorized={props.onUnauthorized}/>} 
 
