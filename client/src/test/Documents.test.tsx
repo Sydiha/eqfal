@@ -132,7 +132,7 @@ describe('Documents', () => {
     const { rerender } = render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(await screen.findByRole('button', { name: 'Save Intake' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('Relational Supplier')).toBeInTheDocument();
-    expect(screen.getByText('INV-7')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('INV-7')).toBeInTheDocument();
     rerender(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview canApprove={false} onUnauthorized={onUnauthorized} />);
     expect(screen.queryByRole('button', { name: 'Save Intake' })).not.toBeInTheDocument();
     expect(screen.getAllByText('Relational Supplier').length).toBeGreaterThan(0);
