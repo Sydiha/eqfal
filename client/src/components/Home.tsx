@@ -94,6 +94,7 @@ type Props = {
   onUnauthorized: () => void;
   periods?: Period[];
   selectedPeriodId?: string | null;
+  onSelectedPeriodChange?: (periodId: string) => void;
   onPeriodsLoad?: (p: Period[]) => void;
 };
 
@@ -115,7 +116,8 @@ export function Home({
   navigateToDiscovery,
   onUnauthorized,
   periods: externalPeriods = [],
-  selectedPeriodId: externalSelectedPeriodId = null,
+  selectedPeriodId = null,
+  onSelectedPeriodChange,
   onPeriodsLoad,
 }: Props) {
   const { i18n } = useTranslation();
@@ -123,7 +125,6 @@ export function Home({
 
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>(externalPeriods);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(externalSelectedPeriodId);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
   const canViewSnapshot = capabilities.some((capability) =>
@@ -224,15 +225,9 @@ export function Home({
 
   useEffect(() => {
     if (periods.length > 0 && !selectedPeriodId) {
-      setSelectedPeriodId(periods[0].id);
+      onSelectedPeriodChange?.(periods[0].id);
     }
-  }, [periods, selectedPeriodId]);
-
-  useEffect(() => {
-    if (externalSelectedPeriodId && externalSelectedPeriodId !== selectedPeriodId) {
-      setSelectedPeriodId(externalSelectedPeriodId);
-    }
-  }, [externalSelectedPeriodId]);
+  }, [periods, selectedPeriodId, onSelectedPeriodChange]);
 
   const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
@@ -437,7 +432,7 @@ export function Home({
             id="period-select"
             className="home__period-select"
             value={selectedPeriodId || ""}
-            onChange={(e) => setSelectedPeriodId(e.target.value)}
+            onChange={(e) => onSelectedPeriodChange?.(e.target.value)}
           >
             {periods.map((period) => {
               const start = new Date(period.period_start);
