@@ -38,7 +38,8 @@ body { background: #fff !important; }
   content: "";
   position: absolute;
   top: -9999px;
-  bottom: -9999px;
+  /* Stop at the page's own bottom: a negative bottom here made <main> scroll ~10000px of empty space. */
+  bottom: 0;
   left: -9999px;
   right: -9999px;
   background: #fff;
