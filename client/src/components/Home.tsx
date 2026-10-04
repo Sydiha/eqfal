@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import "@fontsource/readex-pro/400.css";
-import "@fontsource/readex-pro/500.css";
-import "@fontsource/readex-pro/600.css";
-import "@fontsource/readex-pro/700.css";
+import "@fontsource/readex-pro";
 import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
