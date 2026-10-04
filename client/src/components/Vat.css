@@ -1,0 +1,88 @@
+/* VAT — approved Figma frame 191:973 (1440 RTL, content area only).
+   Presentation only; every selector is scoped to .vat-view so no other screen is affected. */
+.vat-view,.panel.vat-view{--vat-ink:#1e293b;--vat-muted:#64748b;--vat-primary:#00b894;--vat-green:#047857;--vat-navy:#0b1d3a;--vat-border:#e4e8ec;--vat-soft:#f8fafc;display:flex;flex-direction:column;gap:12px;max-width:none;margin:0;padding:0 0 28px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--vat-ink);font-family:"Readex Pro",Tajawal,Inter,system-ui,sans-serif;font-size:12px}
+.vat-view button,.vat-view input,.vat-view select{font-family:inherit}
+.vat-view .vat-icon{flex:none;width:14px;height:14px}
+.vat-view .vat-muted{color:var(--vat-muted);font-size:10px}
+.vat-view .vat-header{display:flex;flex-direction:column;gap:3px;margin:0 0 4px}
+.vat-view .vat-header h2{margin:0;font-size:26px;font-weight:700;line-height:1.3;color:var(--vat-ink)}
+.vat-view .vat-header p{margin:0;color:var(--vat-muted);font-size:12px;line-height:1.5}
+.vat-view .vat-card{box-sizing:border-box;min-width:0;margin:0;border:1px solid var(--vat-border);border-radius:12px;background:#fff}
+.vat-view .vat-card h3{margin:0;font-size:14px;font-weight:600;line-height:1.5;color:var(--vat-ink)}
+/* Buttons */
+.vat-view .vat-primary,.vat-view .vat-ghost,.vat-view .vat-dark,.vat-view .vat-disabled{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-width:0;min-height:0;height:32px;margin:0;padding:0 14px;border-radius:6px;font-size:11px;font-weight:600;line-height:1.5;white-space:nowrap}
+.vat-view .vat-primary{border:0;background:var(--vat-primary);color:#fff}
+.vat-view .vat-primary:hover{background:#00a383}
+.vat-view .vat-ghost{border:1px solid var(--vat-border);background:#fff;color:var(--vat-ink)}
+.vat-view .vat-ghost:hover{background:var(--vat-soft);border-color:#cbd5e1}
+.vat-view .vat-dark{border:0;background:var(--vat-navy);color:#fff}
+.vat-view .vat-disabled,.vat-view .vat-disabled:hover,.vat-view .vat-dark:disabled{border:0;background:#e7ebf0;color:#8c949e;opacity:1;cursor:not-allowed}
+.vat-view .vat-link{min-height:0;height:auto;margin:0;padding:0;border:0;background:transparent;color:var(--vat-green);font-size:11px;font-weight:600}
+.vat-view .vat-close{width:24px;height:24px;min-height:0;margin:0;padding:0;border:0;border-radius:50%;background:#f1f5f9;color:var(--vat-muted);font-size:14px;line-height:1}
+/* Badges */
+.vat-view .vat-badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;line-height:1.5;white-space:nowrap}
+.vat-view .vat-badge--neutral{background:#f1f5f9;color:var(--vat-muted)}
+.vat-view .vat-badge--closed{background:#e2e8f0;color:#475569}
+.vat-view .vat-badge--ok{background:#d1fae5;color:var(--vat-green)}
+.vat-view .vat-badge--warn{background:#fef3c7;color:#b45309}
+/* Period selector */
+.vat-view .vat-periods{display:flex;align-items:center;gap:12px;padding:12px}
+.vat-view .vat-periods__select{display:flex;align-items:center;gap:12px;margin:0;color:var(--vat-muted);font-size:11px}
+.vat-view .vat-periods__select select{width:238px;min-height:0;height:32px;margin:0;padding:0 10px;border:1px solid var(--vat-border);border-radius:6px;background-color:#fff;color:var(--vat-ink);font-size:11px;text-align:center}
+.vat-view .vat-range{color:var(--vat-muted);font-size:11px;white-space:nowrap}
+.vat-view .vat-periods__create{margin-inline-start:auto}
+/* Readiness */
+.vat-view .vat-readiness{display:flex;flex-direction:column;gap:8px;padding:12px}
+.vat-view .vat-readiness__summary{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-block:2px}
+.vat-view .vat-readiness__titles h3{font-size:15px;font-weight:700}
+.vat-view .vat-readiness__titles p{margin:2px 0 0;font-size:12px}
+.vat-view .vat-blockers{display:grid;grid-template-columns:repeat(3,1fr);margin:0;padding:0;list-style:none;border:1px solid var(--vat-border);border-radius:8px;background:var(--vat-soft)}
+.vat-view .vat-blockers li{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;font-size:11px}
+.vat-view .vat-blockers li+li{border-inline-start:1px solid var(--vat-border)}
+.vat-view .vat-blockers li>span:first-child{flex:1;min-width:0}
+.vat-view .vat-blockers b{font-weight:500;color:var(--vat-muted)}
+.vat-view .vat-readiness__close{display:flex;align-items:center;gap:16px;padding-top:6px;border-top:1px solid var(--vat-border)}
+.vat-view .vat-readiness__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vat-view .vat-readiness__reason{flex:1;min-width:0}
+.vat-view .vat-readiness__reason p{margin:0;font-size:11px;line-height:1.6;color:var(--vat-muted)}
+/* Reviewed tax summary */
+.vat-view .vat-summary{padding:0 0 8px}
+.vat-view .vat-summary__values{display:grid;grid-template-columns:repeat(3,1fr);margin:0}
+.vat-view .vat-summary__values>div{display:flex;flex-direction:column;gap:4px;padding:10px 16px}
+.vat-view .vat-summary__values>div+div{border-inline-start:1px solid var(--vat-border)}
+.vat-view .vat-summary__values dt{font-size:11px;color:var(--vat-muted)}
+.vat-view .vat-summary__values dd{display:flex;align-items:baseline;gap:6px;margin:0;font-size:20px;font-weight:600;color:var(--vat-ink)}
+.vat-view .vat-summary__values small{font-size:11px;font-weight:400;color:var(--vat-muted)}
+.vat-view .vat-summary__note{margin:0;padding:0 16px;font-size:10px;color:var(--vat-muted)}
+/* Filters */
+.vat-view .vat-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vat-view .vat-search{flex:1 1 280px;min-width:0}
+.vat-view .vat-search input{box-sizing:border-box;width:100%;min-height:0;height:32px;margin:0;padding:0 12px;border:1px solid var(--vat-border);border-radius:6px;background:#fff;font-size:11px}
+.vat-view .vat-filter{display:flex;align-items:center;gap:4px;height:32px;padding:0 8px;border:1px solid var(--vat-border);border-radius:6px;background:#fff;font-size:11px;color:var(--vat-ink)}
+.vat-view .vat-filter select{min-height:0;height:28px;margin:0;padding:0 4px;border:0;background-color:transparent;font-size:11px;font-weight:500}
+/* Register + detail */
+.vat-view .vat-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.vat-view .vat-workspace.has-detail{grid-template-columns:minmax(0,1fr) 280px}
+.vat-view .vat-register{display:flex;flex-direction:column;gap:8px;padding:12px;min-height:360px}
+.vat-view .vat-register__heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vat-view .vat-table-wrap{overflow-x:auto;border:1px solid var(--vat-border);border-radius:8px}
+.vat-view table{width:100%;border-collapse:collapse;font-size:11px}
+.vat-view th{padding:11px 10px;background:var(--vat-soft);color:var(--vat-muted);font-size:10px;font-weight:500;text-align:start;white-space:nowrap}
+.vat-view td{padding:10px;border-top:1px solid var(--vat-border);text-align:start}
+.vat-view tbody tr{cursor:pointer}
+.vat-view tbody tr.is-selected{background:#ecfdf5;box-shadow:inset 3px 0 0 var(--vat-primary)}
+.vat-view .vat-register__count{margin:auto 0 0;font-size:10px;color:var(--vat-muted)}
+.vat-view .vat-detail{display:flex;flex-direction:column;gap:10px;padding:16px;min-height:360px}
+.vat-view .vat-detail__header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--vat-border)}
+.vat-view .vat-detail__identity{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.vat-view .vat-detail__identity h4{margin:0;font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.vat-view .vat-detail__rows{display:flex;flex-direction:column;gap:10px;margin:0}
+.vat-view .vat-detail__rows>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px}
+.vat-view .vat-detail__rows dt{color:var(--vat-muted);font-size:10px}
+.vat-view .vat-detail__rows dd{margin:0}
+.vat-view .vat-detail__stack{flex-direction:column;align-items:flex-start!important;gap:2px!important}
+.vat-view .vat-detail__sep{padding-top:10px;border-top:1px solid var(--vat-border)}
+.vat-view .vat-detail__compare{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border-radius:6px;background:var(--vat-soft);font-size:11px}
+.vat-view .vat-detail__compare span{color:var(--vat-muted);font-size:10px}
+.vat-view .vat-detail__edit{width:100%;margin-top:auto}
+@media (max-width:900px){.vat-view .vat-workspace.has-detail{grid-template-columns:minmax(0,1fr)}.vat-view .vat-blockers,.vat-view .vat-summary__values{grid-template-columns:1fr}.vat-view .vat-periods,.vat-view .vat-readiness__close{flex-wrap:wrap}}
