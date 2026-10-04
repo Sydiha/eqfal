@@ -107,6 +107,7 @@ export function Home({
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(canViewClose);
   const [error, setError] = useState(false);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const canViewSnapshot = capabilities.some((capability) =>
     ["bank.view", "obligation.view", "document.view"].includes(capability),
   );
@@ -181,6 +182,12 @@ export function Home({
     if (canViewClose) void load();
   }, [canViewClose]);
 
+  useEffect(() => {
+    if (periods.length > 0 && !selectedPeriodId) {
+      setSelectedPeriodId(periods[0].id);
+    }
+  }, [periods, selectedPeriodId]);
+
   const loadSnapshot = async () => {
     if (!canViewSnapshot) return;
     try {
@@ -201,7 +208,7 @@ export function Home({
     if (canViewSnapshot) void loadSnapshot();
   }, [canViewSnapshot]);
 
-  const selected = periods[0] ?? null;
+  const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
@@ -403,6 +410,34 @@ export function Home({
           </p>
         </div>
       </header>
+
+      {/* Period Selector */}
+      {periods.length > 1 && (
+        <div className="home__period-selector">
+          <label htmlFor="period-select" className="home__period-label">
+            {isArabic ? "الفترة:" : "Period:"}
+          </label>
+          <select
+            id="period-select"
+            className="home__period-select"
+            value={selectedPeriodId || ""}
+            onChange={(e) => setSelectedPeriodId(e.target.value)}
+          >
+            {periods.map((period) => {
+              const start = new Date(period.period_start);
+              const end = new Date(period.period_end);
+              const label = isArabic
+                ? `${start.toLocaleDateString("ar-EG")} - ${end.toLocaleDateString("ar-EG")}`
+                : `${start.toLocaleDateString("en-US")} - ${end.toLocaleDateString("en-US")}`;
+              return (
+                <option key={period.id} value={period.id}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
 
       {/* KPI Section - Always Visible */}
       {canViewSnapshot && (
