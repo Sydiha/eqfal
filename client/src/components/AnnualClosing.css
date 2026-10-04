@@ -27,8 +27,36 @@
 .annual-closing-view .ac-table{width:100%;border-collapse:collapse;font-size:12px}
 .annual-closing-view .ac-table th{background:var(--ac-soft);color:var(--ac-muted);font-size:11px;font-weight:400;text-align:start;padding:8px 12px}
 .annual-closing-view .ac-table td{padding:8px 12px;border-top:1px solid var(--ac-border)}
-.annual-closing-view .ac-next{color:var(--ac-green)}
+.annual-closing-view .ac-next{color:var(--ac-muted)}
 .annual-closing-view .ac-note{padding:6px 10px;border-radius:6px;background:var(--ac-soft);color:var(--ac-muted);font-size:11px}
 .annual-closing-view .ac-drift{padding:6px 10px;border-radius:6px;background:#fef3c7;color:#b45309}
 .annual-closing-view .table-wrap{overflow-x:auto;border:1px solid var(--ac-border);border-radius:8px}
 @media (max-width:720px){.annual-closing-view .ac-summary{grid-template-columns:1fr 1fr}}
+/* Package tab (Figma 196:2300-2315) */
+.annual-closing-view .ac-package-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.annual-closing-view .ac-package-title{display:flex;align-items:center;gap:10px}
+.annual-closing-view .ac-package-title h2{margin:0}
+.annual-closing-view .ac-package-state{display:inline-flex;align-items:center;gap:6px}
+.annual-closing-view .ac-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.annual-closing-view .ac-btn,.annual-closing-view .ac-card button:not(.ac-tab){display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 14px;border:1px solid var(--ac-border);border-radius:8px;background:#fff;color:var(--ac-ink);font-size:12px;cursor:pointer}
+.annual-closing-view .ac-btn--primary{border-color:var(--ac-green);background:var(--ac-green);color:#fff}
+.annual-closing-view .ac-card button:disabled{border-color:var(--ac-border);background:#f1f5f9;color:#94a3b8;cursor:not-allowed}
+.annual-closing-view .ac-meta{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.annual-closing-view .ac-meta p{margin:0;color:var(--ac-muted);font-size:11px}
+.annual-closing-view .ac-package .ac-note{margin:0 0 8px}
+.annual-closing-view .warning-alert{margin:0 0 8px;padding:8px 12px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px}
+/* Wrapped legacy sections: TaxWorkpaper and WhtReviews (styling only, no logic) */
+.annual-closing-view .ac-card .panel{margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+.annual-closing-view .ac-card section h2{margin:0 0 8px;font-size:14px;font-weight:600}
+.annual-closing-view .ac-card section h3{margin:8px 0;font-size:13px;font-weight:600}
+.annual-closing-view .ac-card dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 16px;margin:0 0 8px}
+.annual-closing-view .ac-card dt{color:var(--ac-muted);font-size:11px}
+.annual-closing-view .ac-card dd{margin:2px 0 0;font-size:12px}
+.annual-closing-view .ac-card table{width:100%;border-collapse:collapse;font-size:12px}
+.annual-closing-view .ac-card th{background:var(--ac-soft);color:var(--ac-muted);font-size:11px;font-weight:400;text-align:start;padding:8px 12px}
+.annual-closing-view .ac-card td{padding:8px 12px;border-top:1px solid var(--ac-border)}
+.annual-closing-view .ac-card input,.annual-closing-view .ac-card select,.annual-closing-view .ac-card textarea{box-sizing:border-box;min-height:30px;border:1px solid var(--ac-border);border-radius:8px;background:#fff;padding:4px 8px;font-size:12px}
+.annual-closing-view .ac-card label{display:flex;flex-direction:column;gap:4px;color:var(--ac-muted);font-size:11px}
+.annual-closing-view .ac-card form,.annual-closing-view .ac-card .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 12px;align-items:end}
+.annual-closing-view .ac-card [role="alert"]{padding:6px 10px;border-radius:6px;background:#fef2f2;color:#b91c1c;font-size:12px}
+.annual-closing-view .ac-card label.ac-context__year{flex-direction:row;align-items:center;gap:10px;font-size:11px}
