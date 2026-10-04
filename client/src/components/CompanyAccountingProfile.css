@@ -1,0 +1,25 @@
+/* Company Accounting & Tax Profile — governance workspace. Presentation only; all selectors scoped to .company-profile-view. */
+.company-profile-view{--cp-navy:var(--brand-navy,#0b1d3a);--cp-teal:var(--brand-teal,#0e8f7a);--cp-gold:var(--brand-gold,#c8a66a);--cp-border:var(--border,#e3e8ee);--cp-muted:var(--muted,#5b6878);--cp-soft:var(--surface-subtle,#fafbfc);display:flex;flex-direction:column;gap:16px;font-family:"Readex Pro",Tajawal,Inter,system-ui,sans-serif}
+.company-profile-view h2,.company-profile-view h3,.company-profile-view h4{color:var(--cp-navy)}
+.company-profile-view h3{margin:0 0 12px;font-size:15px;font-weight:800}
+.company-profile-view h4,.company-profile-view legend{margin:0 0 10px;padding:0;font-size:13px;font-weight:700;color:var(--cp-navy)}
+.company-profile-view .shared-workspace-page{gap:16px}
+.company-profile-view__summary,.company-profile-view__details,.company-profile-view__review,.company-profile-view__history,.company-profile-view__new-version{width:100%;box-sizing:border-box;margin:0;border:1px solid var(--cp-border);border-radius:12px;background:#fff}
+.company-profile-view__summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.company-profile-view__summary-head h3{margin:0}
+.company-profile-view__sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.company-profile-view__group{min-width:0;margin:0;padding:14px 16px;border:1px solid var(--cp-border);border-radius:8px;background:var(--cp-soft)}
+.company-profile-view__fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0}
+.company-profile-view__fields--inline{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.company-profile-view__field{min-width:0}
+.company-profile-view__field dt{margin:0 0 3px;color:var(--cp-muted);font-size:11.5px}
+.company-profile-view__field dd{margin:0;color:var(--cp-navy);font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.company-profile-view__form{display:flex;flex-direction:column;gap:14px}
+.company-profile-view__form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+.company-profile-view__form label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--cp-muted)}
+.company-profile-view__actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.company-profile-view__actions:empty{display:none}
+.company-profile-view__warning{margin:0 0 12px;padding:10px 14px;border:1px solid var(--cp-gold);border-inline-start-width:4px;border-radius:8px;background:#fbf6ec;color:#7a5a1c;font-size:13px;font-weight:600}
+.company-profile-view__history .table-wrap{overflow-x:auto}
+.company-profile-view__history th{text-align:start}
+@media (max-width:900px){.company-profile-view__sections,.company-profile-view__fields,.company-profile-view__form-grid{grid-template-columns:minmax(0,1fr)}}
