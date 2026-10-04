@@ -1,0 +1,142 @@
+/* Banking workspace — matches Figma frames 53:4 (Bank Reconciliation) and 61:4 (Bank Accounts). UI only. */
+.banking-approved{--b-ink:#1e293b;--b-muted:#64748b;--b-soft:#94a3b8;--b-border:#e4e8ec;--b-field:#475569;--b-surface:#f1f5f9;--b-primary:#00b894;--b-primary-soft:rgba(0,184,148,.1);--b-gold:#d4af37;max-width:none;margin:0;gap:16px;color:var(--b-ink);font-family:Tajawal,Inter,system-ui,sans-serif}
+
+/* Section strip (Figma period-navigation-strip) */
+.banking-approved__tabs.banking-workspace__tabs{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px;border:1px solid var(--b-border);border-radius:10px;background:#fff;box-shadow:none}
+.banking-approved__arrow{display:grid;place-items:center;flex:none;width:16px;height:16px;color:var(--b-soft)}
+.banking-approved__tabs [role=tablist]{display:flex;flex:1;align-items:center;justify-content:center;gap:12px;min-width:0;border:0;overflow-x:auto}
+.banking-approved__tabs [role=tab]{display:inline-flex;align-items:center;gap:6px;min-height:0;padding:6px 16px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--b-soft);font:500 12px Tajawal,Inter,system-ui,sans-serif;white-space:nowrap}
+.banking-approved__tabs .mantine-Tabs-tabLabel{display:inline-flex;align-items:center;gap:6px}
+.banking-approved__tabs [role=tab] i{display:block;flex:none;width:8px;height:8px;border:1px solid var(--b-soft);border-radius:50%}
+.banking-approved__tabs [role=tab][data-active]{border-color:var(--b-primary);background:var(--b-primary-soft);color:var(--b-primary);font-weight:700;box-shadow:none}
+.banking-approved__tabs [role=tab][data-active] i{border-color:var(--b-primary);background:var(--b-primary)}
+.banking-approved__tabs [role=tab]:focus-visible{outline:2px solid var(--b-primary);outline-offset:1px}
+
+/* Page header (Figma page-header) */
+.banking-approved__header h1{margin:0;color:var(--b-ink);font:800 22px Tajawal,Inter,system-ui,sans-serif}
+.banking-approved__header>div{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:3px;color:var(--b-soft);font-size:12px}
+.banking-approved__header p{margin:0}.banking-approved__header time{font-weight:500;white-space:nowrap}
+
+/* Cards shared by both frames */
+.banking-approved .banking-core .mantine-Card-root.bank-accounts-card,.banking-approved .banking-feature-pane>.mantine-Card-root,.banking-approved .bank-recon__card{padding:20px;border:1px solid var(--b-border);border-radius:12px;background:#fff;box-shadow:none}
+.banking-approved .banking-core--accounts>.mantine-Stack-root>.bank-accounts-card{display:block}
+.banking-approved .banking-core--accounts>.mantine-Stack-root{gap:16px}
+.banking-approved .bank-accounts-card .mantine-Title-root{margin:0;color:var(--b-ink);font:800 15px Tajawal,Inter,system-ui,sans-serif}
+.banking-approved .bank-accounts-card--list .mantine-Title-root{color:#0a1c33;font-weight:700}
+
+/* Accounts: create form (Figma create-account-card) */
+.banking-approved .banking-core--accounts form{padding:0;border:0;border-radius:0;background:transparent}
+.banking-approved .banking-core--accounts form .mantine-Group-root{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:16px;align-items:end;flex-wrap:nowrap}
+.banking-approved .banking-core--accounts form .mantine-Group-root>*{max-width:none;min-width:0}
+.banking-approved .banking-core--accounts form .mantine-InputWrapper-label{margin-bottom:6px;color:var(--b-field);font:700 13px Tajawal,Inter,system-ui,sans-serif}
+.banking-approved .banking-core--accounts form .mantine-InputWrapper-required{color:#ef4444;font-weight:400}
+.banking-approved .banking-core--accounts form .mantine-Input-input{height:auto;min-height:0;padding:8px 12px;border:1px solid var(--b-border);border-radius:6px;background:#fff;color:var(--b-ink);font:400 13px Tajawal,Inter,system-ui,sans-serif;line-height:1.5}
+.banking-approved .banking-core--accounts form .mantine-Input-input::placeholder{color:var(--b-soft)}
+.banking-approved .banking-core--accounts form input[name=currency_code]{background:#fafcfd;font:700 13px Inter,Tajawal,sans-serif;text-transform:uppercase}
+.banking-approved .banking-core--accounts form .mantine-Button-root{height:auto;min-height:0;padding:9px 24px;border-radius:6px;background:var(--b-primary);font:700 13px Tajawal,Inter,system-ui,sans-serif}
+
+/* Accounts: list (Figma accounts-list-card / data-table) */
+.banking-approved .banking-core--accounts .mantine-Table-scrollContainer{border:1px solid var(--b-border);border-radius:8px;overflow:hidden}
+.banking-approved .banking-core--accounts table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.banking-approved .banking-core--accounts thead th{padding:9px 16px;border-bottom:1px solid var(--b-border);background:#f8fafc;color:var(--b-soft);font:700 11px Tajawal,Inter,system-ui,sans-serif;text-align:start;text-transform:none;letter-spacing:0}
+.banking-approved .banking-core--accounts tbody tr,.banking-approved .banking-core--accounts tbody tr:nth-of-type(odd),.banking-approved .banking-core--accounts tbody tr:hover{background:#fff}
+.banking-approved .banking-core--accounts tbody td{padding:12px 16px;border-bottom:1px solid var(--b-border);color:var(--b-ink);font:400 12px Tajawal,Inter,system-ui,sans-serif;text-align:start}
+.banking-approved .banking-core--accounts tbody tr:last-child td{border-bottom:0}
+.banking-approved .banking-core--accounts tbody td:first-child{font-weight:700}
+.banking-approved .banking-core--accounts thead th:nth-child(2),.banking-approved .banking-core--accounts tbody td:nth-child(2){width:240px}
+.banking-approved .banking-core--accounts thead th:nth-child(n+3),.banking-approved .banking-core--accounts tbody td:nth-child(n+3){width:120px}
+.banking-approved .banking-core--accounts tbody td:nth-child(3){font:700 12px Inter,Tajawal,sans-serif}
+.banking-approved .banking-core--accounts .mantine-Badge-root{height:auto;padding:3px 8px;border-radius:5px;background:#d1fae5;color:#065f46;font:700 11px Tajawal,Inter,system-ui,sans-serif;text-transform:none}
+
+/* Reconciliation: status strip (Figma import-status-bar) */
+.bank-recon{display:flex;flex-direction:column;gap:16px;min-width:0}
+.bank-recon__status{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px;border:1px solid #a7f3d0;border-radius:10px;background:#ebfdf5}
+.bank-recon .bank-transactions-view__summary.bank-recon__metrics{display:flex!important;align-items:center;gap:16px!important;padding:0;background:transparent}
+.bank-recon__metric{display:inline-flex;align-items:center;gap:6px;color:var(--b-ink);font-size:13px;white-space:nowrap}
+.bank-recon__metric i{width:6px;height:6px;border-radius:50%;background:var(--b-soft)}
+.bank-recon__metric b{font:700 13px Inter,Tajawal,sans-serif}
+.bank-recon__metric.is-pending{color:var(--b-gold)}.bank-recon__metric.is-pending i{background:var(--b-gold)}
+.bank-recon__metric.is-matched{color:var(--b-primary)}.bank-recon__metric.is-matched i{background:var(--b-primary)}.bank-recon__metric.is-matched b{color:var(--b-primary)}
+.bank-recon__metric.is-unmatched i{background:#ef4444}
+.bank-recon .bank-recon__refresh{height:auto;min-height:0;padding:5px 12px;border:1px solid #a7f3d0;border-radius:6px;background:#fff;color:#065f46;font:700 12px Tajawal,Inter,system-ui,sans-serif}
+
+/* Reconciliation: filter bar (Figma filter-bar) */
+.bank-recon .bank-recon__toolbar.shared-workspace-toolbar{align-items:center;gap:10px;padding:12px;border:1px solid var(--b-border);border-radius:10px;background:#fff}
+.bank-recon__sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bank-recon__toolbar .shared-workspace-toolbar__search{flex:0 0 170px;min-width:0}
+.bank-recon__toolbar .shared-workspace-toolbar__search label{gap:6px}
+.bank-recon__toolbar .shared-workspace-toolbar__filters{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:10px}
+.bank-recon__toolbar label{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;color:var(--b-muted);font:400 13px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__toolbar .shared-workspace-toolbar__filters label{flex:0 1 auto}
+.bank-recon__toolbar input,.bank-recon__toolbar select{min-height:0;padding:6px 10px;border:1px solid var(--b-border);border-radius:6px;background:#fff;color:var(--b-ink);font:400 13px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__toolbar input[type=search]{width:100%}.bank-recon__toolbar input[type=number]{width:80px}.bank-recon__toolbar input[type=date]{width:128px;font-family:Inter,Tajawal,sans-serif}
+.bank-recon__toolbar .shared-workspace-toolbar__meta{margin-inline-start:auto;color:var(--b-muted);font-size:12px}
+.bank-recon__toolbar .shared-workspace-toolbar__meta button{padding:8px 16px;border:1px solid var(--b-border);border-radius:6px;background:#fff;color:var(--b-muted);font:700 13px Tajawal,Inter,system-ui,sans-serif}
+
+/* Reconciliation: statement card (Figma column-bank-transactions) */
+.bank-recon .bank-transactions-workspace,.bank-recon .bank-transactions-workspace.has-detail{display:flex;flex-direction:column;align-items:stretch;gap:16px;min-width:0}
+.bank-recon__card{display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px!important}
+.bank-recon__card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bank-recon__card-head h3{margin:0;color:var(--b-ink);font:700 13px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__pill{padding:2px 6px;border-radius:100px;background:var(--b-surface);color:var(--b-muted);font-size:11px}
+.bank-recon .bank-transactions-list{border:1px solid var(--b-border);border-radius:8px;background:#fff}
+.bank-recon .bank-transaction-head,.bank-recon .bank-transaction-main,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-head,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-main{display:grid;grid-template-columns:96px minmax(0,1fr) 130px 104px 96px;gap:12px;align-items:center}
+.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-head span:nth-child(4),.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-head span:nth-child(5){display:block}
+.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-status{display:inline-flex}.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-primary-action{display:flex}
+.bank-recon .bank-transaction-head{padding:8px 12px;border-bottom:1px solid var(--b-border);background:var(--b-surface);color:var(--b-muted);font:700 10px Tajawal,Inter,system-ui,sans-serif;letter-spacing:0;text-transform:none}
+.bank-recon .bank-transaction-row{border-bottom:1px solid var(--b-border);background:var(--b-surface);box-shadow:none}
+.bank-recon .bank-transaction-row--reconciled{background:#fff}
+.bank-recon .bank-transaction-row::before{display:none}
+.bank-recon .bank-transaction-row[aria-selected=true]{background:var(--b-primary-soft);box-shadow:inset 0 0 0 1px var(--b-primary)}
+.bank-recon .bank-transaction-main{min-height:0;padding:8px 12px}
+.bank-recon .bank-transaction-date{color:var(--b-muted);font:400 11px Inter,Tajawal,sans-serif}
+.bank-recon .bank-transaction-description p{margin:0;max-height:none;overflow:hidden;color:var(--b-ink);font:400 11px/1.5 Tajawal,Inter,system-ui,sans-serif;text-overflow:ellipsis;white-space:nowrap}
+.bank-recon .bank-transaction-amount{color:var(--b-ink);font:700 11px Inter,Tajawal,sans-serif;text-align:start}
+.bank-recon .bank-transaction-amount.is-outbound,.bank-recon .bank-transaction-amount.is-inbound{color:var(--b-ink)}
+.bank-recon .bank-status{display:inline-flex;align-items:center;justify-content:center;min-width:55px;height:auto;padding:2px 6px;border-radius:4px;background:var(--b-surface);color:var(--b-muted);font:700 9px Tajawal,Inter,system-ui,sans-serif;white-space:nowrap}
+.bank-recon .bank-status--reconciled{background:var(--b-primary-soft);color:var(--b-primary)}
+.bank-recon .bank-status--matched{background:#faf6e8;color:var(--b-gold)}
+.bank-recon .bank-transaction-status{justify-self:start}
+.bank-recon .bank-transaction-primary-action{justify-content:flex-start}
+.bank-recon .bank-transaction-primary-action .mantine-Button-root{min-width:0;min-height:0;height:24px;padding:0 10px;border-radius:4px;font:700 11px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--b-muted);font-size:12px}
+.bank-recon__pagination>div{display:flex;gap:4px;direction:ltr}
+.bank-recon__pagination button{display:grid;place-items:center;min-width:24px;height:24px;padding:0 4px;border:1px solid var(--b-border);border-radius:4px;background:#fff;color:var(--b-ink);font:400 11px Inter,Tajawal,sans-serif;cursor:pointer}
+.bank-recon__pagination button.is-active{border-color:var(--b-primary);background:var(--b-primary-soft);color:var(--b-primary);font-weight:700}
+.bank-recon__pagination button:disabled{opacity:.5;cursor:default}
+
+/* Reconciliation: selected transaction details (Figma bottom-details-bar) */
+.bank-recon .bank-transactions-workspace>.shared-detail-pane{position:static;width:auto;max-width:none;display:flex;flex-direction:column;gap:16px;padding:16px;border:1px solid var(--b-border);border-radius:12px;background:#fff;box-shadow:none}
+.bank-recon .shared-detail-pane__header{align-items:center;padding:0;border:0}
+.bank-recon__detail-title{display:flex;align-items:center;gap:6px}.bank-recon__detail-title h3{margin:0;color:var(--b-ink);font:800 14px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__detail-icon{display:grid;place-items:center;width:16px;height:16px;color:var(--b-primary)}.bank-recon__detail-icon svg{width:16px;height:16px}
+.bank-recon .bank-transaction-detail__header .mantine-Button-root{height:24px;padding:0 8px;color:var(--b-muted);font-size:1.1rem}
+.bank-recon__detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:start}
+.bank-recon__panel{display:flex;flex-direction:column;gap:12px;min-width:0;padding:12px;border-radius:8px;background:var(--b-surface)}
+.bank-recon__panel h4{margin:0;color:var(--b-muted);font:700 13px Tajawal,Inter,system-ui,sans-serif}
+.bank-recon__panel dl{display:flex;flex-direction:column;gap:0;margin:0}
+.bank-recon .bank-recon__panel dl{display:grid;grid-template-columns:minmax(90px,.5fr) minmax(0,1fr);gap:0 12px}
+.bank-recon__panel dt,.bank-recon__panel dd{padding-block:6px;border-bottom:1px solid #e2e8f0;font-size:13px}
+.bank-recon__panel dt{color:var(--b-muted)}.bank-recon__panel dd{margin:0;color:var(--b-ink);text-align:end;overflow-wrap:anywhere}
+.bank-recon__panel dt:nth-last-of-type(1),.bank-recon__panel dd:last-of-type{border-bottom:0}
+.bank-recon__panel .shared-detail-pane__actions{margin:0}
+
+[dir=rtl] .bank-recon .bank-transaction-row[aria-selected=true]{box-shadow:inset 0 0 0 1px var(--b-primary)}
+
+@media(max-width:74em){.bank-recon .bank-transaction-head,.bank-recon .bank-transaction-main,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-head,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-main{grid-template-columns:90px minmax(0,1fr) 110px 96px 90px;gap:8px}}
+@media(max-width:58em){
+  .banking-approved__header>div{flex-direction:column;align-items:flex-start;gap:4px}
+  .banking-approved .banking-core--accounts form .mantine-Group-root{grid-template-columns:1fr 1fr}
+  .bank-recon__status{flex-direction:column;align-items:stretch}.bank-recon .bank-transactions-view__summary.bank-recon__metrics{flex-wrap:wrap}
+  .bank-recon__detail-grid{grid-template-columns:1fr;gap:12px}
+  .bank-recon .bank-transaction-head{display:none}
+  .bank-recon .bank-transaction-main,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-main{grid-template-columns:90px minmax(0,1fr) 120px;grid-template-areas:"date description amount" "status description action";align-items:start}
+  .bank-recon .bank-transaction-description p{white-space:normal}
+}
+@media(max-width:38em){
+  .banking-approved .banking-core--accounts form .mantine-Group-root{grid-template-columns:1fr}
+  .bank-recon .bank-transaction-main,.bank-recon .bank-transactions-workspace.has-detail .bank-transaction-main{grid-template-columns:1fr auto;grid-template-areas:"description amount" "date status" "action action"}
+  .bank-recon__toolbar .shared-workspace-toolbar__filters{display:grid;grid-template-columns:1fr}.bank-recon__toolbar label{justify-content:space-between}.bank-recon__toolbar input[type=number],.bank-recon__toolbar input[type=date]{width:60%}
+  .bank-recon__pagination{flex-direction:column;align-items:flex-start}
+  .banking-approved .banking-core--accounts thead th:nth-child(n+2),.banking-approved .banking-core--accounts tbody td:nth-child(n+2){width:auto}
+}
