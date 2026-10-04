@@ -45,7 +45,7 @@ describe('Fixed Assets draft editing',()=>{
   const fetchMock=mockApi();render(<FixedAssets {...props}/>);await openDetails();fireEvent.click(screen.getByRole('button',{name:'Edit'}));
   expect(screen.getByLabelText('Asset name')).toHaveValue('Laptop');expect(screen.getByLabelText('Acquisition cost')).not.toHaveAttribute('readonly');expect(screen.getByLabelText('Acquisition date')).not.toHaveAttribute('readonly');
   fireEvent.change(screen.getByLabelText('Asset name'),{target:{value:'Updated laptop'}});fireEvent.change(screen.getByLabelText('Acquisition cost'),{target:{value:'1200.00'}});fireEvent.change(screen.getByLabelText('Acquisition date'),{target:{value:'2026-08-05'}});fireEvent.click(screen.getByRole('button',{name:'Save'}));
-  await waitFor(()=>expect(screen.queryByRole('button',{name:'Save'})).not.toBeInTheDocument());expect(screen.getByRole('heading',{name:/Updated laptop/})).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'Asset details'})).getByText('1200.00')).toBeInTheDocument();
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'Save'})).not.toBeInTheDocument());expect(screen.getByRole('heading',{name:/Updated laptop/})).toBeInTheDocument();expect(within(screen.getByRole('complementary',{name:'Asset details'})).getAllByText('1,200.00')[0]).toBeInTheDocument();
   const patch=fetchMock.mock.calls.find(([,init])=>init?.method==='PATCH');expect(patch?.[0]).toBe('/api/assets/asset-1');expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({name:'Updated laptop',acquisition_cost:'1200.00',acquisition_date:'2026-08-05'});
   expect(fetchMock.mock.calls.filter(([url])=>url==='/api/assets')).toHaveLength(2);
  });
