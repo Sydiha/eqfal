@@ -46,3 +46,52 @@
     padding-block-end: 20px;
   }
 }
+
+/* Figma sidebar parity: soft-green active item, muted inactive items, footer line. */
+.app-shell--v2 .eqfal-nav-link {
+  min-height: 0;
+  padding: 9px 12px;
+  border-radius: 7px;
+  color: #7a95b8;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-shell--v2 .eqfal-nav-link[data-active] {
+  color: var(--brand-teal);
+  font-weight: 700;
+  border: 0;
+  background: rgba(0, 184, 148, .1) !important;
+  box-shadow: inset 3px 0 var(--brand-teal);
+}
+
+.app-shell--v2 .eqfal-nav-link[data-active] .nav-icon {
+  color: var(--brand-teal);
+  background: transparent;
+}
+
+.app-shell--v2 .nav-icon {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+}
+
+.app-shell--v2 .nav-icon .shell-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.eqfal-nav-group__label {
+  color: #5d738d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sidebar-compliance-footer {
+  margin-top: auto;
+  padding: 14px 4px 4px;
+  border-top: 1px solid #193554;
+  color: #3d5a7a;
+  font-size: 10px;
+  text-align: center;
+}

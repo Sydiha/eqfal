@@ -78,7 +78,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     <MantineAppShell
       className="app-shell app-shell--v2"
       header={{ height: 54 }}
-      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
+      navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !menuOpen } }}
       layout="alt"
       padding={0}
     >
@@ -138,6 +138,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
           {navGroup(groupLabels.accounting, <>{canShowNavigationPage('accounting', capabilities)&&nav('accounting')}{canShowNavigationPage('annualClosing', capabilities)&&nav('annualClosing')}{canShowNavigationPage('openingBalances', capabilities)&&nav('openingBalances')}{canShowNavigationPage('periodicAdjustments', capabilities)&&nav('periodicAdjustments')}{canShowNavigationPage('assets', capabilities)&&nav('assets')}{canShowNavigationPage('vat', capabilities)&&nav('vat')}{canShowNavigationPage('monthlyClose', capabilities)&&nav('monthlyClose')}{canShowNavigationPage('fiscalYears', capabilities)&&nav('fiscalYears')}</>)}
           {navGroup(groupLabels.administration, <>{canShowNavigationPage('partners', capabilities)&&nav('partners')}{canShowNavigationPage('companyProfile', capabilities)&&nav('companyProfile')}</>)}
         </Stack>
+        <Text className="sidebar-compliance-footer">{i18n.language === 'ar' ? 'EQFAL — نظام إدارة الإقفال المالي' : 'EQFAL — Financial Close Management'}</Text>
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main className="eqfal-workspace">
