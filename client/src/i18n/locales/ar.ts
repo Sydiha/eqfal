@@ -55,6 +55,9 @@ const ar = {
     name: 'الاسم', start: 'تاريخ البداية', end: 'تاريخ النهاية', status: 'الحالة', actions: 'الإجراءات',
     open: 'مفتوحة', closed: 'مقفلة', edit: 'تعديل', close: 'إقفال', closeTitle: 'إقفال السنة المالية',
     closeConfirmation: 'هل تريد إقفال {{name}}؟ وفق الوظائف المتاحة حاليًا، لا يمكن تعديل السنة المالية المقفلة.', reason: 'السبب (اختياري)', confirmClose: 'تأكيد الإقفال',
+    summary: 'ملخص السنوات المالية', totalCount: 'عدد السنوات المالية', openCount: 'السنوات المفتوحة', closedCount: 'السنوات المقفلة',
+    register: 'سجل السنوات المالية', registerMeta_zero: '0 سنوات مالية', registerMeta_one: 'سنة مالية واحدة', registerMeta_two: 'سنتان ماليتان', registerMeta_few: '{{count}} سنوات مالية', registerMeta_many: '{{count}} سنة مالية', registerMeta_other: '{{count}} سنة مالية',
+    fiscalYear: 'السنة المالية', emptyTitle: 'لا توجد سنوات مالية', saving: 'جارٍ الحفظ…',
   },
   documents: {
     title: 'المستندات',
