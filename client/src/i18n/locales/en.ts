@@ -58,7 +58,7 @@ const en = {
   },
   documents: {
     title: 'Documents',
-    v3: { previewTitle: 'Document preview', availableCount: '{{value}} documents available for review', filter: 'Filter', foldersStatus: 'Folders and processing status', allDocuments: 'All documents', bucketIssues: 'Incomplete / rejected', folders: 'Folders', colSelect: 'Select', colNumber: 'Document no.', colParty: 'Party', colDate: 'Date', colTotal: 'Total', colType: 'Type', colStatus: 'Status', pageRange: 'Showing {{shown}} of {{total}} documents', prevPage: 'Previous page', nextPage: 'Next page', missingTitle: 'Missing data', missingItem: 'Please complete: {{field}}' },
+    v3: { close: 'Close preview', zoomIn: 'Zoom in', zoomOut: 'Zoom out', download: 'Download document', updatedAt: 'Last updated: {{value}}', previewTitle: 'Document preview', availableCount: '{{value}} documents available for review', filter: 'Filter', foldersStatus: 'Folders and processing status', allDocuments: 'All documents', bucketIssues: 'Incomplete / rejected', folders: 'Folders', colSelect: 'Select', colNumber: 'Document no.', colParty: 'Party', colDate: 'Date', colTotal: 'Total', colType: 'Type', colStatus: 'Status', pageRange: 'Showing {{shown}} of {{total}} documents', prevPage: 'Previous page', nextPage: 'Next page', missingTitle: 'Missing data', missingItem: 'Please complete: {{field}}' },
     workspace: 'Document workspace', list: 'Document list', workflow: 'Workflow actions', uploadTitle: 'Upload document', accepted: 'PDF, JPEG, PNG, or WebP · Maximum 10 MB', reasonRequired: 'A reason is required.', approvalNote: 'Note (optional)',
     description: 'Upload and access documents for the active company.',
     chooseFile: 'Choose document',

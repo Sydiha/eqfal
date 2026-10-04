@@ -85,3 +85,8 @@
 .documents-approved .documents-approved__table th{padding:9px 4px;background:#f8fafc;color:var(--d-muted);font:700 10px Tajawal,Inter,sans-serif;letter-spacing:0;text-transform:none}
 .documents-approved__table tr>:first-child{padding-inline-start:10px}.documents-approved__table tr>:last-child{padding-inline-end:10px}
 .documents-approved__table .c-number{width:106px}.documents-approved__table .c-status{width:106px}
+.documents-approved__head-actions{display:flex;align-items:center;gap:4px}.documents-approved .documents-approved__head-actions button.documents-approved__open{padding:0;border:0;cursor:pointer}
+.documents-approved__viewer{overflow:auto;place-items:start center}.documents-approved__viewer-inner{min-width:100%;min-height:100%;display:grid;place-items:center}
+.documents-approved__zoom{display:inline-flex;align-items:center;gap:6px}.documents-approved__zoom button,.documents-approved__viewer-bar a{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--d-muted);cursor:pointer}.documents-approved__zoom button:disabled{opacity:.4;cursor:default}
+.documents-approved__viewer-bar{justify-content:flex-start}.documents-approved__viewer-bar>:nth-child(3){margin-inline-start:auto}
+.documents-approved__footer{padding:10px 4px 0;color:var(--d-muted);font-size:11px}

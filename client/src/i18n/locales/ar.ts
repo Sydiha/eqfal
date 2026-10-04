@@ -58,7 +58,7 @@ const ar = {
   },
   documents: {
     title: 'المستندات',
-    v3: { previewTitle: 'معاينة المستند', availableCount: '{{value}} مستند متاح للفحص', filter: 'تصفية', foldersStatus: 'المجلدات وحالة المعالجة', allDocuments: 'جميع المستندات', bucketIssues: 'ناقص / مرفوض', folders: 'المجلدات', colSelect: 'تحديد', colNumber: 'رقم المستند', colParty: 'الطرف', colDate: 'التاريخ', colTotal: 'المجموع', colType: 'النوع', colStatus: 'الحالة', pageRange: 'عرض {{shown}} من {{total}} مستند', prevPage: 'الصفحة السابقة', nextPage: 'الصفحة التالية', missingTitle: 'بيانات ناقصة', missingItem: 'يرجى استكمال: {{field}}' },
+    v3: { close: 'إغلاق المعاينة', zoomIn: 'تكبير', zoomOut: 'تصغير', download: 'تنزيل المستند', updatedAt: 'آخر تحديث: {{value}}', previewTitle: 'معاينة المستند', availableCount: '{{value}} مستند متاح للفحص', filter: 'تصفية', foldersStatus: 'المجلدات وحالة المعالجة', allDocuments: 'جميع المستندات', bucketIssues: 'ناقص / مرفوض', folders: 'المجلدات', colSelect: 'تحديد', colNumber: 'رقم المستند', colParty: 'الطرف', colDate: 'التاريخ', colTotal: 'المجموع', colType: 'النوع', colStatus: 'الحالة', pageRange: 'عرض {{shown}} من {{total}} مستند', prevPage: 'الصفحة السابقة', nextPage: 'الصفحة التالية', missingTitle: 'بيانات ناقصة', missingItem: 'يرجى استكمال: {{field}}' },
     workspace: 'مساحة عمل المستندات', list: 'قائمة المستندات', workflow: 'إجراءات سير العمل', uploadTitle: 'رفع مستند', accepted: 'PDF أو JPEG أو PNG أو WebP · الحد الأقصى 10 ميجابايت', reasonRequired: 'السبب مطلوب.', approvalNote: 'ملاحظة (اختيارية)',
     description: 'رفع مستندات الشركة النشطة والوصول إليها بأمان.',
     chooseFile: 'اختيار مستند',
