@@ -7,6 +7,7 @@ import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
+import { DateContextProvider } from './context/DateContext';
 
 type Period = {
   id: string;
@@ -223,7 +224,8 @@ function AppContent() {
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
   if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><h1>{t('app.title')}</h1><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
-  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
+  const companyId = session.activeCompanyId || '';
+  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><DateContextProvider companyId={companyId}><AuthenticatedShell/></DateContextProvider></CompanyProvider>;
 }
 
 export default function App() {
