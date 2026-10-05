@@ -15,7 +15,8 @@ export type NavigationPage =
   | 'purchases'
   | 'assets'
   | 'companyProfile'
-  | 'access';
+  | 'access'
+  | 'companies';
 
 const has = (capabilities: readonly string[], capability: string) => capabilities.includes(capability);
 
@@ -52,6 +53,8 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
       return has(capabilities, 'fiscal_year.view');
     case 'access':
       return has(capabilities, 'access.view');
+    case 'companies':
+      return has(capabilities, 'company.view');
     case 'companyProfile':
       return has(capabilities, 'company_accounting_profile.view');
   }

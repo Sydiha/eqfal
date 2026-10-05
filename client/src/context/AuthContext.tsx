@@ -31,6 +31,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchCompany: (companyId: string) => Promise<boolean>;
+  refreshSession: () => Promise<void>;
   handleUnauthorized: () => void;
 }
 
@@ -109,8 +110,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
+  const refreshSession = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+      if (response.status === 401) { setSession(null); return; }
+      const next = await parseSession(response);
+      if (next) setSession(next);
+    } catch {
+      // keep the current session; the next request surfaces any real failure
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ loading, session, login, logout, switchCompany, handleUnauthorized }}>
+    <AuthContext.Provider value={{ loading, session, login, logout, switchCompany, refreshSession, handleUnauthorized }}>
       {children}
     </AuthContext.Provider>
   );
