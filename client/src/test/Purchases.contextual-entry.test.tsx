@@ -1,4 +1,5 @@
-import {fireEvent,render,screen} from '@testing-library/react';
+import {fireEvent,screen} from './test-utils';
+import {render} from './test-utils';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Purchases} from '../components/Purchases';
 import i18n from '../i18n';

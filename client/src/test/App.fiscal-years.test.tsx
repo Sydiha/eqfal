@@ -12,8 +12,8 @@ beforeEach(async () => { await i18n.changeLanguage('en'); vi.restoreAllMocks(); 
 describe('Fiscal year shell integration', () => {
   it('clears company data and refetches after a company switch', async () => {
     let activeCompanyId = 'co-a';
-    let fiscalRequestCount = 0;
-    let resolveBeta!: (response: Response) => void;
+    let betaRequestCount = 0;
+    const pendingBeta: Array<(response: Response) => void> = [];
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/auth/session') return Promise.resolve(new Response(JSON.stringify(session(activeCompanyId)), { status: 200 }));
@@ -23,9 +23,10 @@ describe('Fiscal year shell integration', () => {
         return Promise.resolve(new Response(JSON.stringify(session(activeCompanyId)), { status: 200 }));
       }
       if (url === '/api/fiscal-years') {
-        fiscalRequestCount += 1;
-        if (fiscalRequestCount === 1) return Promise.resolve(new Response(JSON.stringify({ fiscalYears: [{ id: 'a', name: 'Alpha FY', start_date: '2026-01-01', end_date: '2026-12-31', status: 'open' }] }), { status: 200 }));
-        return new Promise<Response>(resolve => { resolveBeta = resolve; });
+        // DateContext and the Fiscal Years page both request fiscal years, so key the response by company, not request count.
+        if (activeCompanyId === 'co-a') return Promise.resolve(new Response(JSON.stringify({ fiscalYears: [{ id: 'a', name: 'Alpha FY', start_date: '2026-01-01', end_date: '2026-12-31', status: 'open' }] }), { status: 200 }));
+        betaRequestCount += 1;
+        return new Promise<Response>(resolve => { pendingBeta.push(resolve); });
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
@@ -36,9 +37,9 @@ describe('Fiscal year shell integration', () => {
     fireEvent.change(screen.getByLabelText('Switch active company'), { target: { value: 'co-b' } });
     await waitFor(() => expect(screen.queryByText('Alpha FY')).not.toBeInTheDocument());
     expect(screen.getByRole('status')).toHaveTextContent(/Switching company|Loading fiscal years/);
-    resolveBeta(new Response(JSON.stringify({ fiscalYears: [{ id: 'b', name: 'Beta FY', start_date: '2026-01-01', end_date: '2026-12-31', status: 'open' }] }), { status: 200 }));
+    pendingBeta.forEach(resolve => resolve(new Response(JSON.stringify({ fiscalYears: [{ id: 'b', name: 'Beta FY', start_date: '2026-01-01', end_date: '2026-12-31', status: 'open' }] }), { status: 200 })));
     expect(await screen.findByText('Beta FY')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.filter(call => call[0] === '/api/fiscal-years')).toHaveLength(2);
+    expect(betaRequestCount).toBeGreaterThanOrEqual(1);
   });
 
   it('returns to login when an application request receives 401', async () => {

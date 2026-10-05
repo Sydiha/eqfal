@@ -1,22 +1,11 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton } from '@mantine/core';
+import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
 import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
-
-type Period = {
-  id: string;
-  fiscal_year_id: string;
-  period_start: string;
-  period_end: string;
-  status: "open" | "closed";
-  ready: boolean;
-  disclosed_total: number;
-  has_hidden_blockers: boolean;
-  blockers: Record<string, number>;
-};
+import { useDateContext } from '../context/DateContext';
 import { IconHome, IconSales, IconPurchases, IconDocuments, IconBanks, IconObligations, IconAccounting, IconOpeningBalances, IconPeriodicAdjustments, IconFixedAssets, IconVAT, IconMonthlyClose, IconAnnualClose, IconFiscalYears, IconPartners, IconCompanyProfile } from './EqfalIcons';
 import '../mobile.css';
 import '../visual-polish.css';
@@ -54,12 +43,11 @@ function ShellIcon({ name }: { name: IconName }) {
 
 const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile' };
 
-export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children, periods = [], selectedPeriodId = null, onPeriodChange }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode; periods?: Period[]; selectedPeriodId?: string | null; onPeriodChange?: (id: string) => void }) {
+export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
-  const [showPeriodMenu, setShowPeriodMenu] = useState(false);
+  const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
   useEffect(close, [page, close]);
-  useEffect(() => setShowPeriodMenu(false), [page]);
   const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
@@ -83,9 +71,6 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   );
 
   const isAr = i18n.language === 'ar';
-  const selected = selectedPeriodId ? periods.find(p => p.id === selectedPeriodId) : periods[0];
-  const displayDate = selected ? new Date(selected.period_start) : new Date();
-  const periodLabel = displayDate.toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory' : 'en-US', { month: 'long', year: 'numeric' });
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
   const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
   const groupLabels = i18n.language === 'ar'
@@ -115,67 +100,53 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
               </button>
             )}
             <span className="topbar-company-group"><CompanySwitcher onSwitch={onSwitch} /></span>
-            <Box className="topbar-period-container" style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className="topbar-chip topbar-chip--period"
-                title={isAr ? 'الفترة الحالية' : 'Current period'}
-                onClick={() => periods.length > 0 && setShowPeriodMenu(!showPeriodMenu)}
-                style={{ cursor: periods.length > 0 ? 'pointer' : 'default', border: 'none', background: 'inherit', color: 'inherit', padding: 'inherit' }}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                {periodLabel}
-              </button>
-              {showPeriodMenu && periods.length > 0 && (
-                <div
-                  className="topbar-period-menu"
-                  role="listbox"
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    [isAr ? 'right' : 'left']: 0,
-                    background: 'white',
-                    border: '1px solid #e0e0e0',
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    zIndex: 1000,
-                    minWidth: '200px',
-                    maxHeight: '300px',
-                    overflowY: 'auto'
-                  }}
-                >
-                  {periods.map((period) => {
-                    const start = new Date(period.period_start);
-                    const label = start.toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory' : 'en-US', { month: 'long', year: 'numeric' });
-                    return (
-                      <button
-                        key={period.id}
-                        className={`topbar-period-menu-item ${period.id === selectedPeriodId ? 'is-selected' : ''}`}
-                        onClick={() => {
-                          onPeriodChange?.(period.id);
-                          setShowPeriodMenu(false);
-                        }}
-                        role="option"
-                        aria-selected={period.id === selectedPeriodId}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          padding: '8px 12px',
-                          textAlign: isAr ? 'right' : 'left',
-                          border: 'none',
-                          background: period.id === selectedPeriodId ? '#f0f0f0' : 'white',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: period.id === selectedPeriodId ? 600 : 400
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </Box>
+
+            {/* Fiscal Year Selector */}
+            {availableFiscalYears && availableFiscalYears.length > 0 && (
+              <Select
+                aria-label={isAr ? 'السنة المالية' : 'Fiscal Year'}
+                value={selectedFiscalYearId || ''}
+                onChange={(value) => value && onSelectFiscalYear(value)}
+                data={availableFiscalYears.map(fy => ({
+                  value: fy.id,
+                  label: fy.name
+                }))}
+                placeholder={isAr ? 'اختر السنة' : 'Select Year'}
+                searchable
+                clearable={false}
+                size="xs"
+                className="topbar-select-wrap"
+                classNames={{ input: 'topbar-select' }}
+              />
+            )}
+
+            {/* Period Selector */}
+            {availablePeriodsForSelectedYear && availablePeriodsForSelectedYear.length > 0 && (
+              <Select
+                aria-label={isAr ? 'الفترة' : 'Period'}
+                value={periodMode === 'all' ? 'all' : (selectedPeriodId || '')}
+                onChange={(value) => {
+                  if (value === 'all') {
+                    onSelectPeriod('', 'all');
+                  } else if (value) {
+                    onSelectPeriod(value, 'specific');
+                  }
+                }}
+                data={[
+                  { value: 'all', label: isAr ? 'السنة كاملة' : 'All Periods in Year' },
+                  ...availablePeriodsForSelectedYear.map(period => ({
+                    value: period.id,
+                    label: `${new Date(period.period_start).toLocaleDateString(isAr ? 'ar-u-ca-gregory-nu-latn' : 'en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })}`
+                  }))
+                ]}
+                placeholder={isAr ? 'اختر الفترة' : 'Select Month'}
+                searchable
+                clearable={false}
+                size="xs"
+                className="topbar-select-wrap"
+                classNames={{ input: 'topbar-select' }}
+              />
+            )}
           </Group>
           <Box className="topbar-spacer" />
           <Group gap={10} wrap="nowrap" className="topbar-user-group">

@@ -1,4 +1,5 @@
-import{act,fireEvent,render,screen,waitFor,within}from'@testing-library/react';
+import{act,fireEvent,screen,waitFor,within}from'./test-utils';
+import{render}from'./test-utils';
 import{afterEach,beforeEach,describe,expect,it,vi}from'vitest';
 import{Sales}from'../components/Sales';
 import i18n from'../i18n';

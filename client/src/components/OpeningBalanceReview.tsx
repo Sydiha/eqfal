@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { readQueryParameter } from '../navigation/queryState';
 import { WorkspacePage, WorkspaceState } from './SharedUI';
+import { useDateContext } from '../context/DateContext';
 import './OpeningBalanceReview.css';
 
 type FiscalYear={id:string;name:string;start_date:string;end_date:string;status:'open'|'closed'};
@@ -23,12 +24,13 @@ const sources=Object.keys(en.sources) as Array<keyof typeof en.sources>;
 
 export function OpeningBalanceReview({canView,canCreate,canDelete,canSubmit,canReview,canApprove,onUnauthorized}:Props){
  const {i18n}=useTranslation();const l=i18n.language==='ar'?ar:en;
+ const { selectedFiscalYearId } = useDateContext();
  const [years,setYears]=useState<FiscalYear[]>([]);const [yearId,setYearId]=useState('');const [accounts,setAccounts]=useState<Account[]>([]);const [review,setReview]=useState<Review|null>(null);const [items,setItems]=useState<Item[]>([]);const [summary,setSummary]=useState<Summary>({debit:'0.00',credit:'0.00',difference:'0.00',confidence:{high:0,medium:0,low:0}});const [suggestions,setSuggestions]=useState<Suggestion[]>([]);const [loading,setLoading]=useState(canView);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);const [returnReason,setReturnReason]=useState('');
  const activeAccounts=useMemo(()=>accounts.filter(x=>x.is_active),[accounts]);
- const loadBase=async()=>{setLoading(true);setError(null);try{const [fyRes,accRes]=await Promise.all([api('/api/fiscal-years',{},onUnauthorized),api('/api/accounts',{},onUnauthorized)]);const fy=(await fyRes.json()) as {fiscalYears:FiscalYear[]};const acc=(await accRes.json()) as {accounts:Account[]};const requestedYear=readQueryParameter('fiscalYear');setYears(fy.fiscalYears);setAccounts(acc.accounts);setYearId(current=>current||(requestedYear&&fy.fiscalYears.some(x=>x.id===requestedYear)?requestedYear:'')||fy.fiscalYears.find(x=>x.status==='open')?.id||fy.fiscalYears[0]?.id||'')}catch(e){if(!(e instanceof ApiError&&e.status===401))setError(e instanceof Error?e.message:l.error)}finally{setLoading(false)}};
+ const loadBase=async()=>{setLoading(true);setError(null);try{const [fyRes,accRes]=await Promise.all([api('/api/fiscal-years',{},onUnauthorized),api('/api/accounts',{},onUnauthorized)]);const fy=(await fyRes.json()) as {fiscalYears:FiscalYear[]};const acc=(await accRes.json()) as {accounts:Account[]};const requestedYear=readQueryParameter('fiscalYear');setYears(fy.fiscalYears);setAccounts(acc.accounts);setYearId(current=>current||(requestedYear&&fy.fiscalYears.some(x=>x.id===requestedYear)?requestedYear:'')||selectedFiscalYearId||fy.fiscalYears.find(x=>x.status==='open')?.id||fy.fiscalYears[0]?.id||'')}catch(e){if(!(e instanceof ApiError&&e.status===401))setError(e instanceof Error?e.message:l.error)}finally{setLoading(false)}};
  const loadYear=async(id:string)=>{if(!id)return;setLoading(true);setError(null);try{const [r,s]=await Promise.all([api(`/api/opening-balances/${id}`,{},onUnauthorized),api(`/api/opening-balances/${id}/suggestions`,{},onUnauthorized)]);const body=await r.json() as {review:Review|null;items:Item[];summary:Summary};const sug=await s.json() as {suggestions:Suggestion[]};setReview(body.review);setItems(body.items);setSummary(body.summary);setSuggestions(sug.suggestions);if(body.review?.status!=='in_review')setReturnReason('')}catch(e){if(!(e instanceof ApiError&&e.status===401))setError(e instanceof Error?e.message:l.error)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void loadBase();// eslint-disable-next-line react-hooks/exhaustive-deps
- },[canView]);
+ },[canView, selectedFiscalYearId]);
  useEffect(()=>{if(yearId)void loadYear(yearId);// eslint-disable-next-line react-hooks/exhaustive-deps
  },[yearId]);
  if(!canView)return <WorkspacePage><WorkspaceState>{l.noAccess}</WorkspaceState></WorkspacePage>;

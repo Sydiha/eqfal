@@ -4,6 +4,7 @@ import { formatDisplayDate } from '../date-format';
 import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 import { Dialog } from './Dialog';
 import { WorkspacePage, WorkspaceState } from './SharedUI';
+import { useDateContext } from '../context/DateContext';
 import './MonthlyClose.css';
 
 type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number};
@@ -27,8 +28,9 @@ const IcKey=()=><Ic><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3
 const IcCalendar=()=><Ic><path d="M8 2v4M16 2v4M3 10h18"/><rect width="18" height="18" x="3" y="4" rx="2"/></Ic>;
 const IcBook=()=><Ic><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></Ic>;
 
-export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId}:Props){
+export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId: _unused}:Props){
  const {t,i18n}=useTranslation();
+ const { selectedPeriodId, periodMode } = useDateContext();
  const [periods,setPeriods]=useState<Period[]>([]),[years,setYears]=useState<FiscalYear[]>([]);
  const [selectedId,setSelectedId]=useState<string|null>(null),[yearFilter,setYearFilter]=useState('');
  const [loading,setLoading]=useState(canView),[error,setError]=useState(false),[creating,setCreating]=useState(false),[reopen,setReopen]=useState<Period|null>(null),[saving,setSaving]=useState(false);
@@ -37,6 +39,7 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
  },[canView]);
  useEffect(()=>{if(selectedPeriodId&&periods.length>0){const globalPeriod=periods.find(p=>p.id===selectedPeriodId);if(globalPeriod&&selectedId!==globalPeriod.id){selectPeriod(globalPeriod.id);}}},[selectedPeriodId,periods]);
  if(!canView)return <WorkspacePage><WorkspaceState>{t('monthlyClose.noAccess')}</WorkspaceState></WorkspacePage>;
+ if(periodMode==='all')return <WorkspacePage><WorkspaceState>{t('monthlyClose.selectSpecificPeriod')}</WorkspaceState></WorkspacePage>;
  const availablePeriods=yearFilter?periods.filter(period=>period.fiscal_year_id===yearFilter):periods,selected=periods.find(period=>period.id===selectedId)??null;
  const selectPeriod=(id:string)=>{setSelectedId(id);writeQueryParameters({closePeriod:id});};
  const selectYear=(value:string)=>{const next=(value?periods.find(period=>period.fiscal_year_id===value):periods[0])?.id??null;setYearFilter(value);setSelectedId(next);writeQueryParameters({closeYear:value||null,closePeriod:next});};

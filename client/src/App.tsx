@@ -7,6 +7,7 @@ import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth } from './context/AuthContext';
+import { DateContextProvider } from './context/DateContext';
 
 type Period = {
   id: string;
@@ -176,7 +177,7 @@ function AuthenticatedShell() {
   const editSalesEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' });
   const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
   const handlePeriodChange = (id: string) => { setSelectedPeriodId(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout} periods={periods} selectedPeriodId={selectedPeriodId} onPeriodChange={handlePeriodChange}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
+  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
 }
 
 function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
@@ -223,7 +224,8 @@ function AppContent() {
   const companies = useMemo(() => (session?.allowedCompanies ?? []).map(company => ({ id: company.id, name: isRtl && company.name_ar ? company.name_ar : company.name })), [session?.allowedCompanies, isRtl]);
   if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><h1>{t('app.title')}</h1><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
-  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><AuthenticatedShell/></CompanyProvider>;
+  const companyId = session.activeCompanyId || '';
+  return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><DateContextProvider companyId={companyId}><AuthenticatedShell/></DateContextProvider></CompanyProvider>;
 }
 
 export default function App() {
