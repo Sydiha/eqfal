@@ -65,7 +65,8 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
       setIsLoading(true);
       const response = await fetch('/api/fiscal-years');
       if (!response.ok) throw new Error('Failed to load fiscal years');
-      const years = await response.json();
+      const data = await response.json();
+      const years = Array.isArray(data) ? data : data.fiscalYears || [];
       setAvailableFiscalYears(years);
       return years;
     } catch (err) {
@@ -83,7 +84,8 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
       setIsLoading(true);
       const response = await fetch('/api/monthly-close-periods');
       if (!response.ok) throw new Error('Failed to load periods');
-      const allPeriods = await response.json();
+      const data = await response.json();
+      const allPeriods = Array.isArray(data) ? data : data.periods || [];
       const yearPeriods = allPeriods.filter((p: Period) => p.fiscal_year_id === fiscalYearId);
       setAvailablePeriodsForSelectedYear(yearPeriods);
       return yearPeriods;

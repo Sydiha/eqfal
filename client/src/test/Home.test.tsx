@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from './test-utils';
+import { render } from './test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompanyProvider } from '../context/CompanyContext';
 import { AuthProvider } from '../context/AuthContext';
