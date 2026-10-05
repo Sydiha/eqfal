@@ -82,6 +82,28 @@ describe('AccessAdministration', () => {
     expect(JSON.parse(post.body!)).toEqual({ email: 'new@example.com' });
   });
 
+  it('creates a brand-new user with a role through the dedicated endpoint', async () => {
+    const calls = mockApi();
+    renderIt(ALL);
+    await screen.findByText('clerk@example.com');
+    fireEvent.click(screen.getByRole('button', { name: 'Create new user' }));
+    fireEvent.change(screen.getByLabelText('User email'), { target: { value: 'fresh@example.com' } });
+    fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'Passw0rd!x' } });
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('combobox'), { target: { value: 'r-clerk' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    const post = calls.find((c) => c.method === 'POST')!;
+    expect(post.url).toBe('/api/access/users');
+    expect(JSON.parse(post.body!)).toEqual({ email: 'fresh@example.com', password: 'Passw0rd!x', role_id: 'r-clerk' });
+  });
+
+  it('hides create-user without access.membership.create', async () => {
+    mockApi();
+    renderIt(['access.view']);
+    await screen.findByText('clerk@example.com');
+    expect(screen.queryByRole('button', { name: 'Create new user' })).toBeNull();
+  });
+
   it('changes role capabilities through grant/revoke endpoints and respects the ceiling', async () => {
     const calls = mockApi();
     renderIt(ALL);

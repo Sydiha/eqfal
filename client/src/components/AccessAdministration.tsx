@@ -13,7 +13,7 @@ interface Props {
 }
 type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflict';
 type Tab = 'members' | 'roles';
-type Dialogs = 'addMember' | 'createRole' | null;
+type Dialogs = 'addMember' | 'createUser' | 'createRole' | null;
 
 class ApiError extends Error { constructor(readonly status: number) { super(`Access API returned ${status}`); } }
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
@@ -102,6 +102,14 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     const email = String(new FormData(event.currentTarget).get('email') ?? '').trim();
     void mutate(() => request('/api/access/memberships', json('POST', { email }), onUnauthorized), () => setDialog(null));
   };
+  const createUser = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const body: Record<string, string> = { email: String(data.get('email') ?? '').trim(), password: String(data.get('password') ?? '') };
+    const roleId = String(data.get('role_id') ?? '');
+    if (roleId) body.role_id = roleId;
+    void mutate(() => request('/api/access/users', json('POST', body), onUnauthorized), () => setDialog(null));
+  };
   const createRole = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
@@ -119,6 +127,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   return <section className="panel acc-view" aria-labelledby="access-title">
     <header className="acc-header">
       <div><h2 id="access-title">{t('access.title')}</h2><p>{t('access.description')}</p></div>
+      {tab === 'members' && can('access.membership.create') && <button className="acc-ghost" onClick={() => { setErrorKey(null); setDialog('createUser'); }}>{t('access.createUser')}</button>}
       {tab === 'members' && can('access.membership.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('addMember'); }}>{t('access.addMember')}</button>}
       {tab === 'roles' && can('access.role.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('createRole'); }}>{t('access.createRole')}</button>}
     </header>
@@ -170,6 +179,11 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     {dialog === 'addMember' && <Dialog title={t('access.addMemberTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
       <form onSubmit={addMember} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label><small>{t('access.emailHint')}</small>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.add')}</button></div></form></Dialog>}
+    {dialog === 'createUser' && <Dialog title={t('access.createUserTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
+      <form onSubmit={createUser} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label>
+        <label>{t('access.password')}<input name="password" type="password" required minLength={8} maxLength={256} dir="ltr" autoComplete="new-password" /></label><small>{t('access.passwordHint')}</small>
+        {can('access.membership.role.assign') && <label>{t('access.role')}<select name="role_id" defaultValue=""><option value="">{t('access.noRole')}</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>}
+        <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
     {dialog === 'createRole' && <Dialog title={t('access.createRoleTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
       <form onSubmit={createRole} className="acc-form"><label>{t('access.roleName')}<input name="name" required maxLength={100} /></label>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}

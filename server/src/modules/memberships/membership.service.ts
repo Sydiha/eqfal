@@ -3,6 +3,8 @@ import { MembershipRepository } from './membership.repository';
 import { Membership, MembershipListItem, CreateMembershipInput, CreateRoleInput, Role, RoleListItem } from './membership.types';
 import logger from '../../shared/logger';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import bcrypt from 'bcrypt';
+import { UserRepository } from '../users/user.repository';
 
 /**
  * MembershipService
@@ -71,6 +73,31 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const membership = await this.repo.createMembership({ user_id: userId, company_id: companyId }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
+      return membership;
+    });
+  }
+
+  /**
+   * Create a brand-new user account and attach it to the active company in one
+   * transaction (user + membership + optional role + audit). The password is
+   * hashed with bcrypt here; the plaintext is never stored or logged.
+   * Throws pg 23505 when the email already has an account.
+   */
+  async createUserForCompany(email: string, password: string, roleId: string | null, companyId: string, actorUserId: string): Promise<Membership> {
+    const hash = await bcrypt.hash(password, 12);
+    return this.transaction(async (client) => {
+      const role = roleId ? await this.repo.findRoleById(roleId, client) : null;
+      if (roleId && (!role || role.company_id !== companyId)) throw new Error('Role not found');
+      const user = await new UserRepository(this.pool).create({ email, password: hash }, client);
+      let membership = await this.repo.createMembership({ user_id: user.id, company_id: companyId }, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.create', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { email: user.email, company_id: companyId } }, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
+      if (role) {
+        await this.assertCanAssign(membership, role, actorUserId, client);
+        const before = membership;
+        membership = await this.repo.assignRoleToMembership(membership.id, role.id, client);
+        await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.role.assign', entity_type: 'membership', entity_id: membership.id, before_data: this.membershipSnapshot(before), after_data: this.membershipSnapshot(membership) }, client);
+      }
       return membership;
     });
   }

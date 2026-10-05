@@ -51,6 +51,7 @@ const ar = {
     user: 'المستخدم', role: 'الدور', status: 'حالة العضوية', actions: 'الإجراءات', noRole: 'بدون دور',
     active: 'نشطة', inactive: 'معطّلة', userDisabled: 'حساب المستخدم معطّل',
     enable: 'تفعيل العضوية', disable: 'تعطيل العضوية', disableHint: 'تعطيل العضوية لا يعطّل حساب المستخدم ولا عضويته في الشركات الأخرى.',
+    createUser: 'إنشاء مستخدم جديد', createUserTitle: 'إنشاء مستخدم جديد وإضافته للشركة', password: 'كلمة المرور المؤقتة', passwordHint: '8 أحرف على الأقل. سلّمها للمستخدم بطريقة آمنة.',
     addMember: 'إضافة عضو', addMemberTitle: 'إضافة عضو إلى الشركة', email: 'البريد الإلكتروني للمستخدم', emailHint: 'يجب أن يكون للمستخدم حساب قائم في النظام.', add: 'إضافة',
     membersEmpty: 'لا يوجد أعضاء في هذه الشركة.', rolesEmpty: 'لا توجد أدوار في هذه الشركة.',
     createRole: 'دور جديد', createRoleTitle: 'إنشاء دور', roleName: 'اسم الدور', create: 'إنشاء',

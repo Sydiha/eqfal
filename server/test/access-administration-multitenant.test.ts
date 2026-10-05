@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 
 const mocks = vi.hoisted(() => ({
   createMembershipByEmail: vi.fn(),
+  createUserForCompany: vi.fn(),
   createMembershipForCompany: vi.fn(),
   listCapabilities: vi.fn(),
   listMemberships: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../src/db/pool', () => ({ default: { query: vi.fn(), connect: vi.fn() }
 vi.mock('../src/modules/memberships/membership.service', () => ({
   MembershipService: class {
     createMembershipByEmail = mocks.createMembershipByEmail;
+    createUserForCompany = mocks.createUserForCompany;
     createMembershipForCompany = mocks.createMembershipForCompany;
     listCapabilities = mocks.listCapabilities;
     listMemberships = mocks.listMemberships;
@@ -172,5 +174,46 @@ describe('disabled membership and permission change behavior', () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ id: 'u' }] });
     await new MembershipRepository({ query } as unknown as Pool).findUserIdByEmail('A@B.co');
     expect(query.mock.calls[0][0]).toMatch(/LOWER\(email\) = LOWER\(\$1\)/);
+  });
+});
+
+describe('new user creation (POST /access/users)', () => {
+  const postUser = (body: unknown) => request(app).post('/api/access/users').set('Origin', 'http://localhost').set('Host', 'localhost').set('Cookie', 'eqfal_session=t').send(body as object);
+  const role = '11111111-1111-4111-8111-111111111111';
+
+  it('requires access.membership.create', async () => {
+    grant(['access.view']);
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1' })).status).toBe(403);
+    expect(mocks.createUserForCompany).not.toHaveBeenCalled();
+  });
+
+  it('creates the user in the server-trusted active company and rejects company_id spoofing', async () => {
+    grant(['access.membership.create']);
+    mocks.createUserForCompany.mockResolvedValue({ id: 'm' });
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1' })).status).toBe(201);
+    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', null, 'company-a', 'user');
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1', company_id: 'company-b' })).status).toBe(400);
+    expect(mocks.createUserForCompany).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects weak passwords and bad emails', async () => {
+    grant(['access.membership.create']);
+    expect((await postUser({ email: 'n@example.com', password: 'short' })).status).toBe(400);
+    expect((await postUser({ email: 'nope', password: 'longenough1' })).status).toBe(400);
+  });
+
+  it('needs access.membership.role.assign to set a role at creation', async () => {
+    grant(['access.membership.create']);
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1', role_id: role })).status).toBe(403);
+    grant(['access.membership.create', 'access.membership.role.assign']);
+    mocks.createUserForCompany.mockResolvedValue({ id: 'm' });
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1', role_id: role })).status).toBe(201);
+    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', role, 'company-a', 'user');
+  });
+
+  it('returns 409 when the email already has an account', async () => {
+    grant(['access.membership.create']);
+    mocks.createUserForCompany.mockRejectedValue(Object.assign(new Error('dup'), { code: '23505' }));
+    expect((await postUser({ email: 'n@example.com', password: 'longenough1' })).status).toBe(409);
   });
 });

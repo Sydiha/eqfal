@@ -51,6 +51,7 @@ const en = {
     user: 'User', role: 'Role', status: 'Membership status', actions: 'Actions', noRole: 'No role',
     active: 'Active', inactive: 'Disabled', userDisabled: 'User account disabled',
     enable: 'Enable membership', disable: 'Disable membership', disableHint: 'Disabling a membership does not disable the user account or their memberships in other companies.',
+    createUser: 'Create new user', createUserTitle: 'Create a new user and add to the company', password: 'Temporary password', passwordHint: 'At least 8 characters. Share it with the user securely.',
     addMember: 'Add member', addMemberTitle: 'Add a member to the company', email: 'User email', emailHint: 'The user must already have an account in the system.', add: 'Add',
     membersEmpty: 'This company has no members.', rolesEmpty: 'This company has no roles.',
     createRole: 'New role', createRoleTitle: 'Create role', roleName: 'Role name', create: 'Create',
