@@ -127,6 +127,11 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
 
   // Initialize fiscal years and selected year on mount or companyId change
   useEffect(() => {
+    // Clear the previous company's date state before fetching the new company's data
+    setAvailableFiscalYears([]);
+    setSelectedFiscalYearId(null);
+    setAvailablePeriodsForSelectedYear([]);
+    setSelectedPeriodId(null);
     const initialize = async () => {
       try {
         const years = await loadFiscalYears();
