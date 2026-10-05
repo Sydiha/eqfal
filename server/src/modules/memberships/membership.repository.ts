@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { Membership, Role, CreateMembershipInput, CreateRoleInput } from './membership.types';
+import { Membership, MembershipListItem, Role, RoleListItem, CreateMembershipInput, CreateRoleInput } from './membership.types';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -152,20 +152,45 @@ export class MembershipRepository {
     return rows.map((r) => r.capability_id);
   }
 
-  async listMemberships(companyId: string): Promise<Membership[]> {
-    const { rows } = await this.pool.query<Membership>(
-      'SELECT * FROM memberships WHERE company_id = $1 ORDER BY created_at, id',
+  /** Memberships of one company only, with display fields for the administration UI. */
+  async listMemberships(companyId: string): Promise<MembershipListItem[]> {
+    const { rows } = await this.pool.query<MembershipListItem>(
+      `SELECT m.*, u.email AS user_email, u.is_active AS user_is_active, r.name AS role_name
+       FROM memberships m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       WHERE m.company_id = $1
+       ORDER BY m.created_at, m.id`,
       [companyId],
     );
     return rows;
   }
 
-  async listRoles(companyId: string): Promise<Role[]> {
-    const { rows } = await this.pool.query<Role>(
-      'SELECT * FROM roles WHERE company_id = $1 ORDER BY name, id',
+  /** Roles of one company only, each with its explicit capability ids. */
+  async listRoles(companyId: string): Promise<RoleListItem[]> {
+    const { rows } = await this.pool.query<RoleListItem>(
+      `SELECT r.*,
+              ARRAY(SELECT rc.capability_id FROM role_capabilities rc
+                    WHERE rc.role_id = r.id ORDER BY rc.capability_id) AS capabilities
+       FROM roles r
+       WHERE r.company_id = $1
+       ORDER BY r.name, r.id`,
       [companyId],
     );
     return rows;
+  }
+
+  async listCapabilities(): Promise<string[]> {
+    const { rows } = await this.pool.query<{ id: string }>('SELECT id FROM capabilities ORDER BY id');
+    return rows.map((row) => row.id);
+  }
+
+  async findUserIdByEmail(email: string): Promise<string | null> {
+    const { rows } = await this.pool.query<{ id: string }>(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [email],
+    );
+    return rows[0]?.id ?? null;
   }
 
   async setMembershipActive(id: string, companyId: string, active: boolean, client: PoolClient): Promise<Membership | null> {

@@ -1,0 +1,36 @@
+/* Access administration — scoped to .acc-view; logical properties keep RTL/LTR symmetric. */
+.acc-view,.panel.acc-view{--acc-ink:#1e293b;--acc-muted:#64748b;--acc-primary:#00b894;--acc-border:#e4e8ec;--acc-soft:#f8fafc;display:flex;flex-direction:column;gap:16px;max-width:none;margin:0;padding:0 0 28px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--acc-ink);font-family:"Readex Pro",Tajawal,Inter,system-ui,sans-serif;font-size:12px}
+.acc-view button,.acc-view input,.acc-view select{font-family:inherit}
+.acc-view .acc-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.acc-view .acc-header h2{margin:0;font-size:24px;font-weight:800}
+.acc-view .acc-header p,.acc-view .acc-hint{margin:4px 0 0;color:var(--acc-muted);font-size:12px}
+.acc-view .acc-primary,.acc-view .acc-ghost{height:32px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
+.acc-view .acc-primary{border:0;background:var(--acc-primary);color:#fff}
+.acc-view .acc-ghost{border:1px solid var(--acc-border);background:#fff;color:var(--acc-ink)}
+.acc-view button:disabled,.acc-view select:disabled{opacity:.5;cursor:not-allowed}
+.acc-view .acc-tabs{display:flex;gap:8px;border-bottom:1px solid var(--acc-border)}
+.acc-view .acc-tabs button{padding:8px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--acc-muted);font-weight:600;cursor:pointer}
+.acc-view .acc-tabs button.is-active{border-bottom-color:var(--acc-primary);color:var(--acc-ink)}
+.acc-view .acc-card{padding:14px 12px;border:1px solid var(--acc-border);border-radius:12px;background:#fff;min-width:0}
+.acc-view .acc-table{overflow-x:auto;border:1px solid var(--acc-border);border-radius:8px;margin-top:10px}
+.acc-view .acc-table table{width:100%;border-collapse:collapse}
+.acc-view .acc-table th{padding:12px 14px;background:var(--acc-soft);border-bottom:1px solid var(--acc-border);color:var(--acc-muted);font-size:11.5px;font-weight:500;text-align:start;white-space:nowrap}
+.acc-view .acc-table td{padding:10px 14px;border-bottom:1px solid var(--acc-border);vertical-align:middle}
+.acc-view .acc-table tr:last-child td{border-bottom:0}
+.acc-view .acc-user{font-weight:700;text-align:end}
+.acc-view .acc-user small{color:var(--acc-muted);font-weight:400}
+.acc-view .acc-empty{padding:24px;text-align:center;color:var(--acc-muted)}
+.acc-view .acc-roles{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);gap:16px;align-items:start}
+.acc-view .acc-role-list{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.acc-view .acc-role-list button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:10px 12px;border:1px solid var(--acc-border);border-radius:8px;background:#fff;text-align:start;cursor:pointer}
+.acc-view .acc-role-list button.is-active{border-color:var(--acc-primary);background:#f0fdf9}
+.acc-view .acc-role-list span{color:var(--acc-muted);font-size:11px}
+.acc-view .acc-capabilities h3{margin:0 0 6px;font-size:15px}
+.acc-view .acc-capabilities fieldset{margin:12px 0 0;padding:8px 10px;border:1px solid var(--acc-border);border-radius:8px}
+.acc-view .acc-capabilities legend{padding:0 6px;font-weight:700}
+.acc-view .acc-capabilities label{display:flex;align-items:center;gap:8px;padding:3px 0}
+.acc-form{display:flex;flex-direction:column;gap:10px}
+.acc-form label{display:flex;flex-direction:column;gap:4px}
+.acc-form small{color:#64748b}
+.acc-alert{margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#b91c1c}
+@media (max-width:700px){.acc-view .acc-roles{grid-template-columns:minmax(0,1fr)}.acc-view .acc-header{flex-direction:column}}

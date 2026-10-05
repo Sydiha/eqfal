@@ -7,6 +7,7 @@ import { MembershipService } from './membership.service';
 export const accessAdministrationRouter = Router();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CAPABILITY = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
 const asyncRoute = (handler: (req: Request, res: Response) => Promise<void>): RequestHandler =>
   (req: Request, res: Response, next: NextFunction) => void handler(req, res).catch(next);
@@ -55,14 +56,48 @@ accessAdministrationRouter.get('/access/roles', ...readGuards, asyncRoute(async 
   if (value) res.json({ roles: await value.listRoles(context(req).activeCompanyId) });
 }));
 
+accessAdministrationRouter.get('/access/capabilities', ...readGuards, asyncRoute(async (_req, res) => {
+  const value = service(res);
+  if (value) res.json({ capabilities: await value.listCapabilities() });
+}));
+
 accessAdministrationRouter.post('/access/memberships', ...writeGuards('access.membership.create'), asyncRoute(async (req, res) => {
   const value = service(res);
   if (!value) return;
-  if (!exactObject(req.body, ['user_id']) || typeof req.body.user_id !== 'string' || !UUID.test(req.body.user_id)) {
+  const body = req.body as Record<string, unknown>;
+  const byId = exactObject(body, ['user_id']) && typeof body.user_id === 'string' && UUID.test(body.user_id);
+  const email = exactObject(body, ['email']) && typeof body.email === 'string' ? body.email.trim() : '';
+  const byEmail = email.length > 0 && email.length <= 254 && EMAIL.test(email);
+  if (!byId && !byEmail) {
     res.status(400).json({ error: 'Invalid access administration request' }); return;
   }
   const ctx = context(req);
-  try { res.status(201).json(await value.createMembershipForCompany(req.body.user_id, ctx.activeCompanyId, ctx.user.id)); }
+  try {
+    const membership = byId
+      ? await value.createMembershipForCompany(body.user_id as string, ctx.activeCompanyId, ctx.user.id)
+      : await value.createMembershipByEmail(email, ctx.activeCompanyId, ctx.user.id);
+    res.status(201).json(membership);
+  }
+  catch (error) { if (!handleKnownError(error, res)) throw error; }
+}));
+
+const MIN_PASSWORD = 8;
+accessAdministrationRouter.post('/access/users', ...writeGuards('access.membership.create'), asyncRoute(async (req, res) => {
+  const value = service(res);
+  if (!value) return;
+  const body = req.body as Record<string, unknown>;
+  const email = exactObject(body, ['email', 'password', 'role_id']) && typeof body.email === 'string' ? body.email.trim() : '';
+  const password = typeof body?.password === 'string' ? body.password : '';
+  const roleId = body?.role_id === undefined || body.role_id === null || body.role_id === '' ? null : body.role_id;
+  const valid = email.length > 0 && email.length <= 254 && EMAIL.test(email)
+    && password.length >= MIN_PASSWORD && password.length <= 256
+    && (roleId === null || (typeof roleId === 'string' && UUID.test(roleId)));
+  if (!valid) { res.status(400).json({ error: 'Invalid access administration request' }); return; }
+  const ctx = context(req);
+  if (roleId !== null && !ctx.capabilities.includes('access.membership.role.assign')) {
+    res.status(403).json({ error: 'Forbidden' }); return;
+  }
+  try { res.status(201).json(await value.createUserForCompany(email, password, roleId as string | null, ctx.activeCompanyId, ctx.user.id)); }
   catch (error) { if (!handleKnownError(error, res)) throw error; }
 }));
 

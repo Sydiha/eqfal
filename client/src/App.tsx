@@ -44,6 +44,7 @@ import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
 import { FixedAssetsModule } from './components/FixedAssetsModule';
 import { CompanyAccountingProfile } from './components/CompanyAccountingProfile';
+import { AccessAdministration } from './components/AccessAdministration';
 import { OpeningBalanceReview } from './components/OpeningBalanceReview';
 import { PeriodicAdjustments } from './components/PeriodicAdjustments';
 import { AnnualClosing } from './components/AnnualClosing';
@@ -59,7 +60,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile', 'access'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -203,6 +204,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'access' && <AccessAdministration capabilities={c} currentUserId={session.user.id} onUnauthorized={handleUnauthorized}/>}
     {page === 'companyProfile' && <CompanyAccountingProfile canView={c.includes('company_accounting_profile.view')} canCreate={c.includes('company_accounting_profile.create')} canEdit={c.includes('company_accounting_profile.edit')} canSubmit={c.includes('company_accounting_profile.submit')} canReview={c.includes('company_accounting_profile.review')} canApprove={c.includes('company_accounting_profile.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'obligations' && <Obligations canView={c.includes('obligation.view')} canCreateObligation={c.includes('obligation.create')} canEditObligation={c.includes('obligation.edit')} canConfirm={c.includes('obligation.confirm')} canCancelObligation={c.includes('obligation.cancel')} canCreateSettlement={c.includes('obligation.settlement.create')} canRemoveSettlement={c.includes('obligation.settlement.remove')} canCreateCounterparty={c.includes('counterparty.create')} canEditCounterparty={c.includes('counterparty.edit')} canDisableCounterparty={c.includes('counterparty.disable')} onUnauthorized={handleUnauthorized} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={onSelectedPeriodChange} autoSelectFirst canViewPeriods={c.includes('monthly_close.view')} onPeriodsLoad={list => onPeriodsLoad(list as Period[])}/>}
     {page === 'sales' && <Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.create')} canCreate={canStartOperationalEntry} canEdit={c.includes('document.edit')} onCreateDocument={startSalesEntry} onEditDocument={editSalesEntry} onUnauthorized={handleUnauthorized}/>}

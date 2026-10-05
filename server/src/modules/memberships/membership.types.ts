@@ -42,3 +42,15 @@ export interface CreateRoleInput {
   company_id: string;
   name: string;
 }
+
+/** Membership row enriched for administration screens (read-only display fields). */
+export interface MembershipListItem extends Membership {
+  user_email: string;
+  user_is_active: boolean;
+  role_name: string | null;
+}
+
+/** Role row with its explicit capability ids (Full Access roles hold every capability implicitly). */
+export interface RoleListItem extends Role {
+  capabilities: string[];
+}

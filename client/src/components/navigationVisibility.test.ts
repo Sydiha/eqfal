@@ -26,6 +26,7 @@ describe('manager workspace navigation boundary', () => {
     expect(canShowNavigationPage('periodicAdjustments', capabilities)).toBe(false);
     expect(canShowNavigationPage('partners', capabilities)).toBe(false);
     expect(canShowNavigationPage('companyProfile', capabilities)).toBe(false);
+    expect(canShowNavigationPage('access', capabilities)).toBe(false);
   });
 
   it('shows each specialist destination only when its matching view capability is present', () => {
@@ -38,6 +39,8 @@ describe('manager workspace navigation boundary', () => {
     expect(canShowNavigationPage('periodicAdjustments', ['periodic_adjustment.view'])).toBe(true);
     expect(canShowNavigationPage('partners', ['partner.view'])).toBe(true);
     expect(canShowNavigationPage('companyProfile', ['company_accounting_profile.view'])).toBe(true);
+    expect(canShowNavigationPage('access', ['access.view'])).toBe(true);
+    expect(canShowNavigationPage('access', ['access.manage'])).toBe(false);
   });
 
   it('requires both document and obligation visibility for sales and purchases discovery', () => {
