@@ -3,6 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
 import {DataWorkspace,DetailPane,MetricStrip,PageHeader,SectionCard,StatusBadge,WorkspacePage,WorkspaceState,WorkspaceToolbar} from './SharedUI';
+import {useDateContext} from '../context/DateContext';
 import './SalesApproved.css';
 
 type Settlement={id:string;amount:string;transaction_date:string;description:string|null;bank_reference:string|null};
@@ -16,7 +17,34 @@ const readFilters=():DiscoveryFilters=>({search:readQueryParameter('salesSearch'
 
 export function Sales({canView,canManage,canCreate=false,canEdit=false,onCreateDocument,onEditDocument,onUnauthorized}:{canView:boolean;canManage:boolean;canCreate?:boolean;canEdit?:boolean;onCreateDocument?:()=>void;onEditDocument?:(documentId:string)=>void;onUnauthorized:()=>void}){
  const{t,i18n}=useTranslation();
+ const { selectedPeriodId, periodMode, availablePeriodsForSelectedYear, selectedFiscalYearId, availableFiscalYears } = useDateContext();
  const[data,setData]=useState<Sale[]|null>(null),[selectedId,setSelectedId]=useState<string|null>(null),[filters,setFilters]=useState<DiscoveryFilters>(readFilters),[error,setError]=useState(false),[page,setPage]=useState(1),[loadedAt,setLoadedAt]=useState<Date|null>(null);
+
+ // Map global period to local date range
+ useEffect(() => {
+   if (periodMode === 'all') {
+     // Use full fiscal year
+     const fiscalYear = availableFiscalYears.find(fy => fy.id === selectedFiscalYearId);
+     if (fiscalYear) {
+       setFilters(current => ({
+         ...current,
+         from: fiscalYear.start_date,
+         to: fiscalYear.end_date
+       }));
+     }
+   } else if (selectedPeriodId && periodMode === 'specific') {
+     // Use selected period
+     const period = availablePeriodsForSelectedYear.find(p => p.id === selectedPeriodId);
+     if (period) {
+       setFilters(current => ({
+         ...current,
+         from: period.period_start,
+         to: period.period_end
+       }));
+     }
+   }
+ }, [selectedPeriodId, periodMode, selectedFiscalYearId, availablePeriodsForSelectedYear, availableFiscalYears]);
+
  const load=async()=>{const response=await fetch('/api/sales');if(response.status===401){onUnauthorized();return;}if(!response.ok)throw Error();const next=(await response.json() as {sales:Sale[]}).sales;setData(next);setLoadedAt(new Date());setSelectedId(old=>old&&next.some(item=>item.id===old)?old:null)};
  useEffect(()=>{if(canView)void load().catch(()=>setError(true))},[canView]);
  useEffect(()=>{const restore=()=>setFilters(readFilters());window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);

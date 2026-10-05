@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { TaxWorkpaper } from './TaxWorkpaper';
 import { WhtReviews } from './WhtReviews';
+import { useDateContext } from '../context/DateContext';
 import './AnnualClosing.css';
 
 type FiscalYear = { id: string; name: string; start_date: string; end_date: string };
@@ -22,6 +23,7 @@ const financialStatementDomainKeys = ['monthly_close', 'ledger', 'documents', 'a
 
 export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=false, canCreatePackageSnapshot=false, canFinalizePackage=false, canHandoffPackage=false, canReviewPackage=false, canApprovePackage=false, canViewWorkpaper=false, canCreateWorkpaper=false, canEditWorkpaper=false, canCreateWorkpaperAdjustment=false, canEditWorkpaperAdjustment=false, canDeleteWorkpaperAdjustment=false, canSubmitWorkpaper=false, canReview=false, canApprove=false, canViewWht=false, canCreateWht=false, canEditWht=false, canSubmitWht=false, canReviewWht=false, onUnauthorized }: { canView: boolean; canViewPackage?:boolean; canCreatePackage?:boolean; canCreatePackageSnapshot?:boolean; canFinalizePackage?:boolean;canHandoffPackage?:boolean; canReviewPackage?:boolean; canApprovePackage?:boolean; canViewWorkpaper?: boolean; canCreateWorkpaper?:boolean; canEditWorkpaper?:boolean; canCreateWorkpaperAdjustment?:boolean; canEditWorkpaperAdjustment?:boolean; canDeleteWorkpaperAdjustment?:boolean; canSubmitWorkpaper?:boolean; canReview?: boolean; canApprove?: boolean; canViewWht?:boolean; canCreateWht?:boolean; canEditWht?:boolean; canSubmitWht?:boolean; canReviewWht?:boolean; onUnauthorized: () => void }) {
   const { t, i18n } = useTranslation();
+  const { selectedFiscalYearId } = useDateContext();
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [yearId, setYearId] = useState('');
   const [result, setResult] = useState<Result | null>(null);
@@ -40,9 +42,11 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
       if (response.status === 401) { onUnauthorized(); return; }
       if (!response.ok) throw new Error();
       const data = await response.json() as { fiscalYears: FiscalYear[] };
-      setYears(data.fiscalYears); setYearId(current => current || data.fiscalYears[0]?.id || '');
+      setYears(data.fiscalYears);
+      // Use selected fiscal year from DateContext if available, otherwise use first
+      setYearId(current => current || selectedFiscalYearId || data.fiscalYears[0]?.id || '');
     }).catch(() => setError(true));
-  }, [canView, onUnauthorized]);
+  }, [canView, onUnauthorized, selectedFiscalYearId]);
   useEffect(() => {
     if (!canView || !yearId) { setResult(null); return; }
     setLoading(true); setError(false);

@@ -41,6 +41,17 @@ export function BankConfirmSummary({result}:{result:BankConfirmResult}){
   return <Alert color="green" role="status">{t('banks.batchStatus.confirmed')} · {t('banks.valid')}: {result.importedRows} · {t('banks.duplicates')}: {result.duplicateRows}{result.idempotent?` · ${t('banks.batchStatus.confirmed')}`:''}</Alert>;
 }
 
+/**
+ * Banking remains independent of the global Topbar period context.
+ *
+ * Bank reconciliation may require visibility into transactions outside
+ * the currently selected accounting month, especially for unreconciled items.
+ * Restricting the transaction view based on accounting-period selection would
+ * hide critical reconciliation work.
+ *
+ * Therefore, Banking displays all transactions regardless of the selected
+ * accounting month or fiscal year.
+ */
 export function Banking({canView,canImport,canManage,canMatch,canReconcile,onUnauthorized}:Props){
   const {t}=useTranslation();
   const [accounts,setAccounts]=useState<Account[]>([]); const [batches,setBatches]=useState<Batch[]>([]); const [transactions,setTransactions]=useState<Transaction[]>([]);

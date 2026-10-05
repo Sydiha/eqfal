@@ -3,6 +3,7 @@ import "@fontsource/readex-pro";
 import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
+import { useDateContext } from "../context/DateContext";
 
 // Figma Home KPI and status icons (presentation only).
 const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -116,12 +117,13 @@ export function Home({
   navigateToDiscovery,
   onUnauthorized,
   periods: externalPeriods = [],
-  selectedPeriodId = null,
-  onSelectedPeriodChange,
+  selectedPeriodId: _unusedSelectedPeriodId = null,
+  onSelectedPeriodChange: _unusedOnSelectedPeriodChange,
   onPeriodsLoad,
 }: Props) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language.startsWith("ar");
+  const { selectedPeriodId, onSelectPeriod } = useDateContext();
 
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>(externalPeriods);
@@ -222,12 +224,6 @@ export function Home({
   useEffect(() => {
     if (canViewSnapshot) void loadSnapshot();
   }, [canViewSnapshot]);
-
-  useEffect(() => {
-    if (periods.length > 0 && !selectedPeriodId) {
-      onSelectedPeriodChange?.(periods[0].id);
-    }
-  }, [periods, selectedPeriodId, onSelectedPeriodChange]);
 
   const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
   const can = (capability: string) => capabilities.includes(capability);
@@ -432,7 +428,7 @@ export function Home({
             id="period-select"
             className="home__period-select"
             value={selectedPeriodId || ""}
-            onChange={(e) => onSelectedPeriodChange?.(e.target.value)}
+            onChange={(e) => e.target.value && onSelectPeriod(e.target.value, 'specific')}
           >
             {periods.map((period) => {
               const start = new Date(period.period_start);
