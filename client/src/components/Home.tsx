@@ -123,7 +123,7 @@ export function Home({
 }: Props) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language.startsWith("ar");
-  const { selectedPeriodId, onSelectPeriod } = useDateContext();
+  const { selectedPeriodId, periodMode, selectedFiscalYearId } = useDateContext();
 
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>(externalPeriods);
@@ -225,7 +225,41 @@ export function Home({
     if (canViewSnapshot) void loadSnapshot();
   }, [canViewSnapshot]);
 
-  const selected = periods.find((p) => p.id === selectedPeriodId) ?? periods[0] ?? null;
+  const yearPeriods = selectedFiscalYearId
+    ? periods.filter((p) => p.fiscal_year_id === selectedFiscalYearId)
+    : periods;
+  // "All / Full Year" aggregates every period of the selected fiscal year instead of staying on one month.
+  const allYearPeriod: Period | null =
+    periodMode === "all" && yearPeriods.length > 0
+      ? yearPeriods.reduce<Period>(
+          (acc, p) => ({
+            ...acc,
+            period_start: p.period_start < acc.period_start ? p.period_start : acc.period_start,
+            period_end: p.period_end > acc.period_end ? p.period_end : acc.period_end,
+            status: acc.status === "open" || p.status === "open" ? "open" : "closed",
+            ready: acc.ready && p.ready,
+            disclosed_total: acc.disclosed_total + p.disclosed_total,
+            has_hidden_blockers: acc.has_hidden_blockers || p.has_hidden_blockers,
+            blockers: {
+              documents: acc.blockers.documents + p.blockers.documents,
+              obligations: acc.blockers.obligations + p.blockers.obligations,
+              bank_transactions: acc.blockers.bank_transactions + p.blockers.bank_transactions,
+              vat: acc.blockers.vat + p.blockers.vat,
+              ledger: acc.blockers.ledger + p.blockers.ledger,
+              assets: acc.blockers.assets + p.blockers.assets,
+              opening_balances: acc.blockers.opening_balances + p.blockers.opening_balances,
+              periodic_adjustments: acc.blockers.periodic_adjustments + p.blockers.periodic_adjustments,
+            },
+          }),
+          { ...yearPeriods[0], blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 }, disclosed_total: 0 },
+        )
+      : null;
+  const selected =
+    allYearPeriod ??
+    periods.find((p) => p.id === selectedPeriodId) ??
+    yearPeriods[0] ??
+    periods[0] ??
+    null;
   const can = (capability: string) => capabilities.includes(capability);
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
@@ -326,9 +360,13 @@ export function Home({
     ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`
     : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`;
 
-  const monthYear = isArabic
-    ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(displayDate)}`
-    : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(displayDate)}`;
+  const monthYear = allYearPeriod
+    ? isArabic
+      ? `السنة كاملة ${displayDate.getUTCFullYear()}`
+      : `Full Year ${displayDate.getUTCFullYear()}`
+    : isArabic
+      ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(displayDate)}`
+      : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(displayDate)}`;
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
     if (!snapshot) {
@@ -417,34 +455,6 @@ export function Home({
             : `Aggregate Financial Summary – ${monthYear}`}
         </p>
       </header>
-
-      {/* Period Selector */}
-      {periods.length > 1 && (
-        <div className="home__period-selector">
-          <label htmlFor="period-select" className="home__period-label">
-            {isArabic ? "الفترة:" : "Period:"}
-          </label>
-          <select
-            id="period-select"
-            className="home__period-select"
-            value={selectedPeriodId || ""}
-            onChange={(e) => e.target.value && onSelectPeriod(e.target.value, 'specific')}
-          >
-            {periods.map((period) => {
-              const start = new Date(period.period_start);
-              const end = new Date(period.period_end);
-              const label = isArabic
-                ? `${start.toLocaleDateString("ar-EG")} - ${end.toLocaleDateString("ar-EG")}`
-                : `${start.toLocaleDateString("en-US")} - ${end.toLocaleDateString("en-US")}`;
-              return (
-                <option key={period.id} value={period.id}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-      )}
 
       {/* KPI Section - Always Visible */}
       {canViewSnapshot && (
@@ -563,7 +573,7 @@ export function Home({
                 </h2>
                 <p className="home__readiness-subtitle">
                   {isArabic
-                    ? `مستوى اكتمال مجالات إقفال شهر ${monthYear}`
+                    ? `مستوى اكتمال مجالات الإقفال ${allYearPeriod ? "لـ" : "لشهر"} ${monthYear}`
                     : `Completion of close areas for ${monthYear}`}
                 </p>
               </div>

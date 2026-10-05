@@ -104,7 +104,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             {/* Fiscal Year Selector */}
             {availableFiscalYears && availableFiscalYears.length > 0 && (
               <Select
-                label={isAr ? 'السنة المالية' : 'Fiscal Year'}
+                aria-label={isAr ? 'السنة المالية' : 'Fiscal Year'}
                 value={selectedFiscalYearId || ''}
                 onChange={(value) => value && onSelectFiscalYear(value)}
                 data={availableFiscalYears.map(fy => ({
@@ -114,7 +114,8 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
                 placeholder={isAr ? 'اختر السنة' : 'Select Year'}
                 searchable
                 clearable={false}
-                style={{ minWidth: '140px' }}
+                size="xs"
+                className="topbar-select-wrap"
                 classNames={{ input: 'topbar-select' }}
               />
             )}
@@ -122,7 +123,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             {/* Period Selector */}
             {availablePeriodsForSelectedYear && availablePeriodsForSelectedYear.length > 0 && (
               <Select
-                label={isAr ? 'الفترة' : 'Period'}
+                aria-label={isAr ? 'الفترة' : 'Period'}
                 value={periodMode === 'all' ? 'all' : (selectedPeriodId || '')}
                 onChange={(value) => {
                   if (value === 'all') {
@@ -135,13 +136,14 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
                   { value: 'all', label: isAr ? 'السنة كاملة' : 'All Periods in Year' },
                   ...availablePeriodsForSelectedYear.map(period => ({
                     value: period.id,
-                    label: `${new Date(period.period_start).toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory' : 'en-US', { month: 'short', year: 'numeric' })}`
+                    label: `${new Date(period.period_start).toLocaleDateString(isAr ? 'ar-u-ca-gregory-nu-latn' : 'en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })}`
                   }))
                 ]}
                 placeholder={isAr ? 'اختر الفترة' : 'Select Month'}
                 searchable
                 clearable={false}
-                style={{ minWidth: '140px' }}
+                size="xs"
+                className="topbar-select-wrap"
                 classNames={{ input: 'topbar-select' }}
               />
             )}
