@@ -30,7 +30,7 @@ const IcBook=()=><Ic><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 
 
 export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId: _unused}:Props){
  const {t,i18n}=useTranslation();
- const { selectedPeriodId } = useDateContext();
+ const { selectedPeriodId, periodMode } = useDateContext();
  const [periods,setPeriods]=useState<Period[]>([]),[years,setYears]=useState<FiscalYear[]>([]);
  const [selectedId,setSelectedId]=useState<string|null>(null),[yearFilter,setYearFilter]=useState('');
  const [loading,setLoading]=useState(canView),[error,setError]=useState(false),[creating,setCreating]=useState(false),[reopen,setReopen]=useState<Period|null>(null),[saving,setSaving]=useState(false);
@@ -39,6 +39,7 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
  },[canView]);
  useEffect(()=>{if(selectedPeriodId&&periods.length>0){const globalPeriod=periods.find(p=>p.id===selectedPeriodId);if(globalPeriod&&selectedId!==globalPeriod.id){selectPeriod(globalPeriod.id);}}},[selectedPeriodId,periods]);
  if(!canView)return <WorkspacePage><WorkspaceState>{t('monthlyClose.noAccess')}</WorkspaceState></WorkspacePage>;
+ if(periodMode==='all')return <WorkspacePage><WorkspaceState>{t('monthlyClose.selectSpecificPeriod')}</WorkspaceState></WorkspacePage>;
  const availablePeriods=yearFilter?periods.filter(period=>period.fiscal_year_id===yearFilter):periods,selected=periods.find(period=>period.id===selectedId)??null;
  const selectPeriod=(id:string)=>{setSelectedId(id);writeQueryParameters({closePeriod:id});};
  const selectYear=(value:string)=>{const next=(value?periods.find(period=>period.fiscal_year_id===value):periods[0])?.id??null;setYearFilter(value);setSelectedId(next);writeQueryParameters({closeYear:value||null,closePeriod:next});};
