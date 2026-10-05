@@ -31,6 +31,7 @@ import { accessAdministrationRouter } from './modules/memberships/access-adminis
 import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
 import { managerFinancialSnapshotRouter } from './modules/manager-financial-snapshot/manager-financial-snapshot.router';
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
+import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import logger from './shared/logger';
 
 const app = express();
@@ -76,6 +77,7 @@ app.use('/api', companyRouter);
 app.use('/api', homeAlertsRouter);
 app.use('/api', managerFinancialSnapshotRouter);
 app.use('/api', whtReviewRouter);
+app.use('/api', auditLogRouter);
 
 // 404
 app.use((_req: Request, res: Response) => {
