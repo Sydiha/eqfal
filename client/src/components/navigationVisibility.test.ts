@@ -41,6 +41,8 @@ describe('manager workspace navigation boundary', () => {
     expect(canShowNavigationPage('companyProfile', ['company_accounting_profile.view'])).toBe(true);
     expect(canShowNavigationPage('access', ['access.view'])).toBe(true);
     expect(canShowNavigationPage('access', ['access.manage'])).toBe(false);
+    expect(canShowNavigationPage('companies', ['company.view'])).toBe(true);
+    expect(canShowNavigationPage('companies', ['access.view'])).toBe(false);
   });
 
   it('requires both document and obligation visibility for sales and purchases discovery', () => {
