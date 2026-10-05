@@ -17,7 +17,7 @@ export interface Period {
   status: string;
 }
 
-interface DateContextState {
+export interface DateContextState {
   companyId: string;
   selectedFiscalYearId: string | null;
   availableFiscalYears: FiscalYear[];
