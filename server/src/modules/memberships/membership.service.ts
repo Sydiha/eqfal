@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { MembershipRepository } from './membership.repository';
-import { Membership, CreateMembershipInput, CreateRoleInput, Role } from './membership.types';
+import { Membership, MembershipListItem, CreateMembershipInput, CreateRoleInput, Role, RoleListItem } from './membership.types';
 import logger from '../../shared/logger';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 
@@ -48,12 +48,23 @@ export class MembershipService {
     }
   }
 
-  async listMemberships(companyId: string): Promise<Membership[]> {
+  async listMemberships(companyId: string): Promise<MembershipListItem[]> {
     return this.repo.listMemberships(companyId);
   }
 
-  async listRoles(companyId: string): Promise<Role[]> {
+  async listRoles(companyId: string): Promise<RoleListItem[]> {
     return this.repo.listRoles(companyId);
+  }
+
+  async listCapabilities(): Promise<string[]> {
+    return this.repo.listCapabilities();
+  }
+
+  /** Resolve an existing user by email so they can be added to the active company. */
+  async createMembershipByEmail(email: string, companyId: string, actorUserId: string): Promise<Membership> {
+    const userId = await this.repo.findUserIdByEmail(email);
+    if (!userId) throw new Error('User not found');
+    return this.createMembershipForCompany(userId, companyId, actorUserId);
   }
 
   async createMembershipForCompany(userId: string, companyId: string, actorUserId: string): Promise<Membership> {
