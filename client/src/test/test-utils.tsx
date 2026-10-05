@@ -4,7 +4,7 @@ import { DateContext, DateContextState } from '../context/DateContext';
 
 const createMockDateContext = (): DateContextState => ({
   companyId: 'test-company',
-  selectedFiscalYearId: 'fy-test',
+  selectedFiscalYearId: null,
   availableFiscalYears: [],
   selectedPeriodId: null,
   availablePeriodsForSelectedYear: [],
@@ -13,8 +13,8 @@ const createMockDateContext = (): DateContextState => ({
   error: null,
   onSelectFiscalYear: async () => {},
   onSelectPeriod: () => {},
-  loadFiscalYears: async () => [],
-  loadPeriodsForYear: async () => [],
+  loadFiscalYears: async () => {},
+  loadPeriodsForYear: async () => {},
 });
 
 interface AllTheProvidersProps {
