@@ -32,7 +32,6 @@
 .acc-form small{color:#64748b}
 .acc-alert{margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#b91c1c}
 @media (max-width:700px){.acc-view .acc-roles{grid-template-columns:minmax(0,1fr)}.acc-view .acc-header{flex-direction:column}}
-.acc-view .acc-bulk{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .acc-view .acc-audit-details .acc-table{margin-top:0}
 .acc-view .acc-audit-details tbody th{background:transparent;color:var(--acc-ink);font-weight:600;white-space:normal}
 .acc-view .acc-audit-details tr.is-changed td:last-child{background:#f0fdf9}
@@ -41,14 +40,44 @@
 .acc-view .acc-audit-raw{margin-top:10px}
 .acc-view .acc-audit-raw summary{cursor:pointer;color:var(--acc-muted)}
 .acc-view .acc-audit-raw pre{overflow-x:auto;margin:4px 0 0;font-size:11px}
-/* Collapsible permission groups (logical properties: identical in RTL and LTR) */
-.acc-view .acc-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:12px;align-items:start}
-.acc-view .acc-group{border:1px solid var(--acc-border);border-radius:8px;background:#fff;min-width:0}
-.acc-view .acc-group.is-open{grid-column:1/-1;border-color:var(--acc-primary)}
-.acc-view .acc-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;background:var(--acc-soft);border-radius:8px}
-.acc-view .acc-group-head label{display:flex;align-items:center;gap:8px;padding:0;font-weight:700;flex:1;min-width:0}
-.acc-view .acc-group-toggle{display:flex;align-items:center;gap:8px;min-height:28px;padding:0 4px;border:0;background:transparent;color:var(--acc-muted);font-size:11.5px;cursor:pointer}
-.acc-view .acc-chevron{width:7px;height:7px;border-inline-end:2px solid currentColor;border-block-end:2px solid currentColor;transform:rotate(45deg);transition:transform .15s}
-.acc-view .acc-group.is-open .acc-chevron{transform:rotate(-135deg)}
-.acc-view .acc-group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 16px;padding:8px 12px 10px}
-.acc-view .acc-group-body label{padding:4px 0}
+/* Permissions panel — compact, calm, logical properties so RTL and LTR mirror naturally */
+.acc-view .acc-capabilities{display:flex;flex-direction:column;gap:6px}
+.acc-view .acc-capabilities>*{margin-block:0}
+.acc-view .acc-capabilities h3{font-size:14px;font-weight:700}
+.acc-view .acc-capabilities .acc-hint{line-height:1.6}
+.acc-view .acc-bulk{display:flex;flex-wrap:wrap;gap:6px;margin-block-start:4px}
+.acc-view .acc-bulk .acc-ghost{height:26px;min-height:0;padding:0 10px;border-radius:6px;font-size:11.5px;font-weight:600;color:var(--acc-muted)}
+.acc-view .acc-bulk .acc-ghost:hover:not(:disabled){color:var(--acc-ink);border-color:#cfd6dd}
+
+/* Native checkbox, restyled only (the global form-control rules otherwise stretch it to full width / control height) */
+.acc-view .acc-capabilities input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:16px;height:16px;min-width:16px;min-height:0;max-width:16px;margin:0;padding:0;border:1.5px solid #b6c0ca;border-radius:4px;background:#fff center/10px 10px no-repeat;cursor:pointer;transition:background-color .12s,border-color .12s}
+.acc-view .acc-capabilities input[type=checkbox]:hover:not(:disabled){border-color:var(--acc-primary)}
+.acc-view .acc-capabilities input[type=checkbox]:checked{border-color:var(--acc-primary);background-color:var(--acc-primary);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2.1 2.1L8 3' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.acc-view .acc-capabilities input[type=checkbox]:indeterminate{border-color:var(--acc-primary);background-color:var(--acc-primary);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2.5 5h5' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")}
+.acc-view .acc-capabilities input[type=checkbox]:focus-visible{outline:2px solid var(--acc-primary);outline-offset:2px}
+.acc-view .acc-capabilities input[type=checkbox]:disabled{cursor:not-allowed;opacity:1;border-color:#dbe1e7;background-color:#f1f4f7}
+.acc-view .acc-capabilities input[type=checkbox]:disabled:checked,.acc-view .acc-capabilities input[type=checkbox]:disabled:indeterminate{border-color:#b9d9d1;background-color:#9fcfc3}
+
+/* Group cards */
+.acc-view .acc-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-block-start:8px;align-items:start}
+.acc-view .acc-group{min-width:0;border:1px solid var(--acc-border);border-radius:8px;background:#fff;overflow:hidden}
+.acc-view .acc-group.is-open{grid-column:1/-1;border-color:#b9d9d1}
+.acc-view .acc-group-head{display:flex;align-items:center;gap:8px;height:40px;padding:0 10px;background:#fff;cursor:pointer}
+.acc-view .acc-group.is-open .acc-group-head{background:var(--acc-soft);border-block-end:1px solid var(--acc-border)}
+.acc-view .acc-group-head:hover{background:var(--acc-soft)}
+.acc-view .acc-group-head .acc-group-check{display:flex;align-items:center;gap:8px;flex:1;min-width:0;margin:0;padding:0;font-size:12.5px;font-weight:600;line-height:1.3}
+.acc-view .acc-group-check>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc-view .acc-group-toggle{display:flex;align-items:center;gap:8px;flex:none;height:28px;min-height:0;padding:0 2px;border:0;background:transparent;color:var(--acc-muted);font-size:11px;cursor:pointer}
+.acc-view .acc-group-count{padding:1px 7px;border-radius:999px;background:var(--acc-soft);border:1px solid var(--acc-border);font-variant-numeric:tabular-nums;line-height:1.5}
+.acc-view .acc-group.is-open .acc-group-count{background:#fff}
+.acc-view .acc-chevron{width:6px;height:6px;border-inline-end:1.5px solid currentColor;border-block-end:1.5px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .15s}
+.acc-view .acc-group.is-open .acc-chevron{transform:rotate(-135deg) translate(-1px,-1px)}
+
+/* Expanded permissions: 2-3 compact columns on desktop, one on phones */
+.acc-view .acc-group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:0 20px;padding:6px 12px 8px}
+.acc-view .acc-group-body label{display:flex;align-items:center;gap:8px;margin:0;padding:6px 2px;font-size:12px;font-weight:500;line-height:1.4;color:var(--acc-ink);cursor:pointer;border-radius:4px}
+.acc-view .acc-group-body label:hover{background:var(--acc-soft)}
+@media (max-width:700px){
+  .acc-view .acc-groups,.acc-view .acc-group-body{grid-template-columns:minmax(0,1fr)}
+  .acc-view .acc-group-body label{padding-block:8px}
+}

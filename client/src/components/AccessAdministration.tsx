@@ -36,7 +36,8 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 function GroupCheckbox({ label, checked, indeterminate, disabled, onChange }: { label: string; checked: boolean; indeterminate: boolean; disabled: boolean; onChange: () => void }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (ref.current) ref.current.indeterminate = indeterminate; }, [indeterminate]);
-  return <label className="acc-group-check"><input ref={ref} type="checkbox" checked={checked} disabled={disabled} aria-checked={indeterminate ? 'mixed' : checked} onChange={onChange} />{label}</label>;
+  // The visible name is not part of a <label>, so clicking it expands the group instead of toggling every permission.
+  return <span className="acc-group-check"><input ref={ref} type="checkbox" aria-label={label} checked={checked} disabled={disabled} aria-checked={indeterminate ? 'mixed' : checked} onChange={onChange} /><span>{label}</span></span>;
 }
 
 /**
@@ -139,6 +140,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     if (revokes.length) body.revokes = revokes;
     void mutate(() => request(`/api/access/roles/${role.id}/capabilities/bulk`, json('POST', body), onUnauthorized));
   };
+  const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
   const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
   const canRevokeId = () => can('access.role.capability.revoke');
 
@@ -202,12 +204,12 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
               const isOpen = openGroups.has(group);
               const panelId = `acc-group-${group}`;
               return <section key={group} className={`acc-group${isOpen ? ' is-open' : ''}`}>
-                <div className="acc-group-head">
+                <div className="acc-group-head" onClick={(event) => { if (!(event.target as HTMLElement).closest('input, button')) toggleGroup(group); }}>
                   <GroupCheckbox label={groupLabel} checked={all} indeterminate={grantedIds.length > 0 && !all}
                     disabled={busy || (all ? revocable.length === 0 : grantable.length === 0)}
                     onChange={() => all ? bulkChange(selectedRole, [], revocable) : bulkChange(selectedRole, grantable, [])} />
                   <button type="button" className="acc-group-toggle" aria-expanded={isOpen} aria-controls={panelId} aria-label={`${groupLabel}: ${isOpen ? t('access.collapseGroup') : t('access.expandGroup')}`}
-                    onClick={() => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; })}>
+                    onClick={() => toggleGroup(group)}>
                     <span className="acc-group-count" dir="ltr">{grantedIds.length} / {ids.length}</span><span aria-hidden="true" className="acc-chevron" />
                   </button>
                 </div>

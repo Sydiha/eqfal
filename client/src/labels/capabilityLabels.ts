@@ -46,7 +46,7 @@ const OBJECTS: Record<string, Pair> = {
 };
 /** Group headings shown above related capabilities (first ID segment). */
 const GROUPS: Record<string, Pair> = {
-  access: ['Access administration', 'إدارة الصلاحيات'], accounting: ['Accounting', 'المحاسبة'], annual_close: ['Annual closing', 'الإقفال السنوي'],
+  access: ['Access', 'إدارة الصلاحيات'], accounting: ['Accounting', 'المحاسبة'], annual_close: ['Annual closing', 'الإقفال السنوي'],
   asset: ['Fixed assets', 'الأصول الثابتة'], audit: ['Audit log', 'سجل التدقيق'], bank: ['Banking', 'البنوك'], company: ['Companies', 'الشركات'],
   company_accounting_profile: ['Company accounting profile', 'الملف المحاسبي للشركة'], counterparty: ['Counterparties', 'الأطراف المقابلة'],
   custody: ['Custody', 'العهد'], document: ['Documents', 'المستندات'], fiscal_year: ['Fiscal years', 'السنوات المالية'],
