@@ -114,4 +114,19 @@ describe('Purchases workspace',()=>{
   const edit=vi.fn();mockPurchases([{...base,status:'uploaded'}]);render(<Purchases canView canManage canCreate canEdit onCreateDocument={create} onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.click((await screen.findAllByRole('button',{name:'Add purchase document +'}))[0]);fireEvent.click(screen.getByRole('button',{name:'Expense'}));expect(create).toHaveBeenCalledWith('expense');fireEvent.change(screen.getByRole('searchbox',{name:'Search purchases'}),{target:{value:'missing'}});expect(screen.getByText('0 purchases')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
  });
 
+
+ const periodContext={companyId:'c',selectedFiscalYearId:'fy1',availableFiscalYears:[{id:'fy1',company_id:'c',name:'FY',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'}],selectedPeriodId:'p8',availablePeriodsForSelectedYear:[{id:'p8',fiscal_year_id:'fy1',period_start:'2026-08-01',period_end:'2026-08-31',status:'open'}],periodMode:'specific' as const,isLoading:false,error:null,onSelectFiscalYear:async()=>{},onSelectPeriod:()=>{},loadFiscalYears:async()=>{},loadPeriodsForYear:async()=>{}};
+ const periodRows=()=>{const mk=(id:string,date:string,total:string)=>({...base,id,reference_number:id.toUpperCase(),document_date:date,total_amount:total,paid_amount:'0.00',payable_relationship:'not_created' as const,financial_state:null,remaining_amount:null});return[mk('aug-1','2026-08-05','100.00'),mk('aug-2','2026-08-20','50.00'),mk('sep-1','2026-09-05','700.00')]};
+
+ it('scopes rows and KPIs to the global period, has no local month control, and keeps the scope after clear filters and popstate',async()=>{
+  mockPurchases(periodRows());render(<Purchases canView canManage onUnauthorized={vi.fn()}/>,{dateContextValue:periodContext});
+  expect(await screen.findByText('AUG-1')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('150.00');
+  expect(document.querySelector('.purchases-approved__period')).toBeNull();
+  fireEvent.change(screen.getByRole('searchbox',{name:'Search purchases'}),{target:{value:'AUG-2'}});
+  expect(screen.queryByText('AUG-1')).not.toBeInTheDocument();expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('50.00');
+  fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));
+  expect(screen.getByText('AUG-1')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('150.00');
+  act(()=>{window.dispatchEvent(new PopStateEvent('popstate'))});
+  expect(screen.getByText('AUG-2')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();
+ });
 });
