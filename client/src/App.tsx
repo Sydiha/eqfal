@@ -59,6 +59,7 @@ type DocumentEntryContext = {
   documentType?: DocumentEntryType;
   documentId?: string;
   returnPage: 'purchases' | 'sales';
+  returnSearch?: string;
   counterpartyType: 'supplier' | 'customer';
 };
 
@@ -168,11 +169,19 @@ function AuthenticatedShell() {
     navigateToQueryState({ page: next === 'home' ? null : next, ...parameters });
     setPageState(next);
   };
+  // The originating list keeps its own history entry (and filters); the entry page gets a clean one.
   const openDocumentEntry = (entry: DocumentEntryContext) => {
-    setDocumentEntry(entry);
+    setDocumentEntry({ ...entry, returnSearch: window.location.search });
     setPageState('documents');
-    clearContextualQueryState('replace');
-    writeQueryParameters({ page: 'documents' });
+    navigateToQueryState({ page: 'documents' });
+  };
+  const returnFromDocumentEntry = (entry: DocumentEntryContext) => {
+    setDocumentEntry(null);
+    setPageState(entry.returnPage);
+    const search = entry.returnSearch && readQueryParameter('page', {}, entry.returnSearch) === entry.returnPage
+      ? entry.returnSearch
+      : `?page=${entry.returnPage}`;
+    window.history.replaceState(null, '', `${window.location.pathname}${search}`);
   };
   const startPurchaseEntry = (documentType: 'purchase' | 'expense') => openDocumentEntry({ documentType, returnPage: 'purchases', counterpartyType: 'supplier' });
   const startSalesEntry = () => openDocumentEntry({ documentType: 'sale', returnPage: 'sales', counterpartyType: 'customer' });
@@ -180,10 +189,10 @@ function AuthenticatedShell() {
   const editSalesEntry = (documentId: string) => openDocumentEntry({ documentId, returnPage: 'sales', counterpartyType: 'customer' });
   const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
   const handlePeriodChange = (id: string) => { setSelectedPeriodId(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
+  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} returnFromDocumentEntry={returnFromDocumentEntry} startPurchaseEntry={startPurchaseEntry} startSalesEntry={startSalesEntry} editPurchaseEntry={editPurchaseEntry} editSalesEntry={editSalesEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
 }
 
-function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
+function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, returnFromDocumentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; returnFromDocumentEntry: (entry: DocumentEntryContext) => void; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized, refreshSession } = useAuth();
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
@@ -192,7 +201,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
   return <div key={companyKey}>
     {page === 'home' && <Home capabilities={c} navigate={setPage} navigateToDiscovery={navigateToDiscovery} onUnauthorized={handleUnauthorized} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={onSelectedPeriodChange} onPeriodsLoad={onPeriodsLoad}/>}
     {page === 'fiscalYears' && <FiscalYears canView={c.includes('fiscal_year.view')} canCreate={c.includes('fiscal_year.create')} canEdit={c.includes('fiscal_year.edit')} canClose={c.includes('fiscal_year.close')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canEdit={c.includes('document.edit')} canSubmit={c.includes('document.submit')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('counterparty.create')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onEntryCancel={documentEntry?()=>setPage(documentEntry.returnPage):undefined} onUnauthorized={handleUnauthorized}/>}
+    {page === 'documents' && <Documents canView={c.includes('document.view')} canUpload={c.includes('document.upload')} canEdit={c.includes('document.edit')} canSubmit={c.includes('document.submit')} canReview={c.includes('document.review')} canApprove={c.includes('document.approve')} canManageCounterparties={Boolean(documentEntry)&&c.includes('counterparty.create')} entryDocumentType={documentEntry?.documentType} entryDocumentId={documentEntry?.documentId} entryReturnPage={documentEntry?.returnPage} entryCounterpartyType={documentEntry?.counterpartyType} onEntryComplete={documentEntry?()=>returnFromDocumentEntry(documentEntry):undefined} onEntryCancel={documentEntry?()=>returnFromDocumentEntry(documentEntry):undefined} onUnauthorized={handleUnauthorized}/>}
     {page === 'banks' && <BankingWorkspace
       canView={c.includes('bank.view')}
       canImport={c.includes('bank.import')}
