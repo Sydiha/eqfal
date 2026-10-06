@@ -238,6 +238,29 @@ describe('Banking',()=>{
       expect(fetchMock.mock.calls.filter(c=>c[1]?.method==='POST')).toHaveLength(1);
     });
 
+    it('disables file and account inputs while an upload is in flight',async()=>{
+      let release!:()=>void;
+      const gate=new Promise<void>(r=>{release=r;});
+      vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
+        if(url==='/api/bank-accounts')return json({accounts:[account]});
+        if(url==='/api/bank-import-batches'&&init?.method==='POST'){await gate;return json({batch,columns:['date','amount'],mapping,preview,autoMapped:true},201);}
+        if(url==='/api/bank-import-batches')return json({batches:[]});
+        return json({transactions:[]});
+      }));
+      renderBanking({ canView:true, canImport:true, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+      expect((await screen.findAllByText('Main')).length).toBeGreaterThan(0);
+      const input=document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input,{target:{files:[csv('a.csv')]}});
+      const button=screen.getByRole('button',{name:/Upload/i});
+      await waitFor(()=>expect(button).toBeEnabled());
+      fireEvent.click(button);
+      await waitFor(()=>expect(input).toBeDisabled());
+      expect(screen.getByRole('textbox',{name:/Account/i})).toBeDisabled();
+      release();
+      expect(await screen.findByText('Stale row')).toBeInTheDocument();
+      expect(input).not.toBeDisabled();
+    });
+
     it('clears stale preview, mapping and error when a different file is selected',async()=>{
       const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{
         if(url==='/api/bank-accounts')return json({accounts:[account]});
