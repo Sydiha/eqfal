@@ -188,4 +188,24 @@ describe('Periodic Adjustments KPI quick filters', () => {
     buttons.forEach(b => expect(b.tagName).toBe('BUTTON'));
     expect(buttons[1]).toHaveTextContent(/فترات|معلق/);
   });
+
+  it('moves focus and scroll to the results after a quick-filter click, by mouse or keyboard, without opening an adjustment', async () => {
+    const scroll = vi.fn();
+    (Element.prototype as any).scrollIntoView = scroll;
+    mountQuick(ctx());
+    await screen.findByText('only-pending');
+    const results = document.querySelector('.pa-results') as HTMLElement;
+    fireEvent.click(card(/Pending/));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+    expect(document.activeElement).toBe(results);
+    // keyboard activation of a native button dispatches the same click
+    const posted = card(/Posted/);
+    posted.focus();
+    fireEvent.keyDown(posted, { key: 'Enter' });
+    fireEvent.click(posted);
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(2));
+    expect(card(/Posted/)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Recognition schedule')).not.toBeInTheDocument();
+    delete (Element.prototype as any).scrollIntoView;
+  });
 });
