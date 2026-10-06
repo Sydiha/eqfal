@@ -15,7 +15,7 @@
 | 14 | IN PROGRESS / PARTIALLY VALIDATED |
 | 15 | PARTIALLY MERGED / IN PROGRESS |
 
-- [stated] Phase 14 Matrix reconciliation completed (PR #320, 2026-10-03) — 14B marked PASS
+- [stated] Phase 14 Matrix reconciliation completed (PR #320, 2026-10-03) — 14B: row 5 PASS, rows 1–4 PARTIAL (Task 32 reconciliation, PR #391)
 
 ## Current Task
 - **Status:** idle
