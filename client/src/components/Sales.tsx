@@ -21,28 +21,20 @@ export function Sales({canView,canManage,canCreate=false,canEdit=false,onCreateD
  const[data,setData]=useState<Sale[]|null>(null),[selectedId,setSelectedId]=useState<string|null>(null),[filters,setFilters]=useState<DiscoveryFilters>(readFilters),[error,setError]=useState(false),[page,setPage]=useState(1),[loadedAt,setLoadedAt]=useState<Date|null>(null);
 
  // Map global period to local date range
- useEffect(() => {
+ const scopeRange=()=>{
    if (periodMode === 'all') {
-     // Use full fiscal year
      const fiscalYear = availableFiscalYears.find(fy => fy.id === selectedFiscalYearId);
-     if (fiscalYear) {
-       setFilters(current => ({
-         ...current,
-         from: fiscalYear.start_date,
-         to: fiscalYear.end_date
-       }));
-     }
-   } else if (selectedPeriodId && periodMode === 'specific') {
-     // Use selected period
-     const period = availablePeriodsForSelectedYear.find(p => p.id === selectedPeriodId);
-     if (period) {
-       setFilters(current => ({
-         ...current,
-         from: period.period_start,
-         to: period.period_end
-       }));
-     }
+     return fiscalYear ? { from: fiscalYear.start_date, to: fiscalYear.end_date } : null;
    }
+   if (selectedPeriodId && periodMode === 'specific') {
+     const period = availablePeriodsForSelectedYear.find(p => p.id === selectedPeriodId);
+     return period ? { from: period.period_start, to: period.period_end } : null;
+   }
+   return null;
+ };
+ useEffect(() => {
+   const range = scopeRange();
+   if (range) setFilters(current => ({ ...current, ...range }));
  }, [selectedPeriodId, periodMode, selectedFiscalYearId, availablePeriodsForSelectedYear, availableFiscalYears]);
 
  const load=async()=>{const response=await fetch('/api/sales');if(response.status===401){onUnauthorized();return;}if(!response.ok)throw Error();const next=(await response.json() as {sales:Sale[]}).sales;setData(next);setLoadedAt(new Date());setSelectedId(old=>old&&next.some(item=>item.id===old)?old:null)};
@@ -51,7 +43,7 @@ export function Sales({canView,canManage,canCreate=false,canEdit=false,onCreateD
  const customers=useMemo(()=>Array.from(new Map((data??[]).filter(x=>x.counterparty_id).map(x=>[x.counterparty_id!,x.customer_name??t('sales.unknown')])).entries()),[data,t]);
  useEffect(()=>{if(data&&filters.customer&&!data.some(x=>x.counterparty_id===filters.customer))setFilters(current=>({...current,customer:''}))},[data,filters.customer]);
  const updateFilter=(name:keyof DiscoveryFilters,value:string)=>{setFilters(current=>({...current,[name]:value}));const parameter={search:'salesSearch',customer:'salesCustomer',financial:'salesFinancial',review:'salesReview',from:'salesFrom',to:'salesTo',receivable:'salesReceivable',verification:'salesVerification'}[name];writeQueryParameters({[parameter]:value||null},name==='search'?'replace':'push')};
- const clearFilters=()=>{setFilters({search:'',customer:'',financial:'',review:'',from:'',to:'',receivable:'',verification:''});clearQueryParameters(filterParameters)};
+ const clearFilters=()=>{setFilters({search:'',customer:'',financial:'',review:'',from:'',to:'',receivable:'',verification:'',...scopeRange()});clearQueryParameters(filterParameters)};
  const rows=useMemo(()=>{const q=filters.search.trim().toLocaleLowerCase();return(data??[]).filter(x=>(!q||[x.reference_number,x.original_filename,x.customer_name,x.intake_note].some(v=>v?.toLocaleLowerCase().includes(q)))&&(!filters.customer||x.counterparty_id===filters.customer)&&(!filters.financial||x.financial_state===filters.financial)&&(!filters.review||x.status===filters.review)&&(!filters.from||(x.document_date!==null&&x.document_date>=filters.from))&&(!filters.to||(x.document_date!==null&&x.document_date<=filters.to))&&(!filters.receivable||x.receivable_relationship===filters.receivable)&&(!filters.verification||x.verification_status===filters.verification))},[data,filters]);
  const selected=rows.find(sale=>sale.id===selectedId)??null;
  useEffect(()=>{if(selectedId&&!rows.some(sale=>sale.id===selectedId))setSelectedId(null)},[rows,selectedId]);

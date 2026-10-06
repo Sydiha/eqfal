@@ -87,4 +87,18 @@ describe('Sales workspace',()=>{
   const edit=vi.fn();mockSales([{...base,status:'uploaded'}]);render(<Sales canView canManage canEdit onEditDocument={edit} onUnauthorized={vi.fn()}/>);fireEvent.change(await screen.findByRole('searchbox',{name:'Search sales'}),{target:{value:'missing'}});expect(screen.getByText('0 sales')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));fireEvent.click(summaryRow('INV-1'));fireEvent.click(screen.getByRole('button',{name:'Edit'}));expect(edit).toHaveBeenCalledWith('d1');
  });
 
+ it('keeps the global period scope on rows and KPIs after clearing local filters',async()=>{
+  const inP={...active,id:'a1',reference_number:'AUG-1',document_date:'2026-08-05',total_amount:'100.00',collected_amount:'0.00'};
+  const inP2={...active,id:'a2',reference_number:'AUG-2',document_date:'2026-08-20',total_amount:'50.00',collected_amount:'0.00'};
+  const outP={...active,id:'a3',reference_number:'SEP-1',document_date:'2026-09-05',total_amount:'700.00',collected_amount:'0.00'};
+  mockSales([inP,inP2,outP]);
+  const dateContextValue={companyId:'c',selectedFiscalYearId:'fy1',availableFiscalYears:[{id:'fy1',company_id:'c',name:'FY',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'}],selectedPeriodId:'p8',availablePeriodsForSelectedYear:[{id:'p8',fiscal_year_id:'fy1',period_start:'2026-08-01',period_end:'2026-08-31',status:'open'}],periodMode:'specific' as const,isLoading:false,error:null,onSelectFiscalYear:async()=>{},onSelectPeriod:()=>{},loadFiscalYears:async()=>{},loadPeriodsForYear:async()=>{}};
+  render(<Sales canView canManage onUnauthorized={vi.fn()}/>,{dateContextValue});
+  expect(await screen.findByText('AUG-1')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('150.00 SAR')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('searchbox',{name:'Search sales'}),{target:{value:'AUG-2'}});
+  expect(screen.queryByText('AUG-1')).not.toBeInTheDocument();expect(screen.getByText('50.00 SAR')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:/clear/i}));
+  expect(screen.getByText('AUG-1')).toBeInTheDocument();expect(screen.getByText('AUG-2')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('150.00 SAR')).toBeInTheDocument();
+ });
+
 });
