@@ -1,10 +1,10 @@
 # EQFAL — Approved Execution Roadmap
 
 Status: Approved project guidance
-Reconciliation date: 2026-10-03
+Reconciliation date: 2026-10-06
 
 Last reconciled against GitHub/main SHA:
-`181f37ed60920cdf406155049173a9924272c0bb`
+`468cfac20d8a01f567dd4104d5d4669ecc78d345`
 
 This SHA is an audit/reconciliation baseline only; it does not guarantee future `main` HEAD.
 
@@ -235,6 +235,7 @@ Substages:
 - **14B: Foundation & Master Data Validation**
   - Status: PARTIAL — Issue #286 (2026-09-20): row 5 PASS, rows 1–4 PARTIAL (see matrix §9)
   - Progress: Steps 1–5 executed; denial/negative evidence missing for 1–4 (evidence in GitHub Issue #286 comments; recorded in `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` via PR #320)
+  - Beyond 14B, other rows hold PARTIAL status (rows 6, 8, 12, 14 from owner-supplied external evidence, chat-reported and not repository evidence; rows 15, 16, 17, 19, 23); row 11 remains NOT RUN. Per-row status source of truth: `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9 (not duplicated here).
     - Company context
     - Accounting & Tax Profile
     - Fiscal Year 2026
@@ -279,7 +280,7 @@ Full slice definitions: see `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8.
 Dependencies: Phase 13 reactivation pending business need and owner gates (independent of Phase 14).
 
 Baseline SHA: `8f17258df221d15919e56487721f7d087d0a77e9` (14A design baseline)
-Reference SHA at time of reconciliation — not current HEAD: `181f37ed60920cdf406155049173a9924272c0bb` (80+ commits ahead of the 14A doc commit)
+Reference SHA at time of reconciliation — not current HEAD: `468cfac20d8a01f567dd4104d5d4669ecc78d345` (well ahead of the 14A doc commit)
 
 ## Phase 15 — System-wide UI/UX Redesign
 
@@ -291,13 +292,12 @@ Merged Components:
 - #309: Home financial overview (✅ MERGED 2026-10-01)
 - #313: Home blocker categories fix (✅ MERGED 2026-10-02)
 
-Open Work:
+- #307: Purchases visual redesign (✅ MERGED)
+- Tasks 28–31 UX packs (navigation/filters, Admin & Audit usability, Accounting master data and bilingual account names, final visual cleanup), PRs #378–#390 (✅ MERGED)
 
-- #307: Purchases visual redesign (🔄 OPEN — unique work stream, not blocked by Phase 14)
+Remaining:
 
-Pending:
-
-- Remaining system-wide UI/UX components (NOT YET STARTED)
+- No residual Phase 15 item list is recorded in current docs; the Owner decides whether any UI/UX scope remains before Phase 15 is closed.
 
 Note: Phase 15 work progresses in parallel with Phase 14; not dependent on Phase 14 completion.
 

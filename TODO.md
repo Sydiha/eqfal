@@ -19,7 +19,7 @@ Reference SHA at time of reconciliation (Phases 1–12) — not current HEAD:
 Reconciliation date:
 `2026-09-20`
 
-Phase 13–15 status and the governance sections were updated on `2026-10-03`; reference SHA at that time (not current HEAD): `181f37ed60920cdf406155049173a9924272c0bb`.
+Phase 13–15 status and the governance sections were updated on `2026-10-03`; reference SHA at that time (not current HEAD): `181f37ed60920cdf406155049173a9924272c0bb`. Phase 14–15 wording was re-reconciled on `2026-10-06` against `468cfac20d8a01f567dd4104d5d4669ecc78d345` (also an audit reference, not current HEAD).
 
 These SHAs are audit/reconciliation references only, not promises that either remains future `main` HEAD.
 
@@ -42,7 +42,7 @@ These SHAs are audit/reconciliation references only, not promises that either re
 - Phase 11 — Home Screen Alerts: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 12 — Manager Financial Snapshot: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 13 — Conditional Modules: **CONDITIONAL / DEFERRED**
-- Phase 14 — Full Operational & Accounting Cycle Validation: **IN PROGRESS / PARTIALLY VALIDATED** (14A merged; 14B PARTIAL (row 5 PASS, rows 1–4 PARTIAL) — see `docs/EXECUTION_ROADMAP.md` and matrix §9)
+- Phase 14 — Full Operational & Accounting Cycle Validation: **IN PROGRESS / PARTIALLY VALIDATED** (14A merged; 14B PARTIAL (row 5 PASS, rows 1–4 PARTIAL); other rows hold PARTIAL or NOT RUN status — per-row source of truth is matrix §9 in `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md`; see also `docs/EXECUTION_ROADMAP.md`)
 - Phase 15 — System-wide UI/UX Redesign: **PARTIALLY MERGED / IN PROGRESS**
 
 Notes:
@@ -85,7 +85,8 @@ Governance is defined by `AGENTS.md`. The previous two-track (Product / Agent In
 
 These existing items remain open unless separately verified complete; they do not change Product phase status or authorize automatic destructive actions:
 
-- Review open PR #140 and PR #96 separately; do not merge or close them solely from this backlog.
+- PR #140 and PR #96 are already closed without merge (closed 2026-09-11); no action needed from this backlog.
+- Reconcile stale GitHub Issues (read-only review first; do not close in bulk without Owner Approval).
 - Run a read-only stale-branch hygiene audit before any branch deletion.
 - Any branch deletion, force/history rewrite, or other destructive/exceptional Git recovery must follow current governance (`AGENTS.md`) and explicit Owner Approval.
 
@@ -93,13 +94,13 @@ These existing items remain open unless separately verified complete; they do no
 
 Phase 2, Phase 5, Phase 7, Phase 8, Phase 9, Phase 10, Phase 11, and Phase 12 are no longer Product gaps for their currently approved scopes.
 
-Phase 14 — Full Operational & Accounting Cycle Validation is **IN PROGRESS / PARTIALLY VALIDATED**: 14A (validation matrix) is merged and 14B (Steps 1–5) is PARTIAL (Issue #286; row 5 PASS); per-row status in matrix §9; further slices follow `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8. Each slice requires its own governed plan and Owner Approval.
+Phase 14 — Full Operational & Accounting Cycle Validation is **IN PROGRESS / PARTIALLY VALIDATED**: 14A (validation matrix) is merged and 14B (Steps 1–5) is PARTIAL (Issue #286; row 5 PASS); other rows hold PARTIAL status, some from owner-supplied external evidence that is not repository evidence; row 11 remains NOT RUN; per-row status in matrix §9; further slices follow `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8. Each slice requires its own governed plan and Owner Approval.
 
 ## Remaining product backlog
 
-- Continue Phase 14 validation slices (14B–14H) per `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md`.
+- Complete the remaining Phase 14 validation evidence (rows NOT RUN or PARTIAL) per `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md`.
 - Keep Phase 13 conditional modules deferred unless a genuine company need is established and Owner Approval is given.
-- Continue Phase 15 System-wide UI/UX Redesign (PARTIALLY MERGED / IN PROGRESS; runs in parallel with Phase 14). See `docs/EXECUTION_ROADMAP.md`.
+- Phase 15 System-wide UI/UX Redesign is PARTIALLY MERGED / IN PROGRESS (recent UX packs through Task 31 are merged; no residual item list is recorded — Owner confirms whether any scope remains). See `docs/EXECUTION_ROADMAP.md`.
 
 ## Conditional / deferred work
 
