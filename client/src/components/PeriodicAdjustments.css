@@ -88,3 +88,5 @@
  .pa-view .pa-actions .pa-primary,.pa-view .pa-actions .pa-ghost{flex:1 1 auto}
 }
 .pa-view .pa-range{display:inline-flex;gap:4px;white-space:nowrap}
+
+.pa-view .pa-results:focus{outline:none}

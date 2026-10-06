@@ -59,7 +59,13 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  const reviewTone=(d:VatDocument)=>d.review_status==='reviewed'?'ok':d.review_status==='pending'?'warn':'neutral';
  const canEdit=(d:VatDocument)=>canReview&&selected?.status==='open'&&d.status==='approved';
  const amount=(value:string|null)=><bdi dir="ltr">{value??'—'}</bdi>;
- const showRegister=(filter:'not_reviewed'|'pending'|'recoverability')=>()=>{setReviewFilter(filter);setSelectedDocument(null);window.setTimeout(()=>document.getElementById('vat-register')?.scrollIntoView?.({block:'start'}),0)};
+ const showRegister=(filter:'not_reviewed'|'pending'|'recoverability')=>()=>{
+  const matches=filter==='recoverability'?documents.filter(needsRecoverability):[];
+  setReviewFilter(filter);
+  // A single pending-recoverability document opens its detail pane so "Edit VAT review" is immediately visible; nothing is edited or submitted.
+  if(filter==='recoverability'){setSearch('');setTypeFilter('');setTreatmentFilter('')}
+  setSelectedDocument(matches.length===1?matches[0]!:null);
+  window.setTimeout(()=>document.getElementById('vat-register')?.scrollIntoView?.({block:'start'}),0)};
  // A blocker is actionable only when it has a safe existing destination the user is allowed to open; otherwise it stays informational.
  const blockerRows:{key:string;label:string;count:number;action:(()=>void)|null}[]=selected?[
   {key:'unapproved',label:t('vat.unapprovedLabel'),count:selected.blockers.unapproved_documents,action:canViewDocuments?()=>onNavigate('documents',{from:selected.period_start,to:selected.period_end}):null},

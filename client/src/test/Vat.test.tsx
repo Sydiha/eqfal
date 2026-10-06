@@ -70,8 +70,12 @@ describe('VAT review workspace',()=>{
   expect(screen.getByRole('combobox',{name:'Review status'})).toHaveValue('recoverability');
   expect(screen.getByRole('cell',{name:'expense-gamma.pdf'})).toBeInTheDocument();
   expect(screen.queryByRole('cell',{name:'sale-acme.pdf'})).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('cell',{name:'expense-gamma.pdf'}));
-  fireEvent.click(within(await screen.findByLabelText('VAT document details')).getByRole('button',{name:/Edit VAT review/}));
+  // exactly one match: its detail pane opens automatically, nothing is submitted or edited yet
+  const detail=await screen.findByLabelText('VAT document details');
+  expect(within(detail).getByText('expense-gamma.pdf')).toBeInTheDocument();
+  expect(calls).toHaveLength(0);
+  expect(screen.queryByLabelText('VAT recoverability')).not.toBeInTheDocument();
+  fireEvent.click(within(detail).getByRole('button',{name:/Edit VAT review/}));
   fireEvent.change(screen.getByLabelText('VAT recoverability'),{target:{value:'partially_recoverable'}});
   fireEvent.change(screen.getByLabelText('Recoverable VAT amount'),{target:{value:'5.00'}});
   fireEvent.change(screen.getByLabelText('Recoverability reason'),{target:{value:'Mixed use'}});
@@ -103,5 +107,23 @@ describe('VAT review workspace',()=>{
   fireEvent.click(await screen.findByRole('cell',{name:'expense-gamma.pdf'}));
   fireEvent.click(within(await screen.findByLabelText('تفاصيل المستند الضريبي')).getByRole('button',{name:'تعديل المراجعة'}));
   expect(screen.getByLabelText('استرداد الضريبة')).toBeInTheDocument();
+ });
+
+ const pendingExpense=(id:string,name:string)=>({id,status:'approved',original_filename:name,document_type:'expense',document_date:'2026-01-12',counterparty_name:'Gamma',total_amount:'115.00',review_id:'r-'+id,tax_date:'2026-01-12',treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',review_status:'reviewed',review_note:null,version:2,recoverability_status:'needs_review'});
+ const recoverabilityMock=(docs:any[])=>{const blocked={...period,ready:false,blockers:{unapproved_documents:0,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:docs.length,vat_ledger_mismatches:0,vat_adjustments_pending:0,total:docs.length}};vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents:docs}),{status:200})}))};
+ it('does not auto-select a document when several are pending recoverability',async()=>{
+  recoverabilityMock([pendingExpense('x1','exp-1.pdf'),pendingExpense('x2','exp-2.pdf')]);
+  render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Pending VAT recoverability decisions'}));
+  expect(screen.getByRole('cell',{name:'exp-1.pdf'})).toBeInTheDocument();
+  expect(screen.getByRole('cell',{name:'exp-2.pdf'})).toBeInTheDocument();
+  expect(screen.queryByLabelText('VAT document details')).not.toBeInTheDocument();
+ });
+ it('opens the single pending document without offering edit when the user lacks vat.review',async()=>{
+  recoverabilityMock([pendingExpense('x1','exp-1.pdf')]);
+  render(<Vat canView canReview={false} canClose={false} canReopen={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Pending VAT recoverability decisions'}));
+  const detail=await screen.findByLabelText('VAT document details');
+  expect(within(detail).queryByRole('button',{name:/VAT review/})).not.toBeInTheDocument();
  });
 });
