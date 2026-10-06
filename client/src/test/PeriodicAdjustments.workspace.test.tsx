@@ -10,6 +10,7 @@ const accounts=[{id:'b',code:'1500',name:'Accrued',account_type:'liability',is_a
 let calls:{url:string;method:string;body?:string}[]=[];
 const caps={canView:true,canCreate:true,canEdit:true,canSubmit:true,canReview:true,canApprove:true,canPost:true};
 const mount=(over:Partial<typeof caps>={})=>render(<PeriodicAdjustments {...caps} {...over} onUnauthorized={vi.fn()}/>);
+const openSchedule=async()=>{fireEvent.click((await screen.findAllByRole('button',{name:'View schedule'}))[1]);};
 beforeEach(async()=>{
  vi.restoreAllMocks();calls=[];await i18n.changeLanguage('en');window.history.replaceState(null,'','/?page=periodicAdjustments');
  vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
@@ -42,28 +43,34 @@ describe('Accruals & Prepayments workspace',()=>{
   for(const label of ['Total amount','Recognition start','Recognition end','Description','Balance-sheet account','P&L account'])expect(screen.getByLabelText(label)).toBeRequired();
   expect(screen.getByLabelText('Total amount')).toHaveAttribute('pattern','[0-9]+([.][0-9]{1,2})?');
  });
- it('selects the adjustment with a schedule by default and switches schedule on selection',async()=>{
-  mount();expect(await screen.findByText('Recognition schedule')).toBeInTheDocument();
+ it('shows no schedule until View schedule is clicked, then switches per adjustment, read-only',async()=>{
+  mount();await screen.findByText('Prepaid rent');
+  expect(screen.queryByRole('region',{name:'Recognition schedule'})).not.toBeInTheDocument();
+  expect(screen.getByText(/Select an adjustment to view its recognition schedule/)).toBeInTheDocument();
+  const before=calls.length;
+  const views=screen.getAllByRole('button',{name:'View schedule'});
+  fireEvent.click(views[1]);
   const schedule=screen.getByRole('region',{name:'Recognition schedule'});
   expect(within(schedule).getByText(/Prepaid expense — Prepaid rent/)).toBeInTheDocument();
   expect(within(schedule).getAllByRole('button',{name:'Post period'})).toHaveLength(2);
-  fireEvent.click(screen.getAllByRole('button',{name:'View schedule'})[0]);
+  fireEvent.click(views[0]);
   expect(within(screen.getByRole('region',{name:'Recognition schedule'})).getByText(/No recognition schedule yet/)).toBeInTheDocument();
+  expect(calls.slice(before)).toEqual([]);
  });
  it('shows a short journal reference for posted periods and keeps the full id internal',async()=>{
-  mount();const ref=await screen.findByText(/468f8d80…/);expect(ref).toHaveAttribute('title','468f8d80-1111-2222-3333-444455556666e3b53cc3');
+  mount();await openSchedule();const ref=await screen.findByText(/468f8d80…/);expect(ref).toHaveAttribute('title','468f8d80-1111-2222-3333-444455556666e3b53cc3');
   expect(screen.queryByText('468f8d80-1111-2222-3333-444455556666e3b53cc3')).not.toBeInTheDocument();
  });
  it('posts only the chosen period through the existing endpoint',async()=>{
-  mount();const buttons=await screen.findAllByRole('button',{name:'Post period'});fireEvent.click(buttons[0]);
+  mount();await openSchedule();const buttons=await screen.findAllByRole('button',{name:'Post period'});fireEvent.click(buttons[0]);
   await waitFor(()=>expect(calls.some(c=>c.method==='POST'&&c.url==='/api/periodic-adjustments/a1/schedule/s1/post')).toBe(true));
   expect(calls.filter(c=>c.url.endsWith('/post'))).toHaveLength(1);
  });
  it('hides posting without the post capability and never offers it for posted periods',async()=>{
-  mount({canPost:false});await screen.findByText('Recognition schedule');expect(screen.queryByRole('button',{name:'Post period'})).not.toBeInTheDocument();expect(screen.getByText(/Posted$/,{selector:'.pa-done'})).toBeInTheDocument();
+  mount({canPost:false});await openSchedule();await screen.findByText('Recognition schedule');expect(screen.queryByRole('button',{name:'Post period'})).not.toBeInTheDocument();expect(screen.getByText(/Posted$/,{selector:'.pa-done'})).toBeInTheDocument();
  });
  it('shows KPI counts from the loaded data and the empty state when nothing exists',async()=>{
-  mount();await screen.findByText('Recognition schedule');
+  mount();await openSchedule();await screen.findByText('Recognition schedule');
   const kpi=(label:string)=>screen.getByText(label).parentElement!.querySelector('strong')!.textContent;
   expect([kpi('Total adjustments'),kpi('Pending periods'),kpi('Posted periods')]).toEqual(['2','2','1']);
  });
@@ -72,7 +79,7 @@ describe('Accruals & Prepayments workspace',()=>{
   mount();expect(await screen.findByText('No periodic adjustments yet.')).toBeInTheDocument();expect(screen.queryByText('Recognition schedule')).not.toBeInTheDocument();
  });
  it('shows the generic error banner without raw server details when posting fails',async()=>{
-  mount();const buttons=await screen.findAllByRole('button',{name:'Post period'});
+  mount();await openSchedule();const buttons=await screen.findAllByRole('button',{name:'Post period'});
   (fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(async()=>new Response('stack trace secret',{status:409}));
   fireEvent.click(buttons[0]);expect(await screen.findByRole('alert')).toHaveTextContent('Could not load or save data.');expect(screen.queryByText(/stack trace/)).not.toBeInTheDocument();
  });

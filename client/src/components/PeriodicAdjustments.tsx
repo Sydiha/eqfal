@@ -50,7 +50,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const closePeriod=readClosePeriod();
  const visibleItems=closePeriod?items.filter(a=>((a.workflow_status==='draft'||a.workflow_status==='in_review')&&a.recognition_start<=closePeriod.to&&a.recognition_end>=closePeriod.from)||(a.workflow_status==='approved'&&a.schedule.some(entry=>entry.status==='pending'&&entry.recognition_date>=closePeriod.from&&entry.recognition_date<=closePeriod.to))):items;
  const pending=items.flatMap(a=>a.schedule).filter(s=>s.status==='pending').length,posted=items.flatMap(a=>a.schedule).filter(s=>s.status==='posted').length;
- const selected=visibleItems.find(a=>a.id===selectedId)??visibleItems.find(a=>a.schedule.length>0)??visibleItems[0]??null;
+ const selected=visibleItems.find(a=>a.id===selectedId)??null;
  const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
  const showForm=(canCreate&&formOpen)||(!!editing&&canEdit);
@@ -95,7 +95,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
     <td data-label={l.status}><StatusBadge status={a.workflow_status}>{l[a.workflow_status]}</StatusBadge></td>
     <td data-label={l.actions}><div className="pa-actions"><button type="button" className="pa-ghost" aria-pressed={isSel} onClick={()=>setSelectedId(a.id)}>{l.viewSchedule}</button>{canEdit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>edit(a)}>{l.update}</button>}{canSubmit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/submit-review`)}>{l.submit}</button>}{canApprove&&a.workflow_status==='in_review'&&<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/approve`)}>{l.approve}</button>}</div>{canReview&&a.workflow_status==='in_review'&&<div className="pa-return"><textarea aria-label={l.returnReason} placeholder={l.returnReason} value={returnReasons[a.id]??''} onChange={e=>setReturnReasons({...returnReasons,[a.id]:e.target.value})}/><button type="button" className="pa-ghost" disabled={busy||!(returnReasons[a.id]??'').trim()} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/return-to-draft`,{reason:(returnReasons[a.id]??'').trim()})}>{l.returnDraft}</button></div>}</td>
    </tr>})}</tbody></table></div>
-   <div className="pa-foot"><span>{l.showing(visibleItems.length)}</span><span>{l.scheduleLinked}</span></div></>}
+   <div className="pa-foot"><span>{l.showing(visibleItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
   </section>
   {!loading&&selected&&<section className="pa-card" aria-labelledby="pa-schedule-title">
    <div className="pa-card__head"><div><h3 id="pa-schedule-title">{l.schedule}</h3><p className="pa-muted">{l[selected.adjustment_type]} — {selected.description}</p></div><span className="pa-muted">{selected.schedule.length?`${l.periodsCount(selected.schedule.length)} • ${l.scheduleAmounts}`:''}</span></div>
