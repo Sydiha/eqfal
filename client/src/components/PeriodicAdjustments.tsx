@@ -37,6 +37,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const [items,setItems]=useState<Adjustment[]>([]),[accounts,setAccounts]=useState<Account[]>([]),[documents,setDocuments]=useState<Document[]>([]),[obligations,setObligations]=useState<Obligation[]>([]);
  const [form,setForm]=useState<FormState>(initialForm),[editing,setEditing]=useState<Adjustment|null>(null),[returnReasons,setReturnReasons]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(canView),[busy,setBusy]=useState(false),[error,setError]=useState(false);
+ const [quick,setQuick]=useState<'all'|'pending'|'posted'>('all');
  const [formOpen,setFormOpen]=useState(false),[selectedId,setSelectedId]=useState<string|null>(null),[busyUrl,setBusyUrl]=useState<string|null>(null);
  const load=async()=>{setLoading(true);setError(false);try{const main=await api('/api/periodic-adjustments',{},onUnauthorized);setItems(((await main.json()) as {adjustments:Adjustment[]}).adjustments);const optional=await Promise.allSettled([api('/api/accounts',{},onUnauthorized),api('/api/documents',{},onUnauthorized),api('/api/obligations',{},onUnauthorized)]);if(optional[0].status==='fulfilled')setAccounts(((await optional[0].value.json()) as {accounts:Account[]}).accounts);if(optional[1].status==='fulfilled')setDocuments(((await optional[1].value.json()) as {documents:Document[]}).documents);if(optional[2].status==='fulfilled')setObligations(((await optional[2].value.json()) as {obligations:Obligation[]}).obligations);}catch{setError(true)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void load();// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,8 +57,12 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const closePeriod=readClosePeriod();
  const globalRange=(()=>{if(periodMode==='all'){const year=availableFiscalYears.find(y=>y.id===selectedFiscalYearId);return year?{from:year.start_date.slice(0,10),to:year.end_date.slice(0,10)}:null}const period=availablePeriodsForSelectedYear.find(p=>p.id===selectedPeriodId);return period?{from:period.period_start.slice(0,10),to:period.period_end.slice(0,10)}:null})();
  const overlapsGlobal=(a:Adjustment)=>!globalRange||(a.recognition_start<=globalRange.to&&a.recognition_end>=globalRange.from);
- const visibleItems=closePeriod?items.filter(a=>((a.workflow_status==='draft'||a.workflow_status==='in_review')&&a.recognition_start<=closePeriod.to&&a.recognition_end>=closePeriod.from)||(a.workflow_status==='approved'&&a.schedule.some(entry=>entry.status==='pending'&&entry.recognition_date>=closePeriod.from&&entry.recognition_date<=closePeriod.to))):items.filter(overlapsGlobal);
- const pending=visibleItems.flatMap(a=>a.schedule).filter(s=>s.status==='pending').length,posted=visibleItems.flatMap(a=>a.schedule).filter(s=>s.status==='posted').length;
+ const scopedItems=closePeriod?items.filter(a=>((a.workflow_status==='draft'||a.workflow_status==='in_review')&&a.recognition_start<=closePeriod.to&&a.recognition_end>=closePeriod.from)||(a.workflow_status==='approved'&&a.schedule.some(entry=>entry.status==='pending'&&entry.recognition_date>=closePeriod.from&&entry.recognition_date<=closePeriod.to))):items.filter(overlapsGlobal);
+ const scopeRange=closePeriod??globalRange;
+ const entriesInScope=(a:Adjustment)=>scopeRange?a.schedule.filter(e=>e.recognition_date>=scopeRange.from&&e.recognition_date<=scopeRange.to):a.schedule;
+ const countEntries=(status:Schedule['status'])=>scopedItems.reduce((sum,a)=>sum+entriesInScope(a).filter(e=>e.status===status).length,0);
+ const pending=countEntries('pending'),posted=countEntries('posted');
+ const visibleItems=quick==='all'?scopedItems:scopedItems.filter(a=>entriesInScope(a).some(e=>e.status===quick));
  const selected=visibleItems.find(a=>a.id===selectedId)??null;
  const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
@@ -72,9 +77,9 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    {canCreate&&!showForm&&<button type="button" className="pa-primary" onClick={()=>setFormOpen(true)}><span aria-hidden="true">+</span> {l.newItem}</button>}
   </header>
   <div className="pa-kpis">
-   <div className="pa-kpi"><div><span>{l.total}</span><strong>{visibleItems.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></div>
-   <div className="pa-kpi pa-kpi--pending"><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></div>
-   <div className="pa-kpi pa-kpi--posted"><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></div>
+   <button type="button" className={`pa-kpi${quick==='all'?' is-active':''}`} aria-pressed={quick==='all'} onClick={()=>{setQuick('all');setSelectedId(null)}}><div><span>{l.total}</span><strong>{scopedItems.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></button>
+   <button type="button" className={`pa-kpi pa-kpi--pending${quick==='pending'?' is-active':''}`} aria-pressed={quick==='pending'} onClick={()=>{setQuick(quick==='pending'?'all':'pending');setSelectedId(null)}}><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
+   <button type="button" className={`pa-kpi pa-kpi--posted${quick==='posted'?' is-active':''}`} aria-pressed={quick==='posted'} onClick={()=>{setQuick(quick==='posted'?'all':'posted');setSelectedId(null)}}><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
   </div>
   {error&&<WorkspaceState tone="error">{l.error}</WorkspaceState>}
   {showForm&&<section className="pa-card pa-form-card" aria-label={editing?l.update:l.newItem}><div className="pa-card__head"><h3>{editing?l.update:l.formTitle}</h3></div><p className="pa-muted">{l.accountHint}</p><form className="pa-form" onSubmit={submitForm}>

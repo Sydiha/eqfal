@@ -19,6 +19,10 @@
 /* KPI cards */
 .pa-view .pa-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .pa-view .pa-kpi{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:16px 20px;border:1px solid var(--pa-border);border-radius:12px;background:#fff}
+.pa-view button.pa-kpi{width:100%;font:inherit;color:inherit;text-align:start;cursor:pointer}
+.pa-view button.pa-kpi:hover{filter:brightness(.97)}
+.pa-view button.pa-kpi:focus-visible{outline:2px solid var(--pa-green);outline-offset:2px}
+.pa-view .pa-kpi.is-active{box-shadow:0 0 0 2px var(--pa-green);border-color:var(--pa-green)}
 .pa-view .pa-kpi>div{display:flex;flex-direction:column;gap:6px}
 .pa-view .pa-kpi span{color:var(--pa-muted);font-size:12px}
 .pa-view .pa-kpi strong{font-size:24px;font-weight:700;line-height:1}
