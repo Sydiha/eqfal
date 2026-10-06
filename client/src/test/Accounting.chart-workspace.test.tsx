@@ -78,7 +78,7 @@ describe('Accounting chart-of-accounts workspace', () => {
     fireEvent.change(name!, { target: { value: 'Main bank' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
-    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ code: '1999', name: 'Main bank' });
+    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ code: '1999', name_ar: 'Main bank' });
   });
 
   it('locks code, type and parent for a used account but still allows name and status', async () => {
@@ -99,7 +99,7 @@ describe('Accounting chart-of-accounts workspace', () => {
     fireEvent.change(status!, { target: { value: 'inactive' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
-    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ name: 'Renamed', is_active: false });
+    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ name_ar: 'Renamed', is_active: false });
   });
 
   it('locks the type when the account has child accounts', async () => {

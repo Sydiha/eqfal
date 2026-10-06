@@ -12,10 +12,10 @@ export class CashFlowClassificationError extends Error{
 type QueryRunner=Pick<Pool|PoolClient,'query'>;
 type CashFlowLine={
   journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance';source_type:string|null;source_id:string|null;
-  account_id:string;code:string;name:string;cash_role:CashRole;cash_flow_category:CashFlowCategory;debit:string;credit:string;
+  account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;cash_role:CashRole;cash_flow_category:CashFlowCategory;debit:string;credit:string;
 };
 export type CashFlowBlocker={journal_id:string;accounting_date:string;reason:'unmapped'|'ambiguous';account_ids:string[]};
-export type CashFlowRow={account_id:string;code:string;name:string;amount:string};
+export type CashFlowRow={account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;amount:string};
 export type CashFlowSection={category:Exclude<CashFlowCategory,'unmapped'>;accounts:CashFlowRow[];total:string};
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -71,7 +71,7 @@ export class CashFlowStatementService{
   private async lines(db:QueryRunner,companyId:string,fiscalYearId:string,start:string,end:string){
     return(await db.query<CashFlowLine>(
       `SELECT j.id journal_id,j.accounting_date::text,j.entry_type,j.source_type,j.source_id,
-              a.id account_id,a.code,a.name,a.cash_role,a.cash_flow_category,l.debit::text,l.credit::text
+              a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.cash_role,a.cash_flow_category,l.debit::text,l.credit::text
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -100,7 +100,7 @@ export class CashFlowStatementService{
     }
     for(const {line,value} of movements){
       const category=line.cash_flow_category as Exclude<CashFlowCategory,'unmapped'>,existing=grouped[category].get(line.account_id);
-      grouped[category].set(line.account_id,{account_id:line.account_id,code:line.code,name:line.name,amount:money((existing?Number(existing.amount):0)+value)});
+      grouped[category].set(line.account_id,{account_id:line.account_id,code:line.code,name:line.name,name_ar:line.name_ar,name_en:line.name_en,amount:money((existing?Number(existing.amount):0)+value)});
     }
   }
 }

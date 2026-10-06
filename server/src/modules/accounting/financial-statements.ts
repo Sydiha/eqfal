@@ -10,7 +10,7 @@ export class FinancialStatementUnmappedError extends Error{
 }
 
 export type StatementAccount={
-  account_id:string;code:string;name:string;account_type:string;
+  account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;account_type:string;
   statement_category:StatementCategory;is_contra:boolean;amount:string;
 };
 type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string};
@@ -42,7 +42,7 @@ export class FinancialStatementsService{
       throw new FinancialStatementValidationError('Invalid report date range');
     }
     const rows=(await db.query<Movement>(
-      `SELECT a.id account_id,a.code,a.name,a.account_type,a.statement_category,a.is_contra,
+      `SELECT a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.account_type,a.statement_category,a.is_contra,
               COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
               COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
               COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.credit ELSE 0 END),0)::text opening_credit
@@ -51,7 +51,7 @@ export class FinancialStatementsService{
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
        WHERE l.company_id=$1 AND j.company_id=$1 AND j.fiscal_year_id=$2
          AND j.status='posted' AND j.accounting_date BETWEEN $3 AND $4
-       GROUP BY a.id,a.code,a.name,a.account_type,a.statement_category,a.is_contra
+       GROUP BY a.id,a.code,a.name,a.name_ar,a.name_en,a.account_type,a.statement_category,a.is_contra
        ORDER BY a.code,a.id`,
       [companyId,fiscalYearId,from,to],
     )).rows;

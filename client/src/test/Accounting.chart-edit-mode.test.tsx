@@ -50,7 +50,7 @@ describe('Chart of Accounts edit mode (Task 30A)', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'حفظ التعديلات' }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(true));
     const call = fetchMock.mock.calls.find(([, o]) => o?.method === 'PATCH')!;
-    expect(JSON.parse(String(call[1]?.body))).toEqual({ name: 'Main bank' });
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ name_ar: 'Main bank' });
   });
 
   it('restores the original values on Cancel', async () => {
@@ -61,7 +61,9 @@ describe('Chart of Accounts edit mode (Task 30A)', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'تعديل' }));
     fireEvent.change(within(panel).getAllByRole('textbox')[1]!, { target: { value: 'Changed' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'إلغاء' }));
-    expect(within(panel).getAllByRole('textbox')[1]).toHaveValue('Bank');
+    // Legacy account (no localized names yet): the Arabic field returns to empty, showing the legacy name as placeholder.
+    expect(within(panel).getAllByRole('textbox')[1]).toHaveValue('');
+    expect(within(panel).getAllByRole('textbox')[1]).toHaveAttribute('placeholder', 'Bank');
     expect(within(panel).getAllByRole('textbox')[1]).toBeDisabled();
   });
 
