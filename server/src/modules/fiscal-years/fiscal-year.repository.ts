@@ -97,10 +97,15 @@ export class FiscalYearRepository {
   }
 
   /**
-   * Find fiscal years within companyId whose date range overlaps [startDate, endDate).
+   * Find fiscal years within companyId whose date range overlaps [startDate, endDate].
    *
-   * Overlap formula: existing.start_date < endDate AND startDate < existing.end_date
-   * Adjacent ranges (end of one = start of next) do NOT overlap.
+   * start_date and end_date are INCLUSIVE calendar dates (both days belong to
+   * the fiscal year), matching every date-range query elsewhere in the system.
+   *
+   * Overlap formula: existing.start_date <= endDate AND existing.end_date >= startDate
+   * Sharing even one day (e.g. one year ends 2026-12-31 and the next starts
+   * 2026-12-31) IS an overlap. Truly adjacent years (2026-12-31 then 2027-01-01)
+   * do not overlap.
    *
    * @param excludeId  Optional — exclude this fiscal year ID (used during update checks).
    * @param runner     Optional QueryRunner — pass the active PoolClient when calling
@@ -119,8 +124,8 @@ export class FiscalYearRepository {
     let sql = `
       SELECT * FROM fiscal_years
        WHERE company_id  = $1
-         AND start_date  < $3
-         AND end_date    > $2
+         AND start_date  <= $3
+         AND end_date    >= $2
     `;
     if (excludeId) {
       params.push(excludeId);

@@ -163,7 +163,7 @@ describe('FiscalYearService — adjacent years (touching boundaries) allowed', (
     const { service, fyRepo, auditRepo } = makeService(client);
 
     // Existing FY 2023: 2023-01-01 → 2023-12-31
-    // New FY 2024 starts 2024-01-01 — no overlap (2023-12-31 is NOT > 2024-01-01)
+    // New FY 2024 starts 2024-01-01 — no overlap (2023-12-31 is NOT >= 2024-01-01)
     vi.spyOn(fyRepo, 'findOverlapping').mockResolvedValue([]); // repo confirms: no overlap
     const newFy = makeFiscalYear({ start_date: '2024-01-01', end_date: '2024-12-31' });
     vi.spyOn(fyRepo, 'create').mockResolvedValue(newFy);
@@ -180,22 +180,37 @@ describe('FiscalYearService — adjacent years (touching boundaries) allowed', (
     expect(result.start_date).toBe('2024-01-01');
   });
 
-  it('findOverlapping uses strict inequality — adjacent ranges return no rows', async () => {
-    // Verify the overlap formula: existing.start < newEnd AND newStart < existing.end
-    // FY-A: start='2023-01-01', end='2024-01-01'
-    // New:  start='2024-01-01', end='2025-01-01'
-    // newStart (2024-01-01) < existing.end (2024-01-01) → FALSE → no overlap ✓
+  it('findOverlapping treats start/end as inclusive — same-day boundary counts as overlap', async () => {
+    // Existing FY: 2026-01-01..2026-12-31 (inclusive). New: 2026-12-31..2027-12-30.
+    // Overlap formula: existing.start <= newEnd AND existing.end >= newStart
+    //   2026-12-31 >= 2026-12-31 → TRUE → overlap (2026-12-31 belongs to both).
     const pool = makePool();
     const repo = new FiscalYearRepository(pool);
     const querySpy = pool.query as ReturnType<typeof vi.fn>;
     querySpy.mockResolvedValue({ rows: [], rowCount: 0 });
 
-    await repo.findOverlapping(COMPANY_A, '2024-01-01', '2025-01-01');
+    await repo.findOverlapping(COMPANY_A, '2026-12-31', '2027-12-30');
 
     const [sql, params] = querySpy.mock.calls[0] as [string, unknown[]];
-    // Confirm the SQL uses end_date > $2 (strict greater-than) for the start boundary
-    expect(sql).toMatch(/end_date\s*>\s*\$2/i);
-    expect(params[1]).toBe('2024-01-01');
+    expect(sql).toMatch(/start_date\s*<=\s*\$3/i);
+    expect(sql).toMatch(/end_date\s*>=\s*\$2/i);
+    expect(sql).not.toMatch(/start_date\s*<\s*\$3/i);
+    expect(sql).not.toMatch(/end_date\s*>\s*\$2/i);
+    expect(params[1]).toBe('2026-12-31');
+    expect(params[2]).toBe('2027-12-30');
+  });
+
+  it('findOverlapping keeps self-exclusion on update', async () => {
+    const pool = makePool();
+    const repo = new FiscalYearRepository(pool);
+    const querySpy = pool.query as ReturnType<typeof vi.fn>;
+    querySpy.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await repo.findOverlapping(COMPANY_A, '2026-01-01', '2026-12-31', FY_ID);
+
+    const [sql, params] = querySpy.mock.calls[0] as [string, unknown[]];
+    expect(sql).toMatch(/id\s*<>\s*\$4/i);
+    expect(params[3]).toBe(FY_ID);
   });
 });
 
