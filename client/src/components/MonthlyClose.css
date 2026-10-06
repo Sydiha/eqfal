@@ -109,3 +109,7 @@
  .mc-view .mc-readiness__foot{flex-direction:column;align-items:flex-start}
  .mc-view .mc-readiness__foot>button{margin-inline-start:0}
 }
+/* Task 31: a ready period has no readiness table above the close action, so drop the orphan divider; keep the month title on one line. */
+.mc-readiness__foot:first-child{padding-top:0;border-top:0}
+.mc-summary__identity{flex-wrap:wrap}
+.mc-summary__identity h3{white-space:nowrap}

@@ -50,3 +50,35 @@
 .opening-balance-view .ob-sug__warn{flex-basis:100%;margin:0;color:#b45309;font-size:11px}
 .opening-balance-view .ob-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
 @media (max-width:720px){.opening-balance-view .ob-summary dl{grid-template-columns:1fr 1fr;row-gap:10px}.opening-balance-view .ob-register__foot{flex-direction:column}}
+/* Task 31: keep the source cell a real table cell so rows stay aligned. */
+.opening-balance-view .ob-table td:nth-child(5){display:table-cell}
+.opening-balance-view .ob-table td:nth-child(5)>.ob-badge{display:block;width:fit-content;margin-top:4px}
+.opening-balance-view .ob-table td button{min-height:0;height:30px;padding:0 12px;border-radius:8px;font-size:12px}
+/* Task 31: compact multi-column add-item form instead of full-width stacked controls. */
+.opening-balance-view .ob-form h3{margin-bottom:10px}
+.opening-balance-view .ob-form .form-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px;align-items:start}
+.opening-balance-view .ob-form .form-grid label{gap:6px;color:var(--ob-muted);font-size:11.5px;font-weight:500}
+.opening-balance-view .ob-form input,.opening-balance-view .ob-form select{height:34px;min-height:0;padding:0 10px;border-radius:8px;font-size:12px}
+.opening-balance-view .ob-form textarea{min-height:64px;padding:8px 10px;border-radius:8px;font-size:12px}
+.opening-balance-view .ob-form .form-grid label:has(textarea){grid-column:1/-1}
+.opening-balance-view .ob-form .form-grid>button{grid-column:1/-1;justify-self:start;min-height:0;height:32px;padding:0 16px;border-radius:8px;font-size:12px}
+@media (max-width:1100px){.opening-balance-view .ob-form .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Task 31: phone layout keeps the register as a scrollable table and stops the context/summary from clipping. */
+@media (max-width:800px){
+ .opening-balance-view .table-wrap.ob-table{overflow-x:auto}
+ .opening-balance-view .ob-table table{display:table;min-width:760px}
+ .opening-balance-view .ob-table thead{display:table-header-group}
+ .opening-balance-view .ob-table tbody{display:table-row-group}
+ .opening-balance-view .ob-table tr{display:table-row;margin:0;padding:0;border:0;border-radius:0}
+ .opening-balance-view .ob-table td{display:table-cell;padding:10px 12px;border-top:1px solid var(--ob-border);white-space:nowrap}
+}
+@media (max-width:720px){
+ .opening-balance-view .ob-context__year{flex-wrap:wrap}
+ .opening-balance-view .ob-context select{flex:1 1 160px;width:auto;min-width:0}
+ .opening-balance-view .ob-divider{display:none}
+ .opening-balance-view .ob-summary dl>div{padding:4px 12px}
+ .opening-balance-view .ob-summary dl>div:nth-child(odd){border-inline-start:0}
+ .opening-balance-view .ob-amount{font-size:18px;overflow-wrap:anywhere}
+ .opening-balance-view .ob-form .form-grid{grid-template-columns:1fr}
+ .opening-balance-view .ob-form .form-grid>button{justify-self:stretch}
+}
