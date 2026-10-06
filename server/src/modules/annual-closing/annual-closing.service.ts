@@ -89,7 +89,18 @@ export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<st
 export class AnnualClosingService {
   constructor(private db: Pool | PoolClient) {}
 
-  async readiness(companyId: string, fiscalYearId: string): Promise<AnnualClosingResponse> {
+  /**
+   * `fiscalYearBounded` is used by the fiscal-year close gate: dated blockers
+   * are evaluated strictly inside [start_date, end_date] and the live tax
+   * workpaper drift lookup (which needs a Pool, not a transaction client) is
+   * skipped. Default behaviour is unchanged.
+   */
+  async readiness(companyId: string, fiscalYearId: string, options: { fiscalYearBounded?: boolean } = {}): Promise<AnnualClosingResponse> {
+    const bounded = options.fiscalYearBounded === true;
+    const obligationDate = bounded ? 'o.recognized_on BETWEEN $2 AND $3' : 'o.recognized_on<=$3';
+    const partnerOverlapLowerBound = bounded
+      ? " AND COALESCE(a.effective_to,'infinity'::date)>=$2 AND COALESCE(b.effective_to,'infinity'::date)>=$2"
+      : '';
     const fiscalYear = (await this.db.query<FiscalYear>(
       'SELECT id,start_date::text,end_date::text,status FROM fiscal_years WHERE id=$1 AND company_id=$2', [fiscalYearId, companyId],
     )).rows[0];
@@ -129,11 +140,11 @@ export class AnnualClosingService {
           EXISTS (SELECT 1 FROM obligations o JOIN journal_entries j ON j.company_id=o.company_id AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted' WHERE o.company_id=d.company_id AND o.document_id=d.id AND NOT o.is_cancelled AND o.verification_status='confirmed')
           OR EXISTS (SELECT 1 FROM custody_document_allocations a JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted' WHERE a.company_id=d.company_id AND a.document_id=d.id)
         ))))::text documents,
-      (SELECT COUNT(*) FROM obligations o WHERE o.company_id=$1 AND o.recognized_on<=$3 AND NOT o.is_cancelled AND o.verification_status='unconfirmed')::text obligations,
+      (SELECT COUNT(*) FROM obligations o WHERE o.company_id=$1 AND ${obligationDate} AND NOT o.is_cancelled AND o.verification_status='unconfirmed')::text obligations,
       (SELECT COALESCE(SUM(GREATEST(o.original_amount-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN (SELECT obligation_id,company_id,SUM(amount) settled FROM obligation_settlements WHERE company_id=$1 AND created_at::date<=$3 GROUP BY obligation_id,company_id) s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='receivable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_receivables,
       (SELECT COALESCE(SUM(GREATEST(o.original_amount-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN (SELECT obligation_id,company_id,SUM(amount) settled FROM obligation_settlements WHERE company_id=$1 AND created_at::date<=$3 GROUP BY obligation_id,company_id) s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='payable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_payables,
       (SELECT COUNT(*) FROM partner_ownership_periods p WHERE p.company_id=$1 AND p.verification_status='unconfirmed' AND (p.effective_from IS NULL OR p.effective_from<=$3) AND (p.effective_to IS NULL OR p.effective_to>=$2))::text partner_unconfirmed,
-      (SELECT COUNT(*) FROM partner_ownership_periods a JOIN partner_ownership_periods b ON b.company_id=a.company_id AND b.partner_id=a.partner_id AND b.id>a.id WHERE a.company_id=$1 AND a.verification_status='confirmed' AND b.verification_status='confirmed' AND COALESCE(a.effective_to,'infinity'::date)>=b.effective_from AND COALESCE(b.effective_to,'infinity'::date)>=a.effective_from AND a.effective_from<=$3 AND b.effective_from<=$3)::text partner_overlaps,
+      (SELECT COUNT(*) FROM partner_ownership_periods a JOIN partner_ownership_periods b ON b.company_id=a.company_id AND b.partner_id=a.partner_id AND b.id>a.id WHERE a.company_id=$1 AND a.verification_status='confirmed' AND b.verification_status='confirmed' AND COALESCE(a.effective_to,'infinity'::date)>=b.effective_from AND COALESCE(b.effective_to,'infinity'::date)>=a.effective_from AND a.effective_from<=$3 AND b.effective_from<=$3${partnerOverlapLowerBound})::text partner_overlaps,
       (SELECT COUNT(*) FROM partners p WHERE p.company_id=$1 AND p.is_active AND NOT EXISTS (SELECT 1 FROM partner_ownership_periods h WHERE h.company_id=p.company_id AND h.partner_id=p.id AND h.verification_status='confirmed' AND h.effective_from<=$3 AND (h.effective_to IS NULL OR h.effective_to>=$2)))::text partner_missing,
       (SELECT COUNT(*) FROM asset_depreciation_entries e WHERE e.company_id=$1 AND e.status='pending' AND e.period_start<=$3 AND e.period_end>=$2)::text pending_depreciation,
       (SELECT COUNT(*) FROM fixed_assets a WHERE a.company_id=$1 AND a.status='draft' AND a.acquisition_date BETWEEN $2 AND $3)::text draft_assets,
@@ -147,7 +158,7 @@ export class AnnualClosingService {
     const whtProfiles=(await this.db.query<WhtProfile>(`SELECT effective_from::text,effective_to::text,wht_profile,has_non_resident_dealings FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$2) ORDER BY effective_from,version_no`,[companyId,start,end])).rows;
     const whtReviews=(await this.db.query<{workflow_status:string;professional_review_required:boolean}>(`SELECT workflow_status,professional_review_required FROM wht_reviews WHERE company_id=$1 AND fiscal_year_id=$2`,[companyId,fiscalYearId])).rows;
     const workpaper=(await this.db.query<{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:string}>(`SELECT w.accounting_profile_id,w.tax_path,w.workflow_status,w.professional_review_required,COUNT(a.id) FILTER (WHERE a.professional_review_required)::text unresolved FROM tax_working_papers w LEFT JOIN tax_working_paper_adjustments a ON a.workpaper_id=w.id AND a.company_id=w.company_id WHERE w.company_id=$1 AND w.fiscal_year_id=$2 GROUP BY w.id`,[companyId,fiscalYearId])).rows[0];
-    const liveTaxWorkpaper=workpaper?await new TaxWorkpaperService(this.db as Pool).get(companyId,fiscalYearId):null;
+    const liveTaxWorkpaper=workpaper&&!bounded?await new TaxWorkpaperService(this.db as Pool).get(companyId,fiscalYearId):null;
     const taxPath=profile?({zakat_applicable:'zakat',income_tax_applicable:'income_tax',mixed:'mixed',needs_review:'needs_review'}[profile.tax_treatment]??'needs_review'):'needs_review';
     const financialBlockers=missingPeriods+openPeriods+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
 

@@ -34,6 +34,8 @@ function resolveRecoverability(documentType:string,input:Exclude<ReturnType<type
 function monthKey(date:string){return date.slice(0,7)}
 async function lockVatDates(companyId:string,dates:string[],client:PoolClient){for(const bucket of [...new Set(dates.map(monthKey))].sort())await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`vat-period:${companyId}:${bucket}`]);}
 async function lockVatRange(companyId:string,start:string,end:string,client:PoolClient){const cursor=new Date(`${start.slice(0,7)}-01T00:00:00Z`),last=new Date(`${end.slice(0,7)}-01T00:00:00Z`),dates:string[]=[];while(cursor<=last){dates.push(cursor.toISOString().slice(0,10));cursor.setUTCMonth(cursor.getUTCMonth()+1)}await lockVatDates(companyId,dates,client);}
+/** Shared by fiscal-year close: serialises against VAT period create/close/reopen and VAT review writes for [start,end]. */
+export async function lockVatPeriodScope(companyId:string,start:string,end:string,client:PoolClient){await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`vat-periods:${companyId}`]);await lockVatRange(companyId,start,end,client);}
 
 export class VatService{
  private audit=new AuditLogRepository();

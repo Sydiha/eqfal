@@ -7,6 +7,12 @@ import {
 } from './fiscal-year.types';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import {
+  FiscalYearCloseBlockedError,
+  getFiscalYearCloseReadiness,
+  loadFiscalYearBounds,
+  lockFiscalYearCloseScope,
+} from './fiscal-year-close-readiness';
 
 /**
  * FiscalYearService
@@ -192,6 +198,15 @@ export class FiscalYearService {
       }
       if (existing.status === 'closed') {
         throw new Error(`Fiscal year '${existing.name}' is already closed`);
+      }
+
+      // Close gate: serialise against every writer that can create a blocker,
+      // then re-check readiness on this same transaction before changing status.
+      const bounds = await loadFiscalYearBounds(client, companyId, id);
+      await lockFiscalYearCloseScope(client, companyId, bounds);
+      const readiness = await getFiscalYearCloseReadiness(client, companyId, bounds);
+      if (!readiness.ready) {
+        throw new FiscalYearCloseBlockedError(readiness.blockers, readiness.warnings);
       }
 
       const updated = await this.fyRepo.updateStatus(id, companyId, 'closed', client);

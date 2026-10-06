@@ -265,6 +265,22 @@ describe('Fiscal Year API tenant and capability boundary', () => {
     expect(res.status).toBe(409);
   });
 
+  it('maps a blocked close to 409 with structured blockers and warnings', async () => {
+    setContext(['fiscal_year.close']);
+    const { FiscalYearCloseBlockedError } = await import('../src/modules/fiscal-years/fiscal-year-close-readiness');
+    mocks.closeFiscalYear.mockRejectedValue(
+      new FiscalYearCloseBlockedError([{ code: 'draft_journals', count: 1 }], [{ code: 'zakat_tax_workpaper_not_ready', count: 1 }]),
+    );
+
+    const res = await request(app)
+      .post('/api/fiscal-years/fy-1/close')
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.blockers).toEqual([{ code: 'draft_journals', count: 1 }]);
+    expect(res.body.warnings).toEqual([{ code: 'zakat_tax_workpaper_not_ready', count: 1 }]);
+  });
+
   it('closes inside active company and forwards the authenticated actor and reason', async () => {
     setContext(['fiscal_year.close']);
     mocks.closeFiscalYear.mockResolvedValue({ ...fiscalYear, status: 'closed' });
