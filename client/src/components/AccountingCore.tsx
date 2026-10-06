@@ -207,6 +207,7 @@ export function Accounting({
   const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
   const [trial, setTrial] = useState<TrialRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [reportScope, setReportScope] = useState<Record<string, string>>({});
   const [statement, setStatement] = useState<StatementReport | null>(null);
   const [statementBlocked, setStatementBlocked] = useState(false);
   const [changesInEquityYearId, setChangesInEquityYearId] = useState("");
@@ -614,6 +615,7 @@ export function Accounting({
     e.preventDefault();
     const d = new FormData(e.currentTarget);
     const year = String(d.get("fiscal_year_id"));
+    const yearLabel = `${t("accounting.fiscalYear")}: ${years.find((y) => y.id === year)?.name ?? ""}`;
     setStatementBlocked(false);
     try {
       if (kind === "trial") {
@@ -623,6 +625,7 @@ export function Accounting({
           onUnauthorized,
         );
         setTrial(((await r.json()) as { accounts: TrialRow[] }).accounts);
+        setReportScope((p) => ({ ...p, trial: yearLabel }));
       } else if (kind === "ledger") {
         const account = String(d.get("account_id"));
         const r = await api(
@@ -631,6 +634,8 @@ export function Accounting({
           onUnauthorized,
         );
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
+        const acc = accounts.find((a) => a.id === account);
+        setReportScope((p) => ({ ...p, ledger: `${yearLabel} · ${acc ? `${acc.code} — ${acc.name}` : ""}` }));
       } else {
         const endpoint = kind === "financialPosition" ? "financial-position" : kind === "profitOrLoss" ? "profit-or-loss" : kind === "changesInEquity" ? "changes-in-equity" : "cash-flow";
         const dates = kind === "financialPosition"
@@ -639,6 +644,7 @@ export function Accounting({
         setStatement(null);
         const r = await api(`/api/financial-statements/${endpoint}?fiscal_year_id=${encodeURIComponent(year)}${dates}`, {}, onUnauthorized);
         setStatement((await r.json()) as StatementReport);
+        setReportScope((p) => ({ ...p, [kind]: kind === "financialPosition" ? `${yearLabel} · ${t("accounting.statements.asOf")} ${String(d.get("as_of_date"))}` : `${yearLabel} · ${String(d.get("start_date"))} — ${String(d.get("end_date"))}` }));
       }
     } catch (reportError) {
       if (reportError instanceof ApiError && (reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS" || reportError.code === "CASH_FLOW_CLASSIFICATION_BLOCKED")) setStatementBlocked(true);
@@ -1368,6 +1374,7 @@ export function Accounting({
           <section className="ac-tab__card" aria-labelledby="accounting-trial-title">
             <div className="ac-tab__head">
               <h2 id="accounting-trial-title">{t("accounting.tabs.trial")}</h2>
+              {reportScope.trial && <p className="ac-tab__context" dir="auto">{reportScope.trial}</p>}
             </div>
             <div className="table-wrap ac-tab__table ac-tab__table--trial">
               <table>
@@ -1433,6 +1440,7 @@ export function Accounting({
           <section className="ac-tab__card" aria-labelledby="accounting-ledger-title">
             <div className="ac-tab__head">
               <h2 id="accounting-ledger-title">{t("accounting.tabs.ledger")}</h2>
+              {reportScope.ledger && <p className="ac-tab__context" dir="auto">{reportScope.ledger}</p>}
             </div>
             <div className="table-wrap ac-tab__table ac-tab__table--ledger">
               <table>
@@ -1477,7 +1485,7 @@ export function Accounting({
           </form>
           {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
-            <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2></div>
+            <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>

@@ -10,6 +10,7 @@
 .ac-tabview .ac-tab__card{box-sizing:border-box;min-width:0;margin:0;padding:14px 12px 12px;border:1px solid var(--ac-border);border-radius:12px;background:#fff;box-shadow:none}
 .ac-tabview .ac-tab__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
 .ac-tabview .ac-tab__head h2{margin:0;font-size:15px;font-weight:800;line-height:normal;color:var(--ac-ink)}
+.ac-tabview .ac-tab__context{margin:0;font-size:12px;color:var(--ac-muted,#64748b);unicode-bidi:plaintext}
 
 /* Fields: label above control */
 .ac-tabview .ac-tab__field{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0;color:var(--ac-muted);font-size:11.5px;line-height:normal}

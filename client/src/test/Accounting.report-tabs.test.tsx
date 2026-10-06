@@ -63,6 +63,7 @@ describe('Accounting report and journal tabs (Figma 246:*)', () => {
     expect(bank.lastElementChild).toHaveTextContent('100.00 Credit');
     expect(screen.getByText('2000 — Payable').closest('tr')!.lastElementChild).toHaveTextContent('40.00 Debit');
     expect(fetchMock).toHaveBeenCalledWith(`/api/trial-balance?fiscal_year_id=${year.id}`, expect.anything());
+    expect(screen.getByText('Fiscal year: 2026')).toBeInTheDocument();
   });
 
   it('scopes every new style rule to the non-chart tabs', () => {
