@@ -44,15 +44,20 @@ describe('bilingual account names',()=>{
   expect(insert()!.params).toEqual(['co-a','1100','النقدية','asset',null,true,'النقدية','Cash']);
   expect(JSON.stringify(audit()!.params[6])).toContain('"name_en":"Cash"');
  });
+ it('derives legacy name from the localized input even if a legacy name is also sent',async()=>{
+  await request(app).post('/api/accounts').send({code:'1100',name:'Other',name_en:'Cash',account_type:'asset'});
+  expect(insert()!.params).toEqual(['co-a','1100','Cash','asset',null,true,null,'Cash']);
+ });
  it('derives legacy name from the English name when only English is entered',async()=>{
   await request(app).post('/api/accounts').send({code:'1100',name_en:'Cash',account_type:'asset'});
   expect(insert()!.params).toEqual(['co-a','1100','Cash','asset',null,true,null,'Cash']);
  });
- it('rejects a new account with no name at all and keeps legacy name-only API clients working',async()=>{
+ it('rejects a new account without a localized name, even when legacy name is supplied',async()=>{
   expect((await request(app).post('/api/accounts').send({code:'1100',name_ar:' ',account_type:'asset'})).status).toBe(400);
   expect(insert()).toBeUndefined();
-  expect((await request(app).post('/api/accounts').send({code:'1100',name:'Cash',account_type:'asset'})).status).toBe(201);
-  expect(insert()!.params).toEqual(['co-a','1100','Cash','asset',null,true,null,null]);
+  expect((await request(app).post('/api/accounts').send({code:'1100',name:'Cash',account_type:'asset'})).status).toBe(400);
+  expect((await request(app).post('/api/accounts').send({code:'1100',name:'Cash',name_ar:'',name_en:null,account_type:'asset'})).status).toBe(400);
+  expect(insert()).toBeUndefined();
  });
  it('rejects over-long localized names instead of silently dropping them',async()=>{
   expect((await request(app).post('/api/accounts').send({code:'1100',name_ar:'x'.repeat(201),account_type:'asset'})).status).toBe(400);
