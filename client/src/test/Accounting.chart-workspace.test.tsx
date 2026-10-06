@@ -67,4 +67,24 @@ describe('Accounting chart-of-accounts workspace', () => {
     expect(within(panel).getAllByRole('combobox')[2]).toBeDisabled();
     expect(within(panel).getByRole('button', { name: 'Update account' })).toBeDisabled();
   });
+  it('drops an unsaved status draft when the shown account changes', async () => {
+    stub();
+    render(ui());
+    await screen.findByText('Bank');
+    const panel = screen.getByRole('complementary');
+    fireEvent.change(within(panel).getAllByRole('combobox')[2]!, { target: { value: 'inactive' } });
+    expect(within(panel).getByRole('button', { name: 'Update account' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    expect(within(panel).getAllByRole('combobox')[2]).toHaveValue('active');
+    expect(within(panel).getByRole('button', { name: 'Update account' })).toBeDisabled();
+  });
+
+  it('mirrors pager arrows in Arabic', async () => {
+    await i18n.changeLanguage('ar');
+    stub();
+    render(ui());
+    await screen.findByText('Bank');
+    expect(screen.getByRole('button', { name: 'الصفحة السابقة' })).toHaveTextContent('›');
+    expect(screen.getByRole('button', { name: 'الصفحة التالية' })).toHaveTextContent('‹');
+  });
 });

@@ -196,7 +196,7 @@ export function Accounting({
   onUnauthorized,
   accountsFooter,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [tab, setTabState] = useState<Tab>(() => readTab() ?? "accounts");
   const [journalFilters, setJournalFilters] = useState(readJournalFilters);
   const [sourceFilters, setSourceFilters] = useState(readSourceFilters);
@@ -368,6 +368,10 @@ export function Accounting({
     : typeof panelMode === "object"
       ? accounts.find((a) => a.id === panelMode.accountId) ?? null
       : pageAccounts[0] ?? null;
+  const activeAccountId = activeAccount?.id;
+  useEffect(() => {
+    setStatusDraft(null);
+  }, [activeAccountId]);
   const selectedStatus = statusDraft ?? activeAccount?.is_active ?? false;
   const parentLabel = (a: Account) => {
     if (!a.parent_account_id) return "—";
@@ -777,11 +781,11 @@ export function Accounting({
                 </span>
                 {accountPageCount > 1 && (
                   <nav className="ac-approved__pager" aria-label={t("accounting.chart.pagination")}>
-                    <button type="button" aria-label={t("accounting.chart.previousPage")} disabled={currentAccountPage <= 1} onClick={() => setAccountPage(currentAccountPage - 1)}>‹</button>
+                    <button type="button" aria-label={t("accounting.chart.previousPage")} disabled={currentAccountPage <= 1} onClick={() => setAccountPage(currentAccountPage - 1)}>{i18n.language === "ar" ? "›" : "‹"}</button>
                     {Array.from({ length: accountPageCount }, (_, i) => i + 1).map((n) => (
                       <button type="button" key={n} className={n === currentAccountPage ? "is-current" : undefined} aria-current={n === currentAccountPage ? "page" : undefined} onClick={() => setAccountPage(n)}>{n}</button>
                     ))}
-                    <button type="button" aria-label={t("accounting.chart.nextPage")} disabled={currentAccountPage >= accountPageCount} onClick={() => setAccountPage(currentAccountPage + 1)}>›</button>
+                    <button type="button" aria-label={t("accounting.chart.nextPage")} disabled={currentAccountPage >= accountPageCount} onClick={() => setAccountPage(currentAccountPage + 1)}>{i18n.language === "ar" ? "‹" : "›"}</button>
                   </nav>
                 )}
               </div>
