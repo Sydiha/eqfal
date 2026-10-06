@@ -15,6 +15,7 @@ import {
   JournalLineResponse,
   JournalResponse,
   journalLineToEditor,
+  localizedAccountName,
   serializeJournalLines,
 } from "./accounting-contracts";
 import {
@@ -44,7 +45,7 @@ type LedgerRow = {
 };
 type StatementSection = {
   category: string;
-  accounts: Array<{ account_id: string; code: string; name: string; amount: string }>;
+  accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string }>;
   total: string;
 };
 type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
@@ -59,7 +60,7 @@ type OperationalSource = {
 type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity" | "cashFlow";
 type AccountTypeFilter = "" | Account["account_type"];
 type AccountStatusFilter = "" | "active" | "inactive";
-type AccountDraft = { code: string; name: string; account_type: Account["account_type"]; parent_account_id: string; is_active: boolean };
+type AccountDraft = { code: string; name_ar: string; name_en: string; account_type: Account["account_type"]; parent_account_id: string; is_active: boolean };
 // Mirrors the server guard: code/parent lock once an account is used; type also locks with children or statement mapping.
 const accountLocks = (a: Account) => {
   const used = a.is_used === true;
@@ -205,6 +206,7 @@ export function Accounting({
   accountsFooter,
 }: Props) {
   const { t, i18n } = useTranslation();
+  const accountName = (a: Parameters<typeof localizedAccountName>[0]) => localizedAccountName(a, i18n.language);
   const [tab, setTabState] = useState<Tab>(() => readTab() ?? "accounts");
   const [journalFilters, setJournalFilters] = useState(readJournalFilters);
   const [sourceFilters, setSourceFilters] = useState(readSourceFilters);
@@ -235,7 +237,8 @@ export function Accounting({
   const [panelMode, setPanelMode] = useState<AccountPanelMode>("auto");
   const [draft, setDraft] = useState<AccountDraft | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | null>(null);
+  const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | "nameRequired" | null>(null);
+  const [createNameError, setCreateNameError] = useState(false);
   const setTab = (value: Tab) => {
     setTabState(value);
     if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
@@ -357,8 +360,8 @@ export function Accounting({
     return accounts.filter(
       (a) =>
         (!search ||
-          [a.code, a.name].some((value) =>
-            value.toLocaleLowerCase().includes(search),
+          [a.code, a.name, a.name_ar, a.name_en].some((value) =>
+            value?.toLocaleLowerCase().includes(search),
           )) &&
         (!accountTypeFilter || a.account_type === accountTypeFilter) &&
         (!accountStatusFilter ||
@@ -391,7 +394,7 @@ export function Accounting({
   const parentLabel = (a: Account) => {
     if (!a.parent_account_id) return "—";
     const parent = accounts.find((x) => x.id === a.parent_account_id);
-    return parent ? `${parent.code} — ${parent.name}` : "—";
+    return parent ? `${parent.code} — ${accountName(parent)}` : "—";
   };
   const selectAccount = (a: Account) => {
     setPanelMode({ accountId: a.id });
@@ -451,6 +454,13 @@ export function Accounting({
     setPanelMode("add");
     const form = e.currentTarget;
     const d = new FormData(form);
+    const nameAr = String(d.get("name_ar") ?? "").trim();
+    const nameEn = String(d.get("name_en") ?? "").trim();
+    if (!nameAr && !nameEn) {
+      setCreateNameError(true);
+      return;
+    }
+    setCreateNameError(false);
     mutationStarted();
     setSaving(true);
     try {
@@ -458,7 +468,8 @@ export function Accounting({
         "/api/accounts",
         json("POST", {
           code: d.get("code"),
-          name: d.get("name"),
+          name_ar: nameAr || null,
+          name_en: nameEn || null,
           account_type: d.get("account_type"),
           parent_account_id: d.get("parent_account_id") || null,
         }),
@@ -475,7 +486,7 @@ export function Accounting({
   };
   const startEdit = (a: Account) => {
     setEditError(null);
-    setDraft({ code: a.code, name: a.name, account_type: a.account_type, parent_account_id: a.parent_account_id ?? "", is_active: a.is_active });
+    setDraft({ code: a.code, name_ar: a.name_ar ?? "", name_en: a.name_en ?? "", account_type: a.account_type, parent_account_id: a.parent_account_id ?? "", is_active: a.is_active });
   };
   const cancelEdit = () => {
     setDraft(null);
@@ -485,13 +496,20 @@ export function Accounting({
     if (!draft) return;
     const locks = accountLocks(a);
     const body: Record<string, unknown> = {};
-    const name = draft.name.trim();
+    const nameAr = draft.name_ar.trim();
+    const nameEn = draft.name_en.trim();
     const code = draft.code.trim();
-    if (!name || !code) {
+    if (!code) {
       setEditError("invalid");
       return;
     }
-    if (name !== a.name) body.name = name;
+    // Legacy accounts (no localized names yet) may stay as they are; once localized, keep at least one.
+    if ((a.name_ar || a.name_en) && !nameAr && !nameEn) {
+      setEditError("nameRequired");
+      return;
+    }
+    if (nameAr !== (a.name_ar ?? "")) body.name_ar = nameAr || null;
+    if (nameEn !== (a.name_en ?? "")) body.name_en = nameEn || null;
     if (!locks.code && code !== a.code) body.code = code;
     if (!locks.type && draft.account_type !== a.account_type) body.account_type = draft.account_type;
     if (!locks.parent && draft.parent_account_id !== (a.parent_account_id ?? "")) body.parent_account_id = draft.parent_account_id || null;
@@ -671,7 +689,7 @@ export function Accounting({
         );
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
         const acc = accounts.find((a) => a.id === account);
-        setReportScope((p) => ({ ...p, ledger: `${yearLabel} · ${acc ? `${acc.code} — ${acc.name}` : ""}` }));
+        setReportScope((p) => ({ ...p, ledger: `${yearLabel} · ${acc ? `${acc.code} — ${accountName(acc)}` : ""}` }));
       } else {
         const endpoint = kind === "financialPosition" ? "financial-position" : kind === "profitOrLoss" ? "profit-or-loss" : kind === "changesInEquity" ? "changes-in-equity" : "cash-flow";
         const dates = kind === "financialPosition"
@@ -795,7 +813,7 @@ export function Accounting({
                   {pageAccounts.map((a) => (
                     <tr key={a.id} className={activeAccount?.id === a.id ? "is-selected" : undefined} aria-selected={activeAccount?.id === a.id}>
                       <td className="ac-approved__code">{a.code}</td>
-                      <td className="ac-approved__name">{a.name}</td>
+                      <td className="ac-approved__name">{accountName(a)}</td>
                       <td>{t(`accounting.types.${a.account_type}`)}</td>
                       <td>{parentLabel(a)}</td>
                       <td>
@@ -839,15 +857,21 @@ export function Accounting({
                 <div className="ac-approved__card-header">
                   <h2 id="accounting-details-title">{t("accounting.chart.newAccountTitle")}</h2>
                 </div>
-                <form className="ac-approved__fields" onSubmit={createAccount}>
+                {/* Keyed so React never reuses the selected account's controlled inputs (and their values) for the new-account form. */}
+                <form key="new-account" className="ac-approved__fields" onSubmit={createAccount}>
                   <label>
                     <span>{t("accounting.code")}</span>
                     <input name="code" required maxLength={50} />
                   </label>
                   <label>
-                    <span>{t("accounting.name")}</span>
-                    <input name="name" required maxLength={200} />
+                    <span>{t("accounting.nameAr")}</span>
+                    <input name="name_ar" maxLength={200} dir="rtl" lang="ar" />
                   </label>
+                  <label>
+                    <span>{t("accounting.nameEn")}</span>
+                    <input name="name_en" maxLength={200} dir="ltr" lang="en" />
+                  </label>
+                  {createNameError && <p className="ac-approved__hint" role="alert">{t("accounting.chart.editError.nameRequired")}</p>}
                   <label>
                     <span>{t("accounting.type")}</span>
                     <select name="account_type">
@@ -864,7 +888,7 @@ export function Accounting({
                       <option value="">—</option>
                       {accounts.map((a) => (
                         <option value={a.id} key={a.id}>
-                          {a.code} — {a.name}
+                          {a.code} — {accountName(a)}
                         </option>
                       ))}
                     </select>
@@ -892,7 +916,7 @@ export function Accounting({
                   {(() => {
                     const locks = accountLocks(activeAccount);
                     const editing = draft !== null && canEditChart;
-                    const d = draft ?? { code: activeAccount.code, name: activeAccount.name, account_type: activeAccount.account_type, parent_account_id: activeAccount.parent_account_id ?? "", is_active: activeAccount.is_active };
+                    const d = draft ?? { code: activeAccount.code, name_ar: activeAccount.name_ar ?? "", name_en: activeAccount.name_en ?? "", account_type: activeAccount.account_type, parent_account_id: activeAccount.parent_account_id ?? "", is_active: activeAccount.is_active };
                     const set = (patch: Partial<AccountDraft>) => setDraft({ ...d, ...patch });
                     const lockNote = (reasonKey: string) => <small className="ac-approved__hint" role="note">{t(reasonKey)}</small>;
                     // A parent cannot be the account itself or one of its descendants (the server enforces this too).
@@ -906,8 +930,12 @@ export function Accounting({
                           {editing && locks.code && lockNote("accounting.chart.lock.code")}
                         </label>
                         <label>
-                          <span>{t("accounting.name")}</span>
-                          <input ref={nameInputRef} value={d.name} maxLength={200} disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name: e.target.value })} />
+                          <span>{t("accounting.nameAr")}</span>
+                          <input ref={nameInputRef} value={d.name_ar} placeholder={activeAccount.name_ar || activeAccount.name_en ? undefined : activeAccount.name} maxLength={200} dir="rtl" lang="ar" disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name_ar: e.target.value })} />
+                        </label>
+                        <label>
+                          <span>{t("accounting.nameEn")}</span>
+                          <input value={d.name_en} placeholder={activeAccount.name_ar || activeAccount.name_en ? undefined : activeAccount.name} maxLength={200} dir="ltr" lang="en" disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name_en: e.target.value })} />
                         </label>
                         <label>
                           <span>{t("accounting.type")}</span>
@@ -925,7 +953,7 @@ export function Accounting({
                               <>
                                 <option value="">—</option>
                                 {accounts.filter((x) => !descendants.has(x.id) && (x.is_active || x.id === activeAccount.parent_account_id)).map((x) => (
-                                  <option value={x.id} key={x.id}>{x.code} — {x.name}</option>
+                                  <option value={x.id} key={x.id}>{x.code} — {accountName(x)}</option>
                                 ))}
                               </>
                             ) : (
@@ -1321,7 +1349,7 @@ export function Accounting({
                         <option value="">{t("accounting.account")}</option>
                         {accounts.map((a) => (
                           <option disabled={!a.is_active} key={a.id} value={a.id}>
-                            {a.code} — {a.name}
+                            {a.code} — {accountName(a)}
                           </option>
                         ))}
                       </select>
@@ -1455,7 +1483,7 @@ export function Accounting({
                   {trial.map((r) => (
                     <tr key={r.id}>
                       <td className="ac-tab__wide">
-                        {r.code} — {r.name}
+                        {r.code} — {accountName(r)}
                       </td>
                       <td className="ac-tab__num">{r.debit_movement}</td>
                       <td className="ac-tab__num">{r.credit_movement}</td>
@@ -1495,7 +1523,7 @@ export function Accounting({
               <select name="account_id" required>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.code} — {a.name}
+                    {a.code} — {accountName(a)}
                   </option>
                 ))}
               </select>
@@ -1554,7 +1582,7 @@ export function Accounting({
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
-              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
+              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td><td>{account.amount}</td></tr>)}
               <tr className="is-total"><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
             </Fragment>)}
             {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
@@ -1565,7 +1593,7 @@ export function Accounting({
             {tab === "changesInEquity" && <>
               <tr><td>{t("accounting.statements.openingEquity")}</td><td>{statement.opening_equity}</td></tr>
               <tr><td>{t("accounting.statements.directEquityMovements")}</td><td>{statement.direct_equity_movements}</td></tr>
-              {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {account.name}</td><td>{account.amount}</td></tr>)}
+              {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {accountName(account)}</td><td>{account.amount}</td></tr>)}
               <tr><td>{t("accounting.statements.currentPeriodEarnings")}</td><td>{statement.current_period_earnings}</td></tr>
               <tr className="is-strong"><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
               <tr className="is-strong is-recon"><th>{t("accounting.statements.reconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>

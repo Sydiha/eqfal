@@ -110,12 +110,12 @@ describe('Accounting integration contracts',()=>{
   render(<Accounting canView canCreateChart canEditChart canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:/New account/}));
   let code=await screen.findByRole('textbox',{name:'Code'});
-  let name=screen.getByRole('textbox',{name:'Name'});
+  let name=screen.getByRole('textbox',{name:'Account name (English)'});
   fireEvent.change(code,{target:{value:'1000'}});fireEvent.change(name,{target:{value:'Cash'}});
   fireEvent.click(screen.getByRole('button',{name:'Add account'}));
   expect(await screen.findByText('Saved successfully.')).toBeInTheDocument();
   await waitFor(()=>expect(screen.getByRole('button',{name:'Add account'})).toBeEnabled());
-  code=screen.getByRole('textbox',{name:'Code'});name=screen.getByRole('textbox',{name:'Name'});
+  code=screen.getByRole('textbox',{name:'Code'});name=screen.getByRole('textbox',{name:'Account name (English)'});
   fireEvent.change(code,{target:{value:'2000'}});fireEvent.change(name,{target:{value:'Receivable'}});
   fireEvent.submit(code.closest('form')!);
   await waitFor(()=>expect(writes).toBe(2));
