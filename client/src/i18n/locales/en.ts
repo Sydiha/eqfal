@@ -78,7 +78,7 @@ const en = {
     membersEmpty: 'This company has no members.', rolesEmpty: 'This company has no roles.',
     createRole: 'New role', createRoleTitle: 'Create role', roleName: 'Role name', create: 'Create',
     fullAccess: 'Full Access', fullAccessNote: 'This role holds every capability and its capabilities cannot be edited.',
-    selectAll: 'Select all', clearAll: 'Clear all', bulkActions: 'Bulk permission actions', selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
+    expandGroup: 'Expand', collapseGroup: 'Collapse', selectAll: 'Select all', clearAll: 'Clear all', bulkActions: 'Bulk permission actions', selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
     ceilingNote: 'You cannot grant a permission you do not hold in this company.', saving: 'Saving…',
     invalidRequest: 'Invalid request. Check the data.', forbidden: 'You are not allowed to perform this action.', notFound: 'Item not found.', conflict: 'This item already exists.', error: 'The operation could not be completed. Try again.',
   },

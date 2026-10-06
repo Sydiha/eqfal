@@ -153,3 +153,29 @@ accessAdministrationRouter.delete(
   ...writeGuards('access.role.capability.revoke'),
   asyncRoute((req, res) => capabilityChange(req, res, false)),
 );
+
+const MAX_BULK = 500;
+const capabilityList = (value: unknown): string[] | null =>
+  Array.isArray(value) && value.length <= MAX_BULK && value.every((id) => typeof id === 'string' && CAPABILITY.test(id)) ? [...new Set(value as string[])] : null;
+
+/** One atomic request for Select all / Clear all / group toggles. Needs grant and/or revoke depending on what is requested. */
+accessAdministrationRouter.post(
+  '/access/roles/:id/capabilities/bulk',
+  requireSameOrigin, requireAuth, requireActiveCompany,
+  asyncRoute(async (req, res) => {
+    const value = service(res);
+    if (!value) return;
+    const ctx = context(req);
+    const body = req.body as Record<string, unknown>;
+    const grants = exactObject(body, ['grants', 'revokes']) ? capabilityList(body.grants ?? []) : null;
+    const revokes = exactObject(body, ['grants', 'revokes']) ? capabilityList(body.revokes ?? []) : null;
+    if (!UUID.test(req.params.id) || !grants || !revokes || grants.length + revokes.length === 0 || grants.some((id) => revokes.includes(id))) {
+      res.status(400).json({ error: 'Invalid access administration request' }); return;
+    }
+    if ((grants.length > 0 && !ctx.capabilities.includes('access.role.capability.grant')) || (revokes.length > 0 && !ctx.capabilities.includes('access.role.capability.revoke'))) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    try { await value.changeRoleCapabilities(req.params.id, grants, revokes, ctx.activeCompanyId, ctx.user.id); res.status(204).end(); }
+    catch (error) { if (!handleKnownError(error, res)) throw error; }
+  }),
+);

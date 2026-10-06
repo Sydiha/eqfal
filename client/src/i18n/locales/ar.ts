@@ -78,7 +78,7 @@ const ar = {
     membersEmpty: 'لا يوجد أعضاء في هذه الشركة.', rolesEmpty: 'لا توجد أدوار في هذه الشركة.',
     createRole: 'دور جديد', createRoleTitle: 'إنشاء دور', roleName: 'اسم الدور', create: 'إنشاء',
     fullAccess: 'وصول كامل', fullAccessNote: 'هذا الدور يملك كل الصلاحيات ولا يمكن تعديل صلاحياته.',
-    selectAll: 'تحديد الكل', clearAll: 'مسح الكل', bulkActions: 'إجراءات الصلاحيات الجماعية', selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
+    expandGroup: 'توسيع', collapseGroup: 'طيّ', selectAll: 'تحديد الكل', clearAll: 'مسح الكل', bulkActions: 'إجراءات الصلاحيات الجماعية', selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
     ceilingNote: 'لا يمكنك منح صلاحية لا تملكها أنت في هذه الشركة.', saving: 'جارٍ الحفظ…',
     invalidRequest: 'الطلب غير صالح. تحقق من البيانات.', forbidden: 'لا تملك صلاحية تنفيذ هذا الإجراء.', notFound: 'العنصر غير موجود.', conflict: 'العنصر موجود مسبقاً.', error: 'تعذّر إكمال العملية. حاول مرة أخرى.',
   },

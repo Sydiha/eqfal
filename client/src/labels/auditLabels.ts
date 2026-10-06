@@ -44,6 +44,24 @@ const ACTIONS: Record<string, Pair> = {
   'periodic_adjustment.return_to_draft': ['Return periodic adjustment to draft', 'إرجاع تسوية دورية إلى مسودة'], 'periodic_adjustment.schedule.post': ['Post adjustment schedule row', 'ترحيل صف من جدول التسوية'],
   'periodic_adjustment.submit_review': ['Submit periodic adjustment for review', 'إرسال تسوية دورية للمراجعة'], 'periodic_adjustment.update': ['Update periodic adjustment', 'تعديل تسوية دورية'],
   review: ['Review', 'مراجعة'], submit: ['Submit', 'إرسال'],
+  'access.membership.disable': ['Disable member', 'تعطيل عضو'], 'access.membership.enable': ['Enable member', 'تفعيل عضو'],
+  'access.role.capability.add': ['Grant permission to role', 'منح صلاحية لدور'], 'access.role.capability.remove': ['Revoke permission from role', 'سحب صلاحية من دور'],
+  'access.role.capability.bulk_change': ['Change role permissions in bulk', 'تعديل صلاحيات دور دفعة واحدة'],
+  'annual_package.approved': ['Annual package approved', 'اعتماد حزمة الإقفال السنوي'], 'annual_package.reviewed': ['Annual package reviewed', 'مراجعة حزمة الإقفال السنوي'],
+  'company.disable': ['Disable company', 'تعطيل شركة'], 'company.enable': ['Enable company', 'تفعيل شركة'],
+  'company_accounting_profile.create': ['Create accounting profile', 'إنشاء ملف محاسبي'], 'company_accounting_profile.submit_review': ['Submit accounting profile for review', 'إرسال الملف المحاسبي للمراجعة'],
+  'company_accounting_profile.review': ['Review accounting profile', 'مراجعة الملف المحاسبي'], 'company_accounting_profile.approve': ['Approve accounting profile', 'اعتماد الملف المحاسبي'],
+  'company_accounting_profile.supersede': ['Supersede accounting profile', 'استبدال الملف المحاسبي'], 'company_accounting_profile.update_draft': ['Update draft accounting profile', 'تعديل مسودة الملف المحاسبي'],
+  'company_accounting_profile.update_professional_review': ['Update accounting profile professional review', 'تعديل المراجعة المهنية للملف المحاسبي'],
+  'counterparty.update': ['Update counterparty', 'تعديل طرف مقابل'], 'document.mark_incomplete': ['Mark document incomplete', 'وسم مستند بأنه غير مكتمل'], 'document.reject': ['Reject document', 'رفض مستند'],
+  'fiscal_year.create': ['Create fiscal year', 'إنشاء سنة مالية'], 'fiscal_year.status_change': ['Change fiscal year status', 'تغيير حالة سنة مالية'], 'fiscal_year.update': ['Update fiscal year', 'تعديل سنة مالية'],
+  'journal.approve': ['Approve journal entry', 'اعتماد قيد يومية'], 'obligation.update': ['Update obligation', 'تعديل التزام'],
+  'opening_balance.return_to_draft': ['Return opening balances to draft', 'إرجاع الأرصدة الافتتاحية إلى مسودة'], 'opening_balance.submit_review': ['Submit opening balances for review', 'إرسال الأرصدة الافتتاحية للمراجعة'],
+  'partner.update': ['Update partner', 'تعديل شريك'], 'partner_ownership.confirm': ['Confirm partner ownership', 'تأكيد ملكية شريك'], 'partner_ownership.update': ['Update partner ownership', 'تعديل ملكية شريك'],
+  'wht_review.created': ['Withholding tax review created', 'إنشاء مراجعة ضريبة مقتطعة'], 'wht_review.updated': ['Withholding tax review updated', 'تعديل مراجعة ضريبة مقتطعة'],
+  'wht_review.materially_changed': ['Withholding tax review materially changed', 'تغيّر جوهري في مراجعة ضريبة مقتطعة'],
+  'vat_adjustment.review': ['Review VAT adjustment', 'مراجعة تعديل ضريبة القيمة المضافة'], 'vat_adjustment.apply': ['Apply VAT adjustment', 'تطبيق تعديل ضريبة القيمة المضافة'],
+
   'tax_workpaper.adjustment.create': ['Create tax adjustment', 'إنشاء تعديل ضريبي'], 'tax_workpaper.adjustment.delete': ['Delete tax adjustment', 'حذف تعديل ضريبي'],
   'tax_workpaper.adjustment.professional_review.resolve': ['Resolve adjustment professional review', 'حسم المراجعة المهنية لتعديل ضريبي'],
   'tax_workpaper.adjustment.update': ['Update tax adjustment', 'تحديث تعديل ضريبي'], 'tax_workpaper.create': ['Create tax working paper', 'إنشاء ورقة عمل ضريبية'],
@@ -86,7 +104,8 @@ const VALUES: Record<string, Pair> = {
   handed_off: ['Handed off', 'مُسلَّم'], filed: ['Filed', 'مُقدَّم'], confirmed: ['Confirmed', 'مؤكد'], settled: ['Settled', 'مسوّى'], reconciled: ['Reconciled', 'مسوّى بنكياً'],
 };
 
-export const auditActionLabel = (value: string, lang: Lang) => ACTIONS[value] ? pick(ACTIONS[value], lang) : humanize(value);
+/** Arabic never falls back to raw/English text: an unmapped future action reads as a generic Arabic label (raw code stays available as a tooltip). */
+export const auditActionLabel = (value: string, lang: Lang) => ACTIONS[value] ? pick(ACTIONS[value], lang) : lang === 'ar' ? 'إجراء آخر' : humanize(value);
 export const auditEntityLabel = (value: string, lang: Lang) => ENTITIES[value] ? pick(ENTITIES[value], lang) : humanize(value);
 export const auditFieldLabel = (key: string, lang: Lang) => FIELDS[key] ? pick(FIELDS[key], lang) : humanize(key);
 export const auditStatusLabel = (value: string, lang: Lang) => VALUES[value] ? pick(VALUES[value], lang) : null;

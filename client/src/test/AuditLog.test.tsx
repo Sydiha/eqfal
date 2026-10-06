@@ -66,6 +66,18 @@ describe('AuditLog', () => {
     expect(screen.getByRole('rowheader', { name: 'الاسم' })).toBeInTheDocument();
   });
 
+  it('Arabic action filter never shows English/raw-derived text, for known or unknown actions', async () => {
+    await i18n.changeLanguage('ar');
+    const actions = ['access.membership.enable', 'access.role.capability.bulk_change', 'fiscal_year.status_change', 'wht_review.materially_changed', 'brand_new.thing_done'];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.startsWith('/api/audit-log/facets') ? { ...facets, actions } : { entries: [{ ...entry, action: 'brand_new.thing_done' }], total: 1 }), { status: 200 })));
+    renderIt();
+    const select = (await screen.findByLabelText('الإجراء')) as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(actions.length + 1));
+    for (const option of Array.from(select.options)) expect(option.textContent).not.toMatch(/[A-Za-z]/);
+    expect(Array.from(select.options).find((o) => o.value === 'brand_new.thing_done')).toHaveAttribute('title', 'brand_new.thing_done');
+    expect(screen.getAllByText('إجراء آخر').length).toBeGreaterThan(1); // option + row, rendering intact
+  });
+
   it('renders structured details and survives unknown action, entity and fields', async () => {
     mockApi(200, [{ ...entry, action: 'brand_new.thing_done', entity_type: 'weird_entity', before_data: { status: 'draft', is_active: true, odd_field: null, capabilities: ['document.view'] }, after_data: { status: 'posted', posted_at: '2026-10-01T10:00:00Z', odd_field: { a: 1 }, capabilities: ['document.view', 'x.unknown'] } }]);
     renderIt();

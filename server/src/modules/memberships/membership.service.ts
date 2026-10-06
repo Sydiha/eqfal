@@ -149,6 +149,28 @@ export class MembershipService {
     });
   }
 
+  /**
+   * Atomic multi-capability change for one role. Same checks as changeRoleCapability (role in the active company,
+   * not Full Access, grants within the actor's ceiling) but every request is validated before anything is written
+   * and the whole change commits or rolls back together with a single audit event.
+   */
+  async changeRoleCapabilities(roleId: string, grants: string[], revokes: string[], companyId: string, actorUserId: string): Promise<void> {
+    const known = new Set(await this.repo.listCapabilities());
+    for (const id of [...grants, ...revokes]) if (!known.has(id)) throw new Error(`Capability not found: '${id}'`);
+    return this.transaction(async (client) => {
+      const role = await this.repo.findRoleById(roleId, client);
+      if (!role || role.company_id !== companyId) throw new Error('Role not found');
+      if (role.is_full_access) throw new Error('Full Access role capabilities cannot be changed');
+      const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
+      for (const id of grants) if (!actorCapabilities.includes(id)) throw new Error(`Ceiling violation: granter lacks capability '${id}'`);
+      const before = await this.repo.getRoleCapabilities(roleId, client);
+      for (const id of grants) await this.repo.addCapabilityToRole(roleId, id, client);
+      for (const id of revokes) await this.repo.removeCapabilityFromRole(roleId, id, client);
+      const after = [...new Set([...before, ...grants])].filter((id) => !revokes.includes(id));
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.capability.bulk_change', entity_type: 'role', entity_id: roleId, before_data: { capabilities: before }, after_data: { capabilities: after } }, client);
+    });
+  }
+
   private membershipSnapshot(value: Membership): Record<string, unknown> {
     return { user_id: value.user_id, company_id: value.company_id, role_id: value.role_id, is_active: value.is_active };
   }
