@@ -241,6 +241,25 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   border-bottom: 1px solid var(--home-line);
   border-right: 1px solid var(--home-line);
 }
+.home__kpi-card--action {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-top: 0;
+  border-left: 0;
+}
+.home__kpi-card--action:hover {
+  filter: brightness(0.97);
+}
+.home__kpi-card--action:focus-visible {
+  outline: 2px solid var(--home-teal);
+  outline-offset: -2px;
+}
+.home__month-note {
+  margin: 0 0 12px;
+  color: var(--home-muted, #5b6770);
+  font-size: 14px;
+}
 .home__kpi-card:nth-child(6n) {
   border-right: none;
 }

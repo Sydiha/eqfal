@@ -92,4 +92,26 @@ describe('ManagerFinancialSnapshotService', () => {
     expect(query.mock.calls[0]?.[1]).toEqual(['company-a', 'fy-1']);
     expect(result.month.end_exclusive).toBe('2027-01-01');
   });
+
+  it('derives whole-year bounds from the fiscal year itself, not from the monthly-close records that happen to exist', async () => {
+    const { pool, query } = poolWithRows([{ start: '2026-01-01', next: '2027-01-01' }]);
+    await new ManagerFinancialSnapshotService(pool).get('company-a', [], { fiscalYearId: 'fy-1' });
+    expect(query.mock.calls[0]?.[0]).toContain('FROM fiscal_years WHERE company_id=$1 AND id=$2');
+    expect(query.mock.calls[0]?.[0]).not.toContain('monthly_close_periods');
+  });
+
+  it('scopes one calendar month of the company fiscal year when no monthly-close record exists', async () => {
+    const { pool, query } = poolWithRows([{ start: '2026-04-01', next: '2026-05-01' }], [], [{ sales: '7', purchases_expenses: '3' }]);
+    const result = await new ManagerFinancialSnapshotService(pool).get('company-a', ['document.view', 'obligation.view'], { fiscalYearId: 'fy-1', month: '2026-04' });
+    expect(query.mock.calls[0]?.[0]).toContain('FROM fiscal_years WHERE company_id=$1 AND id=$2');
+    expect(query.mock.calls[0]?.[1]).toEqual(['company-a', 'fy-1', '2026-04-01']);
+    expect(query.mock.calls[2]?.[1]).toEqual(['company-a', '2026-04-01', '2026-05-01']);
+    expect(result.month).toEqual({ start: '2026-04-01', end_exclusive: '2026-05-01' });
+  });
+
+  it('rejects a month outside the company fiscal year', async () => {
+    const { pool } = poolWithRows([]);
+    await expect(new ManagerFinancialSnapshotService(pool).get('company-a', [], { fiscalYearId: 'fy-1', month: '2031-04' }))
+      .rejects.toBeInstanceOf(SnapshotPeriodNotFoundError);
+  });
 });

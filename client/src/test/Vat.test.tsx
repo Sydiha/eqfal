@@ -19,4 +19,45 @@ describe('VAT review workspace',()=>{
  it('shows blocker categories, a disabled close action and an LTR-isolated period range',async()=>{const blocked={...period,ready:false,blockers:{unapproved_documents:1,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:0,vat_ledger_mismatches:0,vat_adjustments_pending:0,total:1}};vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));const {container}=render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);await screen.findByRole('cell',{name:'sale-acme.pdf'});expect(screen.getByRole('button',{name:'Close VAT period'})).toBeDisabled();expect(screen.getByText('Not ready to close')).toBeInTheDocument();expect(screen.getAllByText('No blockers')).toHaveLength(5);const range=container.querySelector('.vat-range');expect(range).toHaveAttribute('dir','ltr');expect(range?.querySelectorAll('bdi[dir="rtl"]')).toHaveLength(2)});
  it('surfaces every backend blocker category, including recoverability, ledger mismatch and pending adjustments',async()=>{const blocked={...period,ready:false,blockers:{unapproved_documents:0,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:2,vat_ledger_mismatches:1,vat_adjustments_pending:3,total:6}};vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);await screen.findByRole('cell',{name:'sale-acme.pdf'});expect(screen.getByText('6 blocking items')).toBeInTheDocument();for(const [label,count] of [['Pending VAT recoverability decisions','2'],['VAT ledger mismatches','1'],['Pending VAT adjustments','3']]){const row=screen.getByText(label).closest('li') as HTMLElement;expect(within(row).getByText(count)).toBeInTheDocument();expect(within(row).getByText('Blocking')).toBeInTheDocument()}expect(screen.getAllByText('No blockers')).toHaveLength(3);expect(screen.getByRole('button',{name:'Close VAT period'})).toBeDisabled()});
  it('uses Arabic plural forms for the blocker count',async()=>{await i18n.changeLanguage('ar');const forms:Record<number,string>={0:'0 عناصر مانعة',1:'1 عنصر مانع',2:'2 عنصران مانعان',5:'5 عناصر مانعة',11:'11 عنصرًا مانعًا',100:'100 عنصر مانع'};for(const [count,text] of Object.entries(forms))expect(i18n.t('vat.blocked',{count:Number(count)})).toBe(text)});
+
+ it('drills actionable blockers to the relevant screen and keeps others informational',async()=>{
+  const blocked={...period,ready:false,blockers:{unapproved_documents:2,missing_reviews:1,pending_reviews:0,vat_recoverability_pending:1,vat_ledger_mismatches:3,vat_adjustments_pending:1,total:8}};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));
+  const onNavigate=vi.fn();
+  render(<Vat canView canReview canClose canReopen canViewDocuments canViewAccounting onNavigate={onNavigate} onUnauthorized={vi.fn()}/>);
+  const unapproved=await screen.findByRole('button',{name:'Unapproved documents'});
+  fireEvent.click(unapproved);
+  expect(onNavigate).toHaveBeenCalledWith('documents',{from:'2026-01-01',to:'2026-03-31'});
+  fireEvent.click(screen.getByRole('button',{name:'VAT ledger mismatches'}));
+  expect(onNavigate).toHaveBeenCalledWith('accounting',{accountingTab:'sources',sourceFrom:'2026-01-01',sourceTo:'2026-03-31'});
+  // no safe destination: informational text, not a button
+  expect(screen.queryByRole('button',{name:'Pending VAT recoverability decisions'})).not.toBeInTheDocument();
+  expect(screen.getByText('Pending VAT recoverability decisions')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Pending VAT adjustments'})).not.toBeInTheDocument();
+  // zero-count blocker is never a button
+  expect(screen.queryByRole('button',{name:'Pending VAT reviews'})).not.toBeInTheDocument();
+  // in-page blocker filters the register to documents that still need a review
+  fireEvent.click(screen.getByRole('button',{name:'Missing VAT reviews'}));
+  expect(onNavigate).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('combobox',{name:'Review status'})).toHaveValue('not_reviewed');
+  expect(screen.queryByRole('cell',{name:'sale-acme.pdf'})).not.toBeInTheDocument();
+  expect(screen.getByRole('cell',{name:'expense-beta.pdf'})).toBeInTheDocument();
+ });
+ it('hides navigation-only blockers without the destination capability',async()=>{
+  const blocked={...period,ready:false,blockers:{unapproved_documents:2,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:0,vat_ledger_mismatches:3,vat_adjustments_pending:0,total:5}};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));
+  render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText('Unapproved documents')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Unapproved documents'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'VAT ledger mismatches'})).not.toBeInTheDocument();
+ });
+ it('makes actionable blockers keyboard reachable and supports Arabic labels',async()=>{
+  await i18n.changeLanguage('ar');
+  const blocked={...period,ready:false,blockers:{unapproved_documents:2,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:0,vat_ledger_mismatches:0,vat_adjustments_pending:0,total:2}};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));
+  render(<Vat canView canReview canClose canReopen canViewDocuments onNavigate={vi.fn()} onUnauthorized={vi.fn()}/>);
+  const button=await screen.findByRole('button',{name:'مستندات غير معتمدة'});
+  expect(button.tagName).toBe('BUTTON');
+  expect(button).toHaveAttribute('type','button');
+ });
 });

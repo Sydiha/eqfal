@@ -24,22 +24,28 @@ const monthBounds = (date: string) => {
   return { start, next };
 };
 
-export type SnapshotPeriodScope = { periodId?: string; fiscalYearId?: string };
+export type SnapshotPeriodScope = { periodId?: string; fiscalYearId?: string; month?: string };
 
 export class SnapshotPeriodNotFoundError extends Error {}
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ManagerFinancialSnapshotService {
   constructor(private db: Pool) {}
 
-  // Period boundaries are always derived from the company's own monthly_close_periods rows.
+  // Boundaries come from the company's own monthly_close_periods (one period) or fiscal_years (whole year / one calendar month).
   private async resolveRange(companyId: string, scope: SnapshotPeriodScope) {
     const { rows } = scope.periodId
       ? await this.db.query<{ start: string; next: string }>(`SELECT period_start::text start,(period_end+1)::text next
           FROM monthly_close_periods WHERE company_id=$1 AND id=$2`, [companyId, scope.periodId])
-      : await this.db.query<{ start: string | null; next: string | null }>(`SELECT MIN(period_start)::text start,(MAX(period_end)+1)::text next
-          FROM monthly_close_periods WHERE company_id=$1 AND fiscal_year_id=$2`, [companyId, scope.fiscalYearId]);
+      : scope.month
+        ? await this.db.query<{ start: string; next: string }>(`SELECT GREATEST(start_date,$3::date)::text start,
+            LEAST(end_date+1,($3::date+interval '1 month')::date)::text next
+            FROM fiscal_years WHERE company_id=$1 AND id=$2
+              AND start_date < ($3::date+interval '1 month')::date AND end_date >= $3::date`, [companyId, scope.fiscalYearId, `${scope.month}-01`])
+        : await this.db.query<{ start: string | null; next: string | null }>(`SELECT start_date::text start,(end_date+1)::text next
+            FROM fiscal_years WHERE company_id=$1 AND id=$2`, [companyId, scope.fiscalYearId]);
     const row = rows[0];
     if (!row?.start || !row.next) throw new SnapshotPeriodNotFoundError();
     return { start: row.start, next: row.next };
@@ -132,13 +138,14 @@ managerFinancialSnapshotRouter.get('/manager-financial-snapshot', requireAuth, r
   const value = service(res);
   const periodId = typeof req.query.period_id === 'string' ? req.query.period_id : undefined;
   const fiscalYearId = typeof req.query.fiscal_year_id === 'string' ? req.query.fiscal_year_id : undefined;
-  if ((periodId && !UUID_RE.test(periodId)) || (fiscalYearId && !UUID_RE.test(fiscalYearId))) {
+  const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+  if ((periodId && !UUID_RE.test(periodId)) || (fiscalYearId && !UUID_RE.test(fiscalYearId)) || (month && (!MONTH_RE.test(month) || !fiscalYearId))) {
     res.status(400).json({ error: 'Invalid period' });
     return;
   }
   if (!value || !context.activeCompanyId) return;
   try {
-    res.json(await value.get(context.activeCompanyId, context.capabilities, periodId ? { periodId } : { fiscalYearId }));
+    res.json(await value.get(context.activeCompanyId, context.capabilities, periodId ? { periodId } : { fiscalYearId, month }));
   } catch (error) {
     if (error instanceof SnapshotPeriodNotFoundError) res.status(404).json({ error: 'Period not found' });
     else throw error;

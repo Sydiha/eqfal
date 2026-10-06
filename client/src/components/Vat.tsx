@@ -12,10 +12,10 @@ type Blockers={unapproved_documents:number;missing_reviews:number;pending_review
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Blockers};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
 type VatDocument={id:string;status:string;original_filename:string;document_type:'purchase'|'expense'|'sale';document_date:string|null;counterparty_name:string|null;total_amount:string|null;review_id:string|null;tax_date:string|null;treatment:'standard'|'zero_rated'|'exempt'|'out_of_scope'|null;taxable_amount:string|null;vat_amount:string|null;review_status:'pending'|'reviewed'|null;review_note:string|null;version:number|null};
-interface Props{canView:boolean;canReview:boolean;canClose:boolean;canReopen:boolean;onUnauthorized:()=>void;selectedPeriodId?:string|null}
+interface Props{canView:boolean;canReview:boolean;canClose:boolean;canReopen:boolean;canViewDocuments?:boolean;canViewAccounting?:boolean;onNavigate?:(page:'documents'|'accounting',parameters:Record<string,string>)=>void;onUnauthorized:()=>void;selectedPeriodId?:string|null}
 async function api(url:string,options:RequestInit,onUnauthorized:()=>void){const response=await fetch(url,{credentials:'same-origin',...options});if(response.status===401)onUnauthorized();if(!response.ok)throw new Error(String(response.status));return response;}
 
-export function Vat({canView,canReview,canClose,canReopen,onUnauthorized,selectedPeriodId: _unused}:Props){
+export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false,canViewAccounting=false,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId: _unused}:Props){
  const {t,i18n}=useTranslation();
  const { selectedPeriodId } = useDateContext();
  const [periods,setPeriods]=useState<Period[]>([]);const [years,setYears]=useState<FiscalYear[]>([]);const [selectedId,setSelectedId]=useState<string|null>(null);const [documents,setDocuments]=useState<VatDocument[]>([]);const [selectedDocument,setSelectedDocument]=useState<VatDocument|null>(null);const [search,setSearch]=useState('');const [reviewFilter,setReviewFilter]=useState('');const [typeFilter,setTypeFilter]=useState('');const [treatmentFilter,setTreatmentFilter]=useState('');const [loading,setLoading]=useState(canView);const [error,setError]=useState(false);const [creating,setCreating]=useState(false);const [editing,setEditing]=useState<VatDocument|null>(null);const [reopen,setReopen]=useState<Period|null>(null);const [saving,setSaving]=useState(false);
@@ -42,7 +42,15 @@ export function Vat({canView,canReview,canClose,canReopen,onUnauthorized,selecte
  const reviewTone=(d:VatDocument)=>d.review_status==='reviewed'?'ok':d.review_status==='pending'?'warn':'neutral';
  const canEdit=(d:VatDocument)=>canReview&&selected?.status==='open'&&d.status==='approved';
  const amount=(value:string|null)=><bdi dir="ltr">{value??'—'}</bdi>;
- const blockerRows:[string,number][]=selected?[[t('vat.unapprovedLabel'),selected.blockers.unapproved_documents],[t('vat.missingReviewsLabel'),selected.blockers.missing_reviews],[t('vat.pendingReviewsLabel'),selected.blockers.pending_reviews],[t('vat.recoverabilityLabel'),selected.blockers.vat_recoverability_pending??0],[t('vat.ledgerMismatchLabel'),selected.blockers.vat_ledger_mismatches??0],[t('vat.adjustmentsPendingLabel'),selected.blockers.vat_adjustments_pending??0]]:[];
+ const showRegister=(filter:'not_reviewed'|'pending')=>()=>{setReviewFilter(filter);setSelectedDocument(null);window.setTimeout(()=>document.getElementById('vat-register')?.scrollIntoView?.({block:'start'}),0)};
+ // A blocker is actionable only when it has a safe existing destination the user is allowed to open; otherwise it stays informational.
+ const blockerRows:{key:string;label:string;count:number;action:(()=>void)|null}[]=selected?[
+  {key:'unapproved',label:t('vat.unapprovedLabel'),count:selected.blockers.unapproved_documents,action:canViewDocuments?()=>onNavigate('documents',{from:selected.period_start,to:selected.period_end}):null},
+  {key:'missing',label:t('vat.missingReviewsLabel'),count:selected.blockers.missing_reviews,action:showRegister('not_reviewed')},
+  {key:'pending',label:t('vat.pendingReviewsLabel'),count:selected.blockers.pending_reviews,action:showRegister('pending')},
+  {key:'recoverability',label:t('vat.recoverabilityLabel'),count:selected.blockers.vat_recoverability_pending??0,action:null},
+  {key:'ledger',label:t('vat.ledgerMismatchLabel'),count:selected.blockers.vat_ledger_mismatches??0,action:canViewAccounting?()=>onNavigate('accounting',{accountingTab:'sources',sourceFrom:selected.period_start,sourceTo:selected.period_end}):null},
+  {key:'adjustments',label:t('vat.adjustmentsPendingLabel'),count:selected.blockers.vat_adjustments_pending??0,action:null}]:[];
  const hasFilters=Boolean(search||reviewFilter||typeFilter||treatmentFilter);
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
@@ -59,7 +67,7 @@ export function Vat({canView,canReview,canClose,canReopen,onUnauthorized,selecte
      <div className="vat-readiness__titles"><h3>{t('vat.readinessTitle')}</h3><p><strong>{selected.ready?t('vat.ready'):t('vat.blocked',{count:selected.blockers.total})}</strong></p></div>
      <span className={`vat-badge vat-badge--${selected.ready?'ok':'warn'}`}>{selected.ready?t('vat.ready'):t('vat.notReady')}</span>
     </div>
-    <ul className="vat-blockers">{blockerRows.map(([label,count])=><li key={label}><span>{label}</span><b>{count}</b><span className={`vat-badge vat-badge--${count===0?'ok':'warn'}`}>{count===0?t('vat.noBlockers'):t('vat.hasBlockers')}</span></li>)}</ul>
+    <ul className="vat-blockers">{blockerRows.map(({key,label,count,action})=><li key={key}>{action&&count>0?<button type="button" className="vat-blocker-link" onClick={action}>{label}</button>:<span>{label}</span>}<b>{count}</b><span className={`vat-badge vat-badge--${count===0?'ok':'warn'}`}>{count===0?t('vat.noBlockers'):t('vat.hasBlockers')}</span></li>)}</ul>
     <div className="vat-readiness__close">
      <div className="vat-readiness__actions">{canClose&&selected.status==='open'&&<button className={selected.ready?'vat-dark':'vat-disabled'} disabled={!selected.ready||saving} onClick={()=>void close(selected)}>{t('vat.closePeriod')}{!selected.ready&&<svg className="vat-icon" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" fill="none" stroke="currentColor" strokeWidth="1.3"/></svg>}</button>}{canReopen&&selected.status==='closed'&&<button className="vat-ghost" disabled={saving} onClick={()=>setReopen(selected)}>{t('vat.reopenPeriod')}</button>}{selected.status==='closed'&&<VatReportActions periodId={selected.id} language={i18n.language} onError={()=>setError(true)}/>}</div>
      {selected.status==='open'&&!selected.ready&&<div className="vat-readiness__reason"><p>{t('vat.closeUnavailable')}</p><p>{t('vat.nextStep')}</p></div>}
@@ -81,7 +89,7 @@ export function Vat({canView,canReview,canClose,canReopen,onUnauthorized,selecte
     {hasFilters&&<button className="vat-ghost" onClick={()=>{setSearch('');setReviewFilter('');setTypeFilter('');setTreatmentFilter('')}}>{t('vat.clearFilters')}</button>}
    </div>
    {documents.length===0?<WorkspaceState>{t('vat.noDocuments')}</WorkspaceState>:<div className={`vat-workspace${selectedDocument?' has-detail':''}`}>
-    <section className="vat-card vat-register" aria-label={t('vat.registerTitle')}>
+    <section id="vat-register" className="vat-card vat-register" aria-label={t('vat.registerTitle')}>
      <div className="vat-register__heading"><h3>{t('vat.registerTitle')}</h3><span className="vat-muted">{t('vat.resultCount',{count:visibleDocuments.length})} • {t('vat.amountsIn',{currency})}</span></div>
      <div className="vat-table-wrap"><table><thead><tr><th>{t('vat.document')}</th><th>{ar?'العميل / المورد':'Customer / Supplier'}</th><th>{t('vat.documentDate')}</th><th>{t('vat.type')}</th><th>{t('vat.total')}</th><th>{t('vat.vatAmount')}</th><th>{t('vat.reviewStatus')}</th><th>{t('vat.actions')}</th></tr></thead><tbody>{visibleDocuments.map(d=><tr key={d.id} tabIndex={0} aria-selected={selectedDocument?.id===d.id} className={selectedDocument?.id===d.id?'is-selected':undefined} onClick={()=>setSelectedDocument(d)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setSelectedDocument(d)}}}><td>{d.original_filename}</td><td>{d.counterparty_name??'—'}</td><td>{d.document_date?formatDisplayDate(d.document_date,i18n.language):'—'}</td><td>{t(`documents.intake.types.${d.document_type}`)}</td><td>{d.total_amount??'—'}</td><td>{d.vat_amount??'—'}</td><td><span className={`vat-badge vat-badge--${reviewTone(d)}`}>{reviewLabel(d)}</span></td><td>{canEdit(d)?<button className="vat-link" onClick={event=>{event.stopPropagation();setEditing(d)}}>{d.review_id?t('vat.editReview'):t('vat.review')}</button>:'—'}</td></tr>)}</tbody></table>{visibleDocuments.length===0&&<WorkspaceState>{t('vat.noResults')}</WorkspaceState>}</div>
      <p className="vat-register__count">{t('vat.showing',{count:visibleDocuments.length,total:documents.length})}</p>
