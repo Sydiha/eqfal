@@ -3,7 +3,7 @@ import "@fontsource/readex-pro";
 import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
-import { useDateContext } from "../context/DateContext";
+import { isMonthOnlyPeriodId, MONTH_PERIOD_PREFIX, useDateContext } from "../context/DateContext";
 
 // Figma Home KPI and status icons (presentation only).
 const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -30,7 +30,9 @@ type HomePage =
   | "purchases"
   | "assets"
   | "openingBalances"
-  | "periodicAdjustments";
+  | "periodicAdjustments"
+  | "sales"
+  | "purchases";
 
 type DiscoveryPage =
   | "documents"
@@ -40,7 +42,9 @@ type DiscoveryPage =
   | "accounting"
   | "assets"
   | "openingBalances"
-  | "periodicAdjustments";
+  | "periodicAdjustments"
+  | "sales"
+  | "purchases";
 
 type Period = {
   id: string;
@@ -126,7 +130,7 @@ export function Home({
 }: Props) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language.startsWith("ar");
-  const { selectedPeriodId, periodMode, selectedFiscalYearId } = useDateContext();
+  const { selectedPeriodId, periodMode, selectedFiscalYearId, availableFiscalYears = [], availablePeriodsForSelectedYear = [] } = useDateContext();
 
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>(externalPeriods);
@@ -214,7 +218,11 @@ export function Home({
       // Period is resolved server-side within the active company; "all" mode scopes to the fiscal year.
       const params = new URLSearchParams();
       if (periodMode === "all" && selectedFiscalYearId) params.set("fiscal_year_id", selectedFiscalYearId);
-      else if (periodMode === "specific" && selectedPeriodId) params.set("period_id", selectedPeriodId);
+      else if (periodMode === "specific" && isMonthOnlyPeriodId(selectedPeriodId)) {
+        // Month without a monthly-close record: scope the read-only snapshot by calendar month of the fiscal year.
+        params.set("month", selectedPeriodId.slice(MONTH_PERIOD_PREFIX.length));
+        if (selectedFiscalYearId) params.set("fiscal_year_id", selectedFiscalYearId);
+      } else if (periodMode === "specific" && selectedPeriodId) params.set("period_id", selectedPeriodId);
       const query = params.toString();
       const response = await fetch(`/api/manager-financial-snapshot${query ? `?${query}` : ""}`, {
         credentials: "same-origin",
@@ -262,7 +270,9 @@ export function Home({
           { ...yearPeriods[0], blockers: { documents: 0, obligations: 0, bank_transactions: 0, vat: 0, ledger: 0, assets: 0, opening_balances: 0, periodic_adjustments: 0 }, disclosed_total: 0 },
         )
       : null;
-  const selected =
+  // A selected calendar month with no monthly-close record has no readiness data; never fall back to another month.
+  const monthOnlySelected = periodMode === "specific" && isMonthOnlyPeriodId(selectedPeriodId);
+  const selected = monthOnlySelected ? null :
     allYearPeriod ??
     periods.find((p) => p.id === selectedPeriodId) ??
     yearPeriods[0] ??
@@ -272,6 +282,35 @@ export function Home({
   const periodParameters = selected
     ? { from: selected.period_start, to: selected.period_end }
     : null;
+
+  // Narrowest date scope the global selector supports: one calendar month, or the whole fiscal year.
+  const scopeRange = (() => {
+    if (periodMode === "all") {
+      const year = availableFiscalYears.find((y) => y.id === selectedFiscalYearId);
+      return year ? { from: year.start_date.slice(0, 10), to: year.end_date.slice(0, 10) } : null;
+    }
+    const period = availablePeriodsForSelectedYear.find((p) => p.id === selectedPeriodId);
+    return period ? { from: period.period_start.slice(0, 10), to: period.period_end.slice(0, 10) } : null;
+  })();
+  const canViewDocumentSummaries = can("document.view") && can("obligation.view");
+  // Receivables/payables are all-time open balances (not period-scoped on the server), so the drill-down opts out of the global month.
+  // Only metrics backed by a real destination are actionable; net profit has no data source, so it stays informational.
+  const kpiNavigation: Record<string, (() => void) | null> = {
+    bank_balances: can("bank.view") ? () => navigateToDiscovery("banks", { section: "accounts" }) : null,
+    amounts_to_collect: can("obligation.view")
+      ? () => navigateToDiscovery("obligations", { direction: "receivable", confirmation: "confirmed", scope: "all" })
+      : null,
+    amounts_to_pay: can("obligation.view")
+      ? () => navigateToDiscovery("obligations", { direction: "payable", confirmation: "confirmed", scope: "all" })
+      : null,
+    current_month_sales: canViewDocumentSummaries
+      ? () => navigateToDiscovery("sales", scopeRange ? { salesFrom: scopeRange.from, salesTo: scopeRange.to } : {})
+      : null,
+    current_month_purchases_expenses: canViewDocumentSummaries
+      ? () => navigateToDiscovery("purchases", scopeRange ? { purchaseFrom: scopeRange.from, purchaseTo: scopeRange.to } : {})
+      : null,
+    net_profit: null,
+  };
 
   // Build 8 steps from blocker areas
   const blockerAreas = [
@@ -375,7 +414,14 @@ export function Home({
   const readyPercentage = Math.round((readyAreas / blockerAreas.length) * 100);
 
   const today = new Date();
-  const displayDate = selected ? new Date(selected.period_start) : today;
+  const contextMonth = monthOnlySelected
+    ? availablePeriodsForSelectedYear.find((p) => p.id === selectedPeriodId)
+    : undefined;
+  const displayDate = selected
+    ? new Date(selected.period_start)
+    : contextMonth
+      ? new Date(contextMonth.period_start)
+      : today;
   const dayName = isArabic
     ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(displayDate)
     : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(displayDate);
@@ -486,8 +532,15 @@ export function Home({
             {kpiMetrics.map((kpi) => {
               const value = renderKPIValue(kpi);
               const IconComponent = kpi.icon;
+              const open = kpiNavigation[kpi.key];
+              const label = isArabic ? kpi.labelAr : kpi.labelEn;
+              const Card = open ? "button" : "div";
               return (
-                <div key={kpi.key} className={`home__kpi-card ${kpi.colorClass}`}>
+                <Card
+                  key={kpi.key}
+                  className={`home__kpi-card ${kpi.colorClass}${open ? " home__kpi-card--action" : ""}`}
+                  {...(open ? { type: "button" as const, onClick: open, "aria-label": `${label}: ${value}` } : {})}
+                >
                   <div className="home__kpi-text">
                     <div className="home__kpi-label">
                       {isArabic ? kpi.labelAr : kpi.labelEn}
@@ -499,11 +552,19 @@ export function Home({
                   <div className="home__kpi-icon">
                     <IconComponent />
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
         </section>
+      )}
+
+      {canViewClose && !loading && !error && monthOnlySelected && (
+        <p className="home__month-note" role="status">
+          {isArabic
+            ? "لا يوجد سجل إقفال شهري لهذا الشهر بعد، لذا لا تتوفر بيانات الجاهزية له."
+            : "No monthly close record exists for this month yet, so readiness data is not available."}
+        </p>
       )}
 
       {/* Tasks Table - BEFORE Readiness */}

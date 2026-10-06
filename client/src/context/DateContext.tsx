@@ -32,6 +32,45 @@ export interface DateContextState {
   loadPeriodsForYear: (fiscalYearId: string) => Promise<void>;
 }
 
+/** Id prefix for calendar months of a fiscal year that have no monthly-close record yet (UI-only, never persisted to the backend). */
+export const MONTH_PERIOD_PREFIX = 'month:';
+export const isMonthOnlyPeriodId = (id: string | null | undefined): id is string =>
+  typeof id === 'string' && id.startsWith(MONTH_PERIOD_PREFIX);
+
+const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+/**
+ * Full calendar-month list for a fiscal year: the real monthly-close period when one exists,
+ * otherwise a UI-only month entry clipped to the fiscal-year bounds.
+ */
+export function buildYearMonths(year: FiscalYear | undefined, realPeriods: Period[]): Period[] {
+  if (!year) return realPeriods;
+  const fyStart = year.start_date.slice(0, 10);
+  const fyEnd = year.end_date.slice(0, 10);
+  const byMonth = new Map(realPeriods.map(p => [p.period_start.slice(0, 7), p]));
+  const months: Period[] = [];
+  const cursor = new Date(`${fyStart.slice(0, 7)}-01T00:00:00Z`);
+  while (isoDay(cursor) <= fyEnd && months.length < 24) {
+    const key = isoDay(cursor).slice(0, 7);
+    const real = byMonth.get(key);
+    if (real) {
+      months.push(real);
+    } else {
+      const monthStart = isoDay(cursor);
+      const monthEnd = isoDay(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0)));
+      months.push({
+        id: `${MONTH_PERIOD_PREFIX}${key}`,
+        fiscal_year_id: year.id,
+        period_start: monthStart < fyStart ? fyStart : monthStart,
+        period_end: monthEnd > fyEnd ? fyEnd : monthEnd,
+        status: 'not_created',
+      });
+    }
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1);
+  }
+  return months;
+}
+
 export const DateContext = createContext<DateContextState | undefined>(undefined);
 
 export const useDateContext = () => {
@@ -53,6 +92,7 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
   const [periodMode, setPeriodMode] = useState<'all' | 'specific'>('specific');
   const [availableFiscalYears, setAvailableFiscalYears] = useState<FiscalYear[]>([]);
   const [availablePeriodsForSelectedYear, setAvailablePeriodsForSelectedYear] = useState<Period[]>([]);
+  const [realPeriodsForSelectedYear, setRealPeriodsForSelectedYear] = useState<Period[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,7 +127,7 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
       const data = await response.json();
       const allPeriods = Array.isArray(data) ? data : data.periods || [];
       const yearPeriods = allPeriods.filter((p: Period) => p.fiscal_year_id === fiscalYearId);
-      setAvailablePeriodsForSelectedYear(yearPeriods);
+      setRealPeriodsForSelectedYear(yearPeriods);
       return yearPeriods;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -97,6 +137,16 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
       setIsLoading(false);
     }
   }, []);
+
+  // Expose all calendar months of the selected year; months without a monthly-close record are UI-only entries.
+  useEffect(() => {
+    const year = availableFiscalYears.find(y => y.id === selectedFiscalYearId);
+    setAvailablePeriodsForSelectedYear(
+      year && realPeriodsForSelectedYear.every(p => p.fiscal_year_id === year.id)
+        ? buildYearMonths(year, realPeriodsForSelectedYear)
+        : realPeriodsForSelectedYear,
+    );
+  }, [availableFiscalYears, selectedFiscalYearId, realPeriodsForSelectedYear]);
 
   // Determine default fiscal year using approval logic
   const determineDefaultFiscalYear = useCallback((years: FiscalYear[]): FiscalYear | null => {
@@ -130,7 +180,7 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
     // Clear the previous company's date state before fetching the new company's data
     setAvailableFiscalYears([]);
     setSelectedFiscalYearId(null);
-    setAvailablePeriodsForSelectedYear([]);
+    setRealPeriodsForSelectedYear([]);
     setSelectedPeriodId(null);
     const initialize = async () => {
       try {

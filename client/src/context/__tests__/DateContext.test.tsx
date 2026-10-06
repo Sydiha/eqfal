@@ -227,3 +227,39 @@ describe('DateContext', () => {
     expect(localStorage.getItem('eqfal_selectedPeriodId_company-2')).toBeNull();
   });
 });
+
+describe('DateContext full-year months', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => mockFiscalYears });
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => mockPeriods });
+  });
+
+  it('lists January-December although only one monthly-close record exists, keeping the real period selected by default', async () => {
+    const TestComponent = () => {
+      const { availablePeriodsForSelectedYear, selectedPeriodId, onSelectPeriod, periodMode } = useDateContext();
+      return (
+        <div>
+          <span data-testid="count">{availablePeriodsForSelectedYear.length}</span>
+          <span data-testid="selected">{periodMode === 'all' ? 'all' : selectedPeriodId}</span>
+          <span data-testid="ids">{availablePeriodsForSelectedYear.map(p => p.id).join(',')}</span>
+          <button onClick={() => onSelectPeriod('month:2026-02', 'specific')}>feb</button>
+          <button onClick={() => onSelectPeriod('', 'all')}>all</button>
+        </div>
+      );
+    };
+    render(<DateContextProvider companyId="company-1"><TestComponent /></DateContextProvider>);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('12'));
+    expect(screen.getByTestId('ids').textContent).toContain('month:2026-01');
+    expect(screen.getByTestId('ids').textContent).toContain('period-july-2026');
+    expect(screen.getByTestId('ids').textContent).not.toContain('month:2026-07');
+    await waitFor(() => expect(screen.getByTestId('selected')).toHaveTextContent('period-july-2026'));
+
+    fireEvent.click(screen.getByText('feb'));
+    expect(screen.getByTestId('selected')).toHaveTextContent('month:2026-02');
+    fireEvent.click(screen.getByText('all'));
+    expect(screen.getByTestId('selected')).toHaveTextContent('all');
+    expect(screen.getByTestId('count')).toHaveTextContent('12');
+  });
+});

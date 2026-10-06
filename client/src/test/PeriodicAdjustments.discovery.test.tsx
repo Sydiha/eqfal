@@ -1,4 +1,4 @@
-import{render,screen}from'@testing-library/react';
+import{render,screen}from'./test-utils';
 import{beforeEach,describe,expect,it,vi}from'vitest';
 import i18n from'../i18n';
 import{PeriodicAdjustments}from'../components/PeriodicAdjustments';

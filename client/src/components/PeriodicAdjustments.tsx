@@ -1,7 +1,8 @@
-import {FormEvent,useEffect,useMemo,useState} from 'react';
+import {FormEvent,useEffect,useMemo,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
-import {readQueryParameter} from '../navigation/queryState';
+import {clearQueryParameters,readQueryParameter} from '../navigation/queryState';
+import {useDateContext} from '../context/DateContext';
 import {StatusBadge,WorkspaceState} from './SharedUI';
 import './PeriodicAdjustments.css';
 
@@ -24,6 +25,7 @@ const json=(method:string,body:unknown):RequestInit=>({method,headers:{'content-
 
 export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canReview,canApprove,canPost,onUnauthorized}:Props){
  const {i18n}=useTranslation();const ar=i18n.language==='ar';
+ const {selectedPeriodId,periodMode,selectedFiscalYearId,availableFiscalYears,availablePeriodsForSelectedYear}=useDateContext();
  const l=ar?{
   title:'الاستحقاقات والمقدمات',description:'إدارة المصروفات والإيرادات المستحقة والمقدمة مع جداول الاعتراف والترحيل.',newItem:'إضافة تعديل دوري',type:'النوع',amount:'إجمالي المبلغ',start:'بداية الاعتراف',end:'نهاية الاعتراف',descriptionLabel:'الوصف',reference:'المرجع',notes:'ملاحظات',balanceAccount:'حساب الميزانية',pnlAccount:'حساب الربح والخسارة',document:'المستند المرتبط (اختياري)',obligation:'الالتزام المرتبط (اختياري)',none:'بدون ربط',save:'حفظ',update:'تحديث',cancel:'إلغاء التعديل',items:'التعديلات الدورية',schedule:'جدول الاعتراف',period:'الفترة',recognitionDate:'تاريخ الاعتراف',journal:'القيد',post:'ترحيل الفترة',submit:'إرسال للمراجعة',approve:'اعتماد',returnDraft:'إرجاع إلى المسودة',returnReason:'سبب الإرجاع',loading:'جارٍ التحميل...',empty:'لا توجد تعديلات دورية بعد.',error:'تعذر تحميل أو حفظ البيانات.',noAccess:'ليس لديك صلاحية عرض التعديلات الدورية.',draft:'مسودة',in_review:'قيد المراجعة',approved:'معتمد',completed:'مكتمل',pending:'معلق',posted:'مرحل',accrued_expense:'مصروف مستحق',prepaid_expense:'مصروف مقدم',accrued_income:'إيراد مستحق',deferred_income:'إيراد مقدم',total:'إجمالي التعديلات',pendingCount:'فترات معلقة',postedCount:'فترات مرحلة',accountHint:'اختيار الحسابات هو إعداد محاسبي؛ اتجاه المدين/الدائن يحدده النظام تلقائيًا.',
   progress:'التقدم',recognitionPeriod:'فترة الاعتراف',status:'الحالة',actions:'إجراءات',action:'الإجراء',viewSchedule:'عرض جدول الاعتراف',selected:'محدد',oneItem:'تعديل واحد',itemsCount:(n:number)=>n===1?'تعديل واحد':`${n} تعديلات`,showing:(n:number)=>`عرض ${n} من ${n} تعديل`,scheduleLinked:'جدول الاعتراف أدناه مرتبط بالتعديل المحدد',periodsCount:(n:number)=>`${n} فترات`,scheduleAmounts:'المبالغ بالريال السعودي',currency:'ر.س',progressOf:(a:number,b:number)=>`${a} من ${b} فترات مرحلة`,scheduleTotal:'إجمالي جدول الاعتراف',postNote:'ترحيل الفترة إجراء محاسبي للفترة المحددة فقط؛ الفترة المرحلة لا تُرحل مرة أخرى.',posting:'جارٍ الترحيل...',saving:'جارٍ الحفظ...',posted_done:'تم الترحيل',noSchedule:'لا يوجد جدول اعتراف لهذا التعديل بعد؛ يُنشأ الجدول عند الاعتماد.',selectPrompt:'اختر تعديلًا لعرض جدول الاعتراف.',close:'إغلاق',formTitle:'إضافة تعديل دوري'
@@ -39,6 +41,9 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const load=async()=>{setLoading(true);setError(false);try{const main=await api('/api/periodic-adjustments',{},onUnauthorized);setItems(((await main.json()) as {adjustments:Adjustment[]}).adjustments);const optional=await Promise.allSettled([api('/api/accounts',{},onUnauthorized),api('/api/documents',{},onUnauthorized),api('/api/obligations',{},onUnauthorized)]);if(optional[0].status==='fulfilled')setAccounts(((await optional[0].value.json()) as {accounts:Account[]}).accounts);if(optional[1].status==='fulfilled')setDocuments(((await optional[1].value.json()) as {documents:Document[]}).documents);if(optional[2].status==='fulfilled')setObligations(((await optional[2].value.json()) as {obligations:Obligation[]}).obligations);}catch{setError(true)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void load();// eslint-disable-next-line react-hooks/exhaustive-deps
  },[canView]);
+ // A global fiscal-year/month change replaces any drill-down range carried in the URL, so the topbar always wins.
+ const scopeKey=`${periodMode}|${selectedFiscalYearId}|${selectedPeriodId}`;const previousScope=useRef(scopeKey);const [,setScopeVersion]=useState(0);
+ useEffect(()=>{if(previousScope.current!==scopeKey){previousScope.current=scopeKey;clearQueryParameters(['adjustmentFrom','adjustmentTo'],'replace');setSelectedId(null);setScopeVersion(v=>v+1)}},[scopeKey]);
  useEffect(()=>{if(editing&&items.find(i=>i.id===editing.id)?.workflow_status!=='draft'){setEditing(null);setForm(initialForm);setFormOpen(false)}},[items,editing]);
  const expected=useMemo(()=>{const balance=form.type==='accrued_expense'||form.type==='deferred_income'?'liability':'asset';const pnl=form.type==='accrued_expense'||form.type==='prepaid_expense'?'expense':'revenue';return{balance,pnl}},[form.type]);
  const balanceAccounts=accounts.filter(a=>a.is_active&&a.account_type===expected.balance),pnlAccounts=accounts.filter(a=>a.is_active&&a.account_type===expected.pnl);
@@ -49,8 +54,10 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const mutate=async(url:string,body?:unknown)=>{setBusy(true);setBusyUrl(url);setError(false);try{await api(url,body===undefined?{method:'POST'}:json('POST',body),onUnauthorized);await load();return true}catch{setError(true);return false}finally{setBusy(false);setBusyUrl(null)}};
  if(!canView)return <section className="panel pa-view"><WorkspaceState>{l.noAccess}</WorkspaceState></section>;
  const closePeriod=readClosePeriod();
- const visibleItems=closePeriod?items.filter(a=>((a.workflow_status==='draft'||a.workflow_status==='in_review')&&a.recognition_start<=closePeriod.to&&a.recognition_end>=closePeriod.from)||(a.workflow_status==='approved'&&a.schedule.some(entry=>entry.status==='pending'&&entry.recognition_date>=closePeriod.from&&entry.recognition_date<=closePeriod.to))):items;
- const pending=items.flatMap(a=>a.schedule).filter(s=>s.status==='pending').length,posted=items.flatMap(a=>a.schedule).filter(s=>s.status==='posted').length;
+ const globalRange=(()=>{if(periodMode==='all'){const year=availableFiscalYears.find(y=>y.id===selectedFiscalYearId);return year?{from:year.start_date.slice(0,10),to:year.end_date.slice(0,10)}:null}const period=availablePeriodsForSelectedYear.find(p=>p.id===selectedPeriodId);return period?{from:period.period_start.slice(0,10),to:period.period_end.slice(0,10)}:null})();
+ const overlapsGlobal=(a:Adjustment)=>!globalRange||(a.recognition_start<=globalRange.to&&a.recognition_end>=globalRange.from);
+ const visibleItems=closePeriod?items.filter(a=>((a.workflow_status==='draft'||a.workflow_status==='in_review')&&a.recognition_start<=closePeriod.to&&a.recognition_end>=closePeriod.from)||(a.workflow_status==='approved'&&a.schedule.some(entry=>entry.status==='pending'&&entry.recognition_date>=closePeriod.from&&entry.recognition_date<=closePeriod.to))):items.filter(overlapsGlobal);
+ const pending=visibleItems.flatMap(a=>a.schedule).filter(s=>s.status==='pending').length,posted=visibleItems.flatMap(a=>a.schedule).filter(s=>s.status==='posted').length;
  const selected=visibleItems.find(a=>a.id===selectedId)??null;
  const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
@@ -65,7 +72,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    {canCreate&&!showForm&&<button type="button" className="pa-primary" onClick={()=>setFormOpen(true)}><span aria-hidden="true">+</span> {l.newItem}</button>}
   </header>
   <div className="pa-kpis">
-   <div className="pa-kpi"><div><span>{l.total}</span><strong>{items.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></div>
+   <div className="pa-kpi"><div><span>{l.total}</span><strong>{visibleItems.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></div>
    <div className="pa-kpi pa-kpi--pending"><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></div>
    <div className="pa-kpi pa-kpi--posted"><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></div>
   </div>
