@@ -50,7 +50,7 @@ const en = {
     search: 'Search', searchPlaceholder: 'Action, entity, reference, user or reason', action: 'Action', entityType: 'Entity type', user: 'User', allActions: 'All actions', allTypes: 'All types', allUsers: 'All users',
     from: 'From', to: 'To', clear: 'Clear filters', apply: 'Apply', count: '{{count}} entries',
     timestamp: 'Time', entity: 'Entity', reference: 'Reference', company: 'Company', reason: 'Reason', details: 'Details', show: 'Show', hide: 'Hide',
-    before: 'Before', after: 'After', noDetails: 'No details recorded.', previous: 'Previous', next: 'Next', page: 'Showing {{from}}–{{to}} of {{total}}',
+    yes: 'Yes', no: 'No', field: 'Field', rawData: 'Technical data (raw JSON)', before: 'Before', after: 'After', noDetails: 'No details recorded.', previous: 'Previous', next: 'Next', page: 'Showing {{from}}–{{to}} of {{total}}',
     error: 'Unable to load the audit log.', invalidRequest: 'Please check the filter values.', forbidden: 'You do not have permission to view the audit log.',
   },
   companies: {
@@ -78,7 +78,7 @@ const en = {
     membersEmpty: 'This company has no members.', rolesEmpty: 'This company has no roles.',
     createRole: 'New role', createRoleTitle: 'Create role', roleName: 'Role name', create: 'Create',
     fullAccess: 'Full Access', fullAccessNote: 'This role holds every capability and its capabilities cannot be edited.',
-    selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
+    selectAll: 'Select all', clearAll: 'Clear all', bulkActions: 'Bulk permission actions', selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
     ceilingNote: 'You cannot grant a permission you do not hold in this company.', saving: 'Saving…',
     invalidRequest: 'Invalid request. Check the data.', forbidden: 'You are not allowed to perform this action.', notFound: 'Item not found.', conflict: 'This item already exists.', error: 'The operation could not be completed. Try again.',
   },

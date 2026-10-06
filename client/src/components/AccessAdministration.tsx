@@ -1,7 +1,8 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
+import { capabilityGroupKey, capabilityGroupLabel, capabilityLabel, langOf } from '../labels/capabilityLabels';
 import './AccessAdministration.css';
 
 export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean }
@@ -32,13 +33,20 @@ function errorKeyFor(reason: unknown): ErrorKey {
 }
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
+function GroupCheckbox({ label, checked, indeterminate, disabled, onChange }: { label: string; checked: boolean; indeterminate: boolean; disabled: boolean; onChange: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (ref.current) ref.current.indeterminate = indeterminate; }, [indeterminate]);
+  return <label className="acc-group-check"><input ref={ref} type="checkbox" checked={checked} disabled={disabled} aria-checked={indeterminate ? 'mixed' : checked} onChange={onChange} />{label}</label>;
+}
+
 /**
  * Operational UI for memberships, roles and role capabilities of the ACTIVE company.
  * Every action is also enforced server-side (capability, tenant scope and ceiling checks);
  * hiding controls here is only a convenience.
  */
 export function AccessAdministration({ capabilities, currentUserId, onUnauthorized }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = langOf(i18n.language);
   const can = (capability: string) => capabilities.includes(capability);
   const canView = can('access.view');
   const [tab, setTab] = useState<Tab>('members');
@@ -89,7 +97,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const groupedCapabilities = useMemo(() => {
     const groups = new Map<string, string[]>();
     for (const id of allCapabilities) {
-      const group = id.split('.')[0];
+      const group = capabilityGroupKey(id);
       groups.set(group, [...(groups.get(group) ?? []), id]);
     }
     return [...groups.entries()];
@@ -121,6 +129,19 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     mutate(() => request(`/api/access/memberships/${member.id}/role`, json('PUT', { role_id: roleId }), onUnauthorized));
   const toggleCapability = (role: AccessRole, capabilityId: string, grant: boolean) =>
     mutate(() => request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(capabilityId)}`, { method: grant ? 'PUT' : 'DELETE' }, onUnauthorized));
+
+  /** Applies several grants/revokes one by one (same endpoints as a single checkbox); the list is always reloaded afterwards. */
+  const bulkChange = (role: AccessRole, grants: string[], revokes: string[]) => {
+    if (grants.length + revokes.length === 0) return;
+    void mutate(async () => {
+      try {
+        for (const id of grants) await request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(id)}`, { method: 'PUT' }, onUnauthorized);
+        for (const id of revokes) await request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(id)}`, { method: 'DELETE' }, onUnauthorized);
+      } catch (reason) { await load(); throw reason; }
+    });
+  };
+  const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
+  const canRevokeId = () => can('access.role.capability.revoke');
 
   const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{t(`access.${errorKey}`)}</div> : null;
 
@@ -165,13 +186,32 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
           <h3>{t('access.capabilities')} — {selectedRole.name}</h3>
           {selectedRole.is_full_access ? <p className="acc-hint">{t('access.fullAccessNote')}</p> : <>
             <p className="acc-hint">{t('access.ceilingNote')}</p>
-            {groupedCapabilities.map(([group, ids]) => <fieldset key={group}><legend>{group}</legend>
+            {(() => {
+              const grantable = allCapabilities.filter((id) => !selectedRole.capabilities.includes(id) && canGrantId(id));
+              const revocable = allCapabilities.filter((id) => selectedRole.capabilities.includes(id) && canRevokeId());
+              return <div className="acc-bulk" role="group" aria-label={t('access.bulkActions')}>
+                <button type="button" className="acc-ghost" disabled={busy || grantable.length === 0} onClick={() => bulkChange(selectedRole, grantable, [])}>{t('access.selectAll')}</button>
+                <button type="button" className="acc-ghost" disabled={busy || revocable.length === 0} onClick={() => bulkChange(selectedRole, [], revocable)}>{t('access.clearAll')}</button>
+              </div>;
+            })()}
+            {groupedCapabilities.map(([group, ids]) => {
+              const groupLabel = capabilityGroupLabel(group, lang);
+              const grantedIds = ids.filter((id) => selectedRole.capabilities.includes(id));
+              const grantable = ids.filter((id) => !grantedIds.includes(id) && canGrantId(id));
+              const revocable = canRevokeId() ? grantedIds : [];
+              const all = grantedIds.length === ids.length;
+              return <fieldset key={group}><legend>
+                <GroupCheckbox label={groupLabel} checked={all} indeterminate={grantedIds.length > 0 && !all}
+                  disabled={busy || (all ? revocable.length === 0 : grantable.length === 0)}
+                  onChange={() => all ? bulkChange(selectedRole, [], revocable) : bulkChange(selectedRole, grantable, [])} />
+              </legend>
               {ids.map((id) => {
-                const granted = selectedRole.capabilities.includes(id);
-                const canToggle = granted ? can('access.role.capability.revoke') : can('access.role.capability.grant') && can(id);
-                return <label key={id} dir="ltr"><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{id}</label>;
+                const granted = grantedIds.includes(id);
+                const canToggle = granted ? can('access.role.capability.revoke') : canGrantId(id);
+                return <div key={id} className="acc-cap"><label><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label><small dir="ltr">{id}</small></div>;
               })}
-            </fieldset>)}
+            </fieldset>;
+            })}
           </>}
         </>}
       </div>

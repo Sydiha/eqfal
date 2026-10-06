@@ -34,3 +34,16 @@
 .acc-form small{color:#64748b}
 .acc-alert{margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#b91c1c}
 @media (max-width:700px){.acc-view .acc-roles{grid-template-columns:minmax(0,1fr)}.acc-view .acc-header{flex-direction:column}}
+.acc-view .acc-bulk{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.acc-view .acc-capabilities .acc-cap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:3px 0}
+.acc-view .acc-capabilities .acc-cap small{color:var(--acc-muted);font-size:10.5px;white-space:nowrap}
+.acc-view .acc-capabilities legend label{padding:0}
+@media (max-width:700px){.acc-view .acc-capabilities .acc-cap{flex-wrap:wrap;gap:2px 12px}}
+.acc-view .acc-audit-details .acc-table{margin-top:0}
+.acc-view .acc-audit-details tbody th{background:transparent;color:var(--acc-ink);font-weight:600;white-space:normal}
+.acc-view .acc-audit-details tr.is-changed td:last-child{background:#f0fdf9}
+.acc-view .acc-audit-list{margin:0;padding-inline-start:16px}
+.acc-view .acc-audit-inline{font-size:11px;word-break:break-all}
+.acc-view .acc-audit-raw{margin-top:10px}
+.acc-view .acc-audit-raw summary{cursor:pointer;color:var(--acc-muted)}
+.acc-view .acc-audit-raw pre{overflow-x:auto;margin:4px 0 0;font-size:11px}

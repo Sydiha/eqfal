@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { AccessAdministration } from '../components/AccessAdministration';
@@ -109,15 +109,58 @@ describe('AccessAdministration', () => {
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
-    const grant = screen.getByLabelText('document.edit');
+    const grant = screen.getByLabelText('Edit documents');
     expect(grant).not.toBeChecked();
-    expect(screen.getByLabelText('vat.view')).toBeDisabled(); // actor does not hold it
+    expect(screen.getByLabelText('View VAT')).toBeDisabled(); // actor does not hold it
     fireEvent.click(grant);
     await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
     expect(calls.find((c) => c.method === 'PUT')!.url).toBe('/api/access/roles/r-clerk/capabilities/document.edit');
-    fireEvent.click(screen.getByLabelText('document.view'));
+    fireEvent.click(screen.getByLabelText('View documents'));
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
     expect(calls.find((c) => c.method === 'DELETE')!.url).toBe('/api/access/roles/r-clerk/capabilities/document.view');
+  });
+
+  it('shows localized capability names (raw IDs only as secondary text)', async () => {
+    mockApi();
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    expect(screen.getByLabelText('Edit documents')).toBeInTheDocument();
+    expect(screen.getByText('document.edit')).toBeInTheDocument();
+    cleanup();
+    await i18n.changeLanguage('ar');
+    mockApi();
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('tab', { name: 'الأدوار والصلاحيات' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    expect(screen.getByLabelText('تعديل المستندات')).toBeInTheDocument();
+  });
+
+  it('selects/clears all and group-selects with an indeterminate state, honouring the ceiling', async () => {
+    const calls = mockApi();
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    const group = screen.getByLabelText('Documents') as HTMLInputElement; // clerk holds document.view only
+    expect(group.indeterminate).toBe(true);
+    fireEvent.click(group);
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT').map((c) => c.url)).toEqual(['/api/access/roles/r-clerk/capabilities/document.edit']));
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT').length).toBeGreaterThan(1));
+    // never grants what the actor does not hold (vat.view is outside the ceiling)
+    expect(calls.some((c) => c.method === 'PUT' && c.url.includes('vat.view'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+  });
+
+  it('disables bulk controls without grant/revoke capabilities', async () => {
+    mockApi();
+    renderIt(['access.view']);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(screen.getByLabelText('Documents')).toBeDisabled();
   });
 
   it('does not allow editing a Full Access role', async () => {

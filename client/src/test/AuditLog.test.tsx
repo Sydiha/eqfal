@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
-import { AuditLog } from '../components/AuditLog';
+import { AuditLog, type AuditEntry } from '../components/AuditLog';
 
-const entry = { id: 'e1', created_at: '2026-10-01T10:00:00Z', actor_user_id: 'u1', actor_email: 'owner@example.com', action: 'company.update', entity_type: 'company', entity_id: '0e8574b6-5828-40c6-9b56-7dbd1c7e9def', company_id: 'c1', company_name: 'Alpha Co', company_name_ar: 'ألفا', reason: 'Renamed', before_data: { name: 'Old' }, after_data: { name: 'New' } };
+const entry: AuditEntry = { id: 'e1', created_at: '2026-10-01T10:00:00Z', actor_user_id: 'u1', actor_email: 'owner@example.com', action: 'company.update', entity_type: 'company', entity_id: '0e8574b6-5828-40c6-9b56-7dbd1c7e9def', company_id: 'c1', company_name: 'Alpha Co', company_name_ar: 'ألفا', reason: 'Renamed', before_data: { name: 'Old' }, after_data: { name: 'New' } };
 const facets = { actions: ['company.update'], entity_types: ['company'], actors: [{ id: 'u1', email: 'owner@example.com' }] };
 
 function mockApi(status = 200, entries = [entry]) {
@@ -33,7 +33,7 @@ describe('AuditLog', () => {
     mockApi();
     renderIt();
     expect(await screen.findByText('owner@example.com', { selector: 'td' })).toBeInTheDocument();
-    for (const text of ['company.update', 'Alpha Co', 'Renamed', entry.entity_id]) expect(screen.getAllByText(text).length).toBeGreaterThan(0);
+    for (const text of ['Update company', 'Alpha Co', 'Renamed', entry.entity_id]) expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     for (const header of ['Time', 'User', 'Action', 'Entity', 'Reference', 'Company', 'Reason']) expect(screen.getAllByRole('columnheader', { name: header }).length).toBe(1);
     expect(screen.queryByRole('button', { name: /edit|delete|remove/i })).toBeNull();
   });
@@ -44,6 +44,41 @@ describe('AuditLog', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Show' }));
     expect(screen.getByText(/"Old"/)).toBeInTheDocument();
     expect(screen.getByText(/"New"/)).toBeInTheDocument();
+  });
+
+  it('localizes action/entity in filters and rows while keeping raw filter values', async () => {
+    const urls = mockApi();
+    renderIt();
+    expect(await screen.findByRole('option', { name: 'Update company' })).toHaveValue('company.update');
+    expect(screen.getByRole('option', { name: 'Company' })).toHaveValue('company');
+    expect(screen.getByText('Update company', { selector: '.badge, span, td *' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'company.update' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(urls.some((u) => u.includes('action=company.update'))).toBe(true));
+  });
+
+  it('shows Arabic labels and readable details', async () => {
+    await i18n.changeLanguage('ar');
+    mockApi();
+    renderIt();
+    expect(await screen.findByRole('option', { name: 'تعديل شركة' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'عرض' }));
+    expect(screen.getByRole('rowheader', { name: 'الاسم' })).toBeInTheDocument();
+  });
+
+  it('renders structured details and survives unknown action, entity and fields', async () => {
+    mockApi(200, [{ ...entry, action: 'brand_new.thing_done', entity_type: 'weird_entity', before_data: { status: 'draft', is_active: true, odd_field: null, capabilities: ['document.view'] }, after_data: { status: 'posted', posted_at: '2026-10-01T10:00:00Z', odd_field: { a: 1 }, capabilities: ['document.view', 'x.unknown'] } }]);
+    renderIt();
+    expect(await screen.findByText('Brand new thing done', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText('Weird entity')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(screen.getByRole('rowheader', { name: 'Status' })).toBeInTheDocument();
+    expect(screen.getByText('Draft')).toBeInTheDocument();
+    expect(screen.getByText('Posted')).toBeInTheDocument();
+    expect(screen.getByText('Yes')).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Odd field' })).toBeInTheDocument();
+    expect(screen.getAllByText('View documents').length).toBe(2);
+    expect(screen.getByText('Technical data (raw JSON)')).toBeInTheDocument();
   });
 
   it('sends filters and search to the server and can clear them', async () => {
