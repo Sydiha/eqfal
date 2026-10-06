@@ -31,8 +31,7 @@ describe('VAT review workspace',()=>{
   fireEvent.click(screen.getByRole('button',{name:'VAT ledger mismatches'}));
   expect(onNavigate).toHaveBeenCalledWith('accounting',{accountingTab:'sources',sourceFrom:'2026-01-01',sourceTo:'2026-03-31'});
   // no safe destination: informational text, not a button
-  expect(screen.queryByRole('button',{name:'Pending VAT recoverability decisions'})).not.toBeInTheDocument();
-  expect(screen.getByText('Pending VAT recoverability decisions')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Pending VAT recoverability decisions'})).toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Pending VAT adjustments'})).not.toBeInTheDocument();
   // zero-count blocker is never a button
   expect(screen.queryByRole('button',{name:'Pending VAT reviews'})).not.toBeInTheDocument();
@@ -59,5 +58,50 @@ describe('VAT review workspace',()=>{
   const button=await screen.findByRole('button',{name:'مستندات غير معتمدة'});
   expect(button.tagName).toBe('BUTTON');
   expect(button).toHaveAttribute('type','button');
+ });
+
+ it('resolves a pending recoverability blocker through the existing VAT review dialog',async()=>{
+  const blocked={...period,ready:false,blockers:{unapproved_documents:0,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:1,vat_ledger_mismatches:0,vat_adjustments_pending:1,total:2}};
+  const expense={id:'d3',status:'approved',original_filename:'expense-gamma.pdf',document_type:'expense',document_date:'2026-01-12',counterparty_name:'Gamma',total_amount:'115.00',review_id:'r3',tax_date:'2026-01-12',treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',review_status:'reviewed',review_note:null,version:2,recoverability_status:'needs_review',recoverable_vat_amount:null,recoverability_reason:null};
+  const calls:{url:string;body:any}[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{if(options?.method==='PUT'){calls.push({url,body:JSON.parse(String(options.body))});return new Response('{}',{status:200})}if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents:[...documents,expense]}),{status:200})}));
+  render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Pending VAT recoverability decisions'}));
+  expect(screen.getByRole('combobox',{name:'Review status'})).toHaveValue('recoverability');
+  expect(screen.getByRole('cell',{name:'expense-gamma.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'sale-acme.pdf'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('cell',{name:'expense-gamma.pdf'}));
+  fireEvent.click(within(await screen.findByLabelText('VAT document details')).getByRole('button',{name:/Edit VAT review/}));
+  fireEvent.change(screen.getByLabelText('VAT recoverability'),{target:{value:'partially_recoverable'}});
+  fireEvent.change(screen.getByLabelText('Recoverable VAT amount'),{target:{value:'5.00'}});
+  fireEvent.change(screen.getByLabelText('Recoverability reason'),{target:{value:'Mixed use'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save'}));
+  await waitFor(()=>expect(calls).toHaveLength(1));
+  expect(calls[0].url).toBe('/api/documents/d3/vat-review');
+  expect(calls[0].body).toMatchObject({review_status:'reviewed',vat_amount:'15.00',recoverability_status:'partially_recoverable',recoverable_vat_amount:'5.00',recoverability_reason:'Mixed use',version:2});
+ });
+ it('derives the recoverable amount for full and non-recoverable decisions and omits it for sales',async()=>{
+  const expense={id:'d3',status:'approved',original_filename:'expense-gamma.pdf',document_type:'expense',document_date:'2026-01-12',counterparty_name:'Gamma',total_amount:'115.00',review_id:'r3',tax_date:'2026-01-12',treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',review_status:'reviewed',review_note:null,version:2,recoverability_status:'needs_review'};
+  const calls:any[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{if(options?.method==='PUT'){calls.push(JSON.parse(String(options.body)));return new Response('{}',{status:200})}if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[period]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period,documents:[...documents,expense]}),{status:200})}));
+  render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('cell',{name:'expense-gamma.pdf'}));
+  fireEvent.click(within(await screen.findByLabelText('VAT document details')).getByRole('button',{name:/Edit VAT review/}));
+  fireEvent.change(screen.getByLabelText('VAT recoverability'),{target:{value:'fully_recoverable'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save'}));
+  await waitFor(()=>expect(calls).toHaveLength(1));
+  expect(calls[0]).toMatchObject({recoverability_status:'fully_recoverable',recoverable_vat_amount:'15.00'});
+  fireEvent.click(await screen.findByRole('cell',{name:'sale-acme.pdf'}));
+  fireEvent.click(within(await screen.findByLabelText('VAT document details')).getByRole('button',{name:/Edit VAT review/}));
+  expect(screen.queryByLabelText('VAT recoverability')).not.toBeInTheDocument();
+ });
+ it('labels the recoverability workflow in Arabic',async()=>{
+  await i18n.changeLanguage('ar');
+  const expense={id:'d3',status:'approved',original_filename:'expense-gamma.pdf',document_type:'expense',document_date:'2026-01-12',counterparty_name:'Gamma',total_amount:'115.00',review_id:'r3',tax_date:'2026-01-12',treatment:'standard',taxable_amount:'100.00',vat_amount:'15.00',review_status:'reviewed',review_note:null,version:2,recoverability_status:'needs_review'};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[period]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period,documents:[expense]}),{status:200})}));
+  render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('cell',{name:'expense-gamma.pdf'}));
+  fireEvent.click(within(await screen.findByLabelText('تفاصيل المستند الضريبي')).getByRole('button',{name:'تعديل المراجعة'}));
+  expect(screen.getByLabelText('استرداد الضريبة')).toBeInTheDocument();
  });
 });
