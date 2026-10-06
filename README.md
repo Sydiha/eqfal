@@ -1,24 +1,23 @@
 # إقفال | EQFAL · Financial Close & Operations
 
-⚠️ Last Updated: 2026-10-03
-Reference SHA at time of reconciliation — not current HEAD: 181f37ed60920cdf406155049173a9924272c0bb
+⚠️ Last Updated: 2026-10-06
+Reference SHA at time of reconciliation — not current HEAD: 468cfac20d8a01f567dd4104d5d4669ecc78d345
 Status: Active Development (Phase 14–15)
 
 منصة داخلية متعددة الشركات للإدارة والإقفال المالي، تُبنى كنواة صغيرة وآمنة واقتصادية وقابلة للنقل والتوسع.
 
 ## Current Status
 
-Phase 14 (Full-Cycle Validation): IN PROGRESS
-Phase 15 (System-wide UI/UX): PARTIALLY MERGED
-Recent merges: #305 (2026-09-30), #309 (2026-10-01), #313 (2026-10-02)
-Open PRs: #214, #229, #307
+Phase 14 (Full-Cycle Validation): IN PROGRESS / PARTIALLY VALIDATED (per-row status: docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md §9)
+Phase 15 (System-wide UI/UX): PARTIALLY MERGED / IN PROGRESS
+Recent merges: Tasks 29–32 (Admin & Audit usability, Accounting master data UX, bilingual account names, final visual cleanup, Phase 14 evidence reconciliation), PRs #383–#392
 See: docs/EXECUTION_ROADMAP.md for full roadmap
-See: RECAP_SESSION.md for latest session state
+See: PROJECT_STATE.md and SESSION_HANDOFF.md for current state; RECAP_SESSION.md is a historical recap
 
 ## الحالة الحالية
 
 - المرجع الدائم للكود: `GitHub/main`.
-- بيئة التنفيذ الأولية: Replit مع الحفاظ على قابلية النقل.
+- بيئة التنفيذ الأولية: Replit للتحقق التشغيلي اليدوي فقط (وليست مرجع الكود) مع الحفاظ على قابلية النقل.
 - لا Production منشور حاليًا.
 - لا خدمات مدفوعة جديدة دون موافقة صريحة.
 

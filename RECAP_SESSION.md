@@ -1,6 +1,6 @@
 # Project Recap — Current State
-**As of:** 2026-10-03
-**Reference SHA at time of reconciliation — not current HEAD:** 181f37ed60920cdf406155049173a9924272c0bb
+**As of:** 2026-10-06 (historical recap; current state is in `PROJECT_STATE.md` / `SESSION_HANDOFF.md`)
+**Reference SHA at time of reconciliation — not current HEAD:** 468cfac20d8a01f567dd4104d5d4669ecc78d345
 **Branch:** main
 
 ---
@@ -22,13 +22,14 @@
 
 #### 14B: Foundation & Master Data Validation
 - Status: PARTIAL — Issue #286 (2026-09-20): row 5 PASS, rows 1–4 PARTIAL
+- Later rows 6, 8, 12, 14 (14C), 15, 16, 17 hold PARTIAL status partly from owner-supplied external evidence (chat-reported, not repository evidence; PRs #391, #392); row 11 remains NOT RUN
 - Progress: Steps 1–5 executed; denial/negative evidence missing for 1–4 (evidence in GitHub Issue #286 comments; recorded in the matrix via PR #320)
   - Company context
   - Accounting & Tax Profile
   - Fiscal Year 2026
   - Opening Balances
   - Customers / Suppliers (Partners)
-- Pending: Steps 6–24 — see matrix §9 for per-row status
+- Remaining: see matrix §9 for per-row status (source of truth: `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md`)
 
 #### Phase 14 Validation Fixes by Slice:
 Slice attribution below follows the labels found in each PR's GitHub description/title/branch; slice names are from `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8.
@@ -67,21 +68,18 @@ Slice attribution below follows the labels found in each PR's GitHub description
 - #309: Home financial overview (✅ MERGED 2026-10-01)
 - #313: Home blocker categories fix (✅ MERGED 2026-10-02)
 
-#### Open Work:
-- #307: Purchases visual (🔄 OPEN — unique work stream, separate from Phase 14)
+#### Also merged since:
+- #307: Purchases visual (merged; no longer open)
+- Tasks 28–31 UX packs (navigation/filters, Admin & Audit usability, Accounting master data, bilingual account names, final visual cleanup), PRs #378–#390
 
-#### Pending:
-- Remaining system-wide UI/UX components (NOT YET STARTED)
+#### Remaining:
+- No residual Phase 15 item list is recorded; Phase 15 stays PARTIALLY MERGED / IN PROGRESS until the Owner confirms closure
 
 ---
 
 ## Open PRs (Current)
 
-| PR | Title | Status |
-|----|-------|--------|
-| #214 | Docs: verify Codex triggers before reporting execution | OPEN |
-| #229 | Phase 9A.2 correction: make Monthly Close creation capability-independent | OPEN |
-| #307 | Phase 15D follow-up: apply approved Purchases Locofy visual | OPEN |
+None at the time of the 2026-10-06 inspection. Former entries: #214 merged, #229 closed without merge (superseded by #231), #307 merged.
 
 ---
 
@@ -104,7 +102,7 @@ See AGENTS.md for full governance and role definitions.
 
 ## Next Steps
 
-1. **Phase 14:** Continue validation from Step 6 (see matrix §9)
-2. **PR #307:** Complete Purchases visual redesign
-3. **Phase 15:** Continue remaining UI/UX components
+1. **Phase 14:** Complete the rows still NOT RUN or PARTIAL (see matrix §9)
+2. **GitHub Issues:** stale Issue reconciliation/hygiene
+3. **Phase 15:** Owner to confirm whether any residual UI/UX scope remains
 4. **Phase 13:** Reactivate when business need and design gates are met
