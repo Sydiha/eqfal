@@ -3,10 +3,10 @@
 .pt-view button,.pt-view input,.pt-view textarea{font-family:inherit}
 .pt-view .pt-muted{color:var(--pt-muted);font-size:11px}
 .pt-view .pt-icon{width:14px;height:14px;flex:none}
-.pt-view .pt-header{display:flex;align-items:flex-start;justipt-content:space-between;gap:16px;margin:0}
+.pt-view .pt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0}
 .pt-view .pt-header h2{margin:0;font-size:24px;font-weight:800;line-height:normal;color:var(--pt-ink)}
 .pt-view .pt-header p{margin:4px 0 0;color:var(--pt-muted);font-size:13px}
-.pt-view .pt-primary,.pt-view .pt-ghost,.pt-view .pt-dark{display:inline-flex;align-items:center;justipt-content:center;gap:6px;flex:none;min-width:0;min-height:0;height:32px;margin:0;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;line-height:1;cursor:pointer}
+.pt-view .pt-primary,.pt-view .pt-ghost,.pt-view .pt-dark{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-width:0;min-height:0;height:32px;margin:0;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;line-height:1;cursor:pointer}
 .pt-view .pt-primary{border:0;background:var(--pt-primary);color:#fff}
 .pt-view .pt-primary:hover{background:#00a383}
 .pt-view .pt-ghost{border:1px solid var(--pt-border);background:#fff;color:var(--pt-ink);font-weight:600}
@@ -22,7 +22,7 @@
 .pt-view .pt-summary dd{margin:0;font-size:22px;font-weight:700;line-height:1}
 .pt-view .pt-summary>div.is-active dd{color:var(--pt-green)}
 .pt-view .pt-card{box-sizing:border-box;min-width:0;margin:0;padding:14px 12px 12px;border:1px solid var(--pt-border);border-radius:12px;background:#fff}
-.pt-view .pt-card__head{display:flex;align-items:center;justipt-content:space-between;gap:12px;margin:0 0 10px}
+.pt-view .pt-card__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .pt-view .pt-card__head h3{margin:0;font-size:15px;font-weight:800;line-height:normal}
 .pt-view .pt-table{border:1px solid var(--pt-border);border-radius:8px;overflow-x:auto}
 .pt-view .pt-table table{width:100%;border-collapse:collapse}
