@@ -21,8 +21,8 @@
 - Deliverable: docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md
 
 #### 14B: Foundation & Master Data Validation
-- Status: ✅ PASS — Issue #286 (2026-09-20)
-- Progress: Steps 1–5 PASS (evidence in GitHub Issue #286 comments; recorded in the matrix via PR #320)
+- Status: PARTIAL — Issue #286 (2026-09-20): row 5 PASS, rows 1–4 PARTIAL
+- Progress: Steps 1–5 executed; denial/negative evidence missing for 1–4 (evidence in GitHub Issue #286 comments; recorded in the matrix via PR #320)
   - Company context
   - Accounting & Tax Profile
   - Fiscal Year 2026
