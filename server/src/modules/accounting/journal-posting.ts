@@ -3,10 +3,11 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
+import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError } from './journal-posting-errors';
+import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
-export class JournalPostingValidationError extends Error {}
-export class JournalPostingNotFoundError extends Error {}
-export class JournalPostingConflictError extends Error {}
+export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError };
+export { FiscalYearClosedError };
 
 type Journal = {
   id: string;
@@ -59,15 +60,7 @@ export async function postJournalInTransaction(
   if (!journal) throw new JournalPostingNotFoundError();
   if (journal.status !== 'draft') throw new JournalPostingConflictError('Journal is already posted');
 
-  const year = (
-    await client.query<{ start_date: string; end_date: string }>(
-      'SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',
-      [journal.fiscal_year_id, companyId],
-    )
-  ).rows[0];
-  if (!year || journal.accounting_date < year.start_date || journal.accounting_date > year.end_date) {
-    throw new JournalPostingValidationError('Accounting date must be within the fiscal year');
-  }
+  const year = await assertFiscalYearOpen(companyId, journal.fiscal_year_id, journal.accounting_date, client);
   if (journal.entry_type === 'opening_balance' && journal.accounting_date !== year.start_date) {
     throw new JournalPostingValidationError('Opening balance date must equal fiscal year start');
   }
