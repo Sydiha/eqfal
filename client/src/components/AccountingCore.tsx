@@ -947,11 +947,11 @@ export function Accounting({
                           <div className="ac-approved__actions">
                             {editing ? (
                               <>
-                                <button className="primary ac-approved__submit" disabled={saving}>{t("accounting.chart.save")}</button>
-                                <button type="button" className="ac-approved__ghost" disabled={saving} onClick={cancelEdit}>{t("accounting.chart.cancel")}</button>
+                                <button key="save" type="submit" className="primary ac-approved__submit" disabled={saving}>{t("accounting.chart.save")}</button>
+                                <button key="cancel" type="button" className="ac-approved__ghost" disabled={saving} onClick={cancelEdit}>{t("accounting.chart.cancel")}</button>
                               </>
                             ) : (
-                              <button type="button" className="primary ac-approved__submit" onClick={() => startEdit(activeAccount)}>{t("accounting.chart.edit")}</button>
+                              <button key="edit" type="button" className="primary ac-approved__submit" onClick={() => startEdit(activeAccount)}>{t("accounting.chart.edit")}</button>
                             )}
                           </div>
                         )}
