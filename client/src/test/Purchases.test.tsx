@@ -49,6 +49,10 @@ describe('Purchases workspace',()=>{
   mockPurchases([base]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const row=summaryRow(await screen.findByText('INV-1'));fireEvent.keyDown(row,{key});expect(row).toHaveAttribute('aria-expanded','true');
  });
 
+ it('opens with no detail pane until a row is clicked',async()=>{
+  mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1'));expect(screen.queryByRole('complementary',{name:'Purchase details'})).not.toBeInTheDocument();expect(first).toHaveAttribute('aria-expanded','false');fireEvent.click(first);expect(screen.getByRole('complementary',{name:'Purchase details'})).toBeInTheDocument();
+ });
+
  it('closes the first row when a second row opens',async()=>{
   mockPurchases([base,active]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>);const first=summaryRow(await screen.findByText('INV-1')),second=summaryRow(screen.getByText('INV-2'));fireEvent.click(first);fireEvent.click(second);expect(first).toHaveAttribute('aria-expanded','false');expect(second).toHaveAttribute('aria-expanded','true');expect(screen.getAllByRole('complementary',{name:'Purchase details'})).toHaveLength(1);
  });

@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
@@ -18,10 +18,9 @@ const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!
 const sumAmounts=(values:(string|null)[])=>{const valid=values.flatMap(value=>{if(value===null||value.trim()==='')return[];const parsed=Number(value);return Number.isFinite(parsed)?[parsed]:[]});return valid.length?valid.reduce((sum,value)=>sum+value,0).toFixed(2):'—'};
 const readFilters=():DiscoveryFilters=>({search:readQueryParameter('purchaseSearch')??'',supplier:readQueryParameter('purchaseSupplier')??'',financial:readQueryParameter('purchaseFinancial',{allowedValues:financialValues})??'',review:readQueryParameter('purchaseReview',{allowedValues:reviewValues})??'',type:readQueryParameter('purchaseType',{allowedValues:typeValues})??'',from:validDate(readQueryParameter('purchaseFrom')),to:validDate(readQueryParameter('purchaseTo')),payable:readQueryParameter('purchasePayable',{allowedValues:payableValues})??'',verification:readQueryParameter('purchaseVerification',{allowedValues:verificationValues})??'',vatReview:readQueryParameter('purchaseVatReview',{allowedValues:vatReviewValues})??''});
 
-export function Purchases({canView,canManage,canCreate=false,canEdit=false,canCapitalise=false,autoSelectFirst=false,onCreateDocument,onEditDocument,onCapitalise,onUnauthorized}:{canView:boolean;canManage:boolean;canCreate?:boolean;canEdit?:boolean;canCapitalise?:boolean;autoSelectFirst?:boolean;onCreateDocument?:(type:PurchaseEntryType)=>void;onEditDocument?:(documentId:string)=>void;onCapitalise?:(documentId:string)=>void;onUnauthorized:()=>void}){
+export function Purchases({canView,canManage,canCreate=false,canEdit=false,canCapitalise=false,onCreateDocument,onEditDocument,onCapitalise,onUnauthorized}:{canView:boolean;canManage:boolean;canCreate?:boolean;canEdit?:boolean;canCapitalise?:boolean;onCreateDocument?:(type:PurchaseEntryType)=>void;onEditDocument?:(documentId:string)=>void;onCapitalise?:(documentId:string)=>void;onUnauthorized:()=>void}){
  const{t,i18n}=useTranslation();
  const { selectedPeriodId, periodMode, availablePeriodsForSelectedYear, selectedFiscalYearId, availableFiscalYears } = useDateContext();
- const autoSelected=useRef(false);
  const[data,setData]=useState<Purchase[]|null>(null),[selectedId,setSelectedId]=useState<string|null>(null),[filters,setFilters]=useState<DiscoveryFilters>(readFilters),[error,setError]=useState(false),[addOpen,setAddOpen]=useState(false);
 
  // Authoritative global period is the outer boundary; manual from/to may only narrow it
@@ -48,7 +47,6 @@ export function Purchases({canView,canManage,canCreate=false,canEdit=false,canCa
  const rows=useMemo(()=>{const q=filters.search.trim().toLocaleLowerCase();return(data??[]).filter(x=>(!q||[x.reference_number,x.original_filename,x.supplier_name,x.intake_note].some(v=>v?.toLocaleLowerCase().includes(q)))&&(!filters.supplier||x.counterparty_id===filters.supplier)&&(!filters.financial||x.financial_state===filters.financial)&&(!filters.review||x.status===filters.review)&&(!filters.type||x.document_type===filters.type)&&(!effFrom||(x.document_date!==null&&x.document_date>=effFrom))&&(!effTo||(x.document_date!==null&&x.document_date<=effTo))&&(!filters.payable||x.payable_relationship===filters.payable)&&(!filters.verification||x.verification_status===filters.verification)&&(!filters.vatReview||x.vat_review_status===filters.vatReview))},[data,filters,effFrom,effTo]);
  const metrics=useMemo(()=>({total:sumAmounts(rows.map(item=>item.total_amount)),paid:sumAmounts(rows.map(item=>item.paid_amount)),outstanding:sumAmounts(rows.filter(item=>item.payable_relationship==='linked_active'&&!item.payable_cancelled).map(item=>item.remaining_amount))}),[rows]);
  const selected=rows.find(item=>item.id===selectedId)??null;
- useEffect(()=>{if(autoSelectFirst&&!autoSelected.current&&data&&rows.length>0){autoSelected.current=true;setSelectedId(rows[0].id)}},[autoSelectFirst,data,rows]);
  useEffect(()=>{if(selectedId&&!rows.some(item=>item.id===selectedId))setSelectedId(null)},[rows,selectedId]);
  const create=async(purchase:Purchase)=>{const response=await fetch('/api/obligations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({direction:'payable',counterparty_id:purchase.counterparty_id,document_id:purchase.id,original_amount:purchase.total_amount,recognized_on:purchase.document_date,due_on:null,verification_status:'unconfirmed',source_type:'document',source_note:null})});if(response.status===401){onUnauthorized();return;}if(!response.ok){setError(true);return;}await load()};
  if(!canView)return <WorkspacePage><WorkspaceState>{t('purchases.noAccess')}</WorkspaceState></WorkspacePage>;

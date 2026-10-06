@@ -65,7 +65,8 @@ describe('purchase capitalisation navigation', () => {
   it('preserves the purchase id when navigating to fixed-asset capitalisation', async () => {
     render(<AuthProvider><App /></AuthProvider>);
 
-    // The first purchase row is selected automatically, so its details are already open.
+    // No row is selected automatically; open the purchase details explicitly.
+    fireEvent.click((await screen.findByText('EQFAL-14E-ASSET-PUR-001')).closest('tr')!);
     fireEvent.click(await screen.findByRole('button', { name: 'Capitalise as Fixed Asset' }));
 
     const params = new URLSearchParams(window.location.search);
