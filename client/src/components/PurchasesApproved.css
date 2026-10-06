@@ -15,3 +15,8 @@
 
 .purchases-v22__hero .badge{background:#f1f5f9;color:#64748b}.purchases-v22__hero .badge.paid{background:#d1fae5;color:#047857}.purchases-v22__hero .badge.open,.purchases-v22__hero .badge.partial{background:#fef3c7;color:#b45309}.purchases-v22__hero .badge.overdue{background:#fee2e2;color:#dc2626}
 .purchases-approved .purchases-approved__select,.purchases-approved .purchases-approved__search{flex:none}
+/* English/LTR only: headers wrap instead of truncating, reference aligns with its header, due date no longer clipped. */
+[dir=ltr] .purchases-approved .purchases-table thead th{white-space:normal;line-height:12px;vertical-align:bottom}
+[dir=ltr] .purchases-approved .purchases-table td:first-child{text-align:start}
+[dir=ltr] .purchases-approved .purchases-table :is(th,td):nth-child(3),[dir=ltr] .purchases-approved .purchases-table :is(th,td):nth-child(4){padding-inline:1px}
+[dir=ltr] .purchases-approved .purchases-table thead th:nth-child(9){padding-inline:0;font-size:9px}
