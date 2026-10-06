@@ -208,7 +208,12 @@ export function Home({
   const loadSnapshot = async () => {
     if (!canViewSnapshot) return;
     try {
-      const response = await fetch("/api/manager-financial-snapshot", {
+      // Period is resolved server-side within the active company; "all" mode scopes to the fiscal year.
+      const params = new URLSearchParams();
+      if (periodMode === "all" && selectedFiscalYearId) params.set("fiscal_year_id", selectedFiscalYearId);
+      else if (periodMode === "specific" && selectedPeriodId) params.set("period_id", selectedPeriodId);
+      const query = params.toString();
+      const response = await fetch(`/api/manager-financial-snapshot${query ? `?${query}` : ""}`, {
         credentials: "same-origin",
       });
       if (response.status === 401) onUnauthorized();
@@ -223,7 +228,7 @@ export function Home({
 
   useEffect(() => {
     if (canViewSnapshot) void loadSnapshot();
-  }, [canViewSnapshot]);
+  }, [canViewSnapshot, periodMode, selectedPeriodId, selectedFiscalYearId]);
 
   const yearPeriods = selectedFiscalYearId
     ? periods.filter((p) => p.fiscal_year_id === selectedFiscalYearId)

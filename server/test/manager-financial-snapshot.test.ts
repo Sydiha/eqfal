@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Pool } from 'pg';
-import { ManagerFinancialSnapshotService } from '../src/modules/manager-financial-snapshot/manager-financial-snapshot.router';
+import { ManagerFinancialSnapshotService, SnapshotPeriodNotFoundError } from '../src/modules/manager-financial-snapshot/manager-financial-snapshot.router';
 
 const poolWithRows = (...results: unknown[][]) => {
   const query = vi.fn();
@@ -68,5 +68,28 @@ describe('ManagerFinancialSnapshotService', () => {
     expect(parameters[2]).toMatch(/^\d{4}-\d{2}-01$/);
     expect(result.metrics.current_month_sales).toEqual({ state: 'available', amount: '0.30' });
     expect(result.metrics.current_month_purchases_expenses).toEqual({ state: 'available', amount: '999999999999999.99' });
+  });
+
+  it('derives the range from the company-scoped period and uses it for in-period totals', async () => {
+    const { pool, query } = poolWithRows([{ start: '2026-03-01', next: '2026-04-01' }], [], [{ sales: '5', purchases_expenses: '2' }]);
+    const result = await new ManagerFinancialSnapshotService(pool).get('company-a', ['document.view', 'obligation.view'], { periodId: 'p-1' });
+
+    expect(query.mock.calls[0]?.[0]).toContain('company_id=$1 AND id=$2');
+    expect(query.mock.calls[0]?.[1]).toEqual(['company-a', 'p-1']);
+    expect(query.mock.calls[2]?.[1]).toEqual(['company-a', '2026-03-01', '2026-04-01']);
+    expect(result.month).toEqual({ start: '2026-03-01', end_exclusive: '2026-04-01' });
+  });
+
+  it('rejects a period that does not belong to the active company', async () => {
+    const { pool } = poolWithRows([]);
+    await expect(new ManagerFinancialSnapshotService(pool).get('company-b', ['document.view'], { periodId: 'p-of-company-a' }))
+      .rejects.toBeInstanceOf(SnapshotPeriodNotFoundError);
+  });
+
+  it('spans the whole fiscal year in all-periods mode', async () => {
+    const { pool, query } = poolWithRows([{ start: '2026-01-01', next: '2027-01-01' }]);
+    const result = await new ManagerFinancialSnapshotService(pool).get('company-a', [], { fiscalYearId: 'fy-1' });
+    expect(query.mock.calls[0]?.[1]).toEqual(['company-a', 'fy-1']);
+    expect(result.month.end_exclusive).toBe('2027-01-01');
   });
 });
