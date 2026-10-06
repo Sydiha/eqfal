@@ -51,6 +51,7 @@
 .pt-view .pt-form input[aria-invalid="true"]{border-color:var(--pt-danger);box-shadow:0 0 0 1px var(--pt-danger)}
 .pt-view .pt-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .pt-view .pt-form .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin:2px 0 0;padding-top:14px;border-top:1px solid var(--pt-border)}
+.pt-view .modal .modal-actions button:not(.pt-primary):not(.primary){border-color:#94a3b8}
 .pt-view .pt-spinner{width:12px;height:12px;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;animation:pt-spin .8s linear infinite}
 @keyframes pt-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.pt-view .pt-spinner{animation:none}}
