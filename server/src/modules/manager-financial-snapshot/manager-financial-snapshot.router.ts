@@ -24,12 +24,32 @@ const monthBounds = (date: string) => {
   return { start, next };
 };
 
+export type SnapshotPeriodScope = { periodId?: string; fiscalYearId?: string };
+
+export class SnapshotPeriodNotFoundError extends Error {}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class ManagerFinancialSnapshotService {
   constructor(private db: Pool) {}
 
-  async get(companyId: string, capabilities: readonly string[]) {
+  // Period boundaries are always derived from the company's own monthly_close_periods rows.
+  private async resolveRange(companyId: string, scope: SnapshotPeriodScope) {
+    const { rows } = scope.periodId
+      ? await this.db.query<{ start: string; next: string }>(`SELECT period_start::text start,(period_end+1)::text next
+          FROM monthly_close_periods WHERE company_id=$1 AND id=$2`, [companyId, scope.periodId])
+      : await this.db.query<{ start: string | null; next: string | null }>(`SELECT MIN(period_start)::text start,(MAX(period_end)+1)::text next
+          FROM monthly_close_periods WHERE company_id=$1 AND fiscal_year_id=$2`, [companyId, scope.fiscalYearId]);
+    const row = rows[0];
+    if (!row?.start || !row.next) throw new SnapshotPeriodNotFoundError();
+    return { start: row.start, next: row.next };
+  }
+
+  async get(companyId: string, capabilities: readonly string[], scope: SnapshotPeriodScope = {}) {
     const asOf = operationalDate();
-    const { start, next } = monthBounds(asOf);
+    const { start, next } = scope.periodId || scope.fiscalYearId
+      ? await this.resolveRange(companyId, scope)
+      : monthBounds(asOf);
     let bankAccounts: BankAccountMetric[] | null = null;
     let receivables: Metric = { state: 'hidden' };
     let payables: Metric = { state: 'hidden' };
@@ -110,5 +130,17 @@ function service(res: Response) {
 managerFinancialSnapshotRouter.get('/manager-financial-snapshot', requireAuth, requireActiveCompany, route(async (req, res) => {
   const context = getAuthenticatedContext(req)!;
   const value = service(res);
-  if (value && context.activeCompanyId) res.json(await value.get(context.activeCompanyId, context.capabilities));
+  const periodId = typeof req.query.period_id === 'string' ? req.query.period_id : undefined;
+  const fiscalYearId = typeof req.query.fiscal_year_id === 'string' ? req.query.fiscal_year_id : undefined;
+  if ((periodId && !UUID_RE.test(periodId)) || (fiscalYearId && !UUID_RE.test(fiscalYearId))) {
+    res.status(400).json({ error: 'Invalid period' });
+    return;
+  }
+  if (!value || !context.activeCompanyId) return;
+  try {
+    res.json(await value.get(context.activeCompanyId, context.capabilities, periodId ? { periodId } : { fiscalYearId }));
+  } catch (error) {
+    if (error instanceof SnapshotPeriodNotFoundError) res.status(404).json({ error: 'Period not found' });
+    else throw error;
+  }
 }));

@@ -1,16 +1,18 @@
-import { screen, waitFor, within } from './test-utils';
+import { useState } from 'react';
+import { fireEvent, screen, waitFor, within } from './test-utils';
 import { render } from './test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompanyProvider } from '../context/CompanyContext';
 import { AuthProvider } from '../context/AuthContext';
 import { Home } from '../components/Home';
 import i18n from '../i18n';
+import { DateContext, type DateContextState } from '../context/DateContext';
 
 const navigate = vi.fn();
 const navigateToDiscovery = vi.fn();
 const onUnauthorized = vi.fn();
 
-function renderHome(capabilities: string[]) {
+function renderHome(capabilities: string[], dateContextValue?: DateContextState) {
   return render(
     <AuthProvider>
       <CompanyProvider allowedCompanies={[{ id: 'co-1', name: 'Company One' }]} initialCompanyId="co-1">
@@ -22,6 +24,7 @@ function renderHome(capabilities: string[]) {
         />
       </CompanyProvider>
     </AuthProvider>,
+    { dateContextValue },
   );
 }
 
@@ -260,4 +263,36 @@ describe('Owner-approved Home financial overview', () => {
   });
 
 
+
+  it('requests the snapshot for the selected period and refetches when it changes', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ metrics: {} }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const base: DateContextState = {
+      companyId: 'co-1', selectedFiscalYearId: 'fy-1', availableFiscalYears: [], selectedPeriodId: 'period-1',
+      availablePeriodsForSelectedYear: [], periodMode: 'specific', isLoading: false, error: null,
+      onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => {},
+    };
+    function Harness() {
+      const [periodId, setPeriodId] = useState('period-1');
+      return (
+        <DateContext.Provider value={{ ...base, selectedPeriodId: periodId }}>
+          <button onClick={() => setPeriodId('period-2')}>switch</button>
+          <AuthProvider>
+            <CompanyProvider allowedCompanies={[{ id: 'co-1', name: 'Company One' }]} initialCompanyId="co-1">
+              <Home capabilities={['document.view']} navigate={navigate} navigateToDiscovery={navigateToDiscovery} onUnauthorized={onUnauthorized} />
+            </CompanyProvider>
+          </AuthProvider>
+        </DateContext.Provider>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/manager-financial-snapshot?period_id=period-1', expect.anything()));
+    fireEvent.click(screen.getByText('switch'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/manager-financial-snapshot?period_id=period-2', expect.anything()));
+  });
 });
