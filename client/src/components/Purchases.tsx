@@ -24,8 +24,8 @@ export function Purchases({canView,canManage,canCreate=false,canEdit=false,canCa
  const autoSelected=useRef(false);
  const[data,setData]=useState<Purchase[]|null>(null),[selectedId,setSelectedId]=useState<string|null>(null),[filters,setFilters]=useState<DiscoveryFilters>(readFilters),[error,setError]=useState(false),[addOpen,setAddOpen]=useState(false);
 
- // Authoritative global period -> date range; local filters combine with it
- const scopeRange=()=>{
+ // Authoritative global period is the outer boundary; manual from/to may only narrow it
+ const scope=useMemo(()=>{
    if (periodMode === 'all') {
      const fiscalYear = availableFiscalYears.find(fy => fy.id === selectedFiscalYearId);
      return fiscalYear ? { from: fiscalYear.start_date, to: fiscalYear.end_date } : null;
@@ -35,20 +35,17 @@ export function Purchases({canView,canManage,canCreate=false,canEdit=false,canCa
      return period ? { from: period.period_start, to: period.period_end } : null;
    }
    return null;
- };
- useEffect(() => {
-   const range = scopeRange();
-   if (range) setFilters(current => ({ ...current, ...range }));
  }, [selectedPeriodId, periodMode, selectedFiscalYearId, availablePeriodsForSelectedYear, availableFiscalYears]);
 
  const load=async()=>{const response=await fetch('/api/purchases');if(response.status===401){onUnauthorized();return;}if(!response.ok)throw Error();const next=(await response.json() as {purchases:Purchase[]}).purchases;setData(next);setSelectedId(old=>old&&next.some(item=>item.id===old)?old:null)};
  useEffect(()=>{if(canView)void load().catch(()=>setError(true))},[canView]);
- useEffect(()=>{const restore=()=>setFilters({...readFilters(),...scopeRange()});window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[selectedPeriodId,periodMode,selectedFiscalYearId,availablePeriodsForSelectedYear,availableFiscalYears]);
+ useEffect(()=>{const restore=()=>setFilters(readFilters());window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
  const suppliers=useMemo(()=>Array.from(new Map((data??[]).filter(x=>x.counterparty_id).map(x=>[x.counterparty_id!,x.supplier_name??t('purchases.unknown')])).entries()),[data,t]);
  useEffect(()=>{if(data&&filters.supplier&&!data.some(x=>x.counterparty_id===filters.supplier))setFilters(current=>({...current,supplier:''}))},[data,filters.supplier]);
  const updateFilter=(name:keyof DiscoveryFilters,value:string)=>{setFilters(current=>({...current,[name]:value}));const parameter={search:'purchaseSearch',supplier:'purchaseSupplier',financial:'purchaseFinancial',review:'purchaseReview',type:'purchaseType',from:'purchaseFrom',to:'purchaseTo',payable:'purchasePayable',verification:'purchaseVerification',vatReview:'purchaseVatReview'}[name];writeQueryParameters({[parameter]:value||null},name==='search'?'replace':'push')};
- const clearFilters=()=>{setFilters({search:'',supplier:'',financial:'',review:'',type:'',from:'',to:'',payable:'',verification:'',vatReview:'',...scopeRange()});clearQueryParameters(filterParameters)};
- const rows=useMemo(()=>{const q=filters.search.trim().toLocaleLowerCase();return(data??[]).filter(x=>(!q||[x.reference_number,x.original_filename,x.supplier_name,x.intake_note].some(v=>v?.toLocaleLowerCase().includes(q)))&&(!filters.supplier||x.counterparty_id===filters.supplier)&&(!filters.financial||x.financial_state===filters.financial)&&(!filters.review||x.status===filters.review)&&(!filters.type||x.document_type===filters.type)&&(!filters.from||(x.document_date!==null&&x.document_date>=filters.from))&&(!filters.to||(x.document_date!==null&&x.document_date<=filters.to))&&(!filters.payable||x.payable_relationship===filters.payable)&&(!filters.verification||x.verification_status===filters.verification)&&(!filters.vatReview||x.vat_review_status===filters.vatReview))},[data,filters]);
+ const clearFilters=()=>{setFilters({search:'',supplier:'',financial:'',review:'',type:'',from:'',to:'',payable:'',verification:'',vatReview:''});clearQueryParameters(filterParameters)};
+ const effFrom=[scope?.from,filters.from].filter(Boolean).sort().pop()??'',effTo=[scope?.to,filters.to].filter(Boolean).sort()[0]??'';
+ const rows=useMemo(()=>{const q=filters.search.trim().toLocaleLowerCase();return(data??[]).filter(x=>(!q||[x.reference_number,x.original_filename,x.supplier_name,x.intake_note].some(v=>v?.toLocaleLowerCase().includes(q)))&&(!filters.supplier||x.counterparty_id===filters.supplier)&&(!filters.financial||x.financial_state===filters.financial)&&(!filters.review||x.status===filters.review)&&(!filters.type||x.document_type===filters.type)&&(!effFrom||(x.document_date!==null&&x.document_date>=effFrom))&&(!effTo||(x.document_date!==null&&x.document_date<=effTo))&&(!filters.payable||x.payable_relationship===filters.payable)&&(!filters.verification||x.verification_status===filters.verification)&&(!filters.vatReview||x.vat_review_status===filters.vatReview))},[data,filters,effFrom,effTo]);
  const metrics=useMemo(()=>({total:sumAmounts(rows.map(item=>item.total_amount)),paid:sumAmounts(rows.map(item=>item.paid_amount)),outstanding:sumAmounts(rows.filter(item=>item.payable_relationship==='linked_active'&&!item.payable_cancelled).map(item=>item.remaining_amount))}),[rows]);
  const selected=rows.find(item=>item.id===selectedId)??null;
  useEffect(()=>{if(autoSelectFirst&&!autoSelected.current&&data&&rows.length>0){autoSelected.current=true;setSelectedId(rows[0].id)}},[autoSelectFirst,data,rows]);

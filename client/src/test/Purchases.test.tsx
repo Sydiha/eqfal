@@ -129,4 +129,16 @@ describe('Purchases workspace',()=>{
   act(()=>{window.dispatchEvent(new PopStateEvent('popstate'))});
   expect(screen.getByText('AUG-2')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();
  });
+
+ it('never lets manual dates widen outside the global period, and keeps the scope after clear and popstate',async()=>{
+  const jul={...periodRows()[0],id:'jul-1',reference_number:'JUL-1',document_date:'2026-07-20',total_amount:'900.00'};
+  mockPurchases([jul,...periodRows()]);render(<Purchases canView canManage onUnauthorized={vi.fn()}/>,{dateContextValue:periodContext});
+  expect(await screen.findByText('AUG-1')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('From document date'),{target:{value:'2026-07-01'}});fireEvent.change(screen.getByLabelText('To document date'),{target:{value:'2026-09-30'}});
+  expect(screen.queryByText('JUL-1')).not.toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('150.00');
+  fireEvent.change(screen.getByLabelText('From document date'),{target:{value:'2026-08-10'}});expect(screen.queryByText('AUG-1')).not.toBeInTheDocument();expect(screen.getByText('AUG-2')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));expect(screen.getByText('AUG-1')).toBeInTheDocument();expect(screen.queryByText('JUL-1')).not.toBeInTheDocument();
+  window.history.replaceState(null,'','/?page=purchases&purchaseFrom=2026-07-01&purchaseTo=2026-09-30');act(()=>{window.dispatchEvent(new PopStateEvent('popstate'))});
+  expect(screen.queryByText('JUL-1')).not.toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('Total purchases').nextElementSibling).toHaveTextContent('150.00');
+ });
 });
