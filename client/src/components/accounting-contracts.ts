@@ -26,6 +26,8 @@ export type AccountResponse={
  is_contra?:boolean;
  cash_role?:CashRole;
  cash_flow_category?:CashFlowCategory;
+ is_used?:boolean;
+ has_children?:boolean;
 };
 export type JournalResponse={id:string;fiscal_year_id:string;accounting_date:string;description:string;reference:string|null;entry_type:'standard'|'opening_balance';status:'draft'|'posted'};
 export type JournalLineResponse={id:string;company_id:string;journal_entry_id:string;account_id:string;debit:string;credit:string;memo:string|null;sequence:number};

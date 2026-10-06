@@ -58,6 +58,13 @@ type OperationalSource = {
 type Tab = "accounts" | "journals" | "sources" | "trial" | "ledger" | "financialPosition" | "profitOrLoss" | "changesInEquity" | "cashFlow";
 type AccountTypeFilter = "" | Account["account_type"];
 type AccountStatusFilter = "" | "active" | "inactive";
+type AccountDraft = { code: string; name: string; account_type: Account["account_type"]; parent_account_id: string; is_active: boolean };
+// Mirrors the server guard: code/parent lock once an account is used; type also locks with children or statement mapping.
+const accountLocks = (a: Account) => {
+  const used = a.is_used === true;
+  const mapped = (a.statement_category ?? "unmapped") !== "unmapped" || (a.cash_role ?? "non_cash") !== "non_cash" || (a.cash_flow_category ?? "unmapped") !== "unmapped";
+  return { code: used, parent: used, type: used || a.has_children === true || mapped, typeUsed: used };
+};
 type AccountPanelMode = "auto" | "add" | { accountId: string };
 const accountTypes = ["asset", "liability", "equity", "revenue", "expense"] as const;
 const ACCOUNT_PAGE_SIZE = 5;
@@ -225,7 +232,8 @@ export function Accounting({
   const [accountStatusFilter, setAccountStatusFilter] = useState<AccountStatusFilter>("");
   const [accountPage, setAccountPage] = useState(1);
   const [panelMode, setPanelMode] = useState<AccountPanelMode>("auto");
-  const [statusDraft, setStatusDraft] = useState<boolean | null>(null);
+  const [draft, setDraft] = useState<AccountDraft | null>(null);
+  const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | null>(null);
   const setTab = (value: Tab) => {
     setTabState(value);
     if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
@@ -371,9 +379,9 @@ export function Accounting({
       : pageAccounts[0] ?? null;
   const activeAccountId = activeAccount?.id;
   useEffect(() => {
-    setStatusDraft(null);
+    setDraft(null);
+    setEditError(null);
   }, [activeAccountId]);
-  const selectedStatus = statusDraft ?? activeAccount?.is_active ?? false;
   const parentLabel = (a: Account) => {
     if (!a.parent_account_id) return "—";
     const parent = accounts.find((x) => x.id === a.parent_account_id);
@@ -381,7 +389,8 @@ export function Accounting({
   };
   const selectAccount = (a: Account) => {
     setPanelMode({ accountId: a.id });
-    setStatusDraft(null);
+    setDraft(null);
+    setEditError(null);
   };
   const sourceTypes = useMemo(
     () => [...new Set(sources.map((source) => source.source_type))].sort(),
@@ -458,27 +467,48 @@ export function Accounting({
       setSaving(false);
     }
   };
-  const toggleAccount = async (a: Account) => {
+  const startEdit = (a: Account) => {
+    setEditError(null);
+    setDraft({ code: a.code, name: a.name, account_type: a.account_type, parent_account_id: a.parent_account_id ?? "", is_active: a.is_active });
+  };
+  const cancelEdit = () => {
+    setDraft(null);
+    setEditError(null);
+  };
+  const saveAccount = async (a: Account) => {
+    if (!draft) return;
+    const locks = accountLocks(a);
+    const body: Record<string, unknown> = {};
+    const name = draft.name.trim();
+    const code = draft.code.trim();
+    if (!name || !code) {
+      setEditError("invalid");
+      return;
+    }
+    if (name !== a.name) body.name = name;
+    if (!locks.code && code !== a.code) body.code = code;
+    if (!locks.type && draft.account_type !== a.account_type) body.account_type = draft.account_type;
+    if (!locks.parent && draft.parent_account_id !== (a.parent_account_id ?? "")) body.parent_account_id = draft.parent_account_id || null;
+    if (draft.is_active !== a.is_active) body.is_active = draft.is_active;
+    if (Object.keys(body).length === 0) {
+      cancelEdit();
+      return;
+    }
     mutationStarted();
     setSaving(true);
+    setEditError(null);
     try {
-      await api(
-        `/api/accounts/${a.id}`,
-        json("PATCH", { is_active: !a.is_active }),
-        onUnauthorized,
-      );
+      await api(`/api/accounts/${a.id}`, json("PATCH", body), onUnauthorized);
       mutationSucceeded();
+      setDraft(null);
       await load(true);
-    } catch {
-      setError(true);
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0;
+      setEditError(status === 409 ? "locked" : status === 400 ? "invalid" : "failed");
+      if (status === 409) await load(true);
     } finally {
       setSaving(false);
     }
-  };
-  const applyStatus = async (a: Account) => {
-    if (statusDraft === null || statusDraft === a.is_active) return;
-    await toggleAccount(a);
-    setStatusDraft(null);
   };
   const createJournal = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -738,7 +768,7 @@ export function Accounting({
                 </select>
               </label>
               {canCreateChart && (
-                <button type="button" className="ac-approved__create" onClick={() => { setPanelMode("add"); setStatusDraft(null); }}>
+                <button type="button" className="ac-approved__create" onClick={() => { setPanelMode("add"); setDraft(null); }}>
                   <span aria-hidden="true">+</span> {t("accounting.chart.newAccount")}
                 </button>
               )}
@@ -852,47 +882,76 @@ export function Accounting({
                   <h2 id="accounting-details-title">{t("accounting.chart.detailsTitle")}</h2>
                   <span className="ac-approved__muted">{activeAccount.code}</span>
                 </div>
-                <form className="ac-approved__fields" onSubmit={(e) => { e.preventDefault(); void applyStatus(activeAccount); }}>
-                  <label>
-                    <span>{t("accounting.code")}</span>
-                    <input value={activeAccount.code} disabled readOnly />
-                  </label>
-                  <label>
-                    <span>{t("accounting.name")}</span>
-                    <input value={activeAccount.name} disabled readOnly />
-                  </label>
-                  <label>
-                    <span>{t("accounting.type")}</span>
-                    <select value={activeAccount.account_type} disabled>
-                      <option value={activeAccount.account_type}>{t(`accounting.types.${activeAccount.account_type}`)}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>{t("accounting.parent")}</span>
-                    <select value={activeAccount.parent_account_id ?? ""} disabled>
-                      <option value={activeAccount.parent_account_id ?? ""}>{parentLabel(activeAccount)}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>{t("accounting.status")}</span>
-                    <select
-                      value={selectedStatus ? "active" : "inactive"}
-                      disabled={!canEditChart || saving}
-                      onChange={(e) => setStatusDraft(e.target.value === "active")}
-                    >
-                      <option value="active">{t("accounting.active")}</option>
-                      <option value="inactive">{t("accounting.inactive")}</option>
-                    </select>
-                  </label>
-                  <p className="ac-approved__hint">{t("accounting.chart.editLocked")}</p>
-                  <div className="ac-approved__actions">
-                    <button className="primary ac-approved__submit" disabled={!canEditChart || saving || selectedStatus === activeAccount.is_active}>
-                      {t("accounting.chart.updateAccount")}
-                    </button>
-                    <button type="button" className="ac-approved__ghost" disabled={selectedStatus === activeAccount.is_active} onClick={() => setStatusDraft(null)}>
-                      {t("accounting.chart.cancel")}
-                    </button>
-                  </div>
+                <form className="ac-approved__fields" onSubmit={(e) => { e.preventDefault(); void saveAccount(activeAccount); }}>
+                  {(() => {
+                    const locks = accountLocks(activeAccount);
+                    const editing = draft !== null && canEditChart;
+                    const d = draft ?? { code: activeAccount.code, name: activeAccount.name, account_type: activeAccount.account_type, parent_account_id: activeAccount.parent_account_id ?? "", is_active: activeAccount.is_active };
+                    const set = (patch: Partial<AccountDraft>) => setDraft({ ...d, ...patch });
+                    const lockNote = (reasonKey: string) => <small className="ac-approved__hint" role="note">{t(reasonKey)}</small>;
+                    // A parent cannot be the account itself or one of its descendants (the server enforces this too).
+                    const descendants = new Set<string>([activeAccount.id]);
+                    for (let grew = true; grew;) { grew = false; for (const x of accounts) if (x.parent_account_id && descendants.has(x.parent_account_id) && !descendants.has(x.id)) { descendants.add(x.id); grew = true; } }
+                    return (
+                      <>
+                        <label>
+                          <span>{t("accounting.code")}</span>
+                          <input value={d.code} maxLength={50} disabled={!editing || locks.code || saving} readOnly={!editing} onChange={(e) => set({ code: e.target.value })} />
+                          {editing && locks.code && lockNote("accounting.chart.lock.code")}
+                        </label>
+                        <label>
+                          <span>{t("accounting.name")}</span>
+                          <input value={d.name} maxLength={200} disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name: e.target.value })} />
+                        </label>
+                        <label>
+                          <span>{t("accounting.type")}</span>
+                          <select value={d.account_type} disabled={!editing || locks.type || saving} onChange={(e) => set({ account_type: e.target.value as Account["account_type"] })}>
+                            {(editing && !locks.type ? accountTypes : [d.account_type]).map((x) => (
+                              <option value={x} key={x}>{t(`accounting.types.${x}`)}</option>
+                            ))}
+                          </select>
+                          {editing && locks.type && lockNote(locks.typeUsed ? "accounting.chart.lock.typeUsed" : "accounting.chart.lock.type")}
+                        </label>
+                        <label>
+                          <span>{t("accounting.parent")}</span>
+                          <select value={d.parent_account_id} disabled={!editing || locks.parent || saving} onChange={(e) => set({ parent_account_id: e.target.value })}>
+                            {editing && !locks.parent ? (
+                              <>
+                                <option value="">—</option>
+                                {accounts.filter((x) => !descendants.has(x.id) && (x.is_active || x.id === activeAccount.parent_account_id)).map((x) => (
+                                  <option value={x.id} key={x.id}>{x.code} — {x.name}</option>
+                                ))}
+                              </>
+                            ) : (
+                              <option value={activeAccount.parent_account_id ?? ""}>{parentLabel(activeAccount)}</option>
+                            )}
+                          </select>
+                          {editing && locks.parent && lockNote("accounting.chart.lock.parent")}
+                        </label>
+                        <label>
+                          <span>{t("accounting.status")}</span>
+                          <select value={d.is_active ? "active" : "inactive"} disabled={!editing || saving} onChange={(e) => set({ is_active: e.target.value === "active" })}>
+                            <option value="active">{t("accounting.active")}</option>
+                            <option value="inactive">{t("accounting.inactive")}</option>
+                          </select>
+                        </label>
+                        <p className="ac-approved__hint">{t(editing ? "accounting.chart.editHint" : "accounting.chart.viewHint")}</p>
+                        {editError && <p className="ac-approved__hint" role="alert">{t(`accounting.chart.editError.${editError}`)}</p>}
+                        {canEditChart && (
+                          <div className="ac-approved__actions">
+                            {editing ? (
+                              <>
+                                <button className="primary ac-approved__submit" disabled={saving}>{t("accounting.chart.save")}</button>
+                                <button type="button" className="ac-approved__ghost" disabled={saving} onClick={cancelEdit}>{t("accounting.chart.cancel")}</button>
+                              </>
+                            ) : (
+                              <button type="button" className="primary ac-approved__submit" onClick={() => startEdit(activeAccount)}>{t("accounting.chart.edit")}</button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </form>
               </>
             ) : (
