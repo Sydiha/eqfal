@@ -2,6 +2,9 @@ import { FormEvent, Fragment, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import { formatDisplayDateTime } from '../date-format';
+import { AuditDetails } from './AuditDetails';
+import { auditActionLabel, auditEntityLabel } from '../labels/auditLabels';
+import { langOf } from '../labels/capabilityLabels';
 import './AccessAdministration.css';
 
 export interface AuditEntry {
@@ -81,15 +84,15 @@ export function AuditLog({ canView, onUnauthorized }: { canView: boolean; onUnau
   const set = (key: keyof Filters) => (value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const actor = (e: AuditEntry) => e.actor_email ?? e.actor_user_id;
   const company = (e: AuditEntry) => (i18n.language === 'ar' && e.company_name_ar) || e.company_name;
-  const json = (value: Record<string, unknown> | null) => value ? JSON.stringify(value, null, 2) : '—';
+  const lang = langOf(i18n.language);
   const last = Math.min(offset + entries.length, total);
 
   return <section className="panel acc-view" aria-labelledby="audit-log-title">
     <header className="acc-header"><div><h2 id="audit-log-title">{t('auditLog.title')}</h2><p>{t('auditLog.description')}</p></div></header>
     <form className="acc-card acc-form" onSubmit={submit} role="search" aria-label={t('auditLog.search')}>
       <label>{t('auditLog.search')}<input type="search" value={draft.q} maxLength={200} placeholder={t('auditLog.searchPlaceholder')} onChange={(e) => set('q')(e.target.value)} /></label>
-      <label>{t('auditLog.action')}<select value={draft.action} onChange={(e) => set('action')(e.target.value)}><option value="">{t('auditLog.allActions')}</option>{facets.actions.map((v) => <option key={v} value={v}>{v}</option>)}</select></label>
-      <label>{t('auditLog.entityType')}<select value={draft.entity_type} onChange={(e) => set('entity_type')(e.target.value)}><option value="">{t('auditLog.allTypes')}</option>{facets.entity_types.map((v) => <option key={v} value={v}>{v}</option>)}</select></label>
+      <label>{t('auditLog.action')}<select value={draft.action} onChange={(e) => set('action')(e.target.value)}><option value="">{t('auditLog.allActions')}</option>{facets.actions.map((v) => <option key={v} value={v}>{auditActionLabel(v, lang)}</option>)}</select></label>
+      <label>{t('auditLog.entityType')}<select value={draft.entity_type} onChange={(e) => set('entity_type')(e.target.value)}><option value="">{t('auditLog.allTypes')}</option>{facets.entity_types.map((v) => <option key={v} value={v}>{auditEntityLabel(v, lang)}</option>)}</select></label>
       <label>{t('auditLog.user')}<select value={draft.actor_user_id} onChange={(e) => set('actor_user_id')(e.target.value)}><option value="">{t('auditLog.allUsers')}</option>{facets.actors.map((a) => <option key={a.id} value={a.id}>{a.email ?? a.id}</option>)}</select></label>
       <label>{t('auditLog.from')}<input type="date" value={draft.from} max={draft.to || undefined} onChange={(e) => set('from')(e.target.value)} /></label>
       <label>{t('auditLog.to')}<input type="date" value={draft.to} min={draft.from || undefined} onChange={(e) => set('to')(e.target.value)} /></label>
@@ -105,15 +108,15 @@ export function AuditLog({ canView, onUnauthorized }: { canView: boolean; onUnau
           <tr>
             <td dir="ltr">{formatDisplayDateTime(e.created_at, i18n.language)}</td>
             <td dir="ltr">{actor(e)}</td>
-            <td dir="ltr"><StatusBadge status="open">{e.action}</StatusBadge></td>
-            <td dir="ltr">{e.entity_type}</td>
+            <td title={e.action}><StatusBadge status="open">{auditActionLabel(e.action, lang)}</StatusBadge></td>
+            <td title={e.entity_type}>{auditEntityLabel(e.entity_type, lang)}</td>
             <td dir="ltr" className="acc-user">{e.entity_id}</td>
             <td>{company(e)}</td>
             <td>{e.reason ?? '—'}</td>
             <td><button className="acc-ghost" aria-expanded={open === e.id} onClick={() => setOpen(open === e.id ? null : e.id)}>{t(open === e.id ? 'auditLog.hide' : 'auditLog.show')}</button></td>
           </tr>
           {open === e.id && <tr><td colSpan={8}>{e.before_data || e.after_data
-            ? <div className="acc-roles"><div><strong>{t('auditLog.before')}</strong><pre dir="ltr">{json(e.before_data)}</pre></div><div><strong>{t('auditLog.after')}</strong><pre dir="ltr">{json(e.after_data)}</pre></div></div>
+            ? <AuditDetails before={e.before_data} after={e.after_data} />
             : <span className="acc-hint">{t('auditLog.noDetails')}</span>}</td></tr>}
         </Fragment>)}
       </tbody></table></div>

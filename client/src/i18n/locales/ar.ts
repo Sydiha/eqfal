@@ -50,7 +50,7 @@ const ar = {
     search: 'بحث', searchPlaceholder: 'الإجراء أو الكيان أو المرجع أو المستخدم أو السبب', action: 'الإجراء', entityType: 'نوع الكيان', user: 'المستخدم', allActions: 'كل الإجراءات', allTypes: 'كل الأنواع', allUsers: 'كل المستخدمين',
     from: 'من', to: 'إلى', clear: 'مسح المرشحات', apply: 'تطبيق', count: '{{count}} سجل',
     timestamp: 'الوقت', entity: 'الكيان', reference: 'المرجع', company: 'الشركة', reason: 'السبب', details: 'التفاصيل', show: 'عرض', hide: 'إخفاء',
-    before: 'قبل', after: 'بعد', noDetails: 'لا توجد تفاصيل مسجلة.', previous: 'السابق', next: 'التالي', page: 'عرض {{from}}–{{to}} من {{total}}',
+    yes: 'نعم', no: 'لا', field: 'الحقل', rawData: 'البيانات التقنية (JSON خام)', before: 'قبل', after: 'بعد', noDetails: 'لا توجد تفاصيل مسجلة.', previous: 'السابق', next: 'التالي', page: 'عرض {{from}}–{{to}} من {{total}}',
     error: 'تعذّر تحميل سجل التدقيق.', invalidRequest: 'يرجى التحقق من قيم المرشحات.', forbidden: 'ليست لديك صلاحية عرض سجل التدقيق.',
   },
   companies: {
@@ -78,7 +78,7 @@ const ar = {
     membersEmpty: 'لا يوجد أعضاء في هذه الشركة.', rolesEmpty: 'لا توجد أدوار في هذه الشركة.',
     createRole: 'دور جديد', createRoleTitle: 'إنشاء دور', roleName: 'اسم الدور', create: 'إنشاء',
     fullAccess: 'وصول كامل', fullAccessNote: 'هذا الدور يملك كل الصلاحيات ولا يمكن تعديل صلاحياته.',
-    selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
+    selectAll: 'تحديد الكل', clearAll: 'مسح الكل', bulkActions: 'إجراءات الصلاحيات الجماعية', selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
     ceilingNote: 'لا يمكنك منح صلاحية لا تملكها أنت في هذه الشركة.', saving: 'جارٍ الحفظ…',
     invalidRequest: 'الطلب غير صالح. تحقق من البيانات.', forbidden: 'لا تملك صلاحية تنفيذ هذا الإجراء.', notFound: 'العنصر غير موجود.', conflict: 'العنصر موجود مسبقاً.', error: 'تعذّر إكمال العملية. حاول مرة أخرى.',
   },
