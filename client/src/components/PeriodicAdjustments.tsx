@@ -74,7 +74,8 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
  const showForm=(canCreate&&formOpen)||(!!editing&&canEdit);
- const scheduleTotal=selected?selected.schedule.reduce((sum,s)=>sum+Math.round((parseFloat(s.amount)||0)*100),0)/100:0;
+ const scheduleRows=selected?(quick==='all'?selected.schedule:entriesInScope(selected).filter(e=>e.status===quick)):[];
+ const scheduleTotal=selected?scheduleRows.reduce((sum,s)=>sum+Math.round((parseFloat(s.amount)||0)*100),0)/100:0;
  const icon=(d:string)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d}/></svg>;
  const amountCell=(value:string)=><span className="pa-amount"><small>{l.currency}</small><strong>{money(value)}</strong></span>;
  const formBusy=busy&&busyUrl===null;
@@ -118,9 +119,9 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    <div className="pa-foot"><span>{l.showing(visibleItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
   </section>
   {!loading&&selected&&<section className="pa-card pa-results" ref={scheduleRef} tabIndex={-1} aria-labelledby="pa-schedule-title">
-   <div className="pa-card__head"><div><h3 id="pa-schedule-title">{l.schedule}</h3><p className="pa-muted">{l[selected.adjustment_type]} — {selected.description}</p></div><span className="pa-muted">{selected.schedule.length?`${l.periodsCount(selected.schedule.length)} • ${l.scheduleAmounts}`:''}</span></div>
+   <div className="pa-card__head"><div><h3 id="pa-schedule-title">{l.schedule}</h3><p className="pa-muted">{l[selected.adjustment_type]} — {selected.description}</p></div><span className="pa-muted">{scheduleRows.length?`${l.periodsCount(scheduleRows.length)} • ${l.scheduleAmounts}`:''}</span></div>
    {selected.schedule.length===0?<WorkspaceState kind="empty">{l.noSchedule}</WorkspaceState>:<>
-   <div className="table-wrap pa-table"><table><thead><tr><th>{l.period}</th><th>{l.recognitionDate}</th><th>{l.amount}</th><th>{l.status}</th><th>{l.journal}</th><th>{l.action}</th></tr></thead><tbody>{selected.schedule.map(s=><tr key={s.id} className={s.status==='posted'?'is-posted':undefined}>
+   <div className="table-wrap pa-table"><table><thead><tr><th>{l.period}</th><th>{l.recognitionDate}</th><th>{l.amount}</th><th>{l.status}</th><th>{l.journal}</th><th>{l.action}</th></tr></thead><tbody>{scheduleRows.map(s=><tr key={s.id} className={s.status==='posted'?'is-posted':undefined}>
     <td data-label={l.period}><span className="pa-range"><span>{formatDisplayDate(s.period_start,i18n.language)}</span><span aria-hidden="true">–</span><span>{formatDisplayDate(s.period_end,i18n.language)}</span></span></td>
     <td data-label={l.recognitionDate}>{formatDisplayDate(s.recognition_date,i18n.language)}</td>
     <td data-label={l.amount}>{amountCell(s.amount)}</td>
@@ -128,7 +129,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
     <td data-label={l.journal}>{s.journal_entry_id?<code className="pa-ref" title={s.journal_entry_id}>{shortRef(s.journal_entry_id)}</code>:'—'}</td>
     <td data-label={l.action}>{canPost&&s.status==='pending'?<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${selected.id}/schedule/${s.id}/post`)}>{busyUrl===`/api/periodic-adjustments/${selected.id}/schedule/${s.id}/post`?l.posting:l.post}</button>:s.status==='posted'?<span className="pa-done">✓ {l.posted_done}</span>:null}</td>
    </tr>)}</tbody></table></div>
-   <div className="pa-total"><strong>{l.scheduleTotal} • {l.periodsCount(selected.schedule.length)}</strong>{amountCell(scheduleTotal.toFixed(2))}</div>
+   <div className="pa-total"><strong>{l.scheduleTotal} • {l.periodsCount(scheduleRows.length)}</strong>{amountCell(scheduleTotal.toFixed(2))}</div>
    <p className="pa-note">{l.postNote}</p></>}
   </section>}
  </section>;

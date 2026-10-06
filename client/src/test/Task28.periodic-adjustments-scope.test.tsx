@@ -225,3 +225,56 @@ describe('Periodic Adjustments KPI quick filters', () => {
     delete (Element.prototype as any).scrollIntoView;
   });
 });
+
+describe('Recognition schedule follows the quick filter', () => {
+  const entry = (id: string, date: string, status: 'pending' | 'posted') => ({
+    id, period_start: date, period_end: date, recognition_date: date, amount: '10.00', status, journal_entry_id: null,
+  });
+  const single = adjustment('solo', '2026-02-01', '2026-03-31', [
+    entry('s0', '2026-02-10', 'pending'),
+    entry('s1', '2026-03-01', 'pending'), entry('s2', '2026-03-02', 'pending'),
+    entry('s3', '2026-03-03', 'pending'), entry('s4', '2026-03-04', 'posted'),
+  ]);
+  const scheduleRows = () => {
+    const section = screen.getByText('Recognition schedule').closest('section') as HTMLElement;
+    return Array.from(section.querySelectorAll('tbody tr'));
+  };
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+    window.history.replaceState(null, '', '/?page=periodicAdjustments');
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/periodic-adjustments') return new Response(JSON.stringify({ adjustments: [single] }));
+      return new Response(JSON.stringify({ accounts: [], documents: [], obligations: [] }));
+    }));
+    render(<PeriodicAdjustments canView canCreate={false} canEdit={false} canSubmit={false} canReview={false} canApprove={false} canPost={false} onUnauthorized={vi.fn()} />, { dateContextValue: ctx() });
+  });
+  const card = (name: RegExp) => screen.getAllByRole('button').find(b => b.classList.contains('pa-kpi') && name.test(b.textContent ?? '')) as HTMLElement;
+
+  it('Pending shows only in-scope pending rows', async () => {
+    await screen.findByText('solo');
+    fireEvent.click(card(/Pending/));
+    await screen.findByText('Recognition schedule');
+    expect(scheduleRows()).toHaveLength(3);
+    expect(scheduleRows().map(r => r.textContent).join('|')).not.toContain('Posted');
+    expect(screen.getByText(/Recognition schedule total/).textContent).toContain('3 periods');
+  });
+
+  it('Posted shows only in-scope posted rows', async () => {
+    await screen.findByText('solo');
+    fireEvent.click(card(/Posted/));
+    await screen.findByText('Recognition schedule');
+    expect(scheduleRows()).toHaveLength(1);
+    expect(scheduleRows()[0].textContent).toContain('Posted');
+    expect(screen.getByText(/Recognition schedule total/).textContent).toContain('1 periods');
+  });
+
+  it('Total shows the full schedule', async () => {
+    await screen.findByText('solo');
+    fireEvent.click(card(/Pending/));
+    await screen.findByText('Recognition schedule');
+    fireEvent.click(card(/Total/));
+    await screen.findByText('Recognition schedule');
+    expect(scheduleRows()).toHaveLength(5);
+  });
+});
