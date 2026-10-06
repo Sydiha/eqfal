@@ -66,8 +66,8 @@ describe('Home KPI drill-down', () => {
     screen.getByRole('button', { name: /Revenue/ }).click();
     screen.getByRole('button', { name: /Expenses/ }).click();
     expect(navigateToDiscovery).toHaveBeenCalledWith('banks', { section: 'accounts' });
-    expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { direction: 'receivable', confirmation: 'confirmed' });
-    expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { direction: 'payable', confirmation: 'confirmed' });
+    expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { direction: 'receivable', confirmation: 'confirmed', scope: 'all' });
+    expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { direction: 'payable', confirmation: 'confirmed', scope: 'all' });
     expect(navigateToDiscovery).toHaveBeenCalledWith('sales', { salesFrom: '2026-03-01', salesTo: '2026-03-31' });
     expect(navigateToDiscovery).toHaveBeenCalledWith('purchases', { purchaseFrom: '2026-03-01', purchaseTo: '2026-03-31' });
   });

@@ -293,14 +293,15 @@ export function Home({
     return period ? { from: period.period_start.slice(0, 10), to: period.period_end.slice(0, 10) } : null;
   })();
   const canViewDocumentSummaries = can("document.view") && can("obligation.view");
+  // Receivables/payables are all-time open balances (not period-scoped on the server), so the drill-down opts out of the global month.
   // Only metrics backed by a real destination are actionable; net profit has no data source, so it stays informational.
   const kpiNavigation: Record<string, (() => void) | null> = {
     bank_balances: can("bank.view") ? () => navigateToDiscovery("banks", { section: "accounts" }) : null,
     amounts_to_collect: can("obligation.view")
-      ? () => navigateToDiscovery("obligations", { direction: "receivable", confirmation: "confirmed" })
+      ? () => navigateToDiscovery("obligations", { direction: "receivable", confirmation: "confirmed", scope: "all" })
       : null,
     amounts_to_pay: can("obligation.view")
-      ? () => navigateToDiscovery("obligations", { direction: "payable", confirmation: "confirmed" })
+      ? () => navigateToDiscovery("obligations", { direction: "payable", confirmation: "confirmed", scope: "all" })
       : null,
     current_month_sales: canViewDocumentSummaries
       ? () => navigateToDiscovery("sales", scopeRange ? { salesFrom: scopeRange.from, salesTo: scopeRange.to } : {})
