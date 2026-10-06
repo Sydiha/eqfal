@@ -130,7 +130,7 @@ describe('Periodic Adjustments KPI quick filters', () => {
     window.history.replaceState(null, '', '/?page=periodicAdjustments');
   });
 
-  it('filters by pending and posted periods inside the effective month scope, with active state and toggle back', async () => {
+  it('filters by pending and posted periods inside the effective month scope, with active state; only Total resets', async () => {
     mountQuick(ctx());
     await screen.findByText('only-pending');
     expect(card(/Total/)).toHaveAttribute('aria-pressed', 'true');
@@ -146,9 +146,14 @@ describe('Periodic Adjustments KPI quick filters', () => {
     // the mixed item's posted period (Feb) is outside March, so only the March-posted item matches
     expect(rows().join('|')).toContain('only-posted');
     expect(rows().join('|')).not.toContain('mixed');
+    // clicking the active Posted card again keeps it active (idempotent)
     fireEvent.click(card(/Posted/));
-    expect(rows()).toHaveLength(4);
+    expect(card(/Posted/)).toHaveAttribute('aria-pressed', 'true');
+    expect(rows().join('|')).toContain('only-posted');
     fireEvent.click(card(/Pending/));
+    fireEvent.click(card(/Pending/));
+    expect(card(/Pending/)).toHaveAttribute('aria-pressed', 'true');
+    expect(rows().join('|')).not.toContain('only-posted');
     fireEvent.click(card(/Total/));
     expect(card(/Total/)).toHaveAttribute('aria-pressed', 'true');
     expect(rows()).toHaveLength(4);
@@ -189,23 +194,34 @@ describe('Periodic Adjustments KPI quick filters', () => {
     expect(buttons[1]).toHaveTextContent(/فترات|معلق/);
   });
 
-  it('moves focus and scroll to the results after a quick-filter click, by mouse or keyboard, without opening an adjustment', async () => {
+  it('scrolls to the register when several adjustments remain and does not auto-select one', async () => {
     const scroll = vi.fn();
     (Element.prototype as any).scrollIntoView = scroll;
     mountQuick(ctx());
     await screen.findByText('only-pending');
-    const results = document.querySelector('.pa-results') as HTMLElement;
     fireEvent.click(card(/Pending/));
     await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
-    expect(document.activeElement).toBe(results);
-    // keyboard activation of a native button dispatches the same click
+    expect(document.activeElement).toBe(document.querySelector('.pa-results'));
+    expect(rows()).toHaveLength(2);
+    expect(screen.queryByText('Recognition schedule')).not.toBeInTheDocument();
+    delete (Element.prototype as any).scrollIntoView;
+  });
+
+  it('auto-selects the single remaining adjustment and focuses its recognition schedule without mutating anything', async () => {
+    const scroll = vi.fn();
+    (Element.prototype as any).scrollIntoView = scroll;
+    mountQuick(ctx());
+    await screen.findByText('only-pending');
     const posted = card(/Posted/);
     posted.focus();
     fireEvent.keyDown(posted, { key: 'Enter' });
     fireEvent.click(posted);
-    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Recognition schedule')).toBeInTheDocument();
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+    const schedule = screen.getByText('Recognition schedule').closest('section') as HTMLElement;
+    expect(document.activeElement).toBe(schedule);
     expect(card(/Posted/)).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('Recognition schedule')).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method)).toHaveLength(0);
     delete (Element.prototype as any).scrollIntoView;
   });
 });

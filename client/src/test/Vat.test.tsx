@@ -54,10 +54,15 @@ describe('VAT review workspace',()=>{
   await i18n.changeLanguage('ar');
   const blocked={...period,ready:false,blockers:{unapproved_documents:2,missing_reviews:0,pending_reviews:0,vat_recoverability_pending:0,vat_ledger_mismatches:0,vat_adjustments_pending:0,total:2}};
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[blocked]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period:blocked,documents}),{status:200})}));
-  render(<Vat canView canReview canClose canReopen canViewDocuments onNavigate={vi.fn()} onUnauthorized={vi.fn()}/>);
+  const onNavigate=vi.fn();
+  render(<Vat canView canReview canClose canReopen canViewDocuments onNavigate={onNavigate} onUnauthorized={vi.fn()}/>);
   const button=await screen.findByRole('button',{name:'مستندات غير معتمدة'});
   expect(button.tagName).toBe('BUTTON');
   expect(button).toHaveAttribute('type','button');
+  expect(button).toHaveClass('vat-blocker-link');
+  button.focus();expect(button).toHaveFocus();
+  fireEvent.click(button);
+  expect(onNavigate).toHaveBeenCalledWith('documents',{from:'2026-01-01',to:'2026-03-31'});
  });
 
  it('resolves a pending recoverability blocker through the existing VAT review dialog',async()=>{

@@ -40,7 +40,8 @@
 .vat-view .vat-blockers li{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;font-size:11px}
 .vat-view .vat-blockers li+li{border-inline-start:1px solid var(--vat-border)}
 .vat-view .vat-blockers li>span:first-child,.vat-view .vat-blockers li>.vat-blocker-link{flex:1;min-width:0}
-.vat-view .vat-blocker-link{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:start;text-decoration:underline;cursor:pointer}
+.vat-view .vat-blocker-link{display:block;appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:0;margin:0;padding:0;font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;text-align:start;text-decoration:none;cursor:pointer}
+.vat-view .vat-blocker-link:hover{color:var(--vat-accent,inherit)}
 .vat-view .vat-blocker-link:focus-visible{outline:2px solid var(--vat-accent,currentColor);outline-offset:2px;border-radius:4px}
 .vat-view .vat-blockers b{font-weight:500;color:var(--vat-muted)}
 .vat-view .vat-readiness__close{display:flex;align-items:center;gap:16px;padding-top:6px;border-top:1px solid var(--vat-border)}
