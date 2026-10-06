@@ -37,7 +37,10 @@ type DiscoveryPage =
   | "banks"
   | "obligations"
   | "vat"
-  | "accounting";
+  | "accounting"
+  | "assets"
+  | "openingBalances"
+  | "periodicAdjustments";
 
 type Period = {
   id: string;
@@ -287,7 +290,11 @@ export function Home({
       count: selected?.blockers.obligations ?? 0,
       canOpen: can("obligation.view"),
       navigate: () =>
-        navigateToDiscovery("obligations", { confirmation: "unconfirmed" }),
+        navigateToDiscovery("obligations", {
+          confirmation: "unconfirmed",
+          recognizedFrom: selected?.period_start ?? "",
+          recognizedTo: selected?.period_end ?? "",
+        }),
     },
     {
       key: "banks",
@@ -332,7 +339,11 @@ export function Home({
       labelEn: "Fixed Assets",
       count: selected?.blockers.assets ?? 0,
       canOpen: can("asset.view"),
-      navigate: () => navigate("assets"),
+      navigate: () =>
+        navigateToDiscovery("assets", {
+          assetFrom: selected?.period_start ?? "",
+          assetTo: selected?.period_end ?? "",
+        }),
     },
     {
       key: "opening_balances",
@@ -340,7 +351,10 @@ export function Home({
       labelEn: "Opening Balances",
       count: selected?.blockers.opening_balances ?? 0,
       canOpen: can("opening_balance.view"),
-      navigate: () => navigate("openingBalances"),
+      navigate: () =>
+        navigateToDiscovery("openingBalances", {
+          fiscalYear: selected?.fiscal_year_id ?? "",
+        }),
     },
     {
       key: "periodic_adjustments",
@@ -348,7 +362,11 @@ export function Home({
       labelEn: "Periodic Adjustments",
       count: selected?.blockers.periodic_adjustments ?? 0,
       canOpen: can("periodic_adjustment.view"),
-      navigate: () => navigate("periodicAdjustments"),
+      navigate: () =>
+        navigateToDiscovery("periodicAdjustments", {
+          adjustmentFrom: selected?.period_start ?? "",
+          adjustmentTo: selected?.period_end ?? "",
+        }),
     },
   ];
 

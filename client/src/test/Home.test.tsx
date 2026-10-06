@@ -113,6 +113,29 @@ describe('Owner-approved Home financial overview', () => {
     });
   });
 
+  it('drills every blocker area into the same period scope as the blocker count', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/auth/session') {
+        return Promise.resolve(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }), { status: 200 }));
+      }
+      if (url === '/api/monthly-close-periods') {
+        return Promise.resolve(new Response(JSON.stringify({ periods: [{ id: 'p1', fiscal_year_id: 'fy1', period_start: '2026-08-01', period_end: '2026-08-31', status: 'open', ready: false, disclosed_total: 8, has_hidden_blockers: false, blockers: { documents: 1, obligations: 1, bank_transactions: 1, vat: 1, ledger: 1, assets: 1, opening_balances: 1, periodic_adjustments: 1 } }] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    }));
+    navigateToDiscovery.mockClear();
+    renderHome(['monthly_close.view', 'document.view', 'obligation.view', 'bank.view', 'vat.view', 'accounting.view', 'asset.view', 'opening_balance.view', 'periodic_adjustment.view']);
+    const table = await screen.findByRole('table');
+    const buttons = within(table).getAllByRole('button', { name: 'Handle' });
+    expect(buttons).toHaveLength(8);
+    buttons.forEach(button => button.click());
+    const period = { from: '2026-08-01', to: '2026-08-31' };
+    expect(navigateToDiscovery).toHaveBeenCalledWith('obligations', { confirmation: 'unconfirmed', recognizedFrom: period.from, recognizedTo: period.to });
+    expect(navigateToDiscovery).toHaveBeenCalledWith('assets', { assetFrom: period.from, assetTo: period.to });
+    expect(navigateToDiscovery).toHaveBeenCalledWith('openingBalances', { fiscalYear: 'fy1' });
+    expect(navigateToDiscovery).toHaveBeenCalledWith('periodicAdjustments', { adjustmentFrom: period.from, adjustmentTo: period.to });
+  });
+
   it('shows no blockers instead of ready-to-close wording for a closed period', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       if (url === '/api/auth/session') {
