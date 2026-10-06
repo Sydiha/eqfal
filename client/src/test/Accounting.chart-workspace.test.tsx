@@ -12,10 +12,11 @@ const accounts = Array.from({ length: 7 }, (_, i) => ({
   is_active: true,
 }));
 
-const stub = () => {
+const stub = (used = false, extra: Record<string, unknown> = {}, patchStatus = 200) => {
+  const list = accounts.map((a, i) => (i === 0 ? { ...a, is_used: used, ...extra } : a));
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-    if (url === `/api/accounts/${accounts[0]!.id}` && options?.method === 'PATCH') return new Response(JSON.stringify({ ...accounts[0], is_active: false }));
-    if (url === '/api/accounts') return new Response(JSON.stringify({ accounts }));
+    if (url === `/api/accounts/${accounts[0]!.id}` && options?.method === 'PATCH') return new Response(JSON.stringify(patchStatus === 200 ? { ...list[0], is_active: false } : { error: 'Account field is locked: code' }), { status: patchStatus });
+    if (url === '/api/accounts') return new Response(JSON.stringify({ accounts: list }));
     if (url.startsWith('/api/account-classifications')) return new Response(JSON.stringify({ accounts: [] }));
     if (url === '/api/fiscal-years') return new Response(JSON.stringify({ fiscalYears: [] }));
     if (url === '/api/journals') return new Response(JSON.stringify({ journals: [] }));
@@ -42,41 +43,100 @@ describe('Accounting chart-of-accounts workspace', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/accounts')).toHaveLength(1);
   });
 
-  it('shows identity fields read-only and only sends is_active when the status changes', async () => {
-    const fetchMock = stub();
-    render(ui());
+  const openEdit = async (canEdit = true) => {
+    render(ui(canEdit));
     await screen.findByText('Bank');
     const panel = screen.getByRole('complementary');
+    return panel;
+  };
+  const patches = (fetchMock: ReturnType<typeof stub>) => fetchMock.mock.calls.filter(([, o]) => o?.method === 'PATCH');
+
+  it('shows the account read-only until Edit is pressed and hides Edit without the capability', async () => {
+    stub();
+    const panel = await openEdit();
     for (const field of within(panel).getAllByRole('textbox')) expect(field).toBeDisabled();
-    expect(within(panel).getAllByRole('combobox').slice(0, 2).every((el) => (el as HTMLSelectElement).disabled)).toBe(true);
-    const update = within(panel).getByRole('button', { name: 'Update account' });
-    expect(update).toBeDisabled();
-    fireEvent.change(within(panel).getAllByRole('combobox')[2]!, { target: { value: 'inactive' } });
-    expect(update).toBeEnabled();
-    fireEvent.click(update);
-    await waitFor(() => expect(fetchMock.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(true));
-    const call = fetchMock.mock.calls.find(([, o]) => o?.method === 'PATCH')!;
-    expect(JSON.parse(String(call[1]?.body))).toEqual({ is_active: false });
+    for (const field of within(panel).getAllByRole('combobox')) expect(field).toBeDisabled();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    expect(within(panel).getAllByRole('textbox').every((el) => !(el as HTMLInputElement).disabled)).toBe(true);
+    expect(within(panel).getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
+    expect(within(panel).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 
-  it('keeps the status control disabled without the edit capability', async () => {
+  it('hides Edit without the edit capability', async () => {
     stub();
-    render(ui(false));
-    await screen.findByText('Bank');
-    const panel = screen.getByRole('complementary');
-    expect(within(panel).getAllByRole('combobox')[2]).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Update account' })).toBeDisabled();
+    const panel = await openEdit(false);
+    expect(within(panel).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
-  it('drops an unsaved status draft when the shown account changes', async () => {
+
+  it('sends only the changed fields for an unused account', async () => {
+    const fetchMock = stub();
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    const [code, name] = within(panel).getAllByRole('textbox');
+    fireEvent.change(code!, { target: { value: '1999' } });
+    fireEvent.change(name!, { target: { value: 'Main bank' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
+    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ code: '1999', name: 'Main bank' });
+  });
+
+  it('locks code, type and parent for a used account but still allows name and status', async () => {
+    const fetchMock = stub(true);
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    const [code, name] = within(panel).getAllByRole('textbox');
+    const [type, parent, status] = within(panel).getAllByRole('combobox');
+    expect(code).toBeDisabled();
+    expect(type).toBeDisabled();
+    expect(parent).toBeDisabled();
+    expect(name).toBeEnabled();
+    expect(status).toBeEnabled();
+    expect(within(panel).getByText(/Code is locked/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Type is locked/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Parent is locked/)).toBeInTheDocument();
+    fireEvent.change(name!, { target: { value: 'Renamed' } });
+    fireEvent.change(status!, { target: { value: 'inactive' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
+    expect(JSON.parse(String(patches(fetchMock)[0]![1]?.body))).toEqual({ name: 'Renamed', is_active: false });
+  });
+
+  it('locks the type when the account has child accounts', async () => {
+    stub(false, { has_children: true });
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    expect(within(panel).getAllByRole('combobox')[0]).toBeDisabled();
+    expect(within(panel).getAllByRole('textbox')[0]).toBeEnabled();
+  });
+
+  it('explains a server-side lock conflict and refreshes the data', async () => {
+    const fetchMock = stub(false, {}, 409);
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(within(panel).getAllByRole('textbox')[0]!, { target: { value: '1999' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText(/Could not save/)).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/accounts')).toHaveLength(2));
+  });
+
+  it('drops an unsaved draft when the shown account changes', async () => {
     stub();
-    render(ui());
-    await screen.findByText('Bank');
-    const panel = screen.getByRole('complementary');
-    fireEvent.change(within(panel).getAllByRole('combobox')[2]!, { target: { value: 'inactive' } });
-    expect(within(panel).getByRole('button', { name: 'Update account' })).toBeEnabled();
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(within(panel).getAllByRole('textbox')[1]!, { target: { value: 'Draft' } });
     fireEvent.click(screen.getByRole('button', { name: '2' }));
-    expect(within(panel).getAllByRole('combobox')[2]).toHaveValue('active');
-    expect(within(panel).getByRole('button', { name: 'Update account' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(within(panel).queryByDisplayValue('Draft')).not.toBeInTheDocument();
+  });
+
+  it('renders the edit flow in Arabic', async () => {
+    await i18n.changeLanguage('ar');
+    stub();
+    const panel = await openEdit();
+    fireEvent.click(within(panel).getByRole('button', { name: 'تعديل' }));
+    expect(within(panel).getByRole('button', { name: 'حفظ التعديلات' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'إلغاء' })).toBeInTheDocument();
   });
 
   it('mirrors pager arrows in Arabic', async () => {

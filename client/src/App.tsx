@@ -193,7 +193,7 @@ function AuthenticatedShell() {
 }
 
 function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, returnFromDocumentEntry, startPurchaseEntry, startSalesEntry, editPurchaseEntry, editSalesEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; returnFromDocumentEntry: (entry: DocumentEntryContext) => void; startPurchaseEntry: (type: 'purchase' | 'expense') => void; startSalesEntry: () => void; editPurchaseEntry: (documentId: string) => void; editSalesEntry: (documentId: string) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
-  const { t } = useTranslation(); const { companyKey, activeCompanyId } = useCompany(); const { session, handleUnauthorized, refreshSession } = useAuth();
+  const { t } = useTranslation(); const { companyKey, activeCompanyId, activeCompany } = useCompany(); const { session, handleUnauthorized, refreshSession } = useAuth();
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
@@ -214,7 +214,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       canCloseCustody={c.includes('custody.close')}
       onUnauthorized={handleUnauthorized}
     />}
-    {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} onUnauthorized={handleUnauthorized}/>}
     {page === 'access' && <AccessAdministration capabilities={c} currentUserId={session.user.id} onUnauthorized={handleUnauthorized}/>}
     {page === 'companies' && <CompaniesManagement capabilities={c} onUnauthorized={handleUnauthorized} onChanged={refreshSession}/>}
     {page === 'auditLog' && <AuditLog canView={c.includes('audit.view')} onUnauthorized={handleUnauthorized}/>}
