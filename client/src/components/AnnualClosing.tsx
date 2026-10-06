@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { TaxWorkpaper } from './TaxWorkpaper';
@@ -35,6 +35,8 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const [finalizationBlockers,setFinalizationBlockers]=useState<string[]>([]);
   const [professionalAction,setProfessionalAction]=useState<'review'|'approve'|null>(null);
   const [professionalNote,setProfessionalNote]=useState('');
+  const [packageBusy,setPackageBusy]=useState(false);
+  const mutatingRef=useRef(false);
   const [tab,setTab]=useState<'readiness'|'package'|'wht'>('readiness');
   useEffect(() => {
     if (!canView) return;
@@ -49,14 +51,16 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   }, [canView, onUnauthorized, selectedFiscalYearId]);
   useEffect(() => {
     if (!canView || !yearId) { setResult(null); return; }
+    let cancelled = false;
     setLoading(true); setError(false);
     void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}`).then(async response => {
       if (response.status === 401) { onUnauthorized(); return null; }
       if (!response.ok) throw new Error();
       return response.json() as Promise<Result>;
-    }).then(data => { if (data) setResult(data); }).catch(() => setError(true)).finally(() => setLoading(false));
+    }).then(data => { if (data && !cancelled) setResult(data); }).catch(() => { if (!cancelled) setError(true); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [canView, onUnauthorized, yearId, refresh]);
-  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw new Error();return response.json() as Promise<PackageResult>;}).then(data=>data&&setPackageResult(data)).catch(()=>setPackageError(t('annualClosing.packageLoadError')));},[canViewPackage,onUnauthorized,refresh,t,yearId]);
+  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}let cancelled=false;setPackageError('');void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw new Error();return response.json() as Promise<PackageResult>;}).then(data=>{if(data&&!cancelled)setPackageResult(data);}).catch(()=>{if(!cancelled){setPackageResult(null);setPackageError(t('annualClosing.packageLoadError'));}});return()=>{cancelled=true;};},[canViewPackage,onUnauthorized,refresh,t,yearId]);
   const isArabic=i18n.language.startsWith('ar');
   const sourceLabel=(source:string)=>isArabic?t(`annualClosing.package.sources.${source}`,{defaultValue:t('annualClosing.package.unknownSource')}):source;
   const blockerCode=(blocker:string)=>blocker.split(':').at(-1)??blocker;
@@ -66,7 +70,8 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const snapshotTypeLabel=(type:Snapshot['snapshot_type'])=>t(`annualClosing.package.snapshotTypes.${type}`);
   const formatDateTime=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(date);};
   const blockedFinancialDomainCount=result?financialStatementDomainKeys.filter(key=>(result.domains[key]?.blocker_count??0)>0).length:0;
-  const mutate=async(path:string,body:Record<string,unknown>)=>{setPackageError('');setFinalizationBlockers([]);const response=await fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(response.status===401){onUnauthorized();return;}if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string;blockers?:string[]};if(path==='/finalize'&&data.blockers?.length){setFinalizationBlockers(data.blockers);}else{setPackageError(data.error||t('annualClosing.packageActionError'));}return;}setRefresh(value=>value+1);};
+  const mutate=async(path:string,body:Record<string,unknown>)=>{if(mutatingRef.current)return;mutatingRef.current=true;setPackageBusy(true);try{await runMutate(path,body);}finally{mutatingRef.current=false;setPackageBusy(false);}};
+  const runMutate=async(path:string,body:Record<string,unknown>)=>{setPackageError('');setFinalizationBlockers([]);const response=await fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);if(!response){setPackageError(t('annualClosing.packageActionError'));return;}if(response.status===401){onUnauthorized();return;}if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string;blockers?:string[]};if(path==='/finalize'&&data.blockers?.length){setFinalizationBlockers(data.blockers);}else{setPackageError(data.error||t('annualClosing.packageActionError'));if(response.status===409)setRefresh(value=>value+1);}return;}setRefresh(value=>value+1);};
   const openProfessionalDialog=(action:'review'|'approve')=>{setProfessionalNote('');setProfessionalAction(action);};
   const confirmProfessionalAction=()=>{if(!professionalAction||!packageResult?.package)return;const action=professionalAction;setProfessionalAction(null);void mutate(`/${action}`,{version:packageResult.package.version,note:professionalNote.trim()||null});};
   if (!canView) return <section className="panel"><p>{t('annualClosing.noAccess')}</p></section>;
@@ -76,7 +81,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const tabs=[['readiness','annualClosing.tabs.readiness'],['package','annualClosing.tabs.package'],['wht','annualClosing.tabs.wht']] as const;
   return <section className="panel annual-closing-view" aria-labelledby="annual-closing-title">
     <header className="ac-header"><h1 id="annual-closing-title">{t('annualClosing.title')}</h1><p>{t('annualClosing.description')}</p></header>
-    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} onChange={event => setYearId(event.target.value)}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{selectedYear.start_date} – {selectedYear.end_date}</bdi></span>}</div>
+    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{selectedYear.start_date} – {selectedYear.end_date}</bdi></span>}</div>
     {loading && <p role="status">{t('annualClosing.loading')}</p>}{error && <p role="alert">{t('annualClosing.error')}</p>}
     {result && <>
       <div className="ac-tabs" role="tablist" aria-label={t('annualClosing.title')}>{tabs.map(([key,label])=><button key={key} type="button" role="tab" id={`ac-tab-${key}`} aria-selected={tab===key} aria-controls={`ac-panel-${key}`} className={tab===key?'ac-tab ac-tab--active':'ac-tab'} onClick={()=>setTab(key)}>{t(label)}</button>)}</div>
@@ -90,12 +95,12 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
         <div className="ac-package-head">
           <div className="ac-package-title"><h2 id="annual-package-title">{t('annualClosing.package.title')}</h2>{packageResult?.package&&<span className="ac-package-state"><span className="ac-muted">{t('annualClosing.package.state')}:</span> <span className={badgeClass(packageResult.package.status)}>{status(packageResult.package.status)}</span></span>}</div>
           <div className="ac-actions">
-            {packageResult&&!packageResult.package&&canCreatePackage&&<button type="button" className="ac-btn ac-btn--primary" onClick={()=>void mutate('',{})}>{t('annualClosing.package.create')}</button>}
-            {packageResult?.package?.status==='draft'&&canCreatePackageSnapshot&&<button type="button" className="ac-btn ac-btn--primary" onClick={()=>void mutate('/snapshots',{version:packageResult.package!.version})}>{t('annualClosing.package.preview')}</button>}
-            {packageResult?.package?.status==='draft'&&canFinalizePackage&&<button type="button" className="ac-btn" onClick={()=>void mutate('/finalize',{version:packageResult.package!.version})}>{t('annualClosing.package.finalize')}</button>}
-            {packageResult?.package?.status==='finalized'&&canHandoffPackage&&<button type="button" className="ac-btn ac-btn--primary" onClick={()=>void mutate('/handoff',{version:packageResult.package!.version,note:null,reference:null})}>{t('annualClosing.package.handoff')}</button>}
-            {packageResult?.package?.status==='handed_off'&&canReviewPackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageResult.drift} onClick={()=>openProfessionalDialog('review')}>{t('annualClosing.package.review')}</button>}
-            {packageResult?.package?.status==='reviewed'&&canApprovePackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageResult.drift} onClick={()=>openProfessionalDialog('approve')}>{t('annualClosing.package.approve')}</button>}
+            {packageResult&&!packageResult.package&&canCreatePackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageBusy} onClick={()=>void mutate('',{})}>{t('annualClosing.package.create')}</button>}
+            {packageResult?.package?.status==='draft'&&canCreatePackageSnapshot&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageBusy} onClick={()=>void mutate('/snapshots',{version:packageResult.package!.version})}>{t('annualClosing.package.preview')}</button>}
+            {packageResult?.package?.status==='draft'&&canFinalizePackage&&<button type="button" className="ac-btn" disabled={packageBusy} onClick={()=>void mutate('/finalize',{version:packageResult.package!.version})}>{t('annualClosing.package.finalize')}</button>}
+            {packageResult?.package?.status==='finalized'&&canHandoffPackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageBusy} onClick={()=>void mutate('/handoff',{version:packageResult.package!.version,note:null,reference:null})}>{t('annualClosing.package.handoff')}</button>}
+            {packageResult?.package?.status==='handed_off'&&canReviewPackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageResult.drift||packageBusy} onClick={()=>openProfessionalDialog('review')}>{t('annualClosing.package.review')}</button>}
+            {packageResult?.package?.status==='reviewed'&&canApprovePackage&&<button type="button" className="ac-btn ac-btn--primary" disabled={packageResult.drift||packageBusy} onClick={()=>openProfessionalDialog('approve')}>{t('annualClosing.package.approve')}</button>}
           </div>
         </div>
         {packageError&&<p role="alert">{packageError}</p>}
