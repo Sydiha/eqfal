@@ -38,7 +38,13 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const [form,setForm]=useState<FormState>(initialForm),[editing,setEditing]=useState<Adjustment|null>(null),[returnReasons,setReturnReasons]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(canView),[busy,setBusy]=useState(false),[error,setError]=useState(false);
  const [quick,setQuick]=useState<'all'|'pending'|'posted'>('all');const resultsRef=useRef<HTMLElement>(null);
- const pickQuick=(next:'all'|'pending'|'posted')=>{setQuick(next);setSelectedId(null);window.setTimeout(()=>{const el=resultsRef.current;el?.scrollIntoView?.({block:'start',behavior:'smooth'});el?.focus({preventScroll:true})},0)};
+ const scheduleRef=useRef<HTMLElement>(null);
+ const pickQuick=(next:'all'|'pending'|'posted')=>{
+  // Re-applying the active filter is idempotent; only the Total card returns to All.
+  const remaining=next==='all'?scopedItems:scopedItems.filter(a=>entriesInScope(a).some(e=>e.status===next));
+  const only=remaining.length===1?remaining[0]!:null;
+  setQuick(next);setSelectedId(only?only.id:null);
+  window.setTimeout(()=>{const el=(only&&scheduleRef.current)||resultsRef.current;el?.scrollIntoView?.({block:'start',behavior:'smooth'});el?.focus({preventScroll:true})},0)};
  const [formOpen,setFormOpen]=useState(false),[selectedId,setSelectedId]=useState<string|null>(null),[busyUrl,setBusyUrl]=useState<string|null>(null);
  const load=async()=>{setLoading(true);setError(false);try{const main=await api('/api/periodic-adjustments',{},onUnauthorized);setItems(((await main.json()) as {adjustments:Adjustment[]}).adjustments);const optional=await Promise.allSettled([api('/api/accounts',{},onUnauthorized),api('/api/documents',{},onUnauthorized),api('/api/obligations',{},onUnauthorized)]);if(optional[0].status==='fulfilled')setAccounts(((await optional[0].value.json()) as {accounts:Account[]}).accounts);if(optional[1].status==='fulfilled')setDocuments(((await optional[1].value.json()) as {documents:Document[]}).documents);if(optional[2].status==='fulfilled')setObligations(((await optional[2].value.json()) as {obligations:Obligation[]}).obligations);}catch{setError(true)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void load();// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,8 +85,8 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
   </header>
   <div className="pa-kpis">
    <button type="button" className={`pa-kpi${quick==='all'?' is-active':''}`} aria-pressed={quick==='all'} onClick={()=>pickQuick('all')}><div><span>{l.total}</span><strong>{scopedItems.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></button>
-   <button type="button" className={`pa-kpi pa-kpi--pending${quick==='pending'?' is-active':''}`} aria-pressed={quick==='pending'} onClick={()=>pickQuick(quick==='pending'?'all':'pending')}><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
-   <button type="button" className={`pa-kpi pa-kpi--posted${quick==='posted'?' is-active':''}`} aria-pressed={quick==='posted'} onClick={()=>pickQuick(quick==='posted'?'all':'posted')}><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
+   <button type="button" className={`pa-kpi pa-kpi--pending${quick==='pending'?' is-active':''}`} aria-pressed={quick==='pending'} onClick={()=>pickQuick('pending')}><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
+   <button type="button" className={`pa-kpi pa-kpi--posted${quick==='posted'?' is-active':''}`} aria-pressed={quick==='posted'} onClick={()=>pickQuick('posted')}><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
   </div>
   {error&&<WorkspaceState tone="error">{l.error}</WorkspaceState>}
   {showForm&&<section className="pa-card pa-form-card" aria-label={editing?l.update:l.newItem}><div className="pa-card__head"><h3>{editing?l.update:l.formTitle}</h3></div><p className="pa-muted">{l.accountHint}</p><form className="pa-form" onSubmit={submitForm}>
@@ -111,7 +117,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    </tr>})}</tbody></table></div>
    <div className="pa-foot"><span>{l.showing(visibleItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
   </section>
-  {!loading&&selected&&<section className="pa-card" aria-labelledby="pa-schedule-title">
+  {!loading&&selected&&<section className="pa-card pa-results" ref={scheduleRef} tabIndex={-1} aria-labelledby="pa-schedule-title">
    <div className="pa-card__head"><div><h3 id="pa-schedule-title">{l.schedule}</h3><p className="pa-muted">{l[selected.adjustment_type]} — {selected.description}</p></div><span className="pa-muted">{selected.schedule.length?`${l.periodsCount(selected.schedule.length)} • ${l.scheduleAmounts}`:''}</span></div>
    {selected.schedule.length===0?<WorkspaceState kind="empty">{l.noSchedule}</WorkspaceState>:<>
    <div className="table-wrap pa-table"><table><thead><tr><th>{l.period}</th><th>{l.recognitionDate}</th><th>{l.amount}</th><th>{l.status}</th><th>{l.journal}</th><th>{l.action}</th></tr></thead><tbody>{selected.schedule.map(s=><tr key={s.id} className={s.status==='posted'?'is-posted':undefined}>
