@@ -8,7 +8,7 @@ import { readQueryParameter } from '../navigation/queryState';
 import { useDateContext } from '../context/DateContext';
 import './Vat.css';
 
-type Blockers={unapproved_documents:number;missing_reviews:number;pending_reviews:number;total:number};
+type Blockers={unapproved_documents:number;missing_reviews:number;pending_reviews:number;vat_recoverability_pending:number;vat_ledger_mismatches:number;vat_adjustments_pending:number;total:number};
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Blockers};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
 type VatDocument={id:string;status:string;original_filename:string;document_type:'purchase'|'expense'|'sale';document_date:string|null;counterparty_name:string|null;total_amount:string|null;review_id:string|null;tax_date:string|null;treatment:'standard'|'zero_rated'|'exempt'|'out_of_scope'|null;taxable_amount:string|null;vat_amount:string|null;review_status:'pending'|'reviewed'|null;review_note:string|null;version:number|null};
@@ -42,7 +42,7 @@ export function Vat({canView,canReview,canClose,canReopen,onUnauthorized,selecte
  const reviewTone=(d:VatDocument)=>d.review_status==='reviewed'?'ok':d.review_status==='pending'?'warn':'neutral';
  const canEdit=(d:VatDocument)=>canReview&&selected?.status==='open'&&d.status==='approved';
  const amount=(value:string|null)=><bdi dir="ltr">{value??'—'}</bdi>;
- const blockerRows:[string,number][]=selected?[[t('vat.unapprovedLabel'),selected.blockers.unapproved_documents],[t('vat.missingReviewsLabel'),selected.blockers.missing_reviews],[t('vat.pendingReviewsLabel'),selected.blockers.pending_reviews]]:[];
+ const blockerRows:[string,number][]=selected?[[t('vat.unapprovedLabel'),selected.blockers.unapproved_documents],[t('vat.missingReviewsLabel'),selected.blockers.missing_reviews],[t('vat.pendingReviewsLabel'),selected.blockers.pending_reviews],[t('vat.recoverabilityLabel'),selected.blockers.vat_recoverability_pending??0],[t('vat.ledgerMismatchLabel'),selected.blockers.vat_ledger_mismatches??0],[t('vat.adjustmentsPendingLabel'),selected.blockers.vat_adjustments_pending??0]]:[];
  const hasFilters=Boolean(search||reviewFilter||typeFilter||treatmentFilter);
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
