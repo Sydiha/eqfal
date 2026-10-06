@@ -34,4 +34,39 @@ describe('OpeningBalanceReview',()=>{
  it('renders the Figma register: balanced badge, unverified source, account code/name instead of raw ids',async()=>{const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit' as const,source_type:'manual_unverified',source_reference:'REF-1',confidence:'low' as const,note:null},{id:'i2',category:'equity',account_id:'99999999-9999-4999-8999-999999999999',amount:'100.00',balance_side:'credit' as const,source_type:'bank_statement',source_reference:null,confidence:'high' as const,note:null}];vi.stubGlobal('fetch',loadMock({id:'r1',status:'approved',journal_entry_id:null},items));render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);expect(await screen.findByText('Balanced')).toBeInTheDocument();expect(screen.getByText('Unverified')).toBeInTheDocument();expect(screen.getByText('Unknown account')).toBeInTheDocument();expect(screen.queryByText(/99999999-9999/)).not.toBeInTheDocument();expect(screen.getByText('Cash',{exact:false})).toBeInTheDocument();expect(screen.getByText('REF-1')).toBeInTheDocument();});
 
  it('groups thousands for display only and shows a short manual source beside the unverified badge',async()=>{const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'12500.00',balance_side:'debit' as const,source_type:'manual_unverified',source_reference:null,confidence:'low' as const,note:null}];vi.stubGlobal('fetch',loadMock({id:'r1',status:'draft',journal_entry_id:null},items));render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);expect(await screen.findByText('12,500.00')).toBeInTheDocument();expect(screen.getByText('Manual')).toBeInTheDocument();expect(screen.getByText('Unverified')).toBeInTheDocument();expect(screen.queryByText('Manual / unverified',{selector:'td *'})).not.toBeInTheDocument();});
+
+ it('ignores a late response from a previously selected fiscal year',async()=>{
+  const year2={...year,id:'44444444-4444-4444-8444-444444444444',name:'FY 2027',start_date:'2027-01-01',end_date:'2027-12-31'};
+  const item=(id:string,ref:string)=>({id,category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit',source_type:'bank_statement',source_reference:ref,confidence:'high',note:null});
+  const summary={debit:'100.00',credit:'0.00',difference:'100.00',confidence:{high:1,medium:0,low:0}};
+  let releaseFirst:(r:Response)=>void=()=>undefined;
+  vi.stubGlobal('fetch',vi.fn().mockImplementation((url:string)=>{
+   if(url==='/api/fiscal-years')return response({fiscalYears:[year,year2]});
+   if(url==='/api/accounts')return response({accounts:[cash,equity]});
+   if(url.endsWith('/suggestions'))return response({suggestions:[]});
+   if(url===`/api/opening-balances/${year.id}`)return new Promise<Response>(resolve=>{releaseFirst=resolve;});
+   if(url===`/api/opening-balances/${year2.id}`)return response({year:year2,review:{id:'r2',status:'draft',journal_entry_id:null},items:[item('i2','SECOND-YEAR')],summary});
+   return response({});
+  }));
+  render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove onUnauthorized={vi.fn()}/>);
+  await waitFor(()=>expect(screen.getByRole('combobox',{name:'Fiscal year'})).toBeInTheDocument());
+  fireEvent.change(screen.getByRole('combobox',{name:'Fiscal year'}),{target:{value:year2.id}});
+  expect(await screen.findByText('SECOND-YEAR')).toBeInTheDocument();
+  releaseFirst(new Response(JSON.stringify({year,review:{id:'r1',status:'draft',journal_entry_id:null},items:[item('i1','FIRST-YEAR')],summary}),{status:200}));
+  await new Promise(resolve=>setTimeout(resolve,20));
+  expect(screen.queryByText('FIRST-YEAR')).not.toBeInTheDocument();
+  expect(screen.getByText('SECOND-YEAR')).toBeInTheDocument();
+ });
+ it('shows the error and reloads authoritative state when a mutation conflicts',async()=>{
+  const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit',source_type:'bank_statement',source_reference:'statement',confidence:'high',note:null},{id:'i2',category:'equity',account_id:equity.id,amount:'100.00',balance_side:'credit',source_type:'bank_statement',source_reference:'statement',confidence:'high',note:null}];
+  const base=loadMock({id:'r1',status:'in_review',journal_entry_id:null},items);
+  const fetchMock=vi.fn().mockImplementation((url:string,init?:RequestInit)=>init?.method==='POST'?response({error:'Only in-review opening balance can be approved'},409):base(url));
+  vi.stubGlobal('fetch',fetchMock);
+  render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove onUnauthorized={vi.fn()}/>);
+  const yearGets=()=>fetchMock.mock.calls.filter(([u,i])=>u===`/api/opening-balances/${year.id}`&&i?.method!=='POST').length;
+  fireEvent.click(await screen.findByRole('button',{name:'Approve opening balance'}));
+  expect(await screen.findByText('Only in-review opening balance can be approved')).toBeInTheDocument();
+  await waitFor(()=>expect(yearGets()).toBe(2));
+  expect(screen.getByText('Only in-review opening balance can be approved')).toBeInTheDocument();
+ });
 });
