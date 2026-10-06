@@ -1,6 +1,7 @@
-import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./AccountingApproved.css";
+import "./AccountEdit.css";
 import "./AccountingTabs.css";
 import {
   PageHeader,
@@ -233,6 +234,7 @@ export function Accounting({
   const [accountPage, setAccountPage] = useState(1);
   const [panelMode, setPanelMode] = useState<AccountPanelMode>("auto");
   const [draft, setDraft] = useState<AccountDraft | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | null>(null);
   const setTab = (value: Tab) => {
     setTabState(value);
@@ -378,6 +380,10 @@ export function Accounting({
       ? accounts.find((a) => a.id === panelMode.accountId) ?? null
       : pageAccounts[0] ?? null;
   const activeAccountId = activeAccount?.id;
+  const isEditingAccount = draft !== null && canEditChart;
+  useEffect(() => {
+    if (isEditingAccount) nameInputRef.current?.focus();
+  }, [isEditingAccount]);
   useEffect(() => {
     setDraft(null);
     setEditError(null);
@@ -882,7 +888,7 @@ export function Accounting({
                   <h2 id="accounting-details-title">{t("accounting.chart.detailsTitle")}</h2>
                   <span className="ac-approved__muted">{activeAccount.code}</span>
                 </div>
-                <form className="ac-approved__fields" onSubmit={(e) => { e.preventDefault(); void saveAccount(activeAccount); }}>
+                <form className={`ac-approved__fields${isEditingAccount ? " is-editing" : ""}`} data-mode={isEditingAccount ? "edit" : "view"} onSubmit={(e) => { e.preventDefault(); void saveAccount(activeAccount); }}>
                   {(() => {
                     const locks = accountLocks(activeAccount);
                     const editing = draft !== null && canEditChart;
@@ -901,7 +907,7 @@ export function Accounting({
                         </label>
                         <label>
                           <span>{t("accounting.name")}</span>
-                          <input value={d.name} maxLength={200} disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name: e.target.value })} />
+                          <input ref={nameInputRef} value={d.name} maxLength={200} disabled={!editing || saving} readOnly={!editing} onChange={(e) => set({ name: e.target.value })} />
                         </label>
                         <label>
                           <span>{t("accounting.type")}</span>

@@ -1,0 +1,7 @@
+/* Chart of Accounts edit mode: make editable vs locked fields visually distinct.
+   Kept separate from the locked AccountingApproved.css, which styles disabled and enabled fields identically. */
+.ac-approved__fields.is-editing{padding:10px;border:1px solid var(--ac-primary);border-radius:10px;background:rgba(0,184,148,.04)}
+.ac-approved__fields.is-editing input:enabled,.ac-approved__fields.is-editing select:enabled{border-color:var(--ac-primary);background-color:#fff;box-shadow:0 0 0 2px rgba(0,184,148,.15);cursor:text}
+.ac-approved__fields.is-editing select:enabled{cursor:pointer}
+.ac-approved__fields.is-editing input:disabled,.ac-approved__fields.is-editing select:disabled{border-color:var(--ac-border);background-color:#f1f5f9;color:var(--ac-muted);cursor:not-allowed}
+.ac-approved__fields label small{grid-column:1/-1;line-height:1.5}
