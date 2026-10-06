@@ -42,7 +42,7 @@ These SHAs are audit/reconciliation references only, not promises that either re
 - Phase 11 — Home Screen Alerts: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 12 — Manager Financial Snapshot: **DONE FOR CURRENTLY APPROVED SCOPE**
 - Phase 13 — Conditional Modules: **CONDITIONAL / DEFERRED**
-- Phase 14 — Full Operational & Accounting Cycle Validation: **IN PROGRESS / PARTIALLY VALIDATED** (14A merged; 14B in validation — see `docs/EXECUTION_ROADMAP.md`)
+- Phase 14 — Full Operational & Accounting Cycle Validation: **IN PROGRESS / PARTIALLY VALIDATED** (14A merged; 14B PASS — see `docs/EXECUTION_ROADMAP.md` and matrix §9)
 - Phase 15 — System-wide UI/UX Redesign: **PARTIALLY MERGED / IN PROGRESS**
 
 Notes:
@@ -93,7 +93,7 @@ These existing items remain open unless separately verified complete; they do no
 
 Phase 2, Phase 5, Phase 7, Phase 8, Phase 9, Phase 10, Phase 11, and Phase 12 are no longer Product gaps for their currently approved scopes.
 
-Phase 14 — Full Operational & Accounting Cycle Validation is **IN PROGRESS / PARTIALLY VALIDATED**: 14A (validation matrix) is merged and 14B (Steps 1–5) is in validation (Issue #286); further slices follow `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8. Each slice requires its own governed plan and Owner Approval.
+Phase 14 — Full Operational & Accounting Cycle Validation is **IN PROGRESS / PARTIALLY VALIDATED**: 14A (validation matrix) is merged and 14B (Steps 1–5) is PASS (Issue #286); per-row status in matrix §9; further slices follow `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §8. Each slice requires its own governed plan and Owner Approval.
 
 ## Remaining product backlog
 
