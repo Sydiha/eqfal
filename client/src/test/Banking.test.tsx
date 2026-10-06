@@ -208,4 +208,78 @@ describe('Banking',()=>{
     rerender(<MantineProvider><Banking canView canImport={false} canManage={false} canMatch canReconcile={false} onUnauthorized={vi.fn()}/></MantineProvider>);
     expect(await screen.findByText('Match')).toBeInTheDocument();
   });
+
+  describe('import state safety',()=>{
+    const account={id:'a1',display_name:'Main',bank_name:'Bank',currency_code:'SAR',is_active:true};
+    const batch={id:'batch-1',bank_account_id:'a1',original_filename:'a.csv',status:'preview_ready',total_rows:1,valid_rows:1,duplicate_rows:0,invalid_rows:0,created_at:'2026-08-21T00:00:00.000Z'};
+    const mapping={amount_mode:'signed',date_format:'YYYY-MM-DD',transaction_date:{index:0,label:'date'},amount:{index:1,label:'amount'}};
+    const preview={totalRows:1,validRows:1,duplicateRows:0,possibleDuplicateRows:0,invalidRows:0,rows:[{source_row_number:2,transaction_date:'2026-08-21',description:'Stale row',bank_reference:null,amount:'10.00',running_balance:null,status:'valid',error:null}]};
+    const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status});
+    const csv=(name:string)=>new File(['date,amount\n2026-08-21,10'],name,{type:'text/csv'});
+
+    it('sends a single batch request when upload is clicked twice quickly',async()=>{
+      let release!:()=>void;
+      const gate=new Promise<void>(r=>{release=r;});
+      const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{
+        if(url==='/api/bank-accounts')return json({accounts:[account]});
+        if(url==='/api/bank-import-batches'&&init?.method==='POST'){await gate;return json({batch,columns:['date','amount'],mapping,preview,autoMapped:true},201);}
+        if(url==='/api/bank-import-batches')return json({batches:[]});
+        return json({transactions:[]});
+      });
+      vi.stubGlobal('fetch',fetchMock);
+      renderBanking({ canView:true, canImport:true, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+      expect((await screen.findAllByText('Main')).length).toBeGreaterThan(0);
+      fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement,{target:{files:[csv('a.csv')]}});
+      const button=screen.getByRole('button',{name:/Upload/i});
+      await waitFor(()=>expect(button).toBeEnabled());
+      fireEvent.click(button);fireEvent.click(button);
+      release();
+      expect(await screen.findByText('Stale row')).toBeInTheDocument();
+      expect(fetchMock.mock.calls.filter(c=>c[1]?.method==='POST')).toHaveLength(1);
+    });
+
+    it('disables file and account inputs while an upload is in flight',async()=>{
+      let release!:()=>void;
+      const gate=new Promise<void>(r=>{release=r;});
+      vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
+        if(url==='/api/bank-accounts')return json({accounts:[account]});
+        if(url==='/api/bank-import-batches'&&init?.method==='POST'){await gate;return json({batch,columns:['date','amount'],mapping,preview,autoMapped:true},201);}
+        if(url==='/api/bank-import-batches')return json({batches:[]});
+        return json({transactions:[]});
+      }));
+      renderBanking({ canView:true, canImport:true, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+      expect((await screen.findAllByText('Main')).length).toBeGreaterThan(0);
+      const input=document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input,{target:{files:[csv('a.csv')]}});
+      const button=screen.getByRole('button',{name:/Upload/i});
+      await waitFor(()=>expect(button).toBeEnabled());
+      fireEvent.click(button);
+      await waitFor(()=>expect(input).toBeDisabled());
+      expect(screen.getByRole('textbox',{name:/Account/i})).toBeDisabled();
+      release();
+      expect(await screen.findByText('Stale row')).toBeInTheDocument();
+      expect(input).not.toBeDisabled();
+    });
+
+    it('clears stale preview, mapping and error when a different file is selected',async()=>{
+      const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{
+        if(url==='/api/bank-accounts')return json({accounts:[account]});
+        if(url==='/api/bank-import-batches'&&init?.method==='POST')return json({batch,columns:['date','amount'],mapping,preview,autoMapped:true},201);
+        if(url==='/api/bank-import-batches')return json({batches:[]});
+        return json({transactions:[]});
+      });
+      vi.stubGlobal('fetch',fetchMock);
+      renderBanking({ canView:true, canImport:true, canManage:false, canMatch:false, canReconcile:false, onUnauthorized:vi.fn() });
+      expect((await screen.findAllByText('Main')).length).toBeGreaterThan(0);
+      const input=document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input,{target:{files:[csv('a.csv')]}});
+      const button=screen.getByRole('button',{name:/Upload/i});
+      await waitFor(()=>expect(button).toBeEnabled());
+      fireEvent.click(button);
+      expect(await screen.findByText('Stale row')).toBeInTheDocument();
+      fireEvent.change(input,{target:{files:[csv('b.csv')]}});
+      expect(screen.queryByText('Stale row')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button',{name:'Confirm import'})).not.toBeInTheDocument();
+    });
+  });
 });
