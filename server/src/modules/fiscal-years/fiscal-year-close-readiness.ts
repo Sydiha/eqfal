@@ -48,34 +48,64 @@ export async function lockFiscalYearCloseScope(client: PoolClient, companyId: st
   await lockAccountingRange(companyId, year.start_date, year.end_date, client);
 }
 
-/** Same applicability rules as Monthly Close (profile-driven VAT / opening balances). */
+export interface ApplicabilityProfile {
+  effective_from: string;
+  effective_to: string | null;
+  version_no: number;
+  vat_status: 'not_registered' | 'registered' | 'deregistered' | 'needs_review';
+  vat_registered_from: string | null;
+  vat_deregistered_from: string | null;
+  first_live_accounting_date: string;
+}
+
+const dayBefore = (date: string): string => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Interval-aware applicability over ALL approved profile versions that
+ * intersect the fiscal year (a single version rarely spans the whole year).
+ *  · VAT is applicable when any version has a registered window that overlaps
+ *    the year; `needs_review` versions (or no profile at all) only raise a
+ *    warning and never suppress a known applicable VAT blocker.
+ *  · Opening balances are applicable when the authoritative (latest
+ *    effective) version's first_live_accounting_date falls inside the year;
+ *    with no profile the Monthly Close default (applicable) is kept.
+ * Pure function: profiles must be ordered effective_from DESC, version_no DESC.
+ */
+export function evaluateProfileApplicability(profiles: ApplicabilityProfile[], start: string, end: string) {
+  const vatApplicable = profiles.some((p) => {
+    if (p.vat_status !== 'registered' && p.vat_status !== 'deregistered') return false;
+    const lo = [p.effective_from, start, p.vat_registered_from ?? '0000-01-01'].reduce((a, b) => (a > b ? a : b));
+    const hiCandidates = [p.effective_to ?? '9999-12-31', end];
+    if (p.vat_status === 'deregistered' && p.vat_deregistered_from) hiCandidates.push(dayBefore(p.vat_deregistered_from));
+    const hi = hiCandidates.reduce((a, b) => (a < b ? a : b));
+    return lo <= hi;
+  });
+  const vatNeedsResolution = profiles.length === 0 || profiles.some((p) => p.vat_status === 'needs_review');
+  const authoritative = profiles[0];
+  const openingApplicable = authoritative
+    ? authoritative.first_live_accounting_date >= start && authoritative.first_live_accounting_date <= end
+    : true;
+  return { vatApplicable, vatRequiresResolution: vatNeedsResolution, openingApplicable };
+}
+
 async function loadApplicability(client: PoolClient, companyId: string, year: CloseYear) {
   const { start_date: start, end_date: end, id } = year;
-  const row = (await client.query<{ vat_applicable: string; vat_requires_resolution: string; opening_applicable: string; opening_approved: string }>(
-    `SELECT
-      COALESCE((SELECT CASE
-        WHEN p.vat_status='not_registered' THEN FALSE
-        WHEN p.vat_status='registered' THEN p.vat_registered_from IS NULL OR $3::date>=p.vat_registered_from
-        WHEN p.vat_status='deregistered' THEN p.vat_deregistered_from IS NULL OR $2::date<p.vat_deregistered_from
-        ELSE TRUE END
-        FROM company_accounting_profiles p WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
-        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text vat_applicable,
-      COALESCE((SELECT p.vat_status='needs_review'
-        FROM company_accounting_profiles p WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
-        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text vat_requires_resolution,
-      COALESCE((SELECT p.first_live_accounting_date BETWEEN fy.start_date AND fy.end_date
-        FROM company_accounting_profiles p JOIN fiscal_years fy ON fy.id=$4 AND fy.company_id=p.company_id
-        WHERE p.company_id=$1 AND p.workflow_status='approved' AND p.effective_from<=$2::date AND (p.effective_to IS NULL OR p.effective_to>=$3::date)
-        ORDER BY p.effective_from DESC,p.version_no DESC LIMIT 1),TRUE)::text opening_applicable,
-      EXISTS(SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$4 AND status='approved')::text opening_approved`,
-    [companyId, start, end, id],
-  )).rows[0]!;
-  return {
-    vatApplicable: row.vat_applicable === 'true',
-    vatRequiresResolution: row.vat_requires_resolution === 'true',
-    openingApplicable: row.opening_applicable === 'true',
-    openingApproved: row.opening_approved === 'true',
-  };
+  const profiles = (await client.query<ApplicabilityProfile>(
+    `SELECT effective_from::text,effective_to::text,version_no,vat_status,vat_registered_from::text,vat_deregistered_from::text,first_live_accounting_date::text
+     FROM company_accounting_profiles
+     WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$3::date AND (effective_to IS NULL OR effective_to>=$2::date)
+     ORDER BY effective_from DESC,version_no DESC`,
+    [companyId, start, end],
+  )).rows;
+  const approved = (await client.query<{ approved: boolean }>(
+    "SELECT EXISTS(SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2 AND status='approved') approved",
+    [companyId, id],
+  )).rows[0]!.approved;
+  return { ...evaluateProfileApplicability(profiles, start, end), openingApproved: approved };
 }
 
 /**
@@ -101,7 +131,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
     ['pending_periodic_adjustments', num(d.adjustments!.summary.unresolved_adjustments)],
     ['pending_depreciation', num(d.assets!.summary.pending_depreciation)],
     ['draft_fixed_assets', num(d.assets!.summary.draft_assets)],
-    ['vat_incomplete', apply.vatApplicable && !apply.vatRequiresResolution ? num(d.vat!.summary.incomplete_periods) : 0],
+    ['vat_incomplete', apply.vatApplicable ? num(d.vat!.summary.incomplete_periods) : 0],
     ['opening_balances_incomplete', apply.openingApplicable && !apply.openingApproved ? Math.max(1, openingRows) : 0],
     ['partner_ownership_overlap', num(d.partners!.summary.overlapping_ownership_periods)],
   ];
@@ -118,7 +148,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
   const unconfirmedPartners = num(d.partners!.summary.unconfirmed_ownership_periods) + num(d.partners!.summary.ownership_gaps_needing_review);
   if (unconfirmedPartners > 0) warn('partner_ownership_unconfirmed', unconfirmedPartners);
   if (apply.vatApplicable && num(d.vat!.summary.boundary_review_periods) > 0) warn('vat_boundary_review', num(d.vat!.summary.boundary_review_periods));
-  if (apply.vatApplicable && apply.vatRequiresResolution) warn('vat_profile_needs_review', 1);
+  if (apply.vatRequiresResolution) warn('vat_profile_needs_review', 1);
   const pkg = (await client.query<{ status: string }>(
     'SELECT status FROM annual_closing_packages WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, year.id],
   )).rows[0];

@@ -35,7 +35,8 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
     await pool.end();
   });
 
-  async function world(opts: { vat?: boolean; monthsClosed?: number } = {}): Promise<World> {
+  type ProfileSpec = { from: string; to: string | null; vat: 'registered' | 'not_registered'; regFrom?: string; firstLive?: string };
+  async function world(opts: { vat?: boolean; monthsClosed?: number; profiles?: ProfileSpec[] } = {}): Promise<World> {
     const company = randomUUID();
     companies.push(company);
     await pool.query("INSERT INTO companies(id,slug,name) VALUES($1,$2,'FY Close')", [company, `fy-close-${company}`]);
@@ -43,13 +44,16 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
       "INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,'FY 2026','2026-01-01','2026-12-31') RETURNING id", [company])).rows[0]!.id;
     const fy2025 = (await pool.query<{ id: string }>(
       "INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,'FY 2025','2025-01-01','2025-12-31') RETURNING id", [company])).rows[0]!.id;
-    const vatCols = opts.vat
-      ? "'registered','300000000000003','2025-01-01','monthly'"
-      : "'not_registered',NULL,NULL,NULL";
-    await pool.query(
-      `INSERT INTO company_accounting_profiles(company_id,version_no,workflow_status,accounting_framework,functional_currency,reporting_currency,first_live_accounting_date,vat_status,vat_registration_number,vat_registered_from,vat_filing_frequency,tax_treatment,ownership_context,wht_profile,has_non_resident_dealings,effective_from,prepared_by_user_id,approved_by_user_id,approved_at)
-       VALUES($1,1,'approved','IFRS','SAR','SAR','2025-01-01',${vatCols},'zakat_applicable','saudi_gcc_only','not_currently_applicable','no','2025-01-01',$2,$2,NOW())`,
-      [company, userId]);
+    const specs: ProfileSpec[] = opts.profiles ?? [
+      { from: '2025-01-01', to: null, vat: opts.vat ? 'registered' : 'not_registered', regFrom: '2025-01-01' },
+    ];
+    for (const [i, sp] of specs.entries()) {
+      const reg = sp.vat === 'registered';
+      await pool.query(
+        `INSERT INTO company_accounting_profiles(company_id,version_no,workflow_status,accounting_framework,functional_currency,reporting_currency,first_live_accounting_date,vat_status,vat_registration_number,vat_registered_from,vat_filing_frequency,tax_treatment,ownership_context,wht_profile,has_non_resident_dealings,effective_from,effective_to,prepared_by_user_id,approved_by_user_id,approved_at)
+         VALUES($1,$2,'approved','IFRS','SAR','SAR',$3,$4,$5,$6,$7,'zakat_applicable','saudi_gcc_only','not_currently_applicable','no',$8,$9,$10,$10,NOW())`,
+        [company, i + 1, sp.firstLive ?? '2025-01-01', sp.vat, reg ? '300000000000003' : null, reg ? (sp.regFrom ?? sp.from) : null, reg ? 'monthly' : null, sp.from, sp.to, userId]);
+    }
     const months = opts.monthsClosed ?? 12;
     for (let m = 1; m <= 12; m++) {
       const start = new Date(Date.UTC(2026, m - 1, 1)).toISOString().slice(0, 10);
@@ -223,5 +227,64 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
       expect(await closing).toContain('vat_incomplete');
       expect(await status(w)).toBe('open');
     } finally { writer.release(); }
+  });
+
+  const openVatPeriod = (w: World, start = '2026-02-01', end = '2026-02-28') => pool.query(
+    "INSERT INTO vat_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'open')", [w.company, w.fy, start, end]);
+
+  describe('interval-aware profile applicability (split approved versions)', () => {
+    it('A: two registered versions split inside the year still block unfiled VAT', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: '2026-06-30', vat: 'registered', regFrom: '2025-01-01' },
+        { from: '2026-07-01', to: null, vat: 'registered', regFrom: '2025-01-01' },
+      ] });
+      await openVatPeriod(w);
+      await expectBlocked(w, 'vat_incomplete');
+    });
+
+    it('B: not registered, then registered mid-year: incomplete VAT after registration blocks', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: '2026-06-30', vat: 'not_registered' },
+        { from: '2026-07-01', to: null, vat: 'registered', regFrom: '2026-07-01' },
+      ] });
+      await openVatPeriod(w, '2026-08-01', '2026-08-31');
+      await expectBlocked(w, 'vat_incomplete');
+    });
+
+    it('C: a year that is not VAT-registered throughout gets no false VAT blocker (split versions)', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: '2026-06-30', vat: 'not_registered' },
+        { from: '2026-07-01', to: null, vat: 'not_registered' },
+      ] });
+      await openVatPeriod(w);
+      await expectCloses(w);
+    });
+
+    it('D: first live date inside the year with split versions requires opening balances', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: '2026-06-30', vat: 'not_registered', firstLive: '2026-03-01' },
+        { from: '2026-07-01', to: null, vat: 'not_registered', firstLive: '2026-03-01' },
+      ] });
+      await expectBlocked(w, 'opening_balances_incomplete');
+    });
+
+    it('E: first live date outside the year with split versions creates no opening-balance blocker', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: '2026-06-30', vat: 'not_registered', firstLive: '2025-01-01' },
+        { from: '2026-07-01', to: null, vat: 'not_registered', firstLive: '2025-01-01' },
+      ] });
+      await expectCloses(w);
+    });
+
+    it('a registered period that ended before the year does not apply (deregistration boundary)', async () => {
+      const w = await world({ profiles: [
+        { from: '2025-01-01', to: null, vat: 'registered', regFrom: '2025-01-01' },
+      ] });
+      const client = await pool.connect();
+      try {
+        const readiness = await getFiscalYearCloseReadiness(client, w.company, { id: w.fy, start_date: '2026-01-01', end_date: '2026-12-31' });
+        expect(readiness.warnings.map((x) => x.code)).not.toContain('vat_profile_needs_review');
+      } finally { client.release(); }
+    });
   });
 });
