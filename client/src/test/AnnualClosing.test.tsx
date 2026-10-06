@@ -162,4 +162,60 @@ describe('Annual Closing Center', () => {
     expect(container).toHaveTextContent(format(finalAt));
     expect(container).toHaveTextContent(format(handoffAt));
   });
+
+  it('sends a package action once on repeated clicks and locks actions while in flight',async()=>{
+    const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status});
+    const readiness={ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]};
+    const pkg={package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false};
+    let release:(r:Response)=>void=()=>undefined;
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation((input,init)=>{
+      const url=String(input);
+      if(url==='/api/fiscal-years')return Promise.resolve(json({fiscalYears:[{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'}]}));
+      if(init?.method==='POST')return new Promise<Response>(resolve=>{release=resolve;});
+      return Promise.resolve(json(url.endsWith('/package')?pkg:readiness));
+    });
+    render(<AnnualClosing canView canViewPackage canCreatePackageSnapshot canFinalizePackage onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
+    const preview=await screen.findByRole('button',{name:'Create preview snapshot'});
+    fireEvent.click(preview);fireEvent.click(preview);
+    expect(fetchMock.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+    expect(screen.getByRole('button',{name:'Create preview snapshot'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Finalize package'})).toBeDisabled();
+    release(json({}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Create preview snapshot'})).toBeEnabled());
+  });
+  it('clears the previous year package immediately when another fiscal year is selected',async()=>{
+    const json=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+    const readiness={ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]};
+    const pkg={package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false};
+    vi.spyOn(globalThis,'fetch').mockImplementation(input=>{
+      const url=String(input);
+      if(url==='/api/fiscal-years')return Promise.resolve(json({fiscalYears:[{id:'fy-1',name:'FY1',start_date:'2025-01-01',end_date:'2025-12-31'},{id:'fy-2',name:'FY2',start_date:'2026-01-01',end_date:'2026-12-31'}]}));
+      if(url==='/api/annual-closing/fy-2/package')return new Promise<Response>(()=>undefined);
+      return Promise.resolve(json(url.endsWith('/package')?pkg:readiness));
+    });
+    render(<AnnualClosing canView canViewPackage canCreatePackageSnapshot onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
+    await screen.findByRole('button',{name:'Create preview snapshot'});
+    fireEvent.change(screen.getByRole('combobox'),{target:{value:'fy-2'}});
+    expect(screen.queryByRole('button',{name:'Create preview snapshot'})).not.toBeInTheDocument();
+  });
+
+  it('reloads authoritative package state after a rejected mutation request',async()=>{
+    const json=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+    const readiness={ready:true,blocker_count:0,financial_statements_readiness:{status:'ready',label:'',label_ar:''},zakat_readiness:{status:'ready'},domains:{},package_manifest:[]};
+    const pkg={package:{id:'p',status:'draft',version:1,final_snapshot_id:null,finalized_at:null,handed_off_at:null,handoff_note:null,handoff_reference:null,snapshots:[]},live:{manifest:[],source_fingerprint:'x'},drift:false};
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation((input,init)=>{
+      const url=String(input);
+      if(url==='/api/fiscal-years')return Promise.resolve(json({fiscalYears:[{id:'fy-1',name:'FY',start_date:'2025-01-01',end_date:'2025-12-31'}]}));
+      if(init?.method==='POST')return Promise.reject(new TypeError('network'));
+      return Promise.resolve(json(url.endsWith('/package')?pkg:readiness));
+    });
+    render(<AnnualClosing canView canViewPackage canCreatePackageSnapshot onUnauthorized={vi.fn()}/>);
+    await openPackageTab();
+    const packageGets=()=>fetchMock.mock.calls.filter(([u,init])=>String(u)==='/api/annual-closing/fy-1/package'&&init?.method!=='POST').length;
+    fireEvent.click(await screen.findByRole('button',{name:'Create preview snapshot'}));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await waitFor(()=>expect(packageGets()).toBe(2));
+  });
 });
