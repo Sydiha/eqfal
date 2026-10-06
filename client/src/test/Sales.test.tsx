@@ -101,4 +101,17 @@ describe('Sales workspace',()=>{
   expect(screen.getByText('AUG-1')).toBeInTheDocument();expect(screen.getByText('AUG-2')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('150.00 SAR')).toBeInTheDocument();
  });
 
+ it('keeps the global period scope on rows and KPIs after clear filters and browser history restore',async()=>{
+  const mk=(id:string,date:string,total:string)=>({...active,id,reference_number:id.toUpperCase(),document_date:date,total_amount:total,collected_amount:'0.00'});
+  mockSales([mk('aug-1','2026-08-05','100.00'),mk('aug-2','2026-08-20','50.00'),mk('sep-1','2026-09-05','700.00')]);
+  const dateContextValue={companyId:'c',selectedFiscalYearId:'fy1',availableFiscalYears:[{id:'fy1',company_id:'c',name:'FY',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'}],selectedPeriodId:'p8',availablePeriodsForSelectedYear:[{id:'p8',fiscal_year_id:'fy1',period_start:'2026-08-01',period_end:'2026-08-31',status:'open'}],periodMode:'specific' as const,isLoading:false,error:null,onSelectFiscalYear:async()=>{},onSelectPeriod:()=>{},loadFiscalYears:async()=>{},loadPeriodsForYear:async()=>{}};
+  render(<Sales canView canManage onUnauthorized={vi.fn()}/>,{dateContextValue});
+  expect(await screen.findByText('AUG-1')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('searchbox',{name:'Search sales'}),{target:{value:'AUG-2'}});
+  fireEvent.click(screen.getByRole('button',{name:/clear/i}));
+  expect(window.location.search).not.toContain('salesFrom');
+  act(()=>{window.dispatchEvent(new PopStateEvent('popstate'))});
+  expect(screen.getByText('AUG-1')).toBeInTheDocument();expect(screen.getByText('AUG-2')).toBeInTheDocument();expect(screen.queryByText('SEP-1')).not.toBeInTheDocument();expect(screen.getByText('150.00 SAR')).toBeInTheDocument();
+ });
+
 });

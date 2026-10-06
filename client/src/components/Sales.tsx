@@ -39,7 +39,7 @@ export function Sales({canView,canManage,canCreate=false,canEdit=false,onCreateD
 
  const load=async()=>{const response=await fetch('/api/sales');if(response.status===401){onUnauthorized();return;}if(!response.ok)throw Error();const next=(await response.json() as {sales:Sale[]}).sales;setData(next);setLoadedAt(new Date());setSelectedId(old=>old&&next.some(item=>item.id===old)?old:null)};
  useEffect(()=>{if(canView)void load().catch(()=>setError(true))},[canView]);
- useEffect(()=>{const restore=()=>setFilters(readFilters());window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
+ useEffect(()=>{const restore=()=>setFilters({...readFilters(),...scopeRange()});window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[selectedPeriodId,periodMode,selectedFiscalYearId,availablePeriodsForSelectedYear,availableFiscalYears]);
  const customers=useMemo(()=>Array.from(new Map((data??[]).filter(x=>x.counterparty_id).map(x=>[x.counterparty_id!,x.customer_name??t('sales.unknown')])).entries()),[data,t]);
  useEffect(()=>{if(data&&filters.customer&&!data.some(x=>x.counterparty_id===filters.customer))setFilters(current=>({...current,customer:''}))},[data,filters.customer]);
  const updateFilter=(name:keyof DiscoveryFilters,value:string)=>{setFilters(current=>({...current,[name]:value}));const parameter={search:'salesSearch',customer:'salesCustomer',financial:'salesFinancial',review:'salesReview',from:'salesFrom',to:'salesTo',receivable:'salesReceivable',verification:'salesVerification'}[name];writeQueryParameters({[parameter]:value||null},name==='search'?'replace':'push')};
