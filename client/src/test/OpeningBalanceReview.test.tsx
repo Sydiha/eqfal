@@ -69,4 +69,26 @@ describe('OpeningBalanceReview',()=>{
   await waitFor(()=>expect(yearGets()).toBe(2));
   expect(screen.getByText('Only in-review opening balance can be approved')).toBeInTheDocument();
  });
+
+ it('invalidates the in-flight request synchronously when the fiscal year changes',async()=>{
+  const year2={...year,id:'44444444-4444-4444-8444-444444444444',name:'FY 2027',start_date:'2027-01-01',end_date:'2027-12-31'};
+  const summary={debit:'100.00',credit:'0.00',difference:'100.00',confidence:{high:1,medium:0,low:0}};
+  const old={year,review:{id:'r1',status:'draft',journal_entry_id:null},items:[{id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit',source_type:'bank_statement',source_reference:'OLD-YEAR',confidence:'high',note:null}],summary};
+  let releaseOld:(r:Response)=>void=()=>undefined;
+  vi.stubGlobal('fetch',vi.fn().mockImplementation((url:string)=>{
+   if(url==='/api/fiscal-years')return response({fiscalYears:[year,year2]});
+   if(url==='/api/accounts')return response({accounts:[cash,equity]});
+   if(url.endsWith('/suggestions'))return response({suggestions:[]});
+   if(url===`/api/opening-balances/${year.id}`)return new Promise<Response>(resolve=>{releaseOld=resolve;});
+   if(url===`/api/opening-balances/${year2.id}`)return new Promise<Response>(()=>undefined);
+   return response({});
+  }));
+  render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove onUnauthorized={vi.fn()}/>);
+  const select=await screen.findByRole('combobox',{name:'Fiscal year'});
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith(`/api/opening-balances/${year.id}`,expect.anything()));
+  fireEvent.change(select,{target:{value:year2.id}});
+  releaseOld(new Response(JSON.stringify(old),{status:200}));
+  await new Promise(resolve=>setTimeout(resolve,20));
+  expect(screen.queryByText('OLD-YEAR')).not.toBeInTheDocument();
+ });
 });
