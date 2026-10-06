@@ -71,4 +71,20 @@ describe('Chart of Accounts edit mode (Task 30A)', () => {
     expect(css).toContain('.is-editing input:disabled');
     expect(readFileSync(resolve(__dirname, '../components/AccountingCore.tsx'), 'utf8')).toContain('import "./AccountEdit.css"');
   });
+  it('never reuses the Edit button node as the Save submit button (runtime click would submit the form and leave edit mode)', async () => {
+    const fetchMock = stub();
+    render(<Accounting canView canCreateChart canEditChart canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()} />);
+    await screen.findAllByText('Bank');
+    const panel = screen.getByRole('complementary');
+    const edit = within(panel).getByRole('button', { name: 'تعديل' });
+    expect(edit).toHaveAttribute('type', 'button');
+    fireEvent.click(edit);
+    const save = within(panel).getByRole('button', { name: 'حفظ التعديلات' });
+    // React must mount a fresh <button type="submit">; mutating the clicked node's type lets the browser submit the form in the same click.
+    expect(save).not.toBe(edit);
+    expect(edit.isConnected).toBe(false);
+    expect(edit).toHaveAttribute('type', 'button');
+    expect(panel.querySelector('form')).toHaveAttribute('data-mode', 'edit');
+    expect(fetchMock.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(false);
+  });
 });
