@@ -15,7 +15,7 @@ const VERBS: Record<string, Pair> = {
   confirm: ['Confirm', 'تأكيد'], settle: ['Settle', 'تسوية'], delete: ['Delete', 'حذف'], dispose: ['Dispose of', 'استبعاد'],
   import: ['Import', 'استيراد'], match: ['Match', 'مطابقة'], reconcile: ['Reconcile', 'تسوية'], upload: ['Upload', 'رفع'],
   grant: ['Grant', 'منح'], revoke: ['Revoke', 'سحب'], assign: ['Assign', 'تعيين'], finalize: ['Finalize', 'اعتماد نهائي لـ'],
-  handoff: ['Hand off', 'تسليم'], file: ['File', 'تقديم'],
+  handoff: ['Hand off', 'تسليم'], file: ['File', 'تقديم'], remove: ['Remove', 'إزالة'], update: ['Update', 'تحديث'],
 };
 const OBJECTS: Record<string, Pair> = {
   access: ['access administration', 'إدارة الصلاحيات'],
@@ -56,6 +56,14 @@ const GROUPS: Record<string, Pair> = {
 };
 /** Whole-ID overrides where composition would read poorly. */
 const OVERRIDES: Record<string, Pair> = {
+  'access.view': ['View users & permissions', 'عرض المستخدمين والصلاحيات'], 'access.manage': ['Manage users & permissions', 'إدارة الصلاحيات'],
+  'access.membership.create': ['Add company members', 'إنشاء عضوية مستخدم'], 'access.membership.role.assign': ['Assign roles to members', 'تعيين دور للعضو'],
+  'access.membership.status.edit': ['Change membership status', 'تعديل حالة العضوية'], 'access.role.create': ['Create roles', 'إنشاء دور'],
+  'access.role.capability.grant': ['Grant permissions to roles', 'منح صلاحيات للدور'], 'access.role.capability.revoke': ['Revoke permissions from roles', 'سحب صلاحيات من الدور'],
+  'annual_close.package.finalize': ['Finalize annual closing packages', 'الاعتماد النهائي لحزمة الإقفال السنوي'],
+  'annual_close.package.handoff': ['Hand off annual closing packages', 'تسليم حزمة الإقفال السنوي'],
+  'annual_close.package.snapshot.create': ['Create annual closing package snapshots', 'إنشاء لقطة لحزمة الإقفال السنوي'],
+  'audit.view': ['View audit log', 'عرض سجل التدقيق'],
   'bank.import': ['Import bank statements', 'استيراد كشوف البنك'], 'bank.match': ['Match bank transactions', 'مطابقة المعاملات البنكية'],
   'bank.reconcile': ['Reconcile bank transactions', 'تسوية المعاملات البنكية'],
   'obligation.settle': ['Settle obligations', 'تسوية الالتزامات'], 'invoice.create': ['Create invoices', 'إنشاء الفواتير'],

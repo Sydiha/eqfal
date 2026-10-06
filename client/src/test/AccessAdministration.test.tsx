@@ -109,6 +109,8 @@ describe('AccessAdministration', () => {
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Documents: Expand' }));
+    fireEvent.click(screen.getByRole('button', { name: 'VAT: Expand' }));
     const grant = screen.getByLabelText('Edit documents');
     expect(grant).not.toBeChecked();
     expect(screen.getByLabelText('View VAT')).toBeDisabled(); // actor does not hold it
@@ -120,23 +122,28 @@ describe('AccessAdministration', () => {
     expect(calls.find((c) => c.method === 'DELETE')!.url).toBe('/api/access/roles/r-clerk/capabilities/document.view');
   });
 
-  it('shows localized capability names (raw IDs only as secondary text)', async () => {
+  it('shows compact collapsed groups with counts, localized names and no visible raw IDs', async () => {
     mockApi();
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
-    expect(screen.getByLabelText('Edit documents')).toBeInTheDocument();
-    expect(screen.getByText('document.edit')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Edit documents')).toBeNull(); // collapsed by default
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Documents: Expand' }));
+    expect(screen.getByLabelText('Edit documents').closest('label')).toHaveAttribute('title', 'document.edit');
+    expect(screen.queryByText('document.edit')).toBeNull();
     cleanup();
     await i18n.changeLanguage('ar');
     mockApi();
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'الأدوار والصلاحيات' }));
     fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    fireEvent.click(screen.getByRole('button', { name: /المستندات/ }));
     expect(screen.getByLabelText('تعديل المستندات')).toBeInTheDocument();
+    expect(screen.queryByText(/document\.edit/)).toBeNull();
   });
 
-  it('selects/clears all and group-selects with an indeterminate state, honouring the ceiling', async () => {
+  it('group and page-level selection use ONE bulk request, show indeterminate, and honour the ceiling', async () => {
     const calls = mockApi();
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
@@ -144,13 +151,20 @@ describe('AccessAdministration', () => {
     const group = screen.getByLabelText('Documents') as HTMLInputElement; // clerk holds document.view only
     expect(group.indeterminate).toBe(true);
     fireEvent.click(group);
-    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT').map((c) => c.url)).toEqual(['/api/access/roles/r-clerk/capabilities/document.edit']));
-    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
-    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT').length).toBeGreaterThan(1));
-    // never grants what the actor does not hold (vat.view is outside the ceiling)
-    expect(calls.some((c) => c.method === 'PUT' && c.url.includes('vat.view'))).toBe(false);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/capabilities/bulk'))).toBe(true));
+    const bulkCalls = () => calls.filter((c) => c.url.endsWith('/capabilities/bulk'));
+    expect(bulkCalls()).toHaveLength(1);
+    expect(bulkCalls()[0]).toMatchObject({ method: 'POST', url: '/api/access/roles/r-clerk/capabilities/bulk' });
+    expect(JSON.parse(bulkCalls()[0].body!)).toEqual({ grants: ['document.edit'] });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Select all' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' })); // vat.view is outside the actor's ceiling
+    await waitFor(() => expect(bulkCalls()).toHaveLength(2));
+    expect(JSON.parse(bulkCalls()[1].body!)).toEqual({ grants: ['document.edit'] });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear all' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+    await waitFor(() => expect(bulkCalls()).toHaveLength(3));
+    expect(JSON.parse(bulkCalls()[2].body!)).toEqual({ revokes: ['document.view'] });
+    expect(calls.filter((c) => c.method === 'PUT' || c.method === 'DELETE')).toHaveLength(0); // never per-capability
   });
 
   it('disables bulk controls without grant/revoke capabilities', async () => {

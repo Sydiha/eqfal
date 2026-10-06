@@ -59,6 +59,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set()); // all groups start collapsed
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setErrorKey(null);
@@ -130,15 +131,13 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const toggleCapability = (role: AccessRole, capabilityId: string, grant: boolean) =>
     mutate(() => request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(capabilityId)}`, { method: grant ? 'PUT' : 'DELETE' }, onUnauthorized));
 
-  /** Applies several grants/revokes one by one (same endpoints as a single checkbox); the list is always reloaded afterwards. */
+  /** One atomic request for Select all / Clear all / group toggles; the role list is reloaded once afterwards (by mutate). */
   const bulkChange = (role: AccessRole, grants: string[], revokes: string[]) => {
     if (grants.length + revokes.length === 0) return;
-    void mutate(async () => {
-      try {
-        for (const id of grants) await request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(id)}`, { method: 'PUT' }, onUnauthorized);
-        for (const id of revokes) await request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(id)}`, { method: 'DELETE' }, onUnauthorized);
-      } catch (reason) { await load(); throw reason; }
-    });
+    const body: { grants?: string[]; revokes?: string[] } = {};
+    if (grants.length) body.grants = grants;
+    if (revokes.length) body.revokes = revokes;
+    void mutate(() => request(`/api/access/roles/${role.id}/capabilities/bulk`, json('POST', body), onUnauthorized));
   };
   const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
   const canRevokeId = () => can('access.role.capability.revoke');
@@ -194,24 +193,31 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
                 <button type="button" className="acc-ghost" disabled={busy || revocable.length === 0} onClick={() => bulkChange(selectedRole, [], revocable)}>{t('access.clearAll')}</button>
               </div>;
             })()}
-            {groupedCapabilities.map(([group, ids]) => {
+            <div className="acc-groups">{groupedCapabilities.map(([group, ids]) => {
               const groupLabel = capabilityGroupLabel(group, lang);
               const grantedIds = ids.filter((id) => selectedRole.capabilities.includes(id));
               const grantable = ids.filter((id) => !grantedIds.includes(id) && canGrantId(id));
               const revocable = canRevokeId() ? grantedIds : [];
               const all = grantedIds.length === ids.length;
-              return <fieldset key={group}><legend>
-                <GroupCheckbox label={groupLabel} checked={all} indeterminate={grantedIds.length > 0 && !all}
-                  disabled={busy || (all ? revocable.length === 0 : grantable.length === 0)}
-                  onChange={() => all ? bulkChange(selectedRole, [], revocable) : bulkChange(selectedRole, grantable, [])} />
-              </legend>
-              {ids.map((id) => {
-                const granted = grantedIds.includes(id);
-                const canToggle = granted ? can('access.role.capability.revoke') : canGrantId(id);
-                return <div key={id} className="acc-cap"><label><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label><small dir="ltr">{id}</small></div>;
-              })}
-            </fieldset>;
-            })}
+              const isOpen = openGroups.has(group);
+              const panelId = `acc-group-${group}`;
+              return <section key={group} className={`acc-group${isOpen ? ' is-open' : ''}`}>
+                <div className="acc-group-head">
+                  <GroupCheckbox label={groupLabel} checked={all} indeterminate={grantedIds.length > 0 && !all}
+                    disabled={busy || (all ? revocable.length === 0 : grantable.length === 0)}
+                    onChange={() => all ? bulkChange(selectedRole, [], revocable) : bulkChange(selectedRole, grantable, [])} />
+                  <button type="button" className="acc-group-toggle" aria-expanded={isOpen} aria-controls={panelId} aria-label={`${groupLabel}: ${isOpen ? t('access.collapseGroup') : t('access.expandGroup')}`}
+                    onClick={() => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; })}>
+                    <span className="acc-group-count" dir="ltr">{grantedIds.length} / {ids.length}</span><span aria-hidden="true" className="acc-chevron" />
+                  </button>
+                </div>
+                {isOpen && <div id={panelId} className="acc-group-body">{ids.map((id) => {
+                  const granted = grantedIds.includes(id);
+                  const canToggle = granted ? can('access.role.capability.revoke') : canGrantId(id);
+                  return <label key={id} title={id}><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label>;
+                })}</div>}
+              </section>;
+            })}</div>
           </>}
         </>}
       </div>
