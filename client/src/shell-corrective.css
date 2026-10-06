@@ -116,3 +116,13 @@
 .topbar-select-wrap { flex: 0 1 150px; width: 150px; min-width: 110px; }
 .topbar-select-wrap .topbar-select { height: 30px; min-height: 30px; border: 0; border-radius: 6px; background-color: #f1f5f9; color: #1e293b; font-size: 13px; font-weight: 700; direction: ltr; text-align: start; }
 @media (max-width: 1100px) { .topbar-select-wrap { width: 120px; flex-basis: 120px; } }
+
+/* Task 31: give the top bar its own restrained brand tint so it no longer blends into the page;
+   topbar controls sit on white so they stay legible on the tint. */
+.app-shell--v2 .topbar { background: var(--primary-soft); border-bottom: 1px solid #cfe5df; box-shadow: 0 1px 2px rgba(11, 29, 58, .05); }
+.app-shell--v2 .topbar .topbar-icon-button,
+.app-shell--v2 .topbar .topbar-chip:not(.topbar-chip--period),
+.app-shell--v2 .topbar .topbar-select-wrap .topbar-select,
+.app-shell--v2 .topbar .topbar-company-group select { background-color: #fff; }
+.app-shell--v2 .topbar .topbar-icon-button { min-height: 0; }
+.app-shell--v2 .topbar .topbar-icon-button:hover { background: #f1f5f9; }

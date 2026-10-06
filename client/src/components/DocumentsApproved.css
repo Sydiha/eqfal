@@ -90,3 +90,7 @@
 .documents-approved__zoom{display:inline-flex;align-items:center;gap:6px}.documents-approved__zoom button,.documents-approved__viewer-bar a{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--d-muted);cursor:pointer}.documents-approved__zoom button:disabled{opacity:.4;cursor:default}
 .documents-approved__viewer-bar{justify-content:flex-start}.documents-approved__viewer-bar>:nth-child(3){margin-inline-start:auto}
 .documents-approved__footer{padding:10px 4px 0;color:var(--d-muted);font-size:11px}
+/* Task 31: advanced date filters match the 32px filter selects; intake and review actions share one compact button size. */
+.documents-approved .documents-approved__advanced-fields input{height:32px;min-height:32px;padding-block:0}
+.documents-approved .document-intake>button.primary{min-height:34px;height:auto;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;line-height:1.4}
+.documents-approved .documents-approved__actions button{min-height:34px;padding:7px 14px;font-size:12px;line-height:1.4}

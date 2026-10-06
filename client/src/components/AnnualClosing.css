@@ -60,3 +60,19 @@
 .annual-closing-view .ac-card form,.annual-closing-view .ac-card .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 12px;align-items:end}
 .annual-closing-view .ac-card [role="alert"]{padding:6px 10px;border-radius:6px;background:#fef2f2;color:#b91c1c;font-size:12px}
 .annual-closing-view .ac-card label.ac-context__year{flex-direction:row;align-items:center;gap:10px;font-size:11px}
+/* Task 31: on phones keep readiness/manifest as scrollable tables (the legacy .table-wrap card fallback dropped the column labels). */
+@media (max-width:800px){
+ .annual-closing-view .table-wrap{overflow-x:auto}
+ .annual-closing-view .table-wrap table{display:table;min-width:520px}
+ .annual-closing-view .table-wrap thead{display:table-header-group}
+ .annual-closing-view .table-wrap tbody{display:table-row-group}
+ .annual-closing-view .table-wrap tr{display:table-row;margin:0;padding:0;border:0;border-radius:0}
+ .annual-closing-view .table-wrap td{display:table-cell;padding:8px 12px;border-top:1px solid var(--ac-border);white-space:nowrap}
+ .annual-closing-view .ac-tabs{flex-wrap:wrap}
+ .annual-closing-view .ac-tab{flex:none;padding:0 12px;white-space:nowrap}
+}
+@media (max-width:720px){
+ .annual-closing-view .ac-summary{row-gap:12px}
+ .annual-closing-view .ac-summary article{padding:4px 12px}
+ .annual-closing-view .ac-summary article:nth-child(odd){border-inline-start:0}
+}

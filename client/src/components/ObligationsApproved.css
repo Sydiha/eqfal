@@ -69,3 +69,6 @@
 .ob-approved__date.is-empty::before{content:attr(data-placeholder);position:absolute;inset-inline-start:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:11px;pointer-events:none}.ob-approved__date.is-empty:not(:focus-within) input::-webkit-datetime-edit{opacity:0}
 .ob-approved .ob-approved__date{height:30px;display:block}.ob-approved__date input{height:30px}
 .ob-approved .ob-approved__primary-actions .ob-approved__follow:disabled{border-color:var(--ob-border);background:#f1f5f9;color:#94a3b8;opacity:1;cursor:not-allowed}
+/* Task 31: advanced date filters match their 30px sibling controls; the page header sits on the page surface like other modules. */
+.ob-approved .ob-approved__date input{min-height:0}
+.ob-approved .ob-approved__header{background:transparent}
