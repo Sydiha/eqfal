@@ -83,4 +83,20 @@ describe('Accruals & Prepayments workspace',()=>{
   (fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(async()=>new Response('stack trace secret',{status:409}));
   fireEvent.click(buttons[0]);expect(await screen.findByRole('alert')).toHaveTextContent('Could not load or save data.');expect(screen.queryByText(/stack trace/)).not.toBeInTheDocument();
  });
+ it('offers editing only for draft adjustments',async()=>{
+  mount();await screen.findByText('Prepaid rent');expect(screen.getAllByRole('button',{name:'Update'})).toHaveLength(1);
+ });
+ it('closes a stale edit form once the edited draft is no longer a draft',async()=>{
+  mount();fireEvent.click(await screen.findByRole('button',{name:'Update'}));expect(screen.getByLabelText('Total amount')).toBeInTheDocument();
+  const inReview={...draft,workflow_status:'in_review'};
+  (fetch as ReturnType<typeof vi.fn>).mockImplementation(async(input:string|URL|Request,init?:RequestInit)=>{const url=String(input);if(url==='/api/periodic-adjustments'&&!init?.method)return new Response(JSON.stringify({adjustments:[inReview,approved]}));if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));return new Response(JSON.stringify({documents:[],obligations:[]}))});
+  fireEvent.click(screen.getByRole('button',{name:'Submit for review'}));
+  await waitFor(()=>expect(screen.queryByLabelText('Total amount')).not.toBeInTheDocument());
+  expect(calls.some(c=>c.method==='PATCH')).toBe(false);
+ });
+ it('shows the error banner when loading fails and the no-access state without view capability',async()=>{
+  (fetch as ReturnType<typeof vi.fn>).mockImplementation(async()=>new Response('x',{status:500}));
+  const {unmount}=mount();expect(await screen.findByRole('alert')).toHaveTextContent('Could not load or save data.');unmount();
+  mount({canView:false});expect(screen.getByText('You do not have access to periodic adjustments.')).toBeInTheDocument();
+ });
 });
