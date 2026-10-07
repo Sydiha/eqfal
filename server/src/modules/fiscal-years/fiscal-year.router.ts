@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response, Router } from 'express';
+import { FiscalYearConflictError } from './fiscal-year-errors';
 import { FiscalYearCloseBlockedError } from './fiscal-year-close-readiness';
 import pool from '../../db/pool';
 import {
@@ -33,7 +34,7 @@ function asyncRoute(
 
 function serviceOr503(res: Response): FiscalYearService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new FiscalYearService(pool);
@@ -41,7 +42,7 @@ function serviceOr503(res: Response): FiscalYearService | null {
 
 function repositoryOr503(res: Response): FiscalYearRepository | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new FiscalYearRepository(pool);
@@ -77,7 +78,7 @@ function normalizeName(value: unknown): string | null {
 function activeContext(req: Request, res: Response): ActiveAuthContext | null {
   const context = getAuthenticatedContext(req);
   if (!context?.activeCompanyId) {
-    res.status(403).json({ error: 'No active company' });
+    res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });
     return null;
   }
   return context as ActiveAuthContext;
@@ -85,7 +86,7 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 
 function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
   if (err instanceof FiscalYearCloseBlockedError) {
-    res.status(409).json({ error: 'Fiscal year close blocked', blockers: err.blockers, warnings: err.warnings });
+    res.status(409).json({ error: 'Fiscal year close blocked', code: 'FISCAL_YEAR_CLOSE_BLOCKED', blockers: err.blockers, warnings: err.warnings });
     return;
   }
 
@@ -104,12 +105,8 @@ function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
     return;
   }
 
-  if (
-    err.message.startsWith('Fiscal year overlap:') ||
-    err.message.includes('is already closed') ||
-    err.message.includes('is closed and cannot be modified')
-  ) {
-    res.status(409).json({ error: 'Fiscal year state conflict' });
+  if (err instanceof FiscalYearConflictError) {
+    res.status(409).json({ error: 'Fiscal year state conflict', code: err.code });
     return;
   }
 

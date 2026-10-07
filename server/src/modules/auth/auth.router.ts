@@ -19,7 +19,7 @@ function asyncRoute(
 
 function serviceOr503(res: Response): SessionService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new SessionService(pool);
@@ -66,7 +66,7 @@ authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) =>
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
   if (!email || email.length > 254 || !password || password.length > 256) {
-    res.status(400).json({ error: 'Invalid login request' });
+    res.status(400).json({ error: 'Invalid login request', code: 'INVALID_LOGIN_REQUEST' });
     return;
   }
 
@@ -75,7 +75,7 @@ authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) =>
 
   const result = await service.login(email, password);
   if (!result) {
-    res.status(401).json({ error: 'Invalid credentials' });
+    res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
     return;
   }
 

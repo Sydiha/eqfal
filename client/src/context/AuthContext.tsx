@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { parseApiError, toApiError } from '../api/apiError';
 
 export interface AuthCompany {
   id: string;
@@ -68,12 +69,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    let response: Response;
+    try {
+      response = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (reason) {
+      throw toApiError(reason);
+    }
+    // 401 means the credentials were rejected; any other failure (400/403/503/5xx) is surfaced
+    // as an ApiError so the form never tells the user their password is wrong for a service issue.
+    if (!response.ok && response.status !== 401) throw await parseApiError(response);
     const next = await parseSession(response);
     setSession(next);
     return next !== null;

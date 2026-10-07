@@ -43,6 +43,9 @@
 .fy-view .modal{width:min(100%,466px);padding:20px 24px;border-radius:12px}
 .fy-view .modal>h3{margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--fy-border);font-size:17px;font-weight:800}
 .fy-view .fy-alert{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:12px}
+.fy-view .fy-alert strong{display:block;margin-top:8px}
+.fy-view .fy-findings{margin:4px 0 0;padding-inline-start:18px}
+.fy-view .fy-findings--warning{color:#92400e}
 .fy-view .fy-close-text{margin:0 0 14px;color:var(--fy-ink);font-size:13px;line-height:1.7}
 .fy-view .fy-form{display:grid;gap:14px}
 .fy-view .fy-form label{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--fy-ink);font-size:12px;font-weight:600}

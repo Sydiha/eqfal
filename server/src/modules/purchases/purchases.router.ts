@@ -55,7 +55,7 @@ export class PurchasesService {
 
 const route=(handler:(req:Request,res:Response)=>Promise<void>):RequestHandler=>(req,res,next:NextFunction)=>void handler(req,res).catch(next);
 purchasesRouter.get('/purchases',requireAuth,requireActiveCompany,requireCapability('document.view'),requireCapability('obligation.view'),route(async(req,res)=>{
-  if(!pool){res.status(503).json({error:'Database unavailable'});return;}
+  if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return;}
   const context=getAuthenticatedContext(req)!;
   res.json(await new PurchasesService(pool).list(context.activeCompanyId!));
 }));

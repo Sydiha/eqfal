@@ -24,7 +24,7 @@ function text(value: unknown, max: number): string | null {
   return trimmed.length > 0 && trimmed.length <= max ? trimmed : null;
 }
 function service(res: Response): CompanyManagementService | null {
-  if (!pool) { res.status(503).json({ error: 'Database unavailable' }); return null; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return null; }
   return new CompanyManagementService(pool);
 }
 function actor(req: Request): string { return getAuthenticatedContext(req)!.user.id; }

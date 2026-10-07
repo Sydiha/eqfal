@@ -10,7 +10,7 @@ const context=(req:Request)=>getAuthenticatedContext(req)! as ReturnType<typeof 
 
 async function load(req: Request, res: Response) {
   if (!UUID.test(req.params.id)) { res.status(400).json({error:'Invalid request'}); return null; }
-  if (!pool) { res.status(503).json({error:'Database unavailable'}); return null; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return null; }
   try { return await loadVatClosingReport(pool, context(req).activeCompanyId, req.params.id); }
   catch (error) {
     if (error instanceof VatReportNotFoundError) { res.status(404).json({error:'Not found'}); return null; }

@@ -14,7 +14,7 @@ const required=['accounting_framework','functional_currency','reporting_currency
 const base=[requireAuth,requireActiveCompany];
 const route=(fn:(req:Request,res:Response,next:NextFunction)=>Promise<void>)=>(req:Request,res:Response,next:NextFunction)=>{void fn(req,res,next).catch(next);};
 const context=(req:Request)=>getAuthenticatedContext(req)! as NonNullable<ReturnType<typeof getAuthenticatedContext>> & {activeCompanyId:string};
-const service=(res:Response)=>{if(!pool){res.status(503).json({error:'Database unavailable'});return null;}return new CompanyAccountingProfileService(pool);};
+const service=(res:Response)=>{if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new CompanyAccountingProfileService(pool);};
 const plain=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
 const member=<T extends readonly string[]>(v:unknown,set:T):v is T[number]=>typeof v==='string'&&(set as readonly string[]).includes(v);
 const date=(v:unknown)=>{if(v===null)return true;if(typeof v!=='string'||!DATE.test(v))return false;const [y,m,d]=v.split('-').map(Number);const parsed=new Date(Date.UTC(y!,m!-1,d!));return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m!-1&&parsed.getUTCDate()===d;};

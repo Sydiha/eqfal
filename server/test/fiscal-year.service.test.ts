@@ -310,7 +310,7 @@ describe('FiscalYearService — closed fiscal year is immutable', () => {
 
     await expect(
       service.closeFiscalYear(FY_ID, COMPANY_A, USER_1),
-    ).rejects.toThrow(/already closed/i);
+    ).rejects.toMatchObject({ code: 'FISCAL_YEAR_ALREADY_CLOSED' });
   });
 
   it('updateFiscalYear: throws when fiscal year is closed', async () => {
@@ -319,7 +319,7 @@ describe('FiscalYearService — closed fiscal year is immutable', () => {
 
     await expect(
       service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'New Name' }, USER_1),
-    ).rejects.toThrow(/closed and cannot be modified/i);
+    ).rejects.toMatchObject({ code: 'FISCAL_YEAR_CLOSED_IMMUTABLE' });
   });
 });
 
@@ -938,7 +938,7 @@ describe('FiscalYearService — findByIdForUpdate inside transaction', () => {
 
     await expect(
       service.closeFiscalYear(FY_ID, COMPANY_A, USER_1),
-    ).rejects.toThrow(/already closed/i);
+    ).rejects.toMatchObject({ code: 'FISCAL_YEAR_ALREADY_CLOSED' });
 
     // Must not write anything.
     expect(client.query).not.toHaveBeenCalledWith('COMMIT');
@@ -998,7 +998,7 @@ describe('FiscalYearService — findByIdForUpdate inside transaction', () => {
 
     await expect(
       service.updateFiscalYear(FY_ID, COMPANY_A, { name: 'Too Late' }, USER_1),
-    ).rejects.toThrow(/closed and cannot be modified/i);
+    ).rejects.toMatchObject({ code: 'FISCAL_YEAR_CLOSED_IMMUTABLE' });
 
     expect(client.query).not.toHaveBeenCalledWith('COMMIT');
   });

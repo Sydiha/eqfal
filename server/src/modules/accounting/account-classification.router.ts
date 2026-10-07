@@ -173,7 +173,7 @@ export class AccountClassificationService{
 }
 
 const service=(res:Response)=>{
-  if(!pool){res.status(503).json({error:'Database unavailable'});return null;}
+  if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}
   return new AccountClassificationService(pool);
 };
 const handle=(error:unknown,res:Response)=>{

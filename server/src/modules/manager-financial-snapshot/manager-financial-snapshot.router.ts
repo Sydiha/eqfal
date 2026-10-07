@@ -127,7 +127,7 @@ export class ManagerFinancialSnapshotService {
 
 function service(res: Response) {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new ManagerFinancialSnapshotService(pool);

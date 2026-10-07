@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DirectionProvider, MantineProvider, useDirection } from '@mantine/core';
 import './i18n';
 import './App.css';
+import { apiErrorMessage, toApiError } from './api/apiError';
 import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -98,11 +99,12 @@ function LoginForm() {
   const { login } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [invalid, setInvalid] = useState(false);
+  const [failureMessage, setFailureMessage] = useState<string | null>(null);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setSubmitting(true); setInvalid(false);
+    event.preventDefault(); setSubmitting(true); setInvalid(false); setFailureMessage(null);
     const data = new FormData(event.currentTarget);
-    try { if (!await login(String(data.get('email')), String(data.get('password')))) setInvalid(true); }
-    catch { setInvalid(true); } finally { setSubmitting(false); }
+    try { if (!await login(String(data.get('email')), String(data.get('password')))) { setInvalid(true); setFailureMessage(t('errors.INVALID_CREDENTIALS')); } }
+    catch (reason) { setInvalid(true); setFailureMessage(apiErrorMessage(toApiError(reason), t) ?? t('auth.invalid')); } finally { setSubmitting(false); }
   };
   return <main className="login-shell">
     <div className="login-language"><LanguageButton /></div>
@@ -124,7 +126,7 @@ function LoginForm() {
         <form className="login-form" onSubmit={submit}>
           <label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required aria-invalid={invalid || undefined}/></label>
           <label>{t('auth.password')}<input name="password" type="password" autoComplete="current-password" required aria-invalid={invalid || undefined}/></label>
-          {invalid && <p role="alert" className="login-error">{t('auth.invalid')}</p>}
+          {invalid && <p role="alert" className="login-error">{failureMessage ?? t('auth.invalid')}</p>}
           <button className="primary login-submit" disabled={submitting}>{t('auth.login')}</button>
         </form>
       </div>

@@ -26,7 +26,7 @@ function context(req: Request) {
 
 function service(res: Response): MembershipService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new MembershipService(pool);

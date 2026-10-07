@@ -5,6 +5,7 @@ import {
   CreateFiscalYearInput,
   UpdateFiscalYearInput,
 } from './fiscal-year.types';
+import { FiscalYearConflictError } from './fiscal-year-errors';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import {
@@ -95,7 +96,8 @@ export class FiscalYearService {
 
     if (overlapping.length > 0) {
       const conflict = overlapping[0]!;
-      throw new Error(
+      throw new FiscalYearConflictError(
+        'FISCAL_YEAR_OVERLAP',
         `Fiscal year overlap: [${startDate}, ${endDate}] conflicts with ` +
         `'${conflict.name}' [${conflict.start_date}, ${conflict.end_date}]`,
       );
@@ -197,7 +199,7 @@ export class FiscalYearService {
         throw new Error('Fiscal year not found or access denied');
       }
       if (existing.status === 'closed') {
-        throw new Error(`Fiscal year '${existing.name}' is already closed`);
+        throw new FiscalYearConflictError('FISCAL_YEAR_ALREADY_CLOSED', `Fiscal year '${existing.name}' is already closed`);
       }
 
       // Close gate: serialise against every writer that can create a blocker,
@@ -255,7 +257,7 @@ export class FiscalYearService {
         throw new Error('Fiscal year not found or access denied');
       }
       if (existing.status === 'closed') {
-        throw new Error(`Fiscal year '${existing.name}' is closed and cannot be modified`);
+        throw new FiscalYearConflictError('FISCAL_YEAR_CLOSED_IMMUTABLE', `Fiscal year '${existing.name}' is closed and cannot be modified`);
       }
 
       // Resolve effective dates from the locked row, then validate (pure).

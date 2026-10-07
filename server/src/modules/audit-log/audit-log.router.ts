@@ -46,7 +46,7 @@ function parseFilters(query: Request['query']): AuditLogFilters | null {
 }
 
 auditLogRouter.get('/audit-log', ...guards, asyncRoute(async (req, res) => {
-  if (!pool) { res.status(503).json({ error: 'Database unavailable' }); return; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
   const filters = parseFilters(req.query);
   if (!filters) { res.status(400).json(BAD); return; }
   const companyId = getAuthenticatedContext(req)!.activeCompanyId!;
@@ -55,6 +55,6 @@ auditLogRouter.get('/audit-log', ...guards, asyncRoute(async (req, res) => {
 }));
 
 auditLogRouter.get('/audit-log/facets', ...guards, asyncRoute(async (req, res) => {
-  if (!pool) { res.status(503).json({ error: 'Database unavailable' }); return; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
   res.json(await auditLogFacets(pool, getAuthenticatedContext(req)!.activeCompanyId!));
 }));
