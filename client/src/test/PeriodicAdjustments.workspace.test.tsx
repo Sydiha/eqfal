@@ -100,3 +100,44 @@ describe('Accruals & Prepayments workspace',()=>{
   mount({canView:false});expect(screen.getByText('You do not have access to periodic adjustments.')).toBeInTheDocument();
  });
 });
+
+describe('Accruals & Prepayments filters and period context',()=>{
+ const accrual={...approved,id:'a3',adjustment_type:'accrued_expense',description:'Accrued utilities',workflow_status:'in_review',recognition_start:'2026-10-01',recognition_end:'2026-10-31',schedule:[sched('s9','pending','10')]};
+ const bodies=()=>vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
+  const url=String(input);calls.push({url,method:init?.method??'GET'});
+  if(url==='/api/periodic-adjustments'&&!init?.method)return new Response(JSON.stringify({adjustments:[draft,approved,accrual]}));
+  if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));
+  if(url==='/api/documents')return new Response(JSON.stringify({documents:[]}));
+  if(url==='/api/obligations')return new Response(JSON.stringify({obligations:[]}));
+  return new Response('{}');
+ }));
+ it('shows the period context and filters by type and workflow status without any write call',async()=>{
+  bodies();mount();
+  expect(await screen.findByText('Prepaid rent')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('All periods');
+  fireEvent.change(screen.getByLabelText('Filter by type'),{target:{value:'accrued_expense'}});
+  expect(screen.getByText('Accrued utilities')).toBeInTheDocument();
+  expect(screen.queryByText('Prepaid rent')).not.toBeInTheDocument();
+  expect(screen.getByText('Showing 1 of 3 adjustments')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Filter by status'),{target:{value:'draft'}});
+  expect(screen.getByText('No adjustments match the selected filters.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Reset filters'}));
+  expect(screen.getByText('Prepaid rent')).toBeInTheDocument();
+  expect(screen.getByText('Draft insurance')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Reset filters'})).not.toBeInTheDocument();
+  expect(calls.filter(c=>c.method!=='GET')).toEqual([]);
+ });
+ it('combines the status filter with the pending/posted schedule state',async()=>{
+  bodies();mount();await screen.findByText('Prepaid rent');
+  fireEvent.change(screen.getByLabelText('Filter by status'),{target:{value:'approved'}});
+  fireEvent.click(screen.getByRole('button',{name:/Posted/}));
+  expect(screen.getByText('Prepaid rent')).toBeInTheDocument();
+  expect(screen.queryByText('Accrued utilities')).not.toBeInTheDocument();
+  expect(screen.queryByText('Draft insurance')).not.toBeInTheDocument();
+ });
+ it('shows Arabic filter labels',async()=>{
+  await i18n.changeLanguage('ar');bodies();mount();
+  expect(await screen.findByLabelText('تصفية حسب النوع')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('الفترة المحاسبية');
+ });
+});

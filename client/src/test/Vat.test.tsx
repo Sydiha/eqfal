@@ -132,3 +132,61 @@ describe('VAT review workspace',()=>{
   expect(within(detail).queryByRole('button',{name:/VAT review/})).not.toBeInTheDocument();
  });
 });
+
+describe('VAT summary drill-down',()=>{
+ const docs=[...documents,{id:'d3',status:'approved',original_filename:'purchase-gamma.pdf',document_type:'purchase',document_date:'2026-02-01',counterparty_name:'Gamma',total_amount:'23.00',review_id:'r3',tax_date:'2026-02-01',treatment:'standard',taxable_amount:'20.00',vat_amount:'3.00',review_status:'reviewed',review_note:null,version:1,recoverability_status:'fully_recoverable',recoverable_vat_amount:'3.00'}] as any[];
+ const stub=(list:any[])=>vi.stubGlobal('fetch',vi.fn(async(url:string)=>{if(url==='/api/vat-periods')return new Response(JSON.stringify({periods:[period]}),{status:200});if(url==='/api/fiscal-years')return new Response(JSON.stringify({fiscalYears:[]}),{status:200});return new Response(JSON.stringify({period,documents:list}),{status:200})}));
+ it('filters the register to the reviewed documents behind each figure and resets',async()=>{
+  stub(docs);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'sale-acme.pdf'});
+  fireEvent.click(screen.getByRole('button',{name:/Output VAT/}));
+  expect(screen.getByRole('cell',{name:'sale-acme.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'purchase-gamma.pdf'})).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Output VAT');
+  fireEvent.click(screen.getByRole('button',{name:/Input VAT/}));
+  expect(screen.getByRole('cell',{name:'purchase-gamma.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'sale-acme.pdf'})).not.toBeInTheDocument();
+  // unreviewed documents never contribute to a figure
+  expect(screen.queryByRole('cell',{name:'expense-beta.pdf'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:/Net VAT/}));
+  expect(screen.getByRole('cell',{name:'sale-acme.pdf'})).toBeInTheDocument();
+  expect(screen.getByRole('cell',{name:'purchase-gamma.pdf'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));
+  expect(screen.getByRole('cell',{name:'expense-beta.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+ });
+ it('renders plain figures, not dead buttons, when the period has no documents',async()=>{
+  stub([]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByText('No VAT-relevant documents in this period.');
+  expect(screen.queryByRole('button',{name:/Output VAT/})).not.toBeInTheDocument();
+ });
+
+ const doc=(id:string,type:string,vat:string|null,reviewed=true)=>({id,status:'approved',original_filename:`${id}.pdf`,document_type:type,document_date:'2026-02-01',counterparty_name:'X',total_amount:'10.00',review_id:reviewed?`r-${id}`:null,tax_date:reviewed?'2026-02-01':null,treatment:reviewed?'standard':null,taxable_amount:reviewed?'10.00':null,vat_amount:vat,review_status:reviewed?'reviewed':null,review_note:null,version:1});
+ const drillButtons=()=>['Output VAT','Input VAT','Net VAT'].map(n=>screen.queryByRole('button',{name:new RegExp(n)}));
+ it('input-only period: Output VAT is plain text, Input and Net are clickable',async()=>{
+  stub([doc('p1','purchase','3.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'p1.pdf'});
+  const [out,inp,net]=drillButtons();
+  expect(out).toBeNull();expect(inp).not.toBeNull();expect(net).not.toBeNull();
+ });
+ it('output-only period: Input VAT is plain text, Output and Net are clickable',async()=>{
+  stub([doc('s1','sale','15.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'s1.pdf'});
+  const [out,inp,net]=drillButtons();
+  expect(out).not.toBeNull();expect(inp).toBeNull();expect(net).not.toBeNull();
+ });
+ it('no contributing reviewed VAT documents: no summary drill-down buttons',async()=>{
+  stub([doc('u1','sale',null,false),doc('z1','purchase','0.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'u1.pdf'});
+  expect(drillButtons()).toEqual([null,null,null]);
+ });
+
+ it('Input VAT drill-down lists only positive-VAT contributors, not zero-VAT documents',async()=>{
+  stub([doc('p1','purchase','3.00'),doc('z1','purchase','0.00'),doc('s1','sale','15.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'z1.pdf'});
+  fireEvent.click(screen.getByRole('button',{name:/Input VAT/}));
+  expect(screen.getByRole('cell',{name:'p1.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'z1.pdf'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'s1.pdf'})).not.toBeInTheDocument();
+ });
+});

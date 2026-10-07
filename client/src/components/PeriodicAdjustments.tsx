@@ -4,13 +4,14 @@ import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter} from '../navigation/queryState';
 import {useDateContext} from '../context/DateContext';
 import {StatusBadge,WorkspaceState} from './SharedUI';
+import {localizedAccountName} from './accounting-contracts';
 import './PeriodicAdjustments.css';
 
 type AdjustmentType='accrued_expense'|'prepaid_expense'|'accrued_income'|'deferred_income';
 type Status='draft'|'in_review'|'approved'|'completed';
 type Schedule={id:string;period_start:string;period_end:string;recognition_date:string;amount:string;status:'pending'|'posted';journal_entry_id:string|null};
 type Adjustment={id:string;adjustment_type:AdjustmentType;total_amount:string;recognition_start:string;recognition_end:string;document_id:string|null;obligation_id:string|null;document_name:string|null;description:string;reference:string|null;notes:string|null;balance_account_id:string;pnl_account_id:string;workflow_status:Status;review_note:string|null;version:number;schedule:Schedule[]};
-type Account={id:string;code:string;name:string;account_type:'asset'|'liability'|'equity'|'revenue'|'expense';is_active:boolean};
+type Account={id:string;code:string;name:string;name_ar?:string|null;name_en?:string|null;account_type:'asset'|'liability'|'equity'|'revenue'|'expense';is_active:boolean};
 type Document={id:string;original_filename:string;status:string};
 type Obligation={id:string;direction:string;counterparty_name?:string;document_id:string|null;original_amount:string};
 type Props={canView:boolean;canCreate:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApprove:boolean;canPost:boolean;onUnauthorized:()=>void};
@@ -27,9 +28,11 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const {i18n}=useTranslation();const ar=i18n.language==='ar';
  const {selectedPeriodId,periodMode,selectedFiscalYearId,availableFiscalYears,availablePeriodsForSelectedYear}=useDateContext();
  const l=ar?{
+  ctxLabel:'الفترة المحاسبية',ctxAll:'كل الفترات',ctxDrill:'نطاق الإقفال الشهري',ctxHint:'الإجماليات وصفوف الجدول والفلاتر تتبع هذه الفترة. غيّرها من محدد الفترة في الشريط العلوي.',fType:'تصفية حسب النوع',fStatus:'تصفية حسب الحالة',fAll:'الكل',fReset:'إعادة ضبط الفلاتر',noMatch:'لا توجد تعديلات تطابق الفلاتر المحددة.',inScope:'ضمن الفترة المحددة',showingOf:(n:number,total:number)=>`عرض ${n} من ${total} تعديل`,
   title:'الاستحقاقات والمقدمات',description:'إدارة المصروفات والإيرادات المستحقة والمقدمة مع جداول الاعتراف والترحيل.',newItem:'إضافة تعديل دوري',type:'النوع',amount:'إجمالي المبلغ',start:'بداية الاعتراف',end:'نهاية الاعتراف',descriptionLabel:'الوصف',reference:'المرجع',notes:'ملاحظات',balanceAccount:'حساب الميزانية',pnlAccount:'حساب الربح والخسارة',document:'المستند المرتبط (اختياري)',obligation:'الالتزام المرتبط (اختياري)',none:'بدون ربط',save:'حفظ',update:'تحديث',cancel:'إلغاء التعديل',items:'التعديلات الدورية',schedule:'جدول الاعتراف',period:'الفترة',recognitionDate:'تاريخ الاعتراف',journal:'القيد',post:'ترحيل الفترة',submit:'إرسال للمراجعة',approve:'اعتماد',returnDraft:'إرجاع إلى المسودة',returnReason:'سبب الإرجاع',loading:'جارٍ التحميل...',empty:'لا توجد تعديلات دورية بعد.',error:'تعذر تحميل أو حفظ البيانات.',noAccess:'ليس لديك صلاحية عرض التعديلات الدورية.',draft:'مسودة',in_review:'قيد المراجعة',approved:'معتمد',completed:'مكتمل',pending:'معلق',posted:'مرحل',accrued_expense:'مصروف مستحق',prepaid_expense:'مصروف مقدم',accrued_income:'إيراد مستحق',deferred_income:'إيراد مقدم',total:'إجمالي التعديلات',pendingCount:'فترات معلقة',postedCount:'فترات مرحلة',accountHint:'اختيار الحسابات هو إعداد محاسبي؛ اتجاه المدين/الدائن يحدده النظام تلقائيًا.',
   progress:'التقدم',recognitionPeriod:'فترة الاعتراف',status:'الحالة',actions:'إجراءات',action:'الإجراء',viewSchedule:'عرض جدول الاعتراف',selected:'محدد',oneItem:'تعديل واحد',itemsCount:(n:number)=>n===1?'تعديل واحد':`${n} تعديلات`,showing:(n:number)=>`عرض ${n} من ${n} تعديل`,scheduleLinked:'جدول الاعتراف أدناه مرتبط بالتعديل المحدد',periodsCount:(n:number)=>`${n} فترات`,scheduleAmounts:'المبالغ بالريال السعودي',currency:'ر.س',progressOf:(a:number,b:number)=>`${a} من ${b} فترات مرحلة`,scheduleTotal:'إجمالي جدول الاعتراف',postNote:'ترحيل الفترة إجراء محاسبي للفترة المحددة فقط؛ الفترة المرحلة لا تُرحل مرة أخرى.',posting:'جارٍ الترحيل...',saving:'جارٍ الحفظ...',posted_done:'تم الترحيل',noSchedule:'لا يوجد جدول اعتراف لهذا التعديل بعد؛ يُنشأ الجدول عند الاعتماد.',selectPrompt:'اختر تعديلًا لعرض جدول الاعتراف.',close:'إغلاق',formTitle:'إضافة تعديل دوري'
  }:{
+  ctxLabel:'Accounting period',ctxAll:'All periods',ctxDrill:'Monthly close range',ctxHint:'Totals, schedule rows and filters follow this period. Change it from the period selector in the top bar.',fType:'Filter by type',fStatus:'Filter by status',fAll:'All',fReset:'Reset filters',noMatch:'No adjustments match the selected filters.',inScope:'In selected period',showingOf:(n:number,total:number)=>`Showing ${n} of ${total} adjustments`,
   title:'Accruals & Prepayments',description:'Manage accrued and prepaid expenses/income with governed recognition schedules and posting.',newItem:'Add periodic adjustment',type:'Type',amount:'Total amount',start:'Recognition start',end:'Recognition end',descriptionLabel:'Description',reference:'Reference',notes:'Notes',balanceAccount:'Balance-sheet account',pnlAccount:'P&L account',document:'Linked document (optional)',obligation:'Linked obligation (optional)',none:'No link',save:'Save',update:'Update',cancel:'Cancel edit',items:'Periodic adjustments',schedule:'Recognition schedule',period:'Period',recognitionDate:'Recognition date',journal:'Journal',post:'Post period',submit:'Submit for review',approve:'Approve',returnDraft:'Return to draft',returnReason:'Return reason',loading:'Loading...',empty:'No periodic adjustments yet.',error:'Could not load or save data.',noAccess:'You do not have access to periodic adjustments.',draft:'Draft',in_review:'In review',approved:'Approved',completed:'Completed',pending:'Pending',posted:'Posted',accrued_expense:'Accrued expense',prepaid_expense:'Prepaid expense',accrued_income:'Accrued income',deferred_income:'Deferred income',total:'Total adjustments',pendingCount:'Pending periods',postedCount:'Posted periods',accountHint:'Account selection is accounting setup; the system determines debit/credit direction automatically.',
   progress:'Progress',recognitionPeriod:'Recognition period',status:'Status',actions:'Actions',action:'Action',viewSchedule:'View schedule',selected:'Selected',oneItem:'1 adjustment',itemsCount:(n:number)=>n===1?'1 adjustment':`${n} adjustments`,showing:(n:number)=>`Showing ${n} of ${n} adjustments`,scheduleLinked:'The recognition schedule below belongs to the selected adjustment',periodsCount:(n:number)=>`${n} periods`,scheduleAmounts:'Amounts in Saudi riyals',currency:'SAR',progressOf:(a:number,b:number)=>`${a} of ${b} periods posted`,scheduleTotal:'Recognition schedule total',postNote:'Posting is an accounting action for the selected period only; a posted period is never posted again.',posting:'Posting...',saving:'Saving...',posted_done:'Posted',noSchedule:'No recognition schedule yet; it is generated on approval.',selectPrompt:'Select an adjustment to view its recognition schedule.',close:'Close',formTitle:'Add periodic adjustment'
  };
@@ -37,7 +40,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const [items,setItems]=useState<Adjustment[]>([]),[accounts,setAccounts]=useState<Account[]>([]),[documents,setDocuments]=useState<Document[]>([]),[obligations,setObligations]=useState<Obligation[]>([]);
  const [form,setForm]=useState<FormState>(initialForm),[editing,setEditing]=useState<Adjustment|null>(null),[returnReasons,setReturnReasons]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(canView),[busy,setBusy]=useState(false),[error,setError]=useState(false);
- const [quick,setQuick]=useState<'all'|'pending'|'posted'>('all');const resultsRef=useRef<HTMLElement>(null);
+ const [quick,setQuick]=useState<'all'|'pending'|'posted'>('all'),[typeFilter,setTypeFilter]=useState<''|AdjustmentType>(''),[statusFilter,setStatusFilter]=useState<''|Status>('');const resultsRef=useRef<HTMLElement>(null);
  const scheduleRef=useRef<HTMLElement>(null);
  const pickQuick=(next:'all'|'pending'|'posted')=>{
   // Re-applying the active filter is idempotent; only the Total card returns to All.
@@ -69,7 +72,10 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const entriesInScope=(a:Adjustment)=>scopeRange?a.schedule.filter(e=>e.recognition_date>=scopeRange.from&&e.recognition_date<=scopeRange.to):a.schedule;
  const countEntries=(status:Schedule['status'])=>scopedItems.reduce((sum,a)=>sum+entriesInScope(a).filter(e=>e.status===status).length,0);
  const pending=countEntries('pending'),posted=countEntries('posted');
- const visibleItems=quick==='all'?scopedItems:scopedItems.filter(a=>entriesInScope(a).some(e=>e.status===quick));
+ const visibleItems=scopedItems.filter(a=>(quick==='all'||entriesInScope(a).some(e=>e.status===quick))&&(!typeFilter||a.adjustment_type===typeFilter)&&(!statusFilter||a.workflow_status===statusFilter));
+ const filtersActive=quick!=='all'||!!typeFilter||!!statusFilter;
+ const resetFilters=()=>{setQuick('all');setTypeFilter('');setStatusFilter('');setSelectedId(null)};
+ const inScope=(date:string)=>!!scopeRange&&date>=scopeRange.from&&date<=scopeRange.to;
  const selected=visibleItems.find(a=>a.id===selectedId)??null;
  const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
@@ -84,10 +90,16 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    <div><h2 id="periodic-adjustments-title">{l.title}</h2><p>{l.description}</p></div>
    {canCreate&&!showForm&&<button type="button" className="pa-primary" onClick={()=>setFormOpen(true)}><span aria-hidden="true">+</span> {l.newItem}</button>}
   </header>
+  <p className="pa-context" role="status"><strong>{closePeriod?l.ctxDrill:l.ctxLabel}:</strong> {scopeRange?<span dir="ltr"><bdi dir="rtl">{formatDisplayDate(scopeRange.from,i18n.language)}</bdi> — <bdi dir="rtl">{formatDisplayDate(scopeRange.to,i18n.language)}</bdi></span>:l.ctxAll}<small> {l.ctxHint}</small></p>
   <div className="pa-kpis">
    <button type="button" className={`pa-kpi${quick==='all'?' is-active':''}`} aria-pressed={quick==='all'} onClick={()=>pickQuick('all')}><div><span>{l.total}</span><strong>{scopedItems.length}</strong></div><i aria-hidden="true">{icon('M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')}</i></button>
    <button type="button" className={`pa-kpi pa-kpi--pending${quick==='pending'?' is-active':''}`} aria-pressed={quick==='pending'} onClick={()=>pickQuick('pending')}><div><span>{l.pendingCount}</span><strong>{pending}</strong></div><i aria-hidden="true">{icon('M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
    <button type="button" className={`pa-kpi pa-kpi--posted${quick==='posted'?' is-active':''}`} aria-pressed={quick==='posted'} onClick={()=>pickQuick('posted')}><div><span>{l.postedCount}</span><strong>{posted}</strong></div><i aria-hidden="true">{icon('M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z')}</i></button>
+  </div>
+  <div className="pa-filters" role="group" aria-label={l.items}>
+   <label>{l.fType}<select value={typeFilter} onChange={e=>{setTypeFilter(e.target.value as ''|AdjustmentType);setSelectedId(null)}}><option value="">{l.fAll}</option>{types.map(x=><option key={x} value={x}>{l[x]}</option>)}</select></label>
+   <label>{l.fStatus}<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value as ''|Status);setSelectedId(null)}}><option value="">{l.fAll}</option>{(['draft','in_review','approved','completed'] as Status[]).map(x=><option key={x} value={x}>{l[x]}</option>)}</select></label>
+   {filtersActive&&<button type="button" className="pa-ghost" onClick={resetFilters}>{l.fReset}</button>}
   </div>
   {error&&<WorkspaceState tone="error">{l.error}</WorkspaceState>}
   {showForm&&<section className="pa-card pa-form-card" aria-label={editing?l.update:l.newItem}><div className="pa-card__head"><h3>{editing?l.update:l.formTitle}</h3></div><p className="pa-muted">{l.accountHint}</p><form className="pa-form" onSubmit={submitForm}>
@@ -97,8 +109,8 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    <label>{l.end}<input type="date" value={form.end} onChange={e=>setForm({...form,end:e.target.value})} required/></label>
    <label className="pa-form__wide">{l.descriptionLabel}<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} maxLength={500} required/></label>
    <label className="pa-form__wide">{l.reference}<input value={form.reference} onChange={e=>setForm({...form,reference:e.target.value})} maxLength={200}/></label>
-   <label>{l.balanceAccount}<select value={form.balanceAccountId} onChange={e=>setForm({...form,balanceAccountId:e.target.value})} required><option value="">—</option>{balanceAccounts.map(a=><option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}</select></label>
-   <label>{l.pnlAccount}<select value={form.pnlAccountId} onChange={e=>setForm({...form,pnlAccountId:e.target.value})} required><option value="">—</option>{pnlAccounts.map(a=><option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}</select></label>
+   <label>{l.balanceAccount}<select value={form.balanceAccountId} onChange={e=>setForm({...form,balanceAccountId:e.target.value})} required><option value="">—</option>{balanceAccounts.map(a=><option key={a.id} value={a.id}>{a.code} — {localizedAccountName(a,i18n.language)}</option>)}</select></label>
+   <label>{l.pnlAccount}<select value={form.pnlAccountId} onChange={e=>setForm({...form,pnlAccountId:e.target.value})} required><option value="">—</option>{pnlAccounts.map(a=><option key={a.id} value={a.id}>{a.code} — {localizedAccountName(a,i18n.language)}</option>)}</select></label>
    {documents.length>0&&<label>{l.document}<select value={form.documentId} onChange={e=>setForm({...form,documentId:e.target.value})}><option value="">{l.none}</option>{documents.map(d=><option key={d.id} value={d.id}>{d.original_filename}</option>)}</select></label>}
    {obligations.length>0&&<label>{l.obligation}<select value={form.obligationId} onChange={e=>setForm({...form,obligationId:e.target.value})}><option value="">{l.none}</option>{obligations.map(o=><option key={o.id} value={o.id}>{o.counterparty_name??o.id} — {o.original_amount}</option>)}</select></label>}
    <label className="pa-form__wide">{l.notes}<textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} maxLength={1000}/></label>
@@ -106,7 +118,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
   </form></section>}
   <section className="pa-card pa-results" ref={resultsRef} tabIndex={-1} aria-labelledby="pa-items-title">
    <div className="pa-card__head"><h3 id="pa-items-title">{l.items}</h3><span className="pa-muted">{l.itemsCount(visibleItems.length)}</span></div>
-   {loading?<WorkspaceState>{l.loading}</WorkspaceState>:visibleItems.length===0?<WorkspaceState kind="empty">{l.empty}</WorkspaceState>:<>
+   {loading?<WorkspaceState>{l.loading}</WorkspaceState>:visibleItems.length===0?<WorkspaceState kind="empty">{filtersActive&&scopedItems.length>0?l.noMatch:l.empty}</WorkspaceState>:<>
    <div className="table-wrap pa-table"><table><thead><tr><th>{l.type}</th><th>{l.descriptionLabel}</th><th>{l.amount}</th><th>{l.recognitionPeriod}</th><th>{l.progress}</th><th>{l.status}</th><th>{l.actions}</th></tr></thead><tbody>{visibleItems.map(a=>{const done=a.schedule.filter(s=>s.status==='posted').length;const isSel=selected?.id===a.id;return <tr key={a.id} className={isSel?'is-selected':undefined} aria-selected={isSel}>
     <td data-label={l.type}>{l[a.adjustment_type]}</td>
     <td data-label={l.descriptionLabel}><strong>{a.description}</strong>{a.document_name&&<small>{a.document_name}</small>}</td>
@@ -116,14 +128,14 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
     <td data-label={l.status}><StatusBadge status={a.workflow_status}>{l[a.workflow_status]}</StatusBadge></td>
     <td data-label={l.actions}><div className="pa-actions"><button type="button" className="pa-ghost" aria-pressed={isSel} onClick={()=>setSelectedId(a.id)}>{l.viewSchedule}</button>{canEdit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>edit(a)}>{l.update}</button>}{canSubmit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/submit-review`)}>{l.submit}</button>}{canApprove&&a.workflow_status==='in_review'&&<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/approve`)}>{l.approve}</button>}</div>{canReview&&a.workflow_status==='in_review'&&<div className="pa-return"><textarea aria-label={l.returnReason} placeholder={l.returnReason} value={returnReasons[a.id]??''} onChange={e=>setReturnReasons({...returnReasons,[a.id]:e.target.value})}/><button type="button" className="pa-ghost" disabled={busy||!(returnReasons[a.id]??'').trim()} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/return-to-draft`,{reason:(returnReasons[a.id]??'').trim()})}>{l.returnDraft}</button></div>}</td>
    </tr>})}</tbody></table></div>
-   <div className="pa-foot"><span>{l.showing(visibleItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
+   <div className="pa-foot"><span>{l.showingOf(visibleItems.length,scopedItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
   </section>
   {!loading&&selected&&<section className="pa-card pa-results" ref={scheduleRef} tabIndex={-1} aria-labelledby="pa-schedule-title">
    <div className="pa-card__head"><div><h3 id="pa-schedule-title">{l.schedule}</h3><p className="pa-muted">{l[selected.adjustment_type]} — {selected.description}</p></div><span className="pa-muted">{scheduleRows.length?`${l.periodsCount(scheduleRows.length)} • ${l.scheduleAmounts}`:''}</span></div>
    {selected.schedule.length===0?<WorkspaceState kind="empty">{l.noSchedule}</WorkspaceState>:<>
    <div className="table-wrap pa-table"><table><thead><tr><th>{l.period}</th><th>{l.recognitionDate}</th><th>{l.amount}</th><th>{l.status}</th><th>{l.journal}</th><th>{l.action}</th></tr></thead><tbody>{scheduleRows.map(s=><tr key={s.id} className={s.status==='posted'?'is-posted':undefined}>
     <td data-label={l.period}><span className="pa-range"><span>{formatDisplayDate(s.period_start,i18n.language)}</span><span aria-hidden="true">–</span><span>{formatDisplayDate(s.period_end,i18n.language)}</span></span></td>
-    <td data-label={l.recognitionDate}>{formatDisplayDate(s.recognition_date,i18n.language)}</td>
+    <td data-label={l.recognitionDate}>{formatDisplayDate(s.recognition_date,i18n.language)}{inScope(s.recognition_date)&&<small className="pa-scope-tag">{l.inScope}</small>}</td>
     <td data-label={l.amount}>{amountCell(s.amount)}</td>
     <td data-label={l.status}><StatusBadge status={s.status}>{l[s.status]}</StatusBadge></td>
     <td data-label={l.journal}>{s.journal_entry_id?<code className="pa-ref" title={s.journal_entry_id}>{shortRef(s.journal_entry_id)}</code>:'—'}</td>
