@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response, Router } from 'express
 import pool from '../../db/pool';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
+import { AccessPolicyError } from './access-policy-error';
 import { MembershipService } from './membership.service';
 
 export const accessAdministrationRouter = Router();
@@ -38,6 +39,7 @@ function exactObject(body: unknown, keys: string[]): body is Record<string, unkn
 
 function handleKnownError(error: unknown, res: Response): boolean {
   const message = error instanceof Error ? error.message : '';
+  if (error instanceof AccessPolicyError) { res.status(403).json({ error: 'Forbidden', code: error.code }); return true; }
   if (/not found/i.test(message)) res.status(404).json({ error: 'Not found' });
   else if (/cross-company|ceiling|full access|cannot be changed/i.test(message)) res.status(403).json({ error: 'Forbidden' });
   else if ((error as { code?: string }).code === '23505') res.status(409).json({ error: 'Conflict' });

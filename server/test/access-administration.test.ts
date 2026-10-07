@@ -94,10 +94,10 @@ describe('membership administration service security and audit', () => {
     vi.spyOn(repo, 'findRoleById').mockResolvedValue({ id: 'role', company_id: 'company-a', name: 'Elevated', is_full_access: false, created_at: new Date() });
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['access.manage']);
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['payments.manage']);
-    await expect(service.assignRole('membership', 'role', 'actor')).rejects.toThrow(/ceiling/i);
+    await expect(service.assignRole('membership', 'role', 'actor')).rejects.toMatchObject({ code: 'ACCESS_ROLE_CEILING', message: expect.stringMatching(/ceiling/i) });
     vi.spyOn(repo, 'findRoleById').mockResolvedValue({ id: 'role', company_id: 'company-a', name: 'Full Access', is_full_access: true, created_at: new Date() });
     vi.spyOn(repo, 'hasActiveFullAccessRole').mockResolvedValue(false);
-    await expect(service.assignRole('membership', 'role', 'actor')).rejects.toThrow(/Full Access/i);
+    await expect(service.assignRole('membership', 'role', 'actor')).rejects.toMatchObject({ code: 'ACCESS_ROLE_CEILING', message: expect.stringMatching(/Full Access/i) });
   });
 
   it('writes membership state and its permanent audit record in one transaction', async () => {

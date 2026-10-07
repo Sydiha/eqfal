@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Documents } from '../components/Documents';
 import i18n from '../i18n';
@@ -207,5 +207,90 @@ describe('Documents', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [legacy], counterparties }), { status: 200 })));
     render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
     expect((await screen.findAllByText('Legacy Supplier')).length).toBeGreaterThan(0);
+  });
+
+  describe('coded errors (Task 35D Phase 2)', () => {
+    const needsReviewDoc = { id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'needs_review', created_at: '2026-08-15T00:00:00Z', review_note: null, reviewed_at: null };
+    const reviewFetch = (failure: () => Response | Promise<Response>) => vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return failure();
+      return new Response(JSON.stringify({ documents: [needsReviewDoc] }), { status: 200 });
+    });
+    const approve = async () => {
+      render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview canApprove onUnauthorized={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    };
+
+    it.each([
+      ['DOCUMENT_STATE_CONFLICT', 409, 'The document state has changed or no longer allows this action. Refresh and try again.'],
+      ['DOCUMENT_COUNTERPARTY_INVALID', 409, 'Select a valid counterparty for this document before continuing.'],
+      ['DOCUMENT_APPROVAL_DATA_INCOMPLETE', 409, 'The document cannot be approved until it has a valid document date and total amount.'],
+      ['ACCOUNTING_PERIOD_CLOSED', 409, null],
+      ['DB_UNAVAILABLE', 503, null],
+    ] as const)('shows the translated message for review failure %s', async (code, status, message) => {
+      vi.stubGlobal('fetch', reviewFetch(() => new Response(JSON.stringify({ error: 'Document review conflict', code }), { status })));
+      await approve();
+      const expected = message ?? i18n.t(`errors.${code}`);
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      expect(screen.queryByText('Document review conflict')).toBeNull();
+    });
+
+    it('keeps the legacy conflict message for a code-less 409 and a generic one for an unknown 500', async () => {
+      vi.stubGlobal('fetch', reviewFetch(() => new Response(JSON.stringify({ error: 'Document review conflict' }), { status: 409 })));
+      const first = render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview canApprove onUnauthorized={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+      expect(await screen.findByText(i18n.t('documents.reviewConflict'))).toBeInTheDocument();
+      first.unmount();
+      vi.stubGlobal('fetch', reviewFetch(() => new Response(JSON.stringify({ error: 'pg: deadlock detected' }), { status: 500 })));
+      await approve();
+      expect(await screen.findByText(i18n.t('documents.reviewError'))).toBeInTheDocument();
+      expect(screen.queryByText(/deadlock/)).toBeNull();
+    });
+
+    it('shows the shared network message when a review request cannot reach the server', async () => {
+      vi.stubGlobal('fetch', reviewFetch(() => { throw new TypeError('Failed to fetch'); }));
+      await approve();
+      expect(await screen.findByText(i18n.t('errors.NETWORK_ERROR'))).toBeInTheDocument();
+    });
+
+    it.each([
+      [400, 'documents.invalid'],
+      [413, 'documents.tooLarge'],
+      [403, 'documents.error'],
+      [500, 'documents.error'],
+    ] as const)('maps upload status %i to %s so a 403 never reads as an invalid file', async (status, key) => {
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST'
+        ? new Response(JSON.stringify({ error: 'Forbidden' }), { status })
+        : new Response(JSON.stringify({ documents: [] }), { status: 200 })));
+      render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+      await screen.findByText('No documents uploaded yet.');
+      fireEvent.click(screen.getByRole('button', { name: 'Upload document' }));
+      fireEvent.change(screen.getByLabelText(/Choose document/), { target: { files: [new File([new Uint8Array([1])], 'invoice.pdf', { type: 'application/pdf' })] } });
+      fireEvent.submit(screen.getAllByRole('button', { name: 'Upload document' }).find(button => button.closest('form'))!.closest('form')!);
+      expect((await screen.findAllByText(i18n.t(key))).length).toBeGreaterThan(0);
+    });
+
+    it('uses DB_UNAVAILABLE for an upload 503 and NETWORK_ERROR when the upload cannot connect', async () => {
+      const upload = async () => {
+        render(<Documents canEdit canSubmit canView canUpload canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+        await screen.findByText('No documents uploaded yet.');
+        fireEvent.click(screen.getByRole('button', { name: 'Upload document' }));
+        fireEvent.change(screen.getByLabelText(/Choose document/), { target: { files: [new File([new Uint8Array([1])], 'invoice.pdf', { type: 'application/pdf' })] } });
+        fireEvent.submit(screen.getAllByRole('button', { name: 'Upload document' }).find(button => button.closest('form'))!.closest('form')!);
+      };
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST'
+        ? new Response(JSON.stringify({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }), { status: 503 })
+        : new Response(JSON.stringify({ documents: [] }), { status: 200 })));
+      await upload();
+      expect((await screen.findAllByText(i18n.t('errors.DB_UNAVAILABLE'))).length).toBeGreaterThan(0);
+      cleanup();
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') throw new TypeError('Failed to fetch');
+        return new Response(JSON.stringify({ documents: [] }), { status: 200 });
+      }));
+      await upload();
+      expect((await screen.findAllByText(i18n.t('errors.NETWORK_ERROR'))).length).toBeGreaterThan(0);
+    });
   });
 });

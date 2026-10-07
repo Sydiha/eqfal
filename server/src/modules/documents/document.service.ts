@@ -29,7 +29,10 @@ export interface ReviewDocumentInput extends DocumentTransitionInput {
 export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; }
 
 export class DocumentNotFoundError extends Error {}
-export class DocumentReviewConflictError extends Error {}
+export type DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT' | 'DOCUMENT_COUNTERPARTY_INVALID' | 'DOCUMENT_APPROVAL_DATA_INCOMPLETE';
+export class DocumentReviewConflictError extends Error {
+  constructor(message: string, readonly code: DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT') { super(message); }
+}
 
 export class DocumentService {
   private readonly documents: DocumentRepository;
@@ -85,14 +88,14 @@ export class DocumentService {
     const expectedType = this.expectedCounterpartyType(document.document_type);
     if (!expectedType || !document.counterparty_id) return;
     if (!await this.hasCompanyCounterparty(companyId, document.counterparty_id, client, false, expectedType)) {
-      throw new DocumentReviewConflictError(`Document counterparty must be a ${expectedType}`);
+      throw new DocumentReviewConflictError(`Document counterparty must be a ${expectedType}`, 'DOCUMENT_COUNTERPARTY_INVALID');
     }
   }
 
   private async assertOperationalCounterparty(document: DocumentRecord, companyId: string, client: PoolClient): Promise<void> {
     const expectedType = this.expectedCounterpartyType(document.document_type);
     if (expectedType && !await this.hasCompanyCounterparty(companyId, document.counterparty_id, client, false, expectedType)) {
-      throw new DocumentReviewConflictError(`Operational document requires a valid company ${expectedType}`);
+      throw new DocumentReviewConflictError(`Operational document requires a valid company ${expectedType}`, 'DOCUMENT_COUNTERPARTY_INVALID');
     }
   }
 
@@ -181,7 +184,7 @@ export class DocumentService {
       if (input.intake.counterparty_id !== undefined && input.intake.counterparty_id !== current.counterparty_id
         && input.intake.counterparty_id !== null
         && !await this.hasCompanyCounterparty(input.companyId, input.intake.counterparty_id, client, true)) {
-        throw new DocumentReviewConflictError('Counterparty must be active and belong to the company');
+        throw new DocumentReviewConflictError('Counterparty must be active and belong to the company', 'DOCUMENT_COUNTERPARTY_INVALID');
       }
       const resultingDocument = { ...current, ...input.intake } as DocumentRecord;
       await this.assertCounterpartyRole(resultingDocument, input.companyId, client);
@@ -217,7 +220,7 @@ export class DocumentService {
       }
       if (input.decision === 'approved' && ['purchase', 'expense', 'sale'].includes(current.document_type ?? '')
         && (!isValidDocumentDate(current.document_date) || !isValidDocumentTotalAmount(current.total_amount))) {
-        throw new DocumentReviewConflictError('VAT-eligible document requires a valid document date and total amount');
+        throw new DocumentReviewConflictError('VAT-eligible document requires a valid document date and total amount', 'DOCUMENT_APPROVAL_DATA_INCOMPLETE');
       }
       if (input.decision === 'approved') await this.assertOperationalCounterparty(current, input.companyId, client);
       const document = await this.documents.updateReview(input.documentId, input.companyId, input.decision, input.actorUserId, input.note, client);

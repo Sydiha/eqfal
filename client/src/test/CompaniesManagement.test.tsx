@@ -99,4 +99,47 @@ describe('CompaniesManagement', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'تعطيل' }));
     expect(await screen.findByText(/تعارض/)).toBeInTheDocument();
   });
+
+  it.each([
+    ['COMPANY_LAST_ACTIVE_CONFLICT', 'en', 'This company cannot be disabled because it is your last active company.'],
+    ['COMPANY_LAST_ACTIVE_CONFLICT', 'ar', 'لا يمكن تعطيل هذه الشركة لأنها آخر شركة نشطة متاحة لك.'],
+  ] as const)('maps %s (%s) to its translated message, never the raw backend text', async (code, lang, message) => {
+    await i18n.changeLanguage(lang);
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/companies' && !init?.method) return new Response(JSON.stringify({ companies }), { status: 200 });
+      return new Response(JSON.stringify({ error: 'Conflict', code }), { status: 409 });
+    }));
+    renderIt(ALL);
+    const row = (await screen.findByText(lang === 'ar' ? 'ألفا' : 'Alpha Co')).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button', { name: lang === 'ar' ? 'تعطيل' : 'Disable' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText('Conflict')).toBeNull();
+  });
+
+  it('maps a duplicate slug on create to COMPANY_SLUG_CONFLICT', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/companies' && !init?.method) return new Response(JSON.stringify({ companies }), { status: 200 });
+      return new Response(JSON.stringify({ error: 'Conflict', code: 'COMPANY_SLUG_CONFLICT' }), { status: 409 });
+    }));
+    renderIt(ALL);
+    await screen.findByText('Alpha Co');
+    fireEvent.click(screen.getByRole('button', { name: 'New company' }));
+    const dialog = screen.getByRole('dialog');
+    const inputs = within(dialog).getAllByRole('textbox');
+    fireEvent.change(inputs[0], { target: { value: 'alpha' } });
+    fireEvent.change(inputs[1], { target: { value: 'Alpha Two' } });
+    fireEvent.submit(dialog.querySelector('form')!);
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('This short code is already in use. Choose another one.');
+  });
+
+  it('shows the shared network message for connection failures and a generic message for unknown 500s', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const first = renderIt(ALL);
+    expect(await screen.findByText('Could not connect to the server. Check your connection and try again.')).toBeInTheDocument();
+    first.unmount();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'boom: relation x does not exist' }), { status: 500 })));
+    renderIt(ALL);
+    expect(await screen.findByText(/Something went wrong|Unable to|could not/i)).toBeInTheDocument();
+    expect(screen.queryByText(/relation x/)).toBeNull();
+  });
 });

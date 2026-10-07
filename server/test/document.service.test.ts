@@ -93,7 +93,7 @@ describe('DocumentService review workflow', () => {
     const uploaded = { ...record, document_type, counterparty_id: null };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(uploaded);
     const submit = vi.spyOn(DocumentRepository.prototype, 'submitForReview');
-    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).rejects.toMatchObject({ code: 'DOCUMENT_COUNTERPARTY_INVALID' });
     expect(submit).not.toHaveBeenCalled();
   });
 
@@ -105,7 +105,7 @@ describe('DocumentService review workflow', () => {
     const uploaded = { ...record, document_type, counterparty_id: 'cp-1' };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(uploaded);
     const submit = vi.spyOn(DocumentRepository.prototype, 'submitForReview');
-    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    await expect(new DocumentService(pool, storage).submitReview({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2' })).rejects.toMatchObject({ code: 'DOCUMENT_COUNTERPARTY_INVALID' });
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-1', 'co-a', expectedType]);
     expect(submit).not.toHaveBeenCalled();
   });
@@ -138,7 +138,7 @@ describe('DocumentService review workflow', () => {
 
     await expect(new DocumentService(pool, storage).review({
       documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
-    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    })).rejects.toMatchObject({ code: 'DOCUMENT_APPROVAL_DATA_INCOMPLETE' });
 
     expect(updateReview).not.toHaveBeenCalled();
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
@@ -172,7 +172,7 @@ describe('DocumentService review workflow', () => {
     const needsReview = { ...record, status: 'needs_review' as const, document_type: 'purchase' as const, counterparty_id: 'cp-other', document_date: '2026-08-01', total_amount: '100.00' };
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(needsReview);
     const updateReview = vi.spyOn(DocumentRepository.prototype, 'updateReview');
-    await expect(new DocumentService(pool, storage).review({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    await expect(new DocumentService(pool, storage).review({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null })).rejects.toMatchObject({ code: 'DOCUMENT_COUNTERPARTY_INVALID' });
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-other', 'co-a', 'supplier']);
     expect(updateReview).not.toHaveBeenCalled();
   });
@@ -227,7 +227,7 @@ describe('DocumentService review workflow', () => {
 
     await expect(new DocumentService(pool, storage).review({
       documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', decision: 'approved', note: null,
-    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    })).rejects.toMatchObject({ code: 'DOCUMENT_STATE_CONFLICT' });
 
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
     expect(updateReview).not.toHaveBeenCalled();
@@ -248,7 +248,7 @@ describe('DocumentService intake', () => {
   it('rejects a cross-company or inactive counterparty when creating a link', async () => {
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(record);
     const update = vi.spyOn(DocumentRepository.prototype, 'updateIntake');
-    await expect(new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { counterparty_id: 'cp-other' } })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    await expect(new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { counterparty_id: 'cp-other' } })).rejects.toMatchObject({ code: 'DOCUMENT_COUNTERPARTY_INVALID' });
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('company_id = $2'), ['cp-other', 'co-a']);
     expect(update).not.toHaveBeenCalled();
   });
@@ -264,7 +264,7 @@ describe('DocumentService intake', () => {
 
     await expect(new DocumentService(pool, storage).updateIntake({
       documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { document_type: 'purchase', counterparty_id: 'cp-customer' },
-    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    })).rejects.toMatchObject({ code: 'DOCUMENT_COUNTERPARTY_INVALID' });
 
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('type = $3'), ['cp-customer', 'co-a', 'supplier']);
     expect(update).not.toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('DocumentService intake', () => {
   it.each(['needs_review', 'approved', 'incomplete', 'rejected'] as const)('rolls back without update or audit in %s', async status => {
     vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue({ ...record, status });
     const update = vi.spyOn(DocumentRepository.prototype, 'updateIntake'); const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent');
-    await expect(new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { intake_note: 'note' } })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    await expect(new DocumentService(pool, storage).updateIntake({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', intake: { intake_note: 'note' } })).rejects.toMatchObject({ code: 'DOCUMENT_STATE_CONFLICT' });
     expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
   });
 });

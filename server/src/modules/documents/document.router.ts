@@ -223,7 +223,7 @@ documentRouter.post(
         return;
       }
       if (err instanceof DocumentReviewConflictError) {
-        res.status(409).json({ error: 'Document review conflict' });
+        res.status(409).json({ error: 'Document review conflict', code: err.code });
         return;
       }
       if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
@@ -250,7 +250,7 @@ documentRouter.patch(
       res.status(200).json({ document });
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
-      if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict' }); return; }
+      if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict', code: err.code }); return; }
       if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
       throw err;
     }
@@ -303,7 +303,7 @@ documentRouter.post(
         return;
       }
       if (err instanceof DocumentReviewConflictError) {
-        res.status(409).json({ error: 'Document review conflict' });
+        res.status(409).json({ error: 'Document review conflict', code: err.code });
         return;
       }
       if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }

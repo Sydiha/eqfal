@@ -8,7 +8,7 @@ import { Accounting } from '../components/Accounting';
 import ar from '../i18n/locales/ar';
 import en from '../i18n/locales/en';
 import {
-  FISCAL_YEAR_BLOCKER_CODES, FISCAL_YEAR_WARNING_CODES, PHASE1_ERROR_CODES, parseApiError,
+  FISCAL_YEAR_BLOCKER_CODES, FISCAL_YEAR_WARNING_CODES, PHASE1_ERROR_CODES, PHASE2_ERROR_CODES, parseApiError,
 } from '../api/apiError';
 
 const jsonResponse = (body: unknown, status: number) =>
@@ -40,7 +40,7 @@ describe('apiError parser', () => {
 describe('translation contract', () => {
   it.each([['en', en], ['ar', ar]] as const)('%s has every Phase 1 code, blocker and warning', (_lang, bundle) => {
     const errors = bundle.errors as Record<string, unknown>;
-    for (const code of PHASE1_ERROR_CODES) expect(typeof errors[code], code).toBe('string');
+    for (const code of [...PHASE1_ERROR_CODES, ...PHASE2_ERROR_CODES]) expect(typeof errors[code], code).toBe('string');
     const blockers = errors.blockers as Record<string, string>;
     const warnings = errors.warnings as Record<string, string>;
     for (const code of FISCAL_YEAR_BLOCKER_CODES) expect(typeof blockers[code], code).toBe('string');

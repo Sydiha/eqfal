@@ -23,6 +23,22 @@ export const PHASE1_ERROR_CODES = [
   'NETWORK_ERROR',
 ] as const;
 
+/** Stable codes added in Task 35D Phase 2 (each needs AR + EN). */
+export const PHASE2_ERROR_CODES = [
+  'MONTHLY_CLOSE_BLOCKED',
+  'MONTHLY_CLOSE_PERIOD_NOT_OPEN',
+  'MONTHLY_CLOSE_PERIOD_NOT_CLOSED',
+  'MONTHLY_CLOSE_PERIOD_OVERLAP',
+  'MONTHLY_CLOSE_INVALID_PERIOD',
+  'DOCUMENT_STATE_CONFLICT',
+  'DOCUMENT_COUNTERPARTY_INVALID',
+  'DOCUMENT_APPROVAL_DATA_INCOMPLETE',
+  'COMPANY_SLUG_CONFLICT',
+  'COMPANY_LAST_ACTIVE_CONFLICT',
+  'ACCESS_ROLE_CEILING',
+  'ACCESS_FULL_ACCESS_IMMUTABLE',
+] as const;
+
 export const FISCAL_YEAR_BLOCKER_CODES = [
   'monthly_period_missing', 'monthly_period_open', 'draft_journals', 'unposted_operational_sources',
   'trial_balance_unbalanced', 'unresolved_documents', 'unconfirmed_obligations',

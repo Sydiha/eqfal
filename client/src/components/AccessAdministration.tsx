@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/apiError';
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import { capabilityGroupKey, capabilityGroupLabel, capabilityLabel, langOf } from '../labels/capabilityLabels';
@@ -16,11 +17,12 @@ type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflic
 type Tab = 'members' | 'roles';
 type Dialogs = 'addMember' | 'createUser' | 'createRole' | null;
 
-class ApiError extends Error { constructor(readonly status: number) { super(`Access API returned ${status}`); } }
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options });
-  if (response.status === 401) { onUnauthorized(); throw new ApiError(401); }
-  if (!response.ok) throw new ApiError(response.status);
+  let response: Response;
+  try { response = await fetch(url, { credentials: 'same-origin', ...options }); }
+  catch (reason) { throw reason instanceof DOMException && reason.name === 'AbortError' ? reason : toApiError(reason); }
+  if (response.status === 401) onUnauthorized();
+  if (!response.ok) throw await parseApiError(response);
   return response;
 }
 function errorKeyFor(reason: unknown): ErrorKey {
@@ -57,13 +59,14 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const [loading, setLoading] = useState(canView);
   const [loaded, setLoaded] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set()); // all groups start collapsed
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true); setErrorKey(null);
+    setLoading(true); setErrorKey(null); setFailure(null);
     try {
       const [m, r, c] = await Promise.all([
         request('/api/access/memberships', { signal }, onUnauthorized),
@@ -77,7 +80,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     } catch (reason) {
       const aborted = reason instanceof DOMException && reason.name === 'AbortError';
       const unauthorized = reason instanceof ApiError && reason.status === 401;
-      if (!aborted && !unauthorized) setErrorKey(errorKeyFor(reason));
+      if (!aborted && !unauthorized) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); }
     } finally { if (!signal?.aborted) setLoading(false); }
   }, [onUnauthorized]);
 
@@ -89,9 +92,9 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   }, [canView, load]);
 
   const mutate = async (work: () => Promise<unknown>, afterSuccess?: () => void) => {
-    setBusy(true); setErrorKey(null);
+    setBusy(true); setErrorKey(null); setFailure(null);
     try { await work(); afterSuccess?.(); await load(); }
-    catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) setErrorKey(errorKeyFor(reason)); }
+    catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); } }
     finally { setBusy(false); }
   };
 
@@ -144,7 +147,8 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
   const canRevokeId = () => can('access.role.capability.revoke');
 
-  const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{t(`access.${errorKey}`)}</div> : null;
+  const errorText = errorKey ? (failure && apiErrorMessage(failure, t)) || t(`access.${errorKey}`) : '';
+  const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{errorText}</div> : null;
 
   return <section className="panel acc-view" aria-labelledby="access-title">
     <header className="acc-header">
@@ -157,7 +161,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
       <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'is-active' : ''} onClick={() => setTab('members')}>{t('access.membersTab')}</button>
       <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => setTab('roles')}>{t('access.rolesTab')}</button>
     </div>
-    {errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{t(`access.${errorKey}`)}</WorkspaceState>}
+    {errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
     {loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
       <p className="acc-hint">{t('access.disableHint')}</p>
       <div className="acc-table"><table><thead><tr><th>{t('access.user')}</th><th>{t('access.role')}</th><th>{t('access.status')}</th><th>{t('access.actions')}</th></tr></thead>

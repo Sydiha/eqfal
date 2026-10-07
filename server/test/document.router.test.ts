@@ -36,7 +36,7 @@ vi.mock('../src/modules/documents/document.repository', () => ({
 }));
 vi.mock('../src/modules/documents/document.service', () => ({
   DocumentNotFoundError: class extends Error {},
-  DocumentReviewConflictError: class extends Error {},
+  DocumentReviewConflictError: class extends Error { code: string; constructor(message?: string, code = 'DOCUMENT_STATE_CONFLICT') { super(message); this.code = code; } },
   DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; updateIntake = mocks.updateIntake; },
 }));
 vi.mock('../src/storage/local.storage', () => ({
@@ -210,6 +210,22 @@ describe('Document API security boundary', () => {
     expect((await request(app).patch('/api/documents/missing/intake').send({ intake_note: null })).status).toBe(404);
     mocks.updateIntake.mockRejectedValue(new DocumentReviewConflictError());
     expect((await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null })).status).toBe(409);
+  });
+
+  it('exposes stable conflict codes on intake and review without changing status or legacy text', async () => {
+    setContext(['document.edit', 'document.submit', 'document.review', 'document.approve']);
+    mocks.updateIntake.mockRejectedValueOnce(new DocumentReviewConflictError('x', 'DOCUMENT_COUNTERPARTY_INVALID'));
+    const intake = await request(app).patch('/api/documents/doc-1/intake').send({ intake_note: null });
+    expect(intake.status).toBe(409);
+    expect(intake.body).toEqual({ error: 'Document intake conflict', code: 'DOCUMENT_COUNTERPARTY_INVALID' });
+    mocks.submitReview.mockRejectedValueOnce(new DocumentReviewConflictError('x'));
+    const submit = await request(app).post('/api/documents/doc-1/submit-review');
+    expect(submit.status).toBe(409);
+    expect(submit.body).toEqual({ error: 'Document review conflict', code: 'DOCUMENT_STATE_CONFLICT' });
+    mocks.review.mockRejectedValueOnce(new DocumentReviewConflictError('x', 'DOCUMENT_APPROVAL_DATA_INCOMPLETE'));
+    const review = await request(app).post('/api/documents/doc-1/review').send({ decision: 'approved' });
+    expect(review.status).toBe(409);
+    expect(review.body).toEqual({ error: 'Document review conflict', code: 'DOCUMENT_APPROVAL_DATA_INCOMPLETE' });
   });
 
   it('requires document.submit and same origin to submit for review', async () => {
