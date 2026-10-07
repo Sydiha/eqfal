@@ -1,223 +1,119 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import {
+  ACCOUNTANT_ADDITIONAL_CAPABILITIES,
+  ACCOUNTANT_CAPABILITIES,
+  FINANCE_MANAGER_ADDITIONAL_CAPABILITIES,
+  FINANCE_MANAGER_CAPABILITIES,
+  LEGACY_UNASSIGNED_CAPABILITIES,
+  VIEWER_CAPABILITIES,
+} from '../src/modules/memberships/default-role-capabilities';
 
 const migration = readFileSync(
   new URL('../migrations/059_default_roles_capability_matrix.sql', import.meta.url),
   'utf8',
 );
 
+/** Strip SQL line comments so comment text can never satisfy an assertion. */
+const sql = migration.replace(/--.*$/gm, '');
+
+function quotedIds(block: string): string[] {
+  return [...block.matchAll(/\('([^']+)'\)/g)].map((m) => m[1]);
+}
+
+/** Capabilities registered by the first INSERT INTO capabilities statement. */
+function parseRegisteredCapabilities(): string[] {
+  const m = sql.match(/INSERT INTO capabilities \(id\) VALUES([\s\S]*?)ON CONFLICT/);
+  if (!m) throw new Error('capabilities INSERT not found in migration 059');
+  return quotedIds(m[1]);
+}
+
+/** Capabilities granted to a role by its `CROSS JOIN (VALUES ...) AS cap(id) ... r.name = '<role>'` insert. */
+function parseRoleGrant(roleName: string): string[] {
+  const re = /CROSS JOIN \(VALUES([\s\S]*?)\) AS cap\(id\)\s*WHERE[\s\S]*?r\.name = '([^']+)'/g;
+  const grants: string[][] = [];
+  for (const m of sql.matchAll(re)) if (m[2] === roleName) grants.push(quotedIds(m[1]));
+  if (grants.length !== 1) throw new Error(`expected exactly one grant block for ${roleName}, found ${grants.length}`);
+  return grants[0];
+}
+
+const sameSet = (actual: readonly string[], expected: readonly string[]) => {
+  expect(new Set(actual).size).toBe(actual.length); // no duplicates in SQL
+  expect([...new Set(actual)].sort()).toEqual([...new Set(expected)].sort());
+};
+
 describe('default roles capability matrix contract', () => {
-  // Exact approved capability lists
-  const viewerCapabilities = [
-    'accounting.view',
-    'annual_close.view',
-    'annual_close.package.view',
-    'asset.view',
-    'audit.view',
-    'bank.view',
-    'company.view',
-    'company_accounting_profile.view',
-    'custody.view',
-    'document.view',
-    'fiscal_year.view',
-    'monthly_close.view',
-    'obligation.view',
-    'opening_balance.view',
-    'partner.view',
-    'periodic_adjustment.view',
-    'report.view',
-    'tax_workpaper.view',
-    'vat.view',
-    'wht_review.view',
-  ];
+  const viewer = new Set(VIEWER_CAPABILITIES);
+  const accountant = new Set(ACCOUNTANT_CAPABILITIES);
+  const financeManager = new Set(FINANCE_MANAGER_CAPABILITIES);
 
-  const accountantAdditionalCapabilities = [
-    'accounting.journal.create',
-    'accounting.journal.edit',
-    'accounting.journal.post',
-    'asset.create',
-    'asset.edit',
-    'bank.import',
-    'bank.match',
-    'bank.reconcile',
-    'counterparty.create',
-    'counterparty.edit',
-    'document.edit',
-    'document.upload',
-    'obligation.create',
-    'obligation.edit',
-    'obligation.confirm',
-    'obligation.settlement.create',
-    'opening_balance.item.create',
-    'opening_balance.item.edit',
-    'opening_balance.item.delete',
-    'partner.create',
-    'partner.edit',
-    'periodic_adjustment.create',
-    'periodic_adjustment.edit',
-    'periodic_adjustment.post',
-    'periodic_adjustment.submit',
-    'vat.review',
-  ];
+  it('canonical definition has exact counts 20 / 46 / 96 / 13 with no duplicates', () => {
+    expect(VIEWER_CAPABILITIES.length).toBe(20);
+    expect(viewer.size).toBe(20);
+    expect(ACCOUNTANT_ADDITIONAL_CAPABILITIES.length).toBe(26);
+    expect(ACCOUNTANT_CAPABILITIES.length).toBe(46);
+    expect(accountant.size).toBe(46);
+    expect(FINANCE_MANAGER_ADDITIONAL_CAPABILITIES.length).toBe(50);
+    expect(FINANCE_MANAGER_CAPABILITIES.length).toBe(96);
+    expect(financeManager.size).toBe(96);
+    expect(LEGACY_UNASSIGNED_CAPABILITIES.length).toBe(13);
+    expect(new Set(LEGACY_UNASSIGNED_CAPABILITIES).size).toBe(13);
+  });
 
-  const financeManagerAdditionalCapabilities = [
-    'accounting.chart.create',
-    'accounting.chart.edit',
-    'asset.approve',
-    'asset.cancel',
-    'asset.dispose',
-    'asset.estimate_change.approve',
-    'asset.estimate_change.create',
-    'asset.estimate_change.review',
-    'company_accounting_profile.approve',
-    'company_accounting_profile.create',
-    'company_accounting_profile.edit',
-    'company_accounting_profile.review',
-    'company_accounting_profile.submit',
-    'counterparty.disable',
-    'custody.close',
-    'custody.manage',
-    'document.approve',
-    'document.review',
-    'document.submit',
-    'fiscal_year.close',
-    'fiscal_year.create',
-    'fiscal_year.edit',
-    'monthly_close.close',
-    'monthly_close.create',
-    'annual_close.package.approve',
-    'annual_close.package.create',
-    'annual_close.package.handoff',
-    'annual_close.package.review',
-    'annual_close.package.snapshot.create',
-    'obligation.cancel',
-    'obligation.settlement.remove',
-    'opening_balance.approve',
-    'opening_balance.review',
-    'opening_balance.submit',
-    'partner.disable',
-    'periodic_adjustment.approve',
-    'periodic_adjustment.review',
-    'tax_workpaper.adjust.create',
-    'tax_workpaper.adjust.delete',
-    'tax_workpaper.adjust.edit',
-    'tax_workpaper.approve',
-    'tax_workpaper.create',
-    'tax_workpaper.edit',
-    'tax_workpaper.review',
-    'tax_workpaper.submit',
-    'vat.close',
-    'wht_review.create',
-    'wht_review.edit',
-    'wht_review.review',
-    'wht_review.submit',
-  ];
+  it('hierarchy holds: Viewer is a subset of Accountant, which is a subset of Finance Manager', () => {
+    for (const c of viewer) expect(accountant.has(c)).toBe(true);
+    for (const c of accountant) expect(financeManager.has(c)).toBe(true);
+    expect(accountant.size).toBeGreaterThan(viewer.size);
+    expect(financeManager.size).toBeGreaterThan(accountant.size);
+  });
 
-  const legacyUnassignedCapabilities = [
-    'accounting.chart.manage',
-    'accounting.journal.manage',
-    'annual_close.package.manage',
-    'asset.manage',
-    'bank.account.manage',
-    'company_accounting_profile.manage',
-    'fiscal_year.manage',
-    'obligation.manage',
-    'opening_balance.manage',
-    'partner.manage',
-    'periodic_adjustment.manage',
-    'tax_workpaper.manage',
-    'obligation.settle',
-  ];
+  it('SQL matrix for Viewer equals the canonical definition exactly', () => {
+    const grant = parseRoleGrant('viewer');
+    expect(grant.length).toBe(VIEWER_CAPABILITIES.length);
+    sameSet(grant, VIEWER_CAPABILITIES);
+  });
 
-  it('verifies Viewer role has exactly 20 approved capabilities', () => {
-    expect(viewerCapabilities).toHaveLength(20);
+  it('SQL matrix for Accountant equals the canonical definition exactly', () => {
+    const grant = parseRoleGrant('accountant');
+    expect(grant.length).toBe(ACCOUNTANT_CAPABILITIES.length);
+    sameSet(grant, ACCOUNTANT_CAPABILITIES);
+  });
 
-    // Verify each capability is in the migration
-    for (const capability of viewerCapabilities) {
-      expect(migration).toContain(`('${capability}')`);
+  it('SQL matrix for Finance Manager equals the canonical definition exactly', () => {
+    const grant = parseRoleGrant('finance_manager');
+    expect(grant.length).toBe(FINANCE_MANAGER_CAPABILITIES.length);
+    sameSet(grant, FINANCE_MANAGER_CAPABILITIES);
+  });
+
+  it('SQL registers exactly the canonical default-role capabilities plus the 13 legacy ones', () => {
+    sameSet(parseRegisteredCapabilities(), [...FINANCE_MANAGER_CAPABILITIES, ...LEGACY_UNASSIGNED_CAPABILITIES]);
+  });
+
+  it('legacy/unassigned capabilities are registered in SQL but granted to no default role (SQL and canonical)', () => {
+    const registered = new Set(parseRegisteredCapabilities());
+    const grants = [...parseRoleGrant('viewer'), ...parseRoleGrant('accountant'), ...parseRoleGrant('finance_manager')];
+    for (const capability of LEGACY_UNASSIGNED_CAPABILITIES) {
+      expect(registered.has(capability)).toBe(true);
+      expect(grants).not.toContain(capability);
+      expect(financeManager.has(capability)).toBe(false);
     }
   });
 
-  it('verifies Accountant role contains all Viewer + 26 additional = 46 total', () => {
-    const accountantCapabilities = [...viewerCapabilities, ...accountantAdditionalCapabilities];
-    expect(accountantAdditionalCapabilities).toHaveLength(26);
-    expect(accountantCapabilities).toHaveLength(46);
-
-    // Verify all capabilities are in the migration
-    for (const capability of accountantCapabilities) {
-      expect(migration).toContain(`('${capability}')`);
+  it('ALL access.* capabilities including access.view are Full Access only: zero in Viewer, Accountant, Finance Manager (canonical and SQL)', () => {
+    const isAccess = (c: string) => c.startsWith('access.');
+    for (const caps of [VIEWER_CAPABILITIES, ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_CAPABILITIES, LEGACY_UNASSIGNED_CAPABILITIES]) {
+      expect(caps.filter(isAccess)).toEqual([]);
+      expect(caps).not.toContain('access.view');
     }
+    for (const role of ['viewer', 'accountant', 'finance_manager']) {
+      expect(parseRoleGrant(role).filter(isAccess)).toEqual([]);
+    }
+    expect(parseRegisteredCapabilities().filter(isAccess)).toEqual([]);
   });
 
-  it('verifies Finance Manager role contains all Accountant + 50 additional = 96 total', () => {
-    const accountantCapabilities = [...viewerCapabilities, ...accountantAdditionalCapabilities];
-    const financeManagerCapabilities = [...accountantCapabilities, ...financeManagerAdditionalCapabilities];
-
-    expect(financeManagerAdditionalCapabilities).toHaveLength(50);
-    expect(financeManagerCapabilities).toHaveLength(96);
-
-    // Verify all capabilities are in the migration
-    for (const capability of financeManagerCapabilities) {
-      expect(migration).toContain(`('${capability}')`);
-    }
-  });
-
-  it('verifies legacy/unassigned capabilities are defined but NOT assigned to default roles', () => {
-    expect(legacyUnassignedCapabilities).toHaveLength(13);
-
-    // Verify legacy capabilities are in the capability list but NOT in any role assignment
-    for (const capability of legacyUnassignedCapabilities) {
-      // Legacy capability must be defined in capabilities
-      expect(migration).toContain(`('${capability}')`);
-    }
-
-    // Verify none of the legacy capabilities appear in role-capability assignments
-    // by checking they're only in the initial capability insert, not in role CROSS JOINs
-    const accountantCapabilities = [...viewerCapabilities, ...accountantAdditionalCapabilities];
-    const financeManagerCapabilities = [
-      ...viewerCapabilities,
-      ...accountantAdditionalCapabilities,
-      ...financeManagerAdditionalCapabilities,
-    ];
-
-    for (const capability of legacyUnassignedCapabilities) {
-      expect(viewerCapabilities).not.toContain(capability);
-      expect(accountantCapabilities).not.toContain(capability);
-      expect(financeManagerCapabilities).not.toContain(capability);
-    }
-  });
-
-  it('verifies no access.* capabilities in limited roles except access.view', () => {
-    const allLimitedRoleCapabilities = [
-      ...viewerCapabilities,
-      ...accountantAdditionalCapabilities,
-      ...financeManagerAdditionalCapabilities,
-    ];
-
-    for (const capability of allLimitedRoleCapabilities) {
-      if (capability.startsWith('access.')) {
-        // access.* should not appear in limited roles (Full Access only)
-        expect(capability).not.toBeDefined();
-      }
-    }
-  });
-
-  it('verifies no company.* admin capabilities in limited roles', () => {
-    const allLimitedRoleCapabilities = [
-      ...viewerCapabilities,
-      ...accountantAdditionalCapabilities,
-      ...financeManagerAdditionalCapabilities,
-    ];
-
-    for (const capability of allLimitedRoleCapabilities) {
-      if (capability === 'company_accounting_profile.view' || capability.startsWith('company_accounting_profile.')) {
-        // company_accounting_profile is allowed; this is about company admin (company.create, company.edit, etc.)
-        continue;
-      }
-      // company.* should only be company.view
-      if (capability.startsWith('company.')) {
-        expect(capability).toBe('company.view');
-      }
+  it('limited roles have only company.view among company.* capabilities', () => {
+    for (const caps of [VIEWER_CAPABILITIES, ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_CAPABILITIES]) {
+      expect(caps.filter((c) => c.startsWith('company.'))).toEqual(['company.view']);
     }
   });
 
@@ -247,13 +143,8 @@ describe('default roles capability matrix contract', () => {
   });
 
   it('total capability counts match approved specification', () => {
-    expect(viewerCapabilities).toHaveLength(20);
-    expect([...viewerCapabilities, ...accountantAdditionalCapabilities]).toHaveLength(46);
-    expect([
-      ...viewerCapabilities,
-      ...accountantAdditionalCapabilities,
-      ...financeManagerAdditionalCapabilities,
-    ]).toHaveLength(96);
-    expect(legacyUnassignedCapabilities).toHaveLength(13);
+    expect(parseRoleGrant('viewer').length).toBe(20);
+    expect(parseRoleGrant('accountant').length).toBe(46);
+    expect(parseRoleGrant('finance_manager').length).toBe(96);
   });
 });

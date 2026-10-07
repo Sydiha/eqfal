@@ -1,46 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Pool } from 'pg';
+import { MembershipRepository } from '../src/modules/memberships/membership.repository';
+import { MembershipService } from '../src/modules/memberships/membership.service';
+import {
+  ACCOUNTANT_CAPABILITIES,
+  FINANCE_MANAGER_CAPABILITIES,
+  LEGACY_UNASSIGNED_CAPABILITIES,
+  VIEWER_CAPABILITIES,
+} from '../src/modules/memberships/default-role-capabilities';
+
+vi.mock('../src/shared/logger', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 
 /**
  * Regression tests for default role authorization matrix.
  * These tests verify that the approved role capabilities translate to correct
  * authorization behavior across the application domains.
  *
- * These are specification-level tests (not database integration tests).
- * They document the expected authorization contract for each role.
+ * The role-shape suites check the canonical definition; the 'Real repository authorization'
+ * suite drives the real MembershipRepository/MembershipService through an in-memory pg Pool.
  */
 
 describe('default roles authorization contract', () => {
   describe('Viewer role (read-only)', () => {
-    const viewerCapabilities = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
 
     it('can view all domains', () => {
-      expect(viewerCapabilities.filter((c) => c.includes('.view'))).toHaveLength(20);
+      expect(VIEWER_CAPABILITIES.filter((c) => c.includes('.view'))).toHaveLength(20);
     });
 
     it('cannot mutate any domain (no .create, .edit, .post, .approve, .review, .submit, .manage)', () => {
       const mutationKeywords = ['create', 'edit', 'post', 'approve', 'review', 'submit', 'manage', 'confirm', 'settle', 'upload'];
-      for (const capability of viewerCapabilities) {
+      for (const capability of VIEWER_CAPABILITIES) {
         for (const keyword of mutationKeywords) {
           expect(capability).not.toContain(`.${keyword}`);
         }
@@ -48,72 +39,22 @@ describe('default roles authorization contract', () => {
     });
 
     it('has no access administration capabilities', () => {
-      expect(viewerCapabilities.filter((c) => c.startsWith('access.'))).toHaveLength(0);
+      expect(VIEWER_CAPABILITIES.filter((c) => c.startsWith('access.'))).toHaveLength(0);
     });
 
     it('has company.view only (no company.create/edit/manage)', () => {
-      const companyCapabilities = viewerCapabilities.filter((c) => c.startsWith('company.') && !c.includes('company_accounting_profile'));
+      const companyCapabilities = VIEWER_CAPABILITIES.filter((c) => c.startsWith('company.') && !c.includes('company_accounting_profile'));
       expect(companyCapabilities).toEqual(['company.view']);
     });
   });
 
   describe('Accountant role (operational write access)', () => {
-    const viewerCapabilities = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
 
-    const accountantAdditional = [
-      'accounting.journal.create',
-      'accounting.journal.edit',
-      'accounting.journal.post',
-      'asset.create',
-      'asset.edit',
-      'bank.import',
-      'bank.match',
-      'bank.reconcile',
-      'counterparty.create',
-      'counterparty.edit',
-      'document.edit',
-      'document.upload',
-      'obligation.create',
-      'obligation.edit',
-      'obligation.confirm',
-      'obligation.settlement.create',
-      'opening_balance.item.create',
-      'opening_balance.item.edit',
-      'opening_balance.item.delete',
-      'partner.create',
-      'partner.edit',
-      'periodic_adjustment.create',
-      'periodic_adjustment.edit',
-      'periodic_adjustment.post',
-      'periodic_adjustment.submit',
-      'vat.review',
-    ];
 
-    const accountantCapabilities = [...viewerCapabilities, ...accountantAdditional];
+    const accountantCapabilities = ACCOUNTANT_CAPABILITIES;
 
     it('contains all Viewer capabilities', () => {
-      for (const cap of viewerCapabilities) {
+      for (const cap of VIEWER_CAPABILITIES) {
         expect(accountantCapabilities).toContain(cap);
       }
     });
@@ -181,115 +122,13 @@ describe('default roles authorization contract', () => {
   });
 
   describe('Finance Manager role (approval and close capabilities)', () => {
-    const viewerCapabilities = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
 
-    const accountantAdditional = [
-      'accounting.journal.create',
-      'accounting.journal.edit',
-      'accounting.journal.post',
-      'asset.create',
-      'asset.edit',
-      'bank.import',
-      'bank.match',
-      'bank.reconcile',
-      'counterparty.create',
-      'counterparty.edit',
-      'document.edit',
-      'document.upload',
-      'obligation.create',
-      'obligation.edit',
-      'obligation.confirm',
-      'obligation.settlement.create',
-      'opening_balance.item.create',
-      'opening_balance.item.edit',
-      'opening_balance.item.delete',
-      'partner.create',
-      'partner.edit',
-      'periodic_adjustment.create',
-      'periodic_adjustment.edit',
-      'periodic_adjustment.post',
-      'periodic_adjustment.submit',
-      'vat.review',
-    ];
 
-    const fmAdditional = [
-      'accounting.chart.create',
-      'accounting.chart.edit',
-      'asset.approve',
-      'asset.cancel',
-      'asset.dispose',
-      'asset.estimate_change.approve',
-      'asset.estimate_change.create',
-      'asset.estimate_change.review',
-      'company_accounting_profile.approve',
-      'company_accounting_profile.create',
-      'company_accounting_profile.edit',
-      'company_accounting_profile.review',
-      'company_accounting_profile.submit',
-      'counterparty.disable',
-      'custody.close',
-      'custody.manage',
-      'document.approve',
-      'document.review',
-      'document.submit',
-      'fiscal_year.close',
-      'fiscal_year.create',
-      'fiscal_year.edit',
-      'monthly_close.close',
-      'monthly_close.create',
-      'annual_close.package.approve',
-      'annual_close.package.create',
-      'annual_close.package.handoff',
-      'annual_close.package.review',
-      'annual_close.package.snapshot.create',
-      'obligation.cancel',
-      'obligation.settlement.remove',
-      'opening_balance.approve',
-      'opening_balance.review',
-      'opening_balance.submit',
-      'partner.disable',
-      'periodic_adjustment.approve',
-      'periodic_adjustment.review',
-      'tax_workpaper.adjust.create',
-      'tax_workpaper.adjust.delete',
-      'tax_workpaper.adjust.edit',
-      'tax_workpaper.approve',
-      'tax_workpaper.create',
-      'tax_workpaper.edit',
-      'tax_workpaper.review',
-      'tax_workpaper.submit',
-      'vat.close',
-      'wht_review.create',
-      'wht_review.edit',
-      'wht_review.review',
-      'wht_review.submit',
-    ];
 
-    const fmCapabilities = [...viewerCapabilities, ...accountantAdditional, ...fmAdditional];
+    const fmCapabilities = FINANCE_MANAGER_CAPABILITIES;
 
     it('contains all Accountant capabilities', () => {
-      const accountantCapabilities = [...viewerCapabilities, ...accountantAdditional];
+      const accountantCapabilities = ACCOUNTANT_CAPABILITIES;
       for (const cap of accountantCapabilities) {
         expect(fmCapabilities).toContain(cap);
       }
@@ -377,196 +216,206 @@ describe('default roles authorization contract', () => {
     });
   });
 
-  describe('Multi-company isolation', () => {
-    it('same user with different roles in different companies has isolated permissions', () => {
-      // This is an architectural property enforced at the Backend:
-      // - memberships are (user_id, company_id) scoped
-      // - role_id is company-scoped
-      // - activeCompanyId is server-trusted in session
-      // - authorization checks (user + company + capability) are atomic
-      // Therefore, a user who is Viewer in Company A and Finance Manager in Company B
-      // must be checked for each company separately on each request.
-      // This test documents the expected behavior.
-
-      const user_id = 'test-user-123';
-      const company_a_id = 'company-a-456';
-      const company_b_id = 'company-b-789';
-
-      // User in Company A is Viewer (20 capabilities, read-only)
-      const membershipA = {
-        user_id,
-        company_id: company_a_id,
-        role_id: 'viewer-role-id',
-      };
-
-      // Same user in Company B is Finance Manager (96 capabilities)
-      const membershipB = {
-        user_id,
-        company_id: company_b_id,
-        role_id: 'fm-role-id',
-      };
-
-      // When the user is in activeCompanyId = Company A, they get Viewer permissions
-      // When the user switches to activeCompanyId = Company B, they get Finance Manager permissions
-      // Cross-company access is blocked by design (company_id must match in query + activeCompanyId)
-
-      expect(membershipA.company_id).not.toBe(membershipB.company_id);
-    });
-  });
-
-  describe('Full Access role (dynamic)', () => {
-    it('is not modified by default role matrix migration', () => {
-      // Full Access (is_full_access = TRUE) is a special role that grants all capabilities dynamically.
-      // The migration does NOT add explicit role_capabilities to Full Access roles.
-      // Instead, Full Access is checked at runtime as a special case:
-      // if (role.is_full_access) return true; // grant access
-      // This test documents that the migration preserves this behavior.
-    });
-
-    it('future capabilities automatically reach Full Access without migration', () => {
-      // When a new capability is registered (e.g., 'new_feature.create'),
-      // it should automatically be available to Full Access roles without a migration.
-      // This is ensured by the is_full_access flag in the roles table.
-    });
-  });
+  // Real multi-company isolation and Full Access dynamic behavior: see 'Real repository authorization' below.
 
   describe('Legacy capabilities are unassigned', () => {
-    const legacyCapabilities = [
-      'accounting.chart.manage',
-      'accounting.journal.manage',
-      'annual_close.package.manage',
-      'asset.manage',
-      'bank.account.manage',
-      'company_accounting_profile.manage',
-      'fiscal_year.manage',
-      'obligation.manage',
-      'opening_balance.manage',
-      'partner.manage',
-      'periodic_adjustment.manage',
-      'tax_workpaper.manage',
-      'obligation.settle',
-    ];
 
-    const viewerCapabilities = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
 
-    const accountantAdditional = [
-      'accounting.journal.create',
-      'accounting.journal.edit',
-      'accounting.journal.post',
-      'asset.create',
-      'asset.edit',
-      'bank.import',
-      'bank.match',
-      'bank.reconcile',
-      'counterparty.create',
-      'counterparty.edit',
-      'document.edit',
-      'document.upload',
-      'obligation.create',
-      'obligation.edit',
-      'obligation.confirm',
-      'obligation.settlement.create',
-      'opening_balance.item.create',
-      'opening_balance.item.edit',
-      'opening_balance.item.delete',
-      'partner.create',
-      'partner.edit',
-      'periodic_adjustment.create',
-      'periodic_adjustment.edit',
-      'periodic_adjustment.post',
-      'periodic_adjustment.submit',
-      'vat.review',
-    ];
 
-    const fmAdditional = [
-      'accounting.chart.create',
-      'accounting.chart.edit',
-      'asset.approve',
-      'asset.cancel',
-      'asset.dispose',
-      'asset.estimate_change.approve',
-      'asset.estimate_change.create',
-      'asset.estimate_change.review',
-      'company_accounting_profile.approve',
-      'company_accounting_profile.create',
-      'company_accounting_profile.edit',
-      'company_accounting_profile.review',
-      'company_accounting_profile.submit',
-      'counterparty.disable',
-      'custody.close',
-      'custody.manage',
-      'document.approve',
-      'document.review',
-      'document.submit',
-      'fiscal_year.close',
-      'fiscal_year.create',
-      'fiscal_year.edit',
-      'monthly_close.close',
-      'monthly_close.create',
-      'annual_close.package.approve',
-      'annual_close.package.create',
-      'annual_close.package.handoff',
-      'annual_close.package.review',
-      'annual_close.package.snapshot.create',
-      'obligation.cancel',
-      'obligation.settlement.remove',
-      'opening_balance.approve',
-      'opening_balance.review',
-      'opening_balance.submit',
-      'partner.disable',
-      'periodic_adjustment.approve',
-      'periodic_adjustment.review',
-      'tax_workpaper.adjust.create',
-      'tax_workpaper.adjust.delete',
-      'tax_workpaper.adjust.edit',
-      'tax_workpaper.approve',
-      'tax_workpaper.create',
-      'tax_workpaper.edit',
-      'tax_workpaper.review',
-      'tax_workpaper.submit',
-      'vat.close',
-      'wht_review.create',
-      'wht_review.edit',
-      'wht_review.review',
-      'wht_review.submit',
-    ];
 
     it('are defined in the database but not assigned to any default role', () => {
-      const defaultRoleCapabilities = [...viewerCapabilities, ...accountantAdditional, ...fmAdditional];
+      const defaultRoleCapabilities = FINANCE_MANAGER_CAPABILITIES;
 
-      for (const legacyCapability of legacyCapabilities) {
+      for (const legacyCapability of LEGACY_UNASSIGNED_CAPABILITIES) {
         expect(defaultRoleCapabilities).not.toContain(legacyCapability);
       }
 
       // Legacy capabilities should be defined (so they can be migrated to if needed for backward compat)
-      expect(legacyCapabilities).toHaveLength(13);
+      expect(LEGACY_UNASSIGNED_CAPABILITIES).toHaveLength(13);
+    });
+  });
+});
+
+// ─── Real repository / service authorization ─────────────────────────────────
+
+interface FakeDb {
+  companies: Array<{ id: string; is_active: boolean }>;
+  capabilities: string[];
+  roles: Array<{ id: string; company_id: string; name: string; is_full_access: boolean }>;
+  role_capabilities: Array<{ role_id: string; capability_id: string }>;
+  memberships: Array<{ user_id: string; company_id: string; role_id: string; is_active: boolean }>;
+}
+
+/**
+ * In-memory pg Pool. For the real getActiveCapabilities() SQL it evaluates the same semantics
+ * the SQL expresses: membership(user, company, active) JOIN active company JOIN role with
+ * r.company_id = m.company_id, then every capability row when r.is_full_access, otherwise only
+ * explicit role_capabilities rows. The SQL text itself is asserted by the guard test below.
+ */
+function makeFakePool(db: FakeDb): Pool {
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (!/JOIN capabilities cap ON r\.is_full_access = TRUE/.test(sql)) {
+      throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
+    }
+    const [userId, companyId] = params as [string, string];
+    const rows: Array<{ capability_id: string }> = [];
+    for (const m of db.memberships) {
+      if (m.user_id !== userId || m.company_id !== companyId || !m.is_active) continue;
+      if (!db.companies.some((c) => c.id === m.company_id && c.is_active)) continue;
+      const r = db.roles.find((x) => x.id === m.role_id && x.company_id === m.company_id);
+      if (!r) continue;
+      for (const cap of db.capabilities) {
+        if (r.is_full_access || db.role_capabilities.some((rc) => rc.role_id === r.id && rc.capability_id === cap)) {
+          rows.push({ capability_id: cap });
+        }
+      }
+    }
+    return { rows, rowCount: rows.length };
+  });
+  return { query, connect: vi.fn() } as unknown as Pool;
+}
+
+const CO_A = 'company-a';
+const CO_B = 'company-b';
+const USER = 'user-1';
+
+/** Both companies provisioned like company.service.ts does: 3 explicit-matrix roles + Full Access (no rows). */
+function buildDb(): FakeDb {
+  const db: FakeDb = {
+    companies: [{ id: CO_A, is_active: true }, { id: CO_B, is_active: true }],
+    capabilities: [...new Set([...FINANCE_MANAGER_CAPABILITIES, ...LEGACY_UNASSIGNED_CAPABILITIES, 'access.view', 'access.role.edit'])],
+    roles: [],
+    role_capabilities: [],
+    memberships: [],
+  };
+  const matrix: Record<string, readonly string[]> = {
+    Viewer: VIEWER_CAPABILITIES,
+    Accountant: ACCOUNTANT_CAPABILITIES,
+    'Finance Manager': FINANCE_MANAGER_CAPABILITIES,
+  };
+  for (const company of [CO_A, CO_B]) {
+    for (const [name, caps] of Object.entries(matrix)) {
+      const id = `${company}:${name}`;
+      db.roles.push({ id, company_id: company, name, is_full_access: false });
+      for (const c of caps) db.role_capabilities.push({ role_id: id, capability_id: c });
+    }
+    db.roles.push({ id: `${company}:Full Access`, company_id: company, name: 'Full Access', is_full_access: true });
+  }
+  return db;
+}
+
+describe('Real repository authorization', () => {
+  it('guards the fake: the real repository SQL still has the joins the fake models', async () => {
+    const pool = makeFakePool(buildDb());
+    const spy = pool.query as ReturnType<typeof vi.fn>;
+    await new MembershipRepository(pool).getActiveCapabilities(USER, CO_A);
+    const sql = String(spy.mock.calls[0]?.[0]);
+    expect(sql).toContain('r.company_id = m.company_id');
+    expect(sql).toContain('c.is_active = TRUE');
+    expect(sql).toContain('m.is_active  = TRUE');
+    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/);
+  });
+
+  describe('Multi-company isolation', () => {
+    it('same user is Viewer in Company A and Finance Manager in Company B and gets only the active company capabilities', async () => {
+      const db = buildDb();
+      db.memberships.push(
+        { user_id: USER, company_id: CO_A, role_id: `${CO_A}:Viewer`, is_active: true },
+        { user_id: USER, company_id: CO_B, role_id: `${CO_B}:Finance Manager`, is_active: true },
+      );
+      const service = new MembershipService(makeFakePool(db));
+
+      const inA = await service.getCapabilities(USER, CO_A);
+      const inB = await service.getCapabilities(USER, CO_B);
+
+      expect(new Set(inA)).toEqual(new Set(VIEWER_CAPABILITIES));
+      expect(inA).toHaveLength(20);
+      expect(new Set(inB)).toEqual(new Set(FINANCE_MANAGER_CAPABILITIES));
+      expect(inB).toHaveLength(96);
+      expect(await service.isAuthorized(USER, CO_A, 'accounting.journal.post')).toBe(false);
+      expect(await service.isAuthorized(USER, CO_B, 'accounting.journal.post')).toBe(true);
     });
 
-    it('are available for manual grant or custom roles only', () => {
-      // The migration ensures legacy capabilities exist but are not automatically granted.
-      // Custom roles or manual capability grants may use them for backward compatibility.
-      // This is a deliberate control: new users/companies should not receive legacy capabilities.
+    it('a Company A role cannot authorize Company B (no membership in B, and cross-company role_id fails closed)', async () => {
+      const db = buildDb();
+      // Finance Manager in A only; no membership in B at all
+      db.memberships.push({ user_id: USER, company_id: CO_A, role_id: `${CO_A}:Finance Manager`, is_active: true });
+      const service = new MembershipService(makeFakePool(db));
+      expect(await service.getCapabilities(USER, CO_B)).toEqual([]);
+      expect(await service.isAuthorized(USER, CO_B, 'report.view')).toBe(false);
+      expect(await service.isAuthorized(USER, CO_A, 'asset.approve')).toBe(true);
+
+      // Corrupted membership in B pointing at Company A's Full Access role must still grant nothing
+      db.memberships.push({ user_id: USER, company_id: CO_B, role_id: `${CO_A}:Full Access`, is_active: true });
+      expect(await service.getCapabilities(USER, CO_B)).toEqual([]);
+      expect(await service.isAuthorized(USER, CO_B, 'access.view')).toBe(false);
+    });
+
+    it('Full Access in Company A does not leak into Company B where the user is Viewer', async () => {
+      const db = buildDb();
+      db.memberships.push(
+        { user_id: USER, company_id: CO_A, role_id: `${CO_A}:Full Access`, is_active: true },
+        { user_id: USER, company_id: CO_B, role_id: `${CO_B}:Viewer`, is_active: true },
+      );
+      const service = new MembershipService(makeFakePool(db));
+      expect(await service.isAuthorized(USER, CO_A, 'access.view')).toBe(true);
+      expect(await service.isAuthorized(USER, CO_B, 'access.view')).toBe(false);
+      expect(await service.getCapabilities(USER, CO_B)).toHaveLength(20);
+    });
+  });
+
+  describe('Full Access role (dynamic)', () => {
+    it('resolves ALL registered capabilities with no explicit role_capabilities rows', async () => {
+      const db = buildDb();
+      db.memberships.push({ user_id: USER, company_id: CO_A, role_id: `${CO_A}:Full Access`, is_active: true });
+      expect(db.role_capabilities.filter((rc) => rc.role_id === `${CO_A}:Full Access`)).toEqual([]);
+
+      const caps = await new MembershipService(makeFakePool(db)).getCapabilities(USER, CO_A);
+
+      expect(caps).toHaveLength(db.capabilities.length);
+      expect(new Set(caps)).toEqual(new Set(db.capabilities));
+      for (const c of [...FINANCE_MANAGER_CAPABILITIES, ...LEGACY_UNASSIGNED_CAPABILITIES, 'access.view', 'access.role.edit']) {
+        expect(caps).toContain(c);
+      }
+    });
+
+    it('a newly registered capability reaches Full Access without role_capabilities but NOT Viewer, Accountant or Finance Manager', async () => {
+      const db = buildDb();
+      const NEW_CAP = 'new_feature.create';
+      db.capabilities.push(NEW_CAP); // registered only in `capabilities`; no role_capabilities row anywhere
+      db.memberships.push(
+        { user_id: 'u-full', company_id: CO_A, role_id: `${CO_A}:Full Access`, is_active: true },
+        { user_id: 'u-viewer', company_id: CO_A, role_id: `${CO_A}:Viewer`, is_active: true },
+        { user_id: 'u-acct', company_id: CO_A, role_id: `${CO_A}:Accountant`, is_active: true },
+        { user_id: 'u-fm', company_id: CO_A, role_id: `${CO_A}:Finance Manager`, is_active: true },
+      );
+      expect(db.role_capabilities.some((rc) => rc.capability_id === NEW_CAP)).toBe(false);
+      const service = new MembershipService(makeFakePool(db));
+
+      expect(await service.isAuthorized('u-full', CO_A, NEW_CAP)).toBe(true);
+      expect(await service.isAuthorized('u-viewer', CO_A, NEW_CAP)).toBe(false);
+      expect(await service.isAuthorized('u-acct', CO_A, NEW_CAP)).toBe(false);
+      expect(await service.isAuthorized('u-fm', CO_A, NEW_CAP)).toBe(false);
+      // and the limited roles are otherwise unchanged
+      expect(await service.getCapabilities('u-viewer', CO_A)).toHaveLength(VIEWER_CAPABILITIES.length);
+      expect(await service.getCapabilities('u-acct', CO_A)).toHaveLength(ACCOUNTANT_CAPABILITIES.length);
+      expect(await service.getCapabilities('u-fm', CO_A)).toHaveLength(FINANCE_MANAGER_CAPABILITIES.length);
+    });
+
+    it('access.* capabilities (including access.view) reach only Full Access', async () => {
+      const db = buildDb();
+      db.memberships.push(
+        { user_id: 'u-full', company_id: CO_A, role_id: `${CO_A}:Full Access`, is_active: true },
+        { user_id: 'u-viewer', company_id: CO_A, role_id: `${CO_A}:Viewer`, is_active: true },
+        { user_id: 'u-acct', company_id: CO_A, role_id: `${CO_A}:Accountant`, is_active: true },
+        { user_id: 'u-fm', company_id: CO_A, role_id: `${CO_A}:Finance Manager`, is_active: true },
+      );
+      const service = new MembershipService(makeFakePool(db));
+      expect(await service.isAuthorized('u-full', CO_A, 'access.view')).toBe(true);
+      for (const u of ['u-viewer', 'u-acct', 'u-fm']) {
+        expect((await service.getCapabilities(u, CO_A)).filter((c) => c.startsWith('access.'))).toEqual([]);
+        expect(await service.isAuthorized(u, CO_A, 'access.view')).toBe(false);
+      }
     });
   });
 });

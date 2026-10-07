@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pool, PoolClient } from 'pg';
 import { CompanyManagementService } from '../src/modules/companies/company.service';
+import {
+  ACCOUNTANT_CAPABILITIES,
+  FINANCE_MANAGER_CAPABILITIES,
+  LEGACY_UNASSIGNED_CAPABILITIES,
+  VIEWER_CAPABILITIES,
+} from '../src/modules/memberships/default-role-capabilities';
 
 const COMPANY_ID = 'test-company-id';
 const ACTOR_USER_ID = 'test-user-id';
@@ -46,6 +52,32 @@ function fakePool(handler: (sql: string, params: unknown[]) => Rows): FakePoolRe
   const client = { query, release: vi.fn() } as unknown as PoolClient;
   const pool = { query, connect: vi.fn().mockResolvedValue(client) } as unknown as Pool;
   return { pool, query, sqls, capturedParams };
+}
+
+/** Runs real CompanyManagementService.create() and returns the role_capabilities rows it inserted, by role name. */
+async function provisionCapabilitiesByRole(): Promise<Record<string, string[]>> {
+  const roleNames: Record<string, string> = {};
+  const byRole: Record<string, string[]> = {};
+  let roleCounter = 0;
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('INSERT INTO companies')) {
+      return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
+    }
+    if (sql.includes('INSERT INTO roles')) {
+      const roleId = `role-${++roleCounter}`;
+      roleNames[roleId] = params[1] as string;
+      return { rows: [{ id: roleId }] };
+    }
+    if (sql.includes('INSERT INTO role_capabilities')) {
+      const [roleId, capabilityId] = params as [string, string];
+      (byRole[roleNames[roleId]] ??= []).push(capabilityId);
+    }
+    return { rows: [] };
+  });
+  const client = { query, release: vi.fn() } as unknown as PoolClient;
+  const pool = { query, connect: vi.fn().mockResolvedValue(client) } as unknown as Pool;
+  await new CompanyManagementService(pool).create({ slug: 'test-co', name: 'Test Co', name_ar: null }, ACTOR_USER_ID);
+  return byRole;
 }
 
 describe('company default roles provisioning', () => {
@@ -127,197 +159,45 @@ describe('company default roles provisioning', () => {
     expect(fullAccessRole?.is_full_access).toBe(true);
   });
 
-  it('provisions Viewer role with exactly 20 capabilities', async () => {
-    const capabilitiesInserted: string[] = [];
-    let viewerRoleId = '';
-
-    const { pool } = fakePool((sql) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
-      }
-      return [];
-    });
-
-    const query = pool.query as ReturnType<typeof vi.fn>;
-    let roleCounter = 0;
-    query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
-      }
-      if (sql.includes('INSERT INTO roles')) {
-        const [_, name, is_full_access] = params as [string, string, boolean];
-        const roleId = `role-${++roleCounter}`;
-        if (name === 'Viewer') viewerRoleId = roleId;
-        return { rows: [{ id: roleId }] };
-      }
-      if (sql.includes('INSERT INTO role_capabilities')) {
-        const [roleId, capabilityId] = params as [string, string];
-        if (roleId === viewerRoleId) {
-          capabilitiesInserted.push(capabilityId);
-        }
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO memberships')) return { rows: [] };
-      if (sql.includes('INSERT INTO audit_log')) return { rows: [] };
-      return { rows: [] };
-    });
-
-    const service = new CompanyManagementService(pool);
-    await service.create({ slug: 'test-co', name: 'Test Co', name_ar: null }, ACTOR_USER_ID);
-
-    expect(capabilitiesInserted).toHaveLength(20);
-    const expectedViewerCaps = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
-    for (const cap of expectedViewerCaps) {
-      expect(capabilitiesInserted).toContain(cap);
-    }
+  it('provisions Viewer role with exactly the canonical 20 capabilities', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(VIEWER_CAPABILITIES).toHaveLength(20);
+    expect(byRole['Viewer']).toHaveLength(VIEWER_CAPABILITIES.length);
+    expect(new Set(byRole['Viewer'])).toEqual(new Set(VIEWER_CAPABILITIES));
   });
 
-  it('provisions Accountant role with exactly 46 capabilities', async () => {
-    const capabilitiesInserted: string[] = [];
-    let accountantRoleId = '';
-
-    const { pool } = fakePool((sql) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
-      }
-      return [];
-    });
-
-    const query = pool.query as ReturnType<typeof vi.fn>;
-    let roleCounter = 0;
-    query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
-      }
-      if (sql.includes('INSERT INTO roles')) {
-        const [_, name, is_full_access] = params as [string, string, boolean];
-        const roleId = `role-${++roleCounter}`;
-        if (name === 'Accountant') accountantRoleId = roleId;
-        return { rows: [{ id: roleId }] };
-      }
-      if (sql.includes('INSERT INTO role_capabilities')) {
-        const [roleId, capabilityId] = params as [string, string];
-        if (roleId === accountantRoleId) {
-          capabilitiesInserted.push(capabilityId);
-        }
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO memberships')) return { rows: [] };
-      if (sql.includes('INSERT INTO audit_log')) return { rows: [] };
-      return { rows: [] };
-    });
-
-    const service = new CompanyManagementService(pool);
-    await service.create({ slug: 'test-co', name: 'Test Co', name_ar: null }, ACTOR_USER_ID);
-
-    expect(capabilitiesInserted).toHaveLength(46);
-    // Check that Accountant includes all 20 Viewer capabilities
-    const viewerCaps = [
-      'accounting.view',
-      'annual_close.view',
-      'annual_close.package.view',
-      'asset.view',
-      'audit.view',
-      'bank.view',
-      'company.view',
-      'company_accounting_profile.view',
-      'custody.view',
-      'document.view',
-      'fiscal_year.view',
-      'monthly_close.view',
-      'obligation.view',
-      'opening_balance.view',
-      'partner.view',
-      'periodic_adjustment.view',
-      'report.view',
-      'tax_workpaper.view',
-      'vat.view',
-      'wht_review.view',
-    ];
-    for (const cap of viewerCaps) {
-      expect(capabilitiesInserted).toContain(cap);
-    }
-    // Check additional capabilities
-    expect(capabilitiesInserted).toContain('accounting.journal.create');
-    expect(capabilitiesInserted).toContain('document.edit');
-    expect(capabilitiesInserted).toContain('obligation.confirm');
+  it('provisions Accountant role with exactly the canonical 46 capabilities', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(ACCOUNTANT_CAPABILITIES).toHaveLength(46);
+    expect(byRole['Accountant']).toHaveLength(ACCOUNTANT_CAPABILITIES.length);
+    expect(new Set(byRole['Accountant'])).toEqual(new Set(ACCOUNTANT_CAPABILITIES));
   });
 
-  it('provisions Finance Manager role with exactly 96 capabilities', async () => {
-    const capabilitiesInserted: string[] = [];
-    let financeManagerRoleId = '';
+  it('provisions Finance Manager role with exactly the canonical 96 capabilities', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(FINANCE_MANAGER_CAPABILITIES).toHaveLength(96);
+    expect(byRole['Finance Manager']).toHaveLength(FINANCE_MANAGER_CAPABILITIES.length);
+    expect(new Set(byRole['Finance Manager'])).toEqual(new Set(FINANCE_MANAGER_CAPABILITIES));
+  });
 
-    const { pool } = fakePool((sql) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
-      }
-      return [];
-    });
+  it('provisions a strict Viewer < Accountant < Finance Manager hierarchy and no explicit Full Access rows', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    const viewer = new Set(byRole['Viewer']);
+    const accountant = new Set(byRole['Accountant']);
+    const fm = new Set(byRole['Finance Manager']);
+    for (const c of viewer) expect(accountant.has(c)).toBe(true);
+    for (const c of accountant) expect(fm.has(c)).toBe(true);
+    expect(accountant.size).toBeGreaterThan(viewer.size);
+    expect(fm.size).toBeGreaterThan(accountant.size);
+    expect(byRole['Full Access'] ?? []).toEqual([]);
+  });
 
-    const query = pool.query as ReturnType<typeof vi.fn>;
-    let roleCounter = 0;
-    query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
-      }
-      if (sql.includes('INSERT INTO roles')) {
-        const [_, name, is_full_access] = params as [string, string, boolean];
-        const roleId = `role-${++roleCounter}`;
-        if (name === 'Finance Manager') financeManagerRoleId = roleId;
-        return { rows: [{ id: roleId }] };
-      }
-      if (sql.includes('INSERT INTO role_capabilities')) {
-        const [roleId, capabilityId] = params as [string, string];
-        if (roleId === financeManagerRoleId) {
-          capabilitiesInserted.push(capabilityId);
-        }
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO memberships')) return { rows: [] };
-      if (sql.includes('INSERT INTO audit_log')) return { rows: [] };
-      return { rows: [] };
-    });
-
-    const service = new CompanyManagementService(pool);
-    await service.create({ slug: 'test-co', name: 'Test Co', name_ar: null }, ACTOR_USER_ID);
-
-    expect(capabilitiesInserted).toHaveLength(96);
-    // Check that Finance Manager includes all 46 Accountant capabilities
-    const accountantCaps = [
-      'accounting.view',
-      'accounting.journal.create',
-      'accounting.journal.edit',
-      'document.edit',
-      'obligation.confirm',
-    ];
-    for (const cap of accountantCaps) {
-      expect(capabilitiesInserted).toContain(cap);
+  it('never provisions legacy/unassigned capabilities to any default role', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(LEGACY_UNASSIGNED_CAPABILITIES).toHaveLength(13);
+    for (const caps of Object.values(byRole)) {
+      for (const legacy of LEGACY_UNASSIGNED_CAPABILITIES) expect(caps).not.toContain(legacy);
     }
-    // Check FM-specific capabilities
-    expect(capabilitiesInserted).toContain('accounting.chart.create');
-    expect(capabilitiesInserted).toContain('asset.approve');
-    expect(capabilitiesInserted).toContain('annual_close.package.approve');
   });
 
   it('assigns creator to Full Access role', async () => {
@@ -361,53 +241,14 @@ describe('company default roles provisioning', () => {
     expect(assignedRoleId).toBe(fullAccessRoleId);
   });
 
-  it('does not grant limited roles access.* or company admin capabilities', async () => {
-    const allCapabilitiesInserted: Array<{ roleId: string; capabilityId: string }> = [];
-    const roleNames: Record<string, string> = {};
-
-    const { pool } = fakePool((sql) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
-      }
-      return [];
-    });
-
-    const query = pool.query as ReturnType<typeof vi.fn>;
-    let roleCounter = 0;
-    query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('INSERT INTO companies')) {
-        return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
-      }
-      if (sql.includes('INSERT INTO roles')) {
-        const [_, name, is_full_access] = params as [string, string, boolean];
-        const roleId = `role-${++roleCounter}`;
-        roleNames[roleId] = name;
-        return { rows: [{ id: roleId }] };
-      }
-      if (sql.includes('INSERT INTO role_capabilities')) {
-        const [roleId, capabilityId] = params as [string, string];
-        allCapabilitiesInserted.push({ roleId, capabilityId });
-        return { rows: [] };
-      }
-      if (sql.includes('INSERT INTO memberships')) return { rows: [] };
-      if (sql.includes('INSERT INTO audit_log')) return { rows: [] };
-      return { rows: [] };
-    });
-
-    const service = new CompanyManagementService(pool);
-    await service.create({ slug: 'test-co', name: 'Test Co', name_ar: null }, ACTOR_USER_ID);
-
-    // Check limited roles (Viewer, Accountant, Finance Manager)
-    for (const { roleId, capabilityId } of allCapabilitiesInserted) {
-      const roleName = roleNames[roleId];
-      if (roleName !== 'Full Access') {
-        // Limited roles should not have access.* capabilities
-        expect(capabilityId).not.toMatch(/^access\./);
-        // Limited roles can only have company.view, not company admin capabilities
-        if (capabilityId.startsWith('company.')) {
-          expect(capabilityId).toBe('company.view');
-        }
-      }
+  it('grants no access.* capability (including access.view) to Viewer, Accountant or Finance Manager', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    for (const roleName of ['Viewer', 'Accountant', 'Finance Manager']) {
+      expect(byRole[roleName].length).toBeGreaterThan(0);
+      expect(byRole[roleName].filter((c) => c.startsWith('access.'))).toEqual([]);
+      expect(byRole[roleName]).not.toContain('access.view');
+      // Limited roles only have company.view among company.* capabilities
+      expect(byRole[roleName].filter((c) => c.startsWith('company.'))).toEqual(['company.view']);
     }
   });
 
