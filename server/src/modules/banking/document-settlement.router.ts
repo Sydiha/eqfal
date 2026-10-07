@@ -48,7 +48,7 @@ function asyncRoute(handler: (req: Request, res: Response, next: NextFunction) =
 function activeContext(req: Request, res: Response): ActiveAuthContext | null {
   const context = getAuthenticatedContext(req);
   if (!context?.activeCompanyId) {
-    res.status(403).json({ error: 'No active company' });
+    res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });
     return null;
   }
   return context as ActiveAuthContext;
@@ -56,7 +56,7 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 
 function serviceOr503(res: Response): DocumentSettlementService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new DocumentSettlementService(pool);
@@ -299,7 +299,7 @@ export class DocumentSettlementService {
 function handleError(error: unknown, res: Response): boolean {
   if (error instanceof DocumentSettlementValidationError) { res.status(400).json({ error: error.message }); return true; }
   if (error instanceof DocumentSettlementNotFoundError) { res.status(404).json({ error: error.message }); return true; }
-  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message }); return true; }
+  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return true; }
   if (error instanceof DocumentSettlementConflictError) { res.status(409).json({ error: error.message }); return true; }
   return false;
 }

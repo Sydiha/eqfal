@@ -13,7 +13,7 @@ export function getAuthenticatedContext(req: Request): AuthSessionContext | null
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return;
   }
 
@@ -40,7 +40,7 @@ export function requireActiveCompany(req: Request, res: Response, next: NextFunc
     return;
   }
   if (!context.activeCompanyId) {
-    res.status(403).json({ error: 'No active company' });
+    res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });
     return;
   }
   next();

@@ -76,6 +76,7 @@ describe('closed fiscal year through real route/service flows', () => {
     const res = await request(app).post(`/api/opening-balances/${FY}/approve`).send({});
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Fiscal year is closed');
+    expect(res.body.code).toBe('FISCAL_YEAR_CLOSED');
     noWrites(log);
     expect(log.some(s => s.includes("UPDATE opening_balance_reviews SET status='approved'"))).toBe(false);
   });
@@ -92,6 +93,7 @@ describe('closed fiscal year through real route/service flows', () => {
     const res = await request(app).post(`/api/periodic-adjustments/${ADJ}/schedule/${SCH}/post`).send({});
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Fiscal year is closed');
+    expect(res.body.code).toBe('FISCAL_YEAR_CLOSED');
     noWrites(log);
     expect(log.some(s => s.includes('UPDATE periodic_adjustment_schedule'))).toBe(false);
   });
@@ -103,6 +105,7 @@ describe('closed fiscal year through real route/service flows', () => {
     const res = await request(app).post(`/api/journals/${JID}/post`).send({});
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Fiscal year is closed');
+    expect(res.body.code).toBe('FISCAL_YEAR_CLOSED');
     noWrites(log);
   });
 });

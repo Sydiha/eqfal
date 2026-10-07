@@ -109,7 +109,7 @@ const parseUploadBody: RequestHandler = (req, res, next) => {
 function activeContext(req: Request, res: Response): ActiveAuthContext | null {
   const context = getAuthenticatedContext(req);
   if (!context?.activeCompanyId) {
-    res.status(403).json({ error: 'No active company' });
+    res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });
     return null;
   }
   return context as ActiveAuthContext;
@@ -117,7 +117,7 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 
 function serviceOr503(res: Response): BankService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new BankService(pool, storage);

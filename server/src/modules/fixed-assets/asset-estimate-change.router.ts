@@ -89,7 +89,7 @@ export class AssetEstimateChangeService{
   await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'asset.estimate_change.approve',entity_type:'asset_estimate_change',entity_id:id,before_data:before,after_data:after,reason:before.reason},c);return after})}
 }
 
-function service(res:Response){if(!pool){res.status(503).json({error:'Database unavailable'});return null}return new AssetEstimateChangeService(pool)}
+function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null}return new AssetEstimateChangeService(pool)}
 function handle(e:unknown,res:Response){if(e instanceof AssetEstimateChangeValidationError)res.status(400).json({error:e.message});else if(e instanceof AssetEstimateChangeNotFoundError)res.status(404).json({error:'Not found'});else if(e instanceof AssetEstimateChangeConflictError)res.status(409).json({error:e.message});else throw e}
 const base=[requireAuth,requireActiveCompany] as const,mutation=[requireSameOrigin,...base] as const;
 assetEstimateChangeRouter.get('/assets/:id/estimate-changes',...base,requireCapability('asset.view'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new AssetEstimateChangeValidationError('Invalid request');const s=service(res);if(s)res.json(await s.list(context(req).activeCompanyId,req.params.id))}catch(e){handle(e,res)}}));

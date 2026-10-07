@@ -61,7 +61,7 @@ const parseUploadBody: RequestHandler = (req, res, next) => {
 function activeContext(req: Request, res: Response): ActiveAuthContext | null {
   const context = getAuthenticatedContext(req);
   if (!context?.activeCompanyId) {
-    res.status(403).json({ error: 'No active company' });
+    res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });
     return null;
   }
   return context as ActiveAuthContext;
@@ -69,7 +69,7 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 
 function repositoryOr503(res: Response): DocumentRepository | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new DocumentRepository(pool);
@@ -77,7 +77,7 @@ function repositoryOr503(res: Response): DocumentRepository | null {
 
 function serviceOr503(res: Response): DocumentService | null {
   if (!pool) {
-    res.status(503).json({ error: 'Database unavailable' });
+    res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });
     return null;
   }
   return new DocumentService(pool, storage);
@@ -226,7 +226,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict' });
         return;
       }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
       throw err;
     }
   }),
@@ -251,7 +251,7 @@ documentRouter.patch(
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
       if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict' }); return; }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
       throw err;
     }
   }),
@@ -306,7 +306,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict' });
         return;
       }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
       throw err;
     }
   }),

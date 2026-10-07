@@ -19,5 +19,5 @@ export function requireSameOrigin(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  res.status(403).json({ error: 'Invalid request origin' });
+  res.status(403).json({ error: 'Invalid request origin', code: 'INVALID_REQUEST_ORIGIN' });
 }

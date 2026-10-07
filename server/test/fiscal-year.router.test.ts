@@ -277,8 +277,29 @@ describe('Fiscal Year API tenant and capability boundary', () => {
       .send({});
 
     expect(res.status).toBe(409);
+    expect(res.body.code).toBe('FISCAL_YEAR_CLOSE_BLOCKED');
     expect(res.body.blockers).toEqual([{ code: 'draft_journals', count: 1 }]);
     expect(res.body.warnings).toEqual([{ code: 'zakat_tax_workpaper_not_ready', count: 1 }]);
+  });
+
+  it('returns stable codes for overlap, already-closed and immutable-closed fiscal years', async () => {
+    setContext(['fiscal_year.create', 'fiscal_year.close', 'fiscal_year.edit']);
+    mocks.createFiscalYear.mockRejectedValue(new Error("Fiscal year overlap: [a, b] conflicts with 'FY'"));
+    const overlap = await request(app)
+      .post('/api/fiscal-years')
+      .send({ name: 'FY 2026', start_date: '2026-01-01', end_date: '2027-01-01' });
+    expect(overlap.status).toBe(409);
+    expect(overlap.body).toEqual({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_OVERLAP' });
+
+    mocks.closeFiscalYear.mockRejectedValue(new Error("Fiscal year 'FY' is already closed"));
+    const closed = await request(app).post('/api/fiscal-years/fy-1/close').send({});
+    expect(closed.status).toBe(409);
+    expect(closed.body).toEqual({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_ALREADY_CLOSED' });
+
+    mocks.updateFiscalYear.mockRejectedValue(new Error("Fiscal year 'FY' is closed and cannot be modified"));
+    const immutable = await request(app).patch('/api/fiscal-years/fy-1').send({ name: 'X' });
+    expect(immutable.status).toBe(409);
+    expect(immutable.body).toEqual({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_CLOSED_IMMUTABLE' });
   });
 
   it('closes inside active company and forwards the authenticated actor and reason', async () => {

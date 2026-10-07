@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 annualClosingRouter.get('/annual-closing/:fiscalYearId', requireAuth, requireActiveCompany, requireCapability('annual_close.view'), (req: Request, res: Response, next: NextFunction) => {
   void (async () => {
     if (!UUID.test(req.params.fiscalYearId)) { res.status(400).json({ error: 'Invalid fiscal year' }); return; }
-    if (!pool) { res.status(503).json({ error: 'Database unavailable' }); return; }
+    if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
     const context = getAuthenticatedContext(req)! as ReturnType<typeof getAuthenticatedContext> & { activeCompanyId: string };
     try { res.json(await new AnnualClosingService(pool).readiness(context.activeCompanyId, req.params.fiscalYearId)); }
     catch (error) { if (error instanceof AnnualClosingNotFoundError) res.status(404).json({ error: 'Not found' }); else next(error); }
@@ -23,7 +23,7 @@ const context=(req:Request)=>getAuthenticatedContext(req)! as NonNullable<Return
 const plain=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
 const validVersion=(body:unknown)=>plain(body)&&Number.isInteger(body.version)&&Number(body.version)>0?Number(body.version):null;
 const route=(fn:(req:Request,res:Response,next:NextFunction)=>Promise<void>)=>(req:Request,res:Response,next:NextFunction)=>void fn(req,res,next).catch(next);
-const packageService=(res:Response)=>{if(!pool){res.status(503).json({error:'Database unavailable'});return null;}return new AnnualPackageService(pool);};
+const packageService=(res:Response)=>{if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new AnnualPackageService(pool);};
 const handle=(error:unknown,res:Response,next:NextFunction)=>{if(error instanceof AnnualPackageNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof AnnualPackageConflictError)res.status(409).json({error:error.message});else if(error instanceof AnnualPackageValidationError)res.status(422).json({error:error.message,blockers:error.blockers});else next(error);};
 const checkYear=(req:Request,res:Response)=>{if(!UUID.test(req.params.fiscalYearId)){res.status(400).json({error:'Invalid fiscal year'});return false;}return true;};
 

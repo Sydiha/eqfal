@@ -1,3 +1,4 @@
+import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./AccountingApproved.css";
@@ -154,14 +155,6 @@ interface Props {
   onUnauthorized: () => void;
   accountsFooter?: ReactNode;
 }
-class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string | null,
-  ) {
-    super(String(status));
-  }
-}
 const VAT_RECOGNITION_ERROR =
   "لا يمكن ترحيل القيد. ضريبة القيمة المضافة المعتمدة للمستند لم يتم إثباتها بشكل صحيح في القيد. / The journal cannot be posted. The reviewed VAT is not correctly recognized in the journal.";
 async function api(
@@ -169,18 +162,14 @@ async function api(
   options: RequestInit,
   onUnauthorized: () => void,
 ) {
-  const response = await fetch(url, { credentials: "same-origin", ...options });
-  if (response.status === 401) onUnauthorized();
-  if (!response.ok) {
-    let code: string | null = null;
-    try {
-      const payload = (await response.clone().json()) as { code?: unknown };
-      if (typeof payload.code === "string") code = payload.code;
-    } catch {
-      // Preserve the existing generic error behavior for non-JSON responses.
-    }
-    throw new ApiError(response.status, code);
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: "same-origin", ...options });
+  } catch (reason) {
+    throw toApiError(reason);
   }
+  if (response.status === 401) onUnauthorized();
+  if (!response.ok) throw await parseApiError(response);
   return response;
 }
 const json = (method: string, body: unknown): RequestInit => ({
@@ -225,6 +214,7 @@ export function Accounting({
   const [loading, setLoading] = useState(canView);
   const [error, setError] = useState(false);
   const [vatRecognitionError, setVatRecognitionError] = useState(false);
+  const [codedError, setCodedError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<
     "workspace" | "journal" | null
   >(null);
@@ -442,12 +432,20 @@ export function Accounting({
   const mutationStarted = () => {
     setSaved(false);
     setVatRecognitionError(false);
+    setCodedError(null);
     setRefreshError(null);
   };
   const mutationSucceeded = () => {
     setError(false);
     setVatRecognitionError(false);
+    setCodedError(null);
     setSaved(true);
+  };
+  // Known server codes (closed fiscal year/period, no company, ...) get their own message; anything else stays generic.
+  const failMutation = (reason: unknown) => {
+    const message = reason instanceof ApiError && !reason.network ? apiErrorMessage(reason, t) : null;
+    if (message) setCodedError(message);
+    else setError(true);
   };
   const createAccount = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -556,8 +554,8 @@ export function Accounting({
       setLines([emptyLine(), emptyLine()]);
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (reason) {
+      failMutation(reason);
     } finally {
       setSaving(false);
     }
@@ -593,8 +591,8 @@ export function Accounting({
       setTab("journals");
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (reason) {
+      failMutation(reason);
     } finally {
       setSaving(false);
     }
@@ -630,8 +628,8 @@ export function Accounting({
       );
       mutationSucceeded();
       await openJournal(selected, true);
-    } catch {
-      setError(true);
+    } catch (reason) {
+      failMutation(reason);
     } finally {
       setSaving(false);
     }
@@ -656,7 +654,7 @@ export function Accounting({
       ) {
         setVatRecognitionError(true);
       } else {
-        setError(true);
+        failMutation(postError);
       }
     } finally {
       setSaving(false);
@@ -729,6 +727,7 @@ export function Accounting({
       {vatRecognitionError && (
         <WorkspaceState tone="error">{VAT_RECOGNITION_ERROR}</WorkspaceState>
       )}
+      {codedError && <WorkspaceState tone="error">{codedError}</WorkspaceState>}
       {error && (
         <WorkspaceState
           tone="error"
@@ -757,7 +756,7 @@ export function Accounting({
           {t("accounting.refreshError")}
         </WorkspaceState>
       )}
-      {saved && !error && !vatRecognitionError && (
+      {saved && !error && !vatRecognitionError && !codedError && (
         <WorkspaceState>{t("accounting.saved")}</WorkspaceState>
       )}
       {loading && <WorkspaceState>{t("accounting.loading")}</WorkspaceState>}

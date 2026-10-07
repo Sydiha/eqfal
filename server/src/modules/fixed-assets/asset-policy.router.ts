@@ -83,7 +83,7 @@ export class AssetPolicyService{
   await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'asset.policy.approve',entity_type:'asset_category_depreciation_policy',entity_id:id,before_data:before,after_data:after},c);return after})}
 }
 
-function service(res:Response){if(!pool){res.status(503).json({error:'Database unavailable'});return null}return new AssetPolicyService(pool)}
+function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null}return new AssetPolicyService(pool)}
 function handle(e:unknown,res:Response){if(e instanceof AssetPolicyValidationError)res.status(400).json({error:e.message});else if(e instanceof AssetPolicyNotFoundError)res.status(404).json({error:'Not found'});else if(e instanceof AssetPolicyConflictError)res.status(409).json({error:e.message});else throw e}
 const base=[requireAuth,requireActiveCompany] as const,mutation=[requireSameOrigin,...base] as const;
 assetPolicyRouter.get('/asset-categories/:id/policies',...base,requireCapability('asset.view'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new AssetPolicyValidationError('Invalid request');const s=service(res);if(s)res.json(await s.list(context(req).activeCompanyId,req.params.id))}catch(e){handle(e,res)}}));

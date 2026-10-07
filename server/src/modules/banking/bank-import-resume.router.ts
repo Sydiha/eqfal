@@ -30,8 +30,8 @@ function asyncRoute(handler:(req:Request,res:Response,next:NextFunction)=>Promis
 
 bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requireActiveCompany, requireCapability(IMPORT), asyncRoute(async(req,res)=>{
   const context=getAuthenticatedContext(req);
-  if(!context?.activeCompanyId){res.status(403).json({error:'No active company'});return;}
-  if(!pool){res.status(503).json({error:'Database unavailable'});return;}
+  if(!context?.activeCompanyId){res.status(403).json({ error: 'No active company', code: 'NO_ACTIVE_COMPANY' });return;}
+  if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return;}
 
   const { rows }=await pool.query<ResumeBatch>(
     `SELECT

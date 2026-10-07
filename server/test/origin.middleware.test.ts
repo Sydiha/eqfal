@@ -28,7 +28,7 @@ function expectRejected(headers: Request['headers'], protocol = 'http') {
   const result = invoke(headers, protocol);
   expect(result.next).not.toHaveBeenCalled();
   expect(result.status).toHaveBeenCalledWith(403);
-  expect(result.json).toHaveBeenCalledWith({ error: 'Invalid request origin' });
+  expect(result.json).toHaveBeenCalledWith({ error: 'Invalid request origin', code: 'INVALID_REQUEST_ORIGIN' });
 }
 
 afterEach(() => vi.unstubAllEnvs());

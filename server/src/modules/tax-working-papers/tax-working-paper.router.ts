@@ -9,7 +9,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const amount=(v:unknown)=>typeof v==='string'&&/^(?:0|[1-9]\d{0,15})\.\d{2}$/.test(v)&&v!=='0.00'?v:null;
 const plain=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
 const ctx=(r:Request)=>getAuthenticatedContext(r)! as NonNullable<ReturnType<typeof getAuthenticatedContext>>&{activeCompanyId:string};
-const service=(res:Response)=>{if(!pool){res.status(503).json({error:'Database unavailable'});return null;}return new TaxWorkpaperService(pool);};
+const service=(res:Response)=>{if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new TaxWorkpaperService(pool);};
 const handle=(e:unknown,res:Response,next:NextFunction)=>{if(e instanceof TaxWorkpaperNotFoundError)res.status(404).json({error:'Not found'});else if(e instanceof TaxWorkpaperValidationError)res.status(400).json({error:e.message});else if(e instanceof TaxWorkpaperConflictError)res.status(409).json({error:e.message});else next(e);};
 const route=(fn:(req:Request,res:Response,next:NextFunction)=>Promise<void>)=>(req:Request,res:Response,next:NextFunction)=>void fn(req,res,next).catch(next);
 const base=[requireAuth,requireActiveCompany]; const write=[requireSameOrigin,...base];
