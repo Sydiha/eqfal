@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import {
@@ -16,6 +17,8 @@ export interface ManagedCompany {
   can_edit: boolean;
   can_toggle: boolean;
 }
+
+export interface CompanyLogo { mime_type: string; sha256: string; size_bytes: number; data: Buffer }
 
 export class CompanyAccessError extends Error {
   constructor(readonly kind: 'not_found' | 'forbidden' | 'conflict', readonly code?: 'COMPANY_LAST_ACTIVE_CONFLICT') { super(kind); }
@@ -196,6 +199,38 @@ export class CompanyManagementService {
       const after = rows[0] as CompanyRow;
       await this.audit.logEvent({ company_id: id, actor_user_id: actorUserId, action: active ? 'company.enable' : 'company.disable', entity_type: 'company', entity_id: id, before_data: this.snapshot(before), after_data: this.snapshot(after) }, client);
       return after;
+    });
+  }
+
+  /** Any active member of the company may read its logo (needed to brand reports). Non-members get not_found. */
+  async getLogo(companyId: string, userId: string): Promise<CompanyLogo | null> {
+    if ((await this.capabilitiesIn(userId, companyId, this.pool)) === null) throw new CompanyAccessError('not_found');
+    const { rows } = await this.pool.query<CompanyLogo>('SELECT mime_type, sha256, size_bytes, data FROM company_logos WHERE company_id = $1', [companyId]);
+    return rows[0] ?? null;
+  }
+
+  async setLogo(companyId: string, mime: string, data: Buffer, actorUserId: string): Promise<{ sha256: string; size_bytes: number }> {
+    return this.transaction(async (client) => {
+      await this.requireCapability(actorUserId, companyId, 'company.edit', client);
+      const sha256 = createHash('sha256').update(data).digest('hex');
+      const had = (await client.query('SELECT 1 FROM company_logos WHERE company_id = $1', [companyId])).rows.length > 0;
+      await client.query(
+        `INSERT INTO company_logos (company_id, mime_type, size_bytes, sha256, data, updated_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (company_id) DO UPDATE SET mime_type = EXCLUDED.mime_type, size_bytes = EXCLUDED.size_bytes, sha256 = EXCLUDED.sha256,
+           data = EXCLUDED.data, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()`,
+        [companyId, mime, data.length, sha256, data, actorUserId],
+      );
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: had ? 'company.logo.replace' : 'company.logo.upload', entity_type: 'company', entity_id: companyId, before_data: null, after_data: { mime_type: mime, size_bytes: data.length, sha256 } }, client);
+      return { sha256, size_bytes: data.length };
+    });
+  }
+
+  async removeLogo(companyId: string, actorUserId: string): Promise<void> {
+    await this.transaction(async (client) => {
+      await this.requireCapability(actorUserId, companyId, 'company.edit', client);
+      const { rows } = await client.query<{ sha256: string }>('DELETE FROM company_logos WHERE company_id = $1 RETURNING sha256', [companyId]);
+      if (rows[0]) await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'company.logo.remove', entity_type: 'company', entity_id: companyId, before_data: { sha256: rows[0].sha256 }, after_data: null }, client);
     });
   }
 }

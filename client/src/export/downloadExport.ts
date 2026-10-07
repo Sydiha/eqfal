@@ -1,4 +1,4 @@
-import { buildXlsx, type ExportCell, type ExportLayout, type ExportRows } from './xlsx-builder';
+import { buildXlsx, type ExportCell, type ExportLayout, type ExportRows, type XlsxImages } from './xlsx-builder';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -32,8 +32,8 @@ export function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-export const downloadXlsx = (doc: ExportDocument) =>
-  downloadBlob(new Blob([buildXlsx(doc.sheetName, doc.rows, doc.rtl, doc.layout, doc.rtl ? 'إقفال | EQFAL' : 'EQFAL | إقفال') as BlobPart], { type: XLSX_MIME }), `${doc.fileStem}.xlsx`);
+export const downloadXlsx = (doc: ExportDocument, images?: XlsxImages) =>
+  downloadBlob(new Blob([buildXlsx(doc.sheetName, doc.rows, doc.rtl, doc.layout, doc.rtl ? 'إقفال | EQFAL' : 'EQFAL | إقفال', images) as BlobPart], { type: XLSX_MIME }), `${doc.fileStem}.xlsx`);
 export const downloadCsv = (doc: ExportDocument) =>
   downloadBlob(new Blob([toCsv(doc.rows)], { type: 'text/csv;charset=utf-8' }), `${doc.fileStem}.csv`);
 

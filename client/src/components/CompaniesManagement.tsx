@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/apiError';
+import { useOptionalCompany } from '../context/CompanyContext';
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import './AccessAdministration.css';
@@ -33,6 +34,59 @@ function errorKeyFor(reason: unknown): ErrorKey {
 }
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const LOGO_MAX_BYTES = 512 * 1024;
+
+/** Optional company logo: preview / upload / replace / remove. The server re-validates type, bytes, size and permission. */
+function CompanyLogoPanel({ companyId, active, canEdit, onUnauthorized }: { companyId: string; active: boolean; canEdit: boolean; onUnauthorized: () => void }) {
+  const { t } = useTranslation();
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<'loading' | 'ready'>(active ? 'loading' : 'ready');
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController(); let made: string | null = null;
+    setState('loading');
+    fetch(`/api/companies/${companyId}/logo`, { credentials: 'same-origin', signal: controller.signal })
+      .then(async (response) => {
+        if (response.status === 401) onUnauthorized();
+        if (!response.ok) { setUrl(null); return; }
+        made = URL.createObjectURL(await response.blob()); setUrl(made);
+      })
+      .catch(() => setUrl(null))
+      .finally(() => { if (!controller.signal.aborted) setState('ready'); });
+    return () => { controller.abort(); if (made) URL.revokeObjectURL(made); };
+  }, [companyId, active, version, onUnauthorized]);
+  const change = async (work: () => Promise<unknown>, ok: string) => {
+    setBusy(true); setMessage(null);
+    try { await work(); setVersion((v) => v + 1); setMessage(ok); }
+    catch (reason) { setMessage(reason instanceof ApiError && reason.status === 413 ? t('companies.logoTooLarge') : reason instanceof ApiError && reason.status === 403 ? t('companies.forbidden') : t('companies.logoInvalid')); }
+    finally { setBusy(false); }
+  };
+  const pick = (file: File | undefined) => {
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) { setMessage(t('companies.logoInvalid')); return; }
+    if (file.size > LOGO_MAX_BYTES) { setMessage(t('companies.logoTooLarge')); return; }
+    void change(() => request(`/api/companies/${companyId}/logo`, { method: 'PUT', headers: { 'content-type': file.type }, body: file }, onUnauthorized), t('companies.logoSaved'));
+  };
+  return <section className="acc-logo" aria-label={t('companies.logoTitle')}>
+    <h3>{t('companies.logoTitle')}</h3>
+    <p className="acc-hint">{t('companies.logoHint')}</p>
+    {!active ? <p className="acc-hint">{t('companies.logoSwitch')}</p> : <>
+      <div className="acc-logo-preview">{state === 'loading' ? <span>{t('companies.loading')}</span> : url ? <img src={url} alt={t('companies.logoAlt')} style={{ maxHeight: 72, maxWidth: 220, objectFit: 'contain' }} /> : <span>{t('companies.logoNone')}</span>}</div>
+      {canEdit && <div className="modal-actions">
+        <label className="acc-ghost" style={{ cursor: 'pointer' }}>{url ? t('companies.logoReplace') : t('companies.logoUpload')}
+          <input type="file" accept={LOGO_TYPES.join(',')} hidden disabled={busy} onChange={(event) => { pick(event.target.files?.[0]); event.target.value = ''; }} />
+        </label>
+        {url && <button type="button" className="acc-ghost" disabled={busy} onClick={() => void change(() => request(`/api/companies/${companyId}/logo`, { method: 'DELETE' }, onUnauthorized), t('companies.logoRemoved'))}>{t('companies.logoRemove')}</button>}
+      </div>}
+      {message && <div role="status" className="acc-hint">{message}</div>}
+    </>}
+  </section>;
+}
+
 /**
  * Operational UI for companies the current user belongs to. Every action is also enforced
  * server-side (capability, tenant scope); hiding controls here is only a convenience.
@@ -49,6 +103,7 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
+  const activeCompanyId = useOptionalCompany()?.activeCompanyId ?? null;
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setErrorKey(null); setFailure(null);
@@ -131,6 +186,7 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
         <label>{t('companies.name')}<input name="name" required maxLength={200} defaultValue={dialog.company.name} /></label>
         <label>{t('companies.nameAr')}<input name="name_ar" maxLength={200} dir="rtl" defaultValue={dialog.company.name_ar ?? ''} /></label>
         <label>{t('companies.slug')}<input value={dialog.company.slug} readOnly dir="ltr" /></label><small>{t('companies.slugLocked')}</small>
-        {actions(() => setDialog(null), t('companies.save'))}</form></Dialog>}
+        {actions(() => setDialog(null), t('companies.save'))}</form>
+      <CompanyLogoPanel companyId={dialog.company.id} active={dialog.company.id === activeCompanyId} canEdit={can('company.edit') && dialog.company.can_edit} onUnauthorized={onUnauthorized} /></Dialog>}
   </section>;
 }
