@@ -127,6 +127,10 @@ INSERT INTO capabilities (id) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Create or ensure default roles exist for test company (0e8574b6-5828-40c6-9b56-7dbd1c7e9def)
+-- ONLY when that company row exists (it does not on a fresh/empty database;
+-- an unguarded insert violates roles_company_id_fkey). Capabilities above are
+-- global and are always seeded. Role-capability statements below select from
+-- roles, so they are no-ops when the company is absent.
 -- Idempotently create roles by checking if they already exist
 INSERT INTO roles (company_id, name, is_full_access)
 SELECT
@@ -143,6 +147,10 @@ WHERE NOT EXISTS (
   WHERE r.company_id = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def'::uuid
   AND r.name = new_roles.name
   AND r.is_full_access = FALSE
+)
+AND EXISTS (
+  SELECT 1 FROM companies c
+  WHERE c.id = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def'::uuid
 );
 
 -- Correct Viewer role (20 capabilities)
@@ -262,7 +270,9 @@ ON CONFLICT (role_id, capability_id) DO NOTHING;
 -- Create or ensure Finance Manager role exists, then correct it (96 capabilities)
 -- First ensure the role exists
 INSERT INTO roles (company_id, name, is_full_access)
-VALUES ('0e8574b6-5828-40c6-9b56-7dbd1c7e9def'::uuid, 'finance_manager', FALSE)
+SELECT c.id, 'finance_manager', FALSE
+FROM companies c
+WHERE c.id = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def'::uuid
 ON CONFLICT (company_id, name) DO NOTHING;
 
 -- Remove all non-full-access role_capabilities for the finance_manager role
