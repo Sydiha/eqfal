@@ -61,7 +61,6 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
   const company = useActiveCompanyName() ?? '';
   const ar = i18n.language === 'ar';
   const exportDoc = state === 'ready' && report && data ? agingExport({ ar, company, generatedAt: generatedStamp(), labels: { ...L, title: L.title }, side, asOf: report.as_of_date, data }) : null;
-  const printLines = exportDoc ? exportDoc.rows.slice(1, exportDoc.rows.findIndex((r) => r.length === 0)).map((r) => r.join(': ')) : [];
 
   return <section className="ob-aging" aria-labelledby="ob-aging-title">
     <div className="ob-aging__head">
@@ -72,7 +71,7 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
       </form>
     </div>
     <p className="ob-aging__note">{L.note}</p>
-    <ExportButtons language={i18n.language} document={exportDoc} printTitle={`${L.title} — ${L[side]}`} printLines={printLines} landscape />
+    <ExportButtons language={i18n.language} document={exportDoc} landscape />
     <div className="workspace-tabs ob-aging__sides" role="tablist" aria-label={L.sides}>
       {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => setSide(key)}>{L[key]}</button>)}
     </div>

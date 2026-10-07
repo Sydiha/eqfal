@@ -1,4 +1,4 @@
-import { buildXlsx, type ExportCell, type ExportRows } from './xlsx-builder';
+import { buildXlsx, type ExportCell, type ExportLayout, type ExportRows } from './xlsx-builder';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -9,6 +9,8 @@ export interface ExportDocument {
   rtl: boolean;
   /** Metadata block, header and data rows, totals included. */
   rows: ExportRows;
+  /** Which rows are metadata / headers / totals / sections (drives XLSX styling and the print table). */
+  layout: ExportLayout;
 }
 
 const csvText = (cell: ExportCell) => {
@@ -31,20 +33,14 @@ export function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 export const downloadXlsx = (doc: ExportDocument) =>
-  downloadBlob(new Blob([buildXlsx(doc.sheetName, doc.rows, doc.rtl) as BlobPart], { type: XLSX_MIME }), `${doc.fileStem}.xlsx`);
+  downloadBlob(new Blob([buildXlsx(doc.sheetName, doc.rows, doc.rtl, doc.layout, doc.rtl ? 'إقفال | EQFAL' : 'EQFAL | إقفال') as BlobPart], { type: XLSX_MIME }), `${doc.fileStem}.xlsx`);
 export const downloadCsv = (doc: ExportDocument) =>
   downloadBlob(new Blob([toCsv(doc.rows)], { type: 'text/csv;charset=utf-8' }), `${doc.fileStem}.csv`);
 
-/** Opens the browser print dialog (Save as PDF). Only a temporary @page rule is added, then removed. */
-export function printReport(landscape: boolean) {
-  let style: HTMLStyleElement | null = null;
-  if (landscape) {
-    style = document.createElement('style');
-    style.textContent = '@media print{@page{size:landscape}}';
-    document.head.appendChild(style);
-  }
-  const cleanup = () => { style?.remove(); window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
-  if (!style) window.removeEventListener('afterprint', cleanup);
+/** Adds the temporary @page rule for a print run (A4, orientation, margins); returns its cleanup. */
+export function applyPrintPage(landscape: boolean): () => void {
+  const style = document.createElement('style');
+  style.textContent = `@media print{@page{size:A4 ${landscape ? 'landscape' : 'portrait'};margin:10mm}}`;
+  document.head.appendChild(style);
+  return () => style.remove();
 }

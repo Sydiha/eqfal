@@ -732,8 +732,7 @@ export function Accounting({
   const statementMeta = exportMeta.statement;
   const statementExportDoc = statement && !statementBlocked && statementMeta && statementMeta.kind === tab && statement.statement === ({ financialPosition: "financial_position", profitOrLoss: "profit_or_loss", changesInEquity: "changes_in_equity", cashFlow: "cash_flow" } as Record<string, string>)[tab]
     ? statementExport({ ...exportBase, t, accountName, kind: statementMeta.kind, yearName: statementMeta.yearName, startDate: statementMeta.start, endDate: statementMeta.end, asOfDate: statementMeta.asOf, data: statement }) : null;
-  const exportLines = (doc: { rows: unknown[][] } | null) => (doc ? doc.rows.slice(1, Math.max(1, doc.rows.findIndex((r) => r.length === 0))).map((r) => r.join(": ")) : []);
-  const exportButtons = (doc: ReturnType<typeof trialBalanceExport> | null, title: string, landscape: boolean) => <ExportButtons language={i18n.language} document={doc} printTitle={title} printLines={exportLines(doc)} landscape={landscape} />;
+  const exportButtons = (doc: ReturnType<typeof trialBalanceExport> | null, landscape: boolean) => <ExportButtons language={i18n.language} document={doc} landscape={landscape} />;
   return (
     <section className="panel ac-approved" aria-labelledby="accounting-title">
       <PageHeader
@@ -1500,7 +1499,7 @@ export function Accounting({
               <h2 id="accounting-trial-title">{t("accounting.tabs.trial")}</h2>
               {reportScope.trial && <p className="ac-tab__context" dir="auto">{reportScope.trial}</p>}
             </div>
-            {exportButtons(trialExport, t("accounting.tabs.trial"), true)}
+            {exportButtons(trialExport, true)}
             <div className="table-wrap ac-tab__table ac-tab__table--trial">
               <table>
                 <thead>
@@ -1593,7 +1592,7 @@ export function Accounting({
               <h2 id="accounting-ledger-title">{t("accounting.tabs.ledger")}</h2>
               {reportScope.ledger && <p className="ac-tab__context" dir="auto">{reportScope.ledger}</p>}
             </div>
-            {exportButtons(ledgerExport, t("accounting.tabs.ledger"), true)}
+            {exportButtons(ledgerExport, true)}
             <div className="table-wrap ac-tab__table ac-tab__table--ledger">
               <table>
                 <thead>
@@ -1651,7 +1650,7 @@ export function Accounting({
           {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
             <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
-            {exportButtons(statementExportDoc, t(`accounting.tabs.${tab}`), false)}
+            {exportButtons(statementExportDoc, false)}
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>

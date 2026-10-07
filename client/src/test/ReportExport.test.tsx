@@ -30,14 +30,35 @@ const trialRows = [
 describe('xlsx/csv helpers', () => {
   it('writes a valid stored zip with escaped inline strings and verbatim numerics', () => {
     const files = unzip(buildXlsx('Trial', [['A & B <x>'], [{ num: '12.50' }, null, '']], true));
-    expect(Object.keys(files)).toEqual(['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/worksheets/sheet1.xml']);
+    expect(Object.keys(files)).toEqual(['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml', 'xl/worksheets/sheet1.xml']);
     expect(files['xl/worksheets/sheet1.xml']).toContain('A &amp; B &lt;x&gt;');
-    expect(files['xl/worksheets/sheet1.xml']).toContain('<c r="A2"><v>12.50</v></c>');
+    expect(files['xl/worksheets/sheet1.xml']).toContain('<c r="A2" s="5"><v>12.50</v></c>');
     expect(files['xl/worksheets/sheet1.xml']).toContain('rightToLeft="1"');
   });
   it('emits CSV with BOM, quoting and formula-injection guard', () => {
     expect(toCsv([['a,b', 'say "hi"'], ['=SUM(A1)', { num: '-5.00' }]])).toBe('﻿"a,b","say ""hi"""\r\n\'=SUM(A1),-5.00\r\n');
     expect(slug('FY 2026/27 ✓')).toBe('fy-2026-27');
+  });
+});
+
+describe('xlsx formatting', () => {
+  it('styles header/total rows, formats numbers, freezes the header and keeps cells numeric', () => {
+    const d = trialBalanceExport({ ...base, accountName: (r) => r.name, sum, yearName: '2026', rows: trialRows });
+    const sheet = unzip(buildXlsx(d.sheetName, d.rows, true, d.layout, 'EQFAL'))['xl/worksheets/sheet1.xml']!;
+    expect(sheet).toContain('<pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/>'); // brand + title + 4 meta + blank + header
+    expect(sheet).toContain('rightToLeft="1"');
+    expect(sheet).toContain('<c r="A8" s="4"'); // styled header row
+    expect(sheet).toContain('<c r="B9" s="5"><v>0.00</v></c>'); // numeric cell, #,##0.00 style, no inlineStr
+    expect(sheet).toMatch(/<c r="B11" s="9"><v>100\.00<\/v><\/c>/); // totals row: bold numeric style
+    expect(unzip(buildXlsx('x', [], false))['xl/styles.xml']).toContain('numFmtId="4"');
+  });
+  it('layout marks header and totals rows for every report type', () => {
+    const d = trialBalanceExport({ ...base, accountName: (r) => r.name, sum, yearName: '2026', rows: trialRows });
+    expect(d.rows[d.layout.headerRows[0]!]![0]).toBe('accounting.account');
+    expect(d.rows[d.layout.totalRows[0]!]![0]).toBe('accounting.statements.total');
+    const ag = agingExport({ ...base, labels: { title: 'Aging', asOf: 'As of', receivables: 'AR', payables: 'AP', total: 'Total', counterparty: 'P', dueOn: 'D', daysOverdue: 'N', outstanding: 'O', bucket: 'B', noDue: '-', empty: 'E', buckets: { current: 'C' } }, side: 'receivables', asOf: '2026-10-07', data: { buckets: [{ bucket: 'current', amount: '1.00', count: 1 }], total_outstanding: '1.00', item_count: 1, items: [{ obligation_id: 'o', counterparty_name: 'A', due_on: null, days_overdue: 0, bucket: 'current', outstanding_amount: '1.00' }] } });
+    expect(ag.layout.totalRows.map((i) => ag.rows[i]![0])).toEqual(['Total', 'Total']);
+    expect(ag.layout.headerRows).toHaveLength(2);
   });
 });
 
@@ -113,6 +134,29 @@ describe('aging export + buttons', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Payables/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
     expect(names[2]).toBe('eqfal-ap-aging-2026-10-07.csv');
+  });
+});
+
+describe('print document', () => {
+  it('renders a print-only report table with title, company, period and totals, and removes it on unmount', async () => {
+    const { ExportButtons } = await import('../components/ExportButtons');
+    const d = trialBalanceExport({ ...base, accountName: (r) => r.name, sum, yearName: '2026', rows: trialRows });
+    const print = vi.fn(); vi.stubGlobal('print', print);
+    const { unmount } = render(<ExportButtons language="en" document={d} landscape />);
+    expect(document.body.querySelector('.eqfal-print-doc')).toBeNull(); // not in the DOM until printing
+    fireEvent.click(screen.getByRole('button', { name: 'Print / Save PDF' }));
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(document.head.textContent).toContain('size:A4 landscape');
+    const doc = document.body.querySelector('.eqfal-print-doc')!;
+    expect(doc.parentElement).toBe(document.body);
+    expect(doc.querySelector('h1')).toHaveTextContent('accounting.tabs.trial');
+    expect(doc).toHaveTextContent('Acme Co'); expect(doc).toHaveTextContent('2026'); expect(doc).toHaveTextContent('SAR');
+    expect(doc.querySelectorAll('thead th')).toHaveLength(5);
+    expect(doc.querySelector('tr.t')).toHaveTextContent('100.00');
+    window.dispatchEvent(new Event('afterprint')); // browser finished: print document and @page rule are removed
+    await waitFor(() => expect(document.body.querySelector('.eqfal-print-doc')).toBeNull());
+    expect(document.head.textContent).not.toContain('size:A4');
+    unmount();
   });
 });
 
