@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkspaceState } from './SharedUI';
+import { ExportButtons } from './ExportButtons';
+import { useActiveCompanyName } from '../context/CompanyContext';
+import { agingExport, generatedStamp } from '../export/reportExport';
 import './ObligationsAging.css';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
@@ -55,6 +58,9 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
   useEffect(() => { void load(); }, []);
   const submit = (e: FormEvent) => { e.preventDefault(); if (asOf) void load(asOf); };
   const data = report?.[side];
+  const company = useActiveCompanyName() ?? '';
+  const ar = i18n.language === 'ar';
+  const exportDoc = state === 'ready' && report && data ? agingExport({ ar, company, generatedAt: generatedStamp(), labels: { ...L, title: L.title }, side, asOf: report.as_of_date, data }) : null;
 
   return <section className="ob-aging" aria-labelledby="ob-aging-title">
     <div className="ob-aging__head">
@@ -65,6 +71,7 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
       </form>
     </div>
     <p className="ob-aging__note">{L.note}</p>
+    <ExportButtons language={i18n.language} document={exportDoc} landscape />
     <div className="workspace-tabs ob-aging__sides" role="tablist" aria-label={L.sides}>
       {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => setSide(key)}>{L[key]}</button>)}
     </div>

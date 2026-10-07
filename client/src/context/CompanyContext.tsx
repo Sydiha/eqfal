@@ -208,3 +208,8 @@ export function useCompany(): CompanyContextValue {
   }
   return ctx;
 }
+
+/** Active company display name, or null outside a provider (used by report exports). */
+export function useActiveCompanyName(): string | null {
+  return useContext(CompanyContext)?.activeCompany?.name ?? null;
+}

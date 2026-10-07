@@ -35,7 +35,8 @@ describe('AR/AP aging report view', () => {
     expect(row).toHaveTextContent('2026-05-30');
     expect(row).toHaveTextContent('31');
     expect(screen.getByText('Customer B').closest('tr')).toHaveTextContent('No due date');
-    expect(screen.queryByRole('button', { name: /export|csv|pdf/i })).not.toBeInTheDocument();
+    // Exports were added in the Reports Export Wave (Owner-approved); see ReportExport.test.tsx.
+    expect(screen.getAllByRole('button', { name: /export|csv|pdf/i })).toHaveLength(3);
   });
 
   it('shows an empty state for a side with nothing outstanding and re-runs for an explicit date', async () => {
