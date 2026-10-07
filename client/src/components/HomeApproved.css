@@ -947,3 +947,13 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
   .home__kpi-value { white-space: normal; overflow-wrap: anywhere; }
   .home__kpi-card.kpi-blue .home__kpi-value, .home__kpi-card.kpi-green .home__kpi-value { font-size: 1rem; }
 }
+
+.home__kpi-scope {
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--home-muted, #5b6770);
+  line-height: 1.2;
+}
+.home__subtitle-range {
+  white-space: nowrap;
+}

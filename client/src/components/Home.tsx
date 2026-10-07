@@ -414,28 +414,42 @@ export function Home({
   const readyPercentage = Math.round((readyAreas / blockerAreas.length) * 100);
 
   const today = new Date();
+  const periodRange = selected
+    ? { from: selected.period_start.slice(0, 10), to: selected.period_end.slice(0, 10) }
+    : scopeRange;
   const contextMonth = monthOnlySelected
     ? availablePeriodsForSelectedYear.find((p) => p.id === selectedPeriodId)
     : undefined;
+  // Without monthly-close access there is no readiness period, but the selected scope still labels the cards.
   const displayDate = selected
     ? new Date(selected.period_start)
     : contextMonth
       ? new Date(contextMonth.period_start)
-      : today;
+      : periodRange
+        ? new Date(periodRange.from)
+        : today;
+  // The header date is today's date; the selected period is shown separately in the subtitle so the two are never confused.
   const dayName = isArabic
-    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(displayDate)
-    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(displayDate);
+    ? new Intl.DateTimeFormat("ar-u-ca-gregory", { weekday: "long" }).format(today)
+    : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(today);
   const fullDate = isArabic
-    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`
-    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(displayDate)}`;
+    ? `${dayName}، ${new Intl.DateTimeFormat("ar-u-ca-gregory", { day: "numeric", month: "long", year: "numeric" }).format(today)}`
+    : `${dayName}, ${new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric" }).format(today)}`;
 
-  const monthYear = allYearPeriod
+  const monthYear = allYearPeriod || periodMode === "all"
     ? isArabic
       ? `السنة كاملة ${displayDate.getUTCFullYear()}`
       : `Full Year ${displayDate.getUTCFullYear()}`
     : isArabic
       ? `${new Intl.DateTimeFormat("ar-u-ca-gregory", { month: "long", year: "numeric" }).format(displayDate)}`
       : `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(displayDate)}`;
+
+  // Receivables/payables are all-time open balances; revenue/expenses follow the selected period. Other cards state no scope.
+  const kpiScopeLabel = (key: string): string | null => {
+    if (key === "amounts_to_collect" || key === "amounts_to_pay") return isArabic ? "كل الأرصدة المفتوحة" : "All open balances";
+    if (key === "current_month_sales" || key === "current_month_purchases_expenses") return monthYear;
+    return null;
+  };
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
     if (!snapshot) {
@@ -522,6 +536,14 @@ export function Home({
           {isArabic
             ? `لمحة مالية مجمعة – ${monthYear}`
             : `Aggregate Financial Summary – ${monthYear}`}
+          {periodRange && (
+            <>
+              {" "}
+              <bdi dir="ltr" className="home__subtitle-range" data-testid="home-period-range">
+                ({formatDisplayDate(periodRange.from, i18n.language)} – {formatDisplayDate(periodRange.to, i18n.language)})
+              </bdi>
+            </>
+          )}
         </p>
       </header>
 
@@ -548,6 +570,9 @@ export function Home({
                     <div className="home__kpi-value">
                       {renderKPIAmount(kpi, value)}
                     </div>
+                    {kpiScopeLabel(kpi.key) && (
+                      <div className="home__kpi-scope">{kpiScopeLabel(kpi.key)}</div>
+                    )}
                   </div>
                   <div className="home__kpi-icon">
                     <IconComponent />
