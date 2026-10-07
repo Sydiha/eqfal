@@ -229,6 +229,7 @@ export function Accounting({
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | "nameRequired" | null>(null);
   const [createNameError, setCreateNameError] = useState(false);
+  const [createServerError, setCreateServerError] = useState<"createDuplicate" | "createInvalid" | null>(null);
   const setTab = (value: Tab) => {
     setTabState(value);
     if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
@@ -459,6 +460,7 @@ export function Accounting({
       return;
     }
     setCreateNameError(false);
+    setCreateServerError(null);
     mutationStarted();
     setSaving(true);
     try {
@@ -476,8 +478,12 @@ export function Accounting({
       form.reset();
       mutationSucceeded();
       await load(true);
-    } catch {
-      setError(true);
+    } catch (err) {
+      // A duplicate code or invalid field is a form problem, not a screen-level failure: keep the typed values.
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 409) setCreateServerError("createDuplicate");
+      else if (status === 400) setCreateServerError("createInvalid");
+      else setError(true);
     } finally {
       setSaving(false);
     }
@@ -871,6 +877,7 @@ export function Accounting({
                     <input name="name_en" maxLength={200} dir="ltr" lang="en" />
                   </label>
                   {createNameError && <p className="ac-approved__hint" role="alert">{t("accounting.chart.editError.nameRequired")}</p>}
+                  {createServerError && <p className="ac-approved__hint" role="alert">{t(`accounting.chart.editError.${createServerError}`)}</p>}
                   <label>
                     <span>{t("accounting.type")}</span>
                     <select name="account_type">

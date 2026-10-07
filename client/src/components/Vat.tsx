@@ -28,16 +28,17 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  const {t,i18n}=useTranslation();
  const { selectedPeriodId } = useDateContext();
  const [periods,setPeriods]=useState<Period[]>([]);const [years,setYears]=useState<FiscalYear[]>([]);const [selectedId,setSelectedId]=useState<string|null>(null);const [documents,setDocuments]=useState<VatDocument[]>([]);const [selectedDocument,setSelectedDocument]=useState<VatDocument|null>(null);const [search,setSearch]=useState('');const [reviewFilter,setReviewFilter]=useState('');const [typeFilter,setTypeFilter]=useState('');const [treatmentFilter,setTreatmentFilter]=useState('');const [loading,setLoading]=useState(canView);const [error,setError]=useState(false);const [creating,setCreating]=useState(false);const [editing,setEditing]=useState<VatDocument|null>(null);const [reopen,setReopen]=useState<Period|null>(null);const [saving,setSaving]=useState(false);
+ const [side,setSide]=useState<''|'output'|'input'|'net'>('');
  const selected=periods.find(p=>p.id===selectedId)??null;
  const loadPeriods=async()=>{setLoading(true);setError(false);try{const [p,y]=await Promise.all([api('/api/vat-periods',{},onUnauthorized),api('/api/fiscal-years',{},onUnauthorized)]);const next=((await p.json()) as {periods:Period[]}).periods;const from=readQueryParameter('vatFrom'),to=readQueryParameter('vatTo');const requested=from&&to?next.find(period=>period.period_start===from&&period.period_end===to):null;setPeriods(next);setYears(((await y.json()) as {fiscalYears:FiscalYear[]}).fiscalYears);setSelectedId(current=>requested?.id??(current&&next.some(x=>x.id===current)?current:(next[0]?.id??null)));}catch{setError(true)}finally{setLoading(false)}};
  const loadDetail=async(id:string)=>{try{const response=await api(`/api/vat-periods/${id}`,{},onUnauthorized);const data=await response.json() as {period:Period;documents:VatDocument[]};setPeriods(current=>current.map(p=>p.id===id?data.period:p));setDocuments(data.documents);setSelectedDocument(current=>current?data.documents.find(document=>document.id===current.id)??null:null);}catch{setError(true)}};
  useEffect(()=>{if(canView)void loadPeriods();// eslint-disable-next-line react-hooks/exhaustive-deps
  },[canView]);
- useEffect(()=>{if(selectedId)void loadDetail(selectedId);else setDocuments([]);// eslint-disable-next-line react-hooks/exhaustive-deps
+ useEffect(()=>{setSide('');if(selectedId)void loadDetail(selectedId);else setDocuments([]);// eslint-disable-next-line react-hooks/exhaustive-deps
  },[selectedId]);
  useEffect(()=>{if(selectedPeriodId&&periods.length>0){const globalPeriod=periods.find(p=>p.id===selectedPeriodId);if(globalPeriod&&selectedId!==globalPeriod.id){setSelectedId(globalPeriod.id);}}},[selectedPeriodId,periods]);
  const totals=useMemo(()=>documents.reduce((acc,d)=>{if(d.review_status!=='reviewed'||!d.vat_amount)return acc;const amount=Number(d.vat_amount);if(d.document_type==='sale')acc.output+=amount;else acc.input+=amount;return acc},{input:0,output:0}),[documents]);
- const visibleDocuments=useMemo(()=>{const query=search.trim().toLocaleLowerCase();return documents.filter(d=>(!query||[d.original_filename,d.counterparty_name,d.review_note].some(value=>value?.toLocaleLowerCase().includes(query)))&&(!reviewFilter||(reviewFilter==='not_reviewed'?!d.review_status:reviewFilter==='recoverability'?needsRecoverability(d):d.review_status===reviewFilter))&&(!typeFilter||d.document_type===typeFilter)&&(!treatmentFilter||d.treatment===treatmentFilter))},[documents,search,reviewFilter,typeFilter,treatmentFilter]);
+ const visibleDocuments=useMemo(()=>{const query=search.trim().toLocaleLowerCase();return documents.filter(d=>(!query||[d.original_filename,d.counterparty_name,d.review_note].some(value=>value?.toLocaleLowerCase().includes(query)))&&(!reviewFilter||(reviewFilter==='not_reviewed'?!d.review_status:reviewFilter==='recoverability'?needsRecoverability(d):d.review_status===reviewFilter))&&(!typeFilter||d.document_type===typeFilter)&&(!treatmentFilter||d.treatment===treatmentFilter)&&(!side||(d.review_status==='reviewed'&&!!d.vat_amount&&(side==='net'||(side==='output')===(d.document_type==='sale')))))},[documents,search,reviewFilter,typeFilter,treatmentFilter,side]);
  const ar=i18n.language.startsWith('ar');
  if(!canView)return <WorkspacePage><WorkspaceState>{t('vat.noAccess')}</WorkspaceState></WorkspacePage>;
  const refresh=async()=>{await loadPeriods();if(selectedId)await loadDetail(selectedId)};
@@ -74,7 +75,10 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
   {key:'recoverability',label:t('vat.recoverabilityLabel'),count:selected.blockers.vat_recoverability_pending??0,action:showRegister('recoverability')},
   {key:'ledger',label:t('vat.ledgerMismatchLabel'),count:selected.blockers.vat_ledger_mismatches??0,action:canViewAccounting?()=>onNavigate('accounting',{accountingTab:'sources',sourceFrom:selected.period_start,sourceTo:selected.period_end}):null},
   {key:'adjustments',label:t('vat.adjustmentsPendingLabel'),count:selected.blockers.vat_adjustments_pending??0,action:null}]:[];
- const hasFilters=Boolean(search||reviewFilter||typeFilter||treatmentFilter);
+ const hasFilters=Boolean(search||reviewFilter||typeFilter||treatmentFilter||side);
+ // Summary figures are sums of reviewed documents already loaded in the register, so drilling in only filters that register (no recalculation).
+ const drill=(next:'output'|'input'|'net')=>()=>{const active=side===next;setSide(active?'':next);if(!active){setSearch('');setReviewFilter('');setTypeFilter('');setTreatmentFilter('');setSelectedDocument(null);window.setTimeout(()=>document.getElementById('vat-register')?.scrollIntoView?.({block:'start'}),0)}};
+ const drillValue=(key:'output'|'input'|'net',value:number)=>documents.length>0?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{value.toFixed(2)}</bdi></button>:<bdi dir="ltr">{value.toFixed(2)}</bdi>;
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
   <header className="vat-header"><h2 id="vat-title">{t('vat.title')}</h2><p>{t('vat.description')}</p></header>
@@ -98,9 +102,9 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
    </section>}
    <section className="vat-card vat-summary" aria-label={t('vat.summaryTitle')}>
     <dl className="vat-summary__values">
-     <div><dt>{t('vat.outputVat')}</dt><dd><bdi dir="ltr">{totals.output.toFixed(2)}</bdi><small>{currency}</small></dd></div>
-     <div><dt>{t('vat.inputVat')}</dt><dd><bdi dir="ltr">{totals.input.toFixed(2)}</bdi><small>{currency}</small></dd></div>
-     <div><dt>{t('vat.netVat')}</dt><dd><bdi dir="ltr">{(totals.output-totals.input).toFixed(2)}</bdi><small>{currency}</small></dd></div>
+     <div><dt>{t('vat.outputVat')}</dt><dd>{drillValue('output',totals.output)}<small>{currency}</small></dd></div>
+     <div><dt>{t('vat.inputVat')}</dt><dd>{drillValue('input',totals.input)}<small>{currency}</small></dd></div>
+     <div><dt>{t('vat.netVat')}</dt><dd>{drillValue('net',totals.output-totals.input)}<small>{currency}</small></dd></div>
     </dl>
     <p className="vat-summary__note">{t('vat.summaryNote')}</p>
    </section>
@@ -109,11 +113,11 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
     <div className="vat-filter"><span aria-hidden="true">{t('vat.reviewStatus')}:</span><select aria-label={t('vat.reviewStatus')} value={reviewFilter} onChange={e=>setReviewFilter(e.target.value)}><option value="">{t('vat.all')}</option><option value="reviewed">{t('vat.reviewed')}</option><option value="pending">{t('vat.pending')}</option><option value="not_reviewed">{t('vat.notReviewed')}</option><option value="recoverability">{t('vat.recoverabilityFilter')}</option></select></div>
     <div className="vat-filter"><span aria-hidden="true">{t('vat.type')}:</span><select aria-label={t('vat.type')} value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="">{t('vat.all')}</option>{['purchase','expense','sale'].map(x=><option key={x} value={x}>{t(`documents.intake.types.${x}`)}</option>)}</select></div>
     <div className="vat-filter"><span aria-hidden="true">{t('vat.treatment')}:</span><select aria-label={t('vat.treatment')} value={treatmentFilter} onChange={e=>setTreatmentFilter(e.target.value)}><option value="">{t('vat.all')}</option>{['standard','zero_rated','exempt','out_of_scope'].map(x=><option key={x} value={x}>{t(`vat.treatments.${x}`)}</option>)}</select></div>
-    {hasFilters&&<button className="vat-ghost" onClick={()=>{setSearch('');setReviewFilter('');setTypeFilter('');setTreatmentFilter('')}}>{t('vat.clearFilters')}</button>}
+    {hasFilters&&<button className="vat-ghost" onClick={()=>{setSearch('');setReviewFilter('');setTypeFilter('');setTreatmentFilter('');setSide('')}}>{t('vat.clearFilters')}</button>}
    </div>
    {documents.length===0?<WorkspaceState>{t('vat.noDocuments')}</WorkspaceState>:<div className={`vat-workspace${selectedDocument?' has-detail':''}`}>
     <section id="vat-register" className="vat-card vat-register" aria-label={t('vat.registerTitle')}>
-     <div className="vat-register__heading"><h3>{t('vat.registerTitle')}</h3><span className="vat-muted">{t('vat.resultCount',{count:visibleDocuments.length})} • {t('vat.amountsIn',{currency})}</span></div>
+     <div className="vat-register__heading"><h3>{t('vat.registerTitle')}</h3>{side&&<span className="vat-chip" role="status">{t(`vat.drillActive.${side}`)}</span>}<span className="vat-muted">{t('vat.resultCount',{count:visibleDocuments.length})} • {t('vat.amountsIn',{currency})}</span></div>
      <div className="vat-table-wrap"><table><thead><tr><th>{t('vat.document')}</th><th>{ar?'العميل / المورد':'Customer / Supplier'}</th><th>{t('vat.documentDate')}</th><th>{t('vat.type')}</th><th>{t('vat.total')}</th><th>{t('vat.vatAmount')}</th><th>{t('vat.reviewStatus')}</th><th>{t('vat.actions')}</th></tr></thead><tbody>{visibleDocuments.map(d=><tr key={d.id} tabIndex={0} aria-selected={selectedDocument?.id===d.id} className={selectedDocument?.id===d.id?'is-selected':undefined} onClick={()=>setSelectedDocument(d)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setSelectedDocument(d)}}}><td>{d.original_filename}</td><td>{d.counterparty_name??'—'}</td><td>{d.document_date?formatDisplayDate(d.document_date,i18n.language):'—'}</td><td>{t(`documents.intake.types.${d.document_type}`)}</td><td>{d.total_amount??'—'}</td><td>{d.vat_amount??'—'}</td><td><span className={`vat-badge vat-badge--${reviewTone(d)}`}>{reviewLabel(d)}</span></td><td>{canEdit(d)?<button className="vat-link" onClick={event=>{event.stopPropagation();setEditing(d)}}>{d.review_id?t('vat.editReview'):t('vat.review')}</button>:'—'}</td></tr>)}</tbody></table>{visibleDocuments.length===0&&<WorkspaceState>{t('vat.noResults')}</WorkspaceState>}</div>
      <p className="vat-register__count">{t('vat.showing',{count:visibleDocuments.length,total:documents.length})}</p>
     </section>

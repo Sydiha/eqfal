@@ -89,3 +89,7 @@
 .vat-view .vat-detail__compare span{color:var(--vat-muted);font-size:10px}
 .vat-view .vat-detail__edit{width:100%;margin-top:auto}
 @media (max-width:900px){.vat-view .vat-workspace.has-detail{grid-template-columns:minmax(0,1fr)}.vat-view .vat-blockers,.vat-view .vat-summary__values{grid-template-columns:1fr}.vat-view .vat-periods,.vat-view .vat-readiness__close{flex-wrap:wrap}}
+.vat-view .vat-drill{all:unset;box-sizing:border-box;cursor:pointer;font:inherit;color:inherit;padding:0 2px;border-bottom:1px dashed var(--vat-muted);border-radius:2px}
+.vat-view .vat-drill:hover,.vat-view .vat-drill.is-active{color:var(--vat-ink);border-bottom-style:solid}
+.vat-view .vat-drill:focus-visible{outline:2px solid var(--vat-ink);outline-offset:2px}
+.vat-view .vat-chip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--vat-soft);font-size:11px;color:var(--vat-ink)}

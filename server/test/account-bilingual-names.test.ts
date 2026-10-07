@@ -67,6 +67,15 @@ describe('bilingual account names',()=>{
   expect(res.status).toBe(200);
   expect(update()!.params.slice(2)).toEqual(['1000','Bank','asset',null,true,'البنك','Bank']);
  });
+ it('editing one language keeps the other language and never touches code or legacy name',async()=>{
+  state.before={...legacy,name:'البنك',name_ar:'البنك',name_en:'Bank'};
+  const res=await request(app).patch(`/api/accounts/${legacy.id}`).send({name_ar:'المصرف'});
+  expect(res.status).toBe(200);
+  expect(update()!.params.slice(2)).toEqual(['1000','البنك','asset',null,true,'المصرف','Bank']);
+  state.queries=[];
+  await request(app).patch(`/api/accounts/${legacy.id}`).send({name_en:null});
+  expect(update()!.params.slice(2)).toEqual(['1000','البنك','asset',null,true,'البنك',null]);
+ });
  it('does not let a localized account lose both localized names',async()=>{
   state.before={...legacy,name_ar:'البنك'};
   expect((await request(app).patch(`/api/accounts/${legacy.id}`).send({name_ar:''})).status).toBe(400);

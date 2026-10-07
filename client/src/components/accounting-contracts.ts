@@ -47,8 +47,12 @@ export function serializeJournalLines(lines:JournalLineEditor[]):JournalLinesWri
 }
 
 export type AccountNames={name:string;name_ar?:string|null;name_en?:string|null};
-// Display-only localization: Arabic UI prefers name_ar, English UI prefers name_en; both fall back to
-// the legacy `name`, then to the other language. Nothing is translated or guessed.
-export const localizedAccountName=(account:AccountNames,language:string)=>language.startsWith('ar')
- ?account.name_ar||account.name||account.name_en||''
- :account.name_en||account.name||account.name_ar||'';
+// Display-only localization: Arabic UI prefers name_ar, English UI prefers name_en. Once an account has any
+// localized name the legacy `name` is only compatibility storage (it is not rewritten on edit and can be stale),
+// so the other language is used before it. Legacy accounts with no localized name keep showing `name`.
+// Nothing is translated or guessed.
+export const localizedAccountName=(account:AccountNames,language:string)=>{
+ const ar=language.startsWith('ar');
+ const own=ar?account.name_ar:account.name_en,other=ar?account.name_en:account.name_ar;
+ return own||other||account.name||'';
+};

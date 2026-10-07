@@ -90,3 +90,8 @@
 .pa-view .pa-range{display:inline-flex;gap:4px;white-space:nowrap}
 
 .pa-view .pa-results:focus{outline:none}
+.pa-view .pa-context{margin:0;font-size:12px}
+.pa-view .pa-context small{color:var(--pa-muted,#64748b)}
+.pa-view .pa-filters{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+.pa-view .pa-filters label{display:flex;flex-direction:column;gap:4px;font-size:11px}
+.pa-view .pa-scope-tag{display:block;font-size:10px;color:var(--pa-muted,#64748b)}

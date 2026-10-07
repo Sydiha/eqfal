@@ -59,3 +59,41 @@ describe('Phase 6B2 recoverability controls',()=>{
  it('rejects a recoverability decision on a sale and resolves zero input VAT without a blocker',async()=>{await expect(save('sale','fully_recoverable','15.00')).rejects.toBeInstanceOf(vat.VatValidationError);const values=await save('expense',undefined,undefined,'0.00');expect(values[10]).toBe('fully_recoverable');expect(values[11]).toBe('0.00')});
  it('counts unresolved reviewed input VAT by tax_date as a close blocker',async()=>{const built=poolFor(sql=>{if(sql.startsWith('SELECT (SELECT COUNT(*) FROM documents'))return result([{...blockers(),vat_recoverability_pending:'1'}]);if(sql.startsWith('WITH scoped AS'))return result();throw new Error(sql)});const value=await new vat.VatService(built.pool).readiness(COMPANY,'2026-01-01','2026-03-31');expect(value).toMatchObject({ready:false,blockers:{vat_recoverability_pending:1,total:1}});const sql=built.query.mock.calls[0]![0] as string;expect(sql).toContain('r.tax_date BETWEEN $2 AND $3')});
 });
+
+describe('VAT period detail (source documents behind the summary figures)',()=>{
+ const app=express();app.use(express.json());app.use('/api',vat.vatRouter);app.use((error:unknown,_q:Request,res:Response,_n:NextFunction)=>res.status(500).json({error:error instanceof Error?error.message:'error'}));
+ const emptyRecon=()=>result([]);
+ const run=(sqlLog:{sql:string;args:unknown[]}[],docs:Record<string,unknown>[],hasPeriod=true)=>poolFor((sql,args)=>{
+  sqlLog.push({sql,args});
+  if(sql.includes('FROM vat_periods WHERE id='))return hasPeriod?result([period('open')]):result();
+  if(sql.startsWith('SELECT (SELECT COUNT(*) FROM documents'))return result([blockers()]);
+  if(sql.startsWith('WITH scoped AS'))return emptyRecon();
+  if(sql.startsWith('SELECT d.id,d.status'))return result(docs);
+  throw new Error(sql);
+ });
+ it('requires vat.view for the period detail',async()=>{
+  mocks.context={user:{id:USER},activeCompanyId:COMPANY,capabilities:[]};
+  expect((await request(app).get(`/api/vat-periods/${PERIOD}`)).status).toBe(403);
+ });
+ it('scopes the period and every document query to the active company',async()=>{
+  const log:{sql:string;args:unknown[]}[]=[];mocks.pool=run(log,[{id:DOC,document_type:'sale',vat_amount:'15.00'}]).pool;
+  mocks.context={user:{id:USER},activeCompanyId:COMPANY,capabilities:['vat.view']};
+  const res=await request(app).get(`/api/vat-periods/${PERIOD}`);
+  expect(res.status).toBe(200);expect(res.body.documents).toHaveLength(1);
+  const scoped=log.filter(q=>q.sql.includes('company_id'));
+  expect(scoped.length).toBeGreaterThan(0);
+  for(const q of scoped){expect(q.args).toContain(COMPANY);expect(q.args).not.toContain(OTHER)}
+ });
+ it('returns 404 for another company\'s period and never queries its documents',async()=>{
+  const log:{sql:string;args:unknown[]}[]=[];mocks.pool=run(log,[],false).pool;
+  mocks.context={user:{id:USER},activeCompanyId:OTHER,capabilities:['vat.view']};
+  expect((await request(app).get(`/api/vat-periods/${PERIOD}`)).status).toBe(404);
+  expect(log.some(q=>q.sql.startsWith('SELECT d.id,d.status'))).toBe(false);
+  expect(log[0]!.args).toEqual([PERIOD,OTHER]);
+ });
+ it('returns an empty document list for a period with no VAT documents',async()=>{
+  mocks.pool=run([],[]).pool;mocks.context={user:{id:USER},activeCompanyId:COMPANY,capabilities:['vat.view']};
+  const res=await request(app).get(`/api/vat-periods/${PERIOD}`);
+  expect(res.status).toBe(200);expect(res.body.documents).toEqual([]);
+ });
+});
