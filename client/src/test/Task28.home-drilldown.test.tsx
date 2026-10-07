@@ -95,4 +95,35 @@ describe('Home KPI drill-down', () => {
     expect(await screen.findByText(/No monthly close record exists for this month/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Monthly Close Readiness' })).not.toBeInTheDocument();
   });
+
+  it('shows the selected period range and states each card\'s scope', async () => {
+    renderHome(ALL);
+    await screen.findByRole('button', { name: /Cash and Banks/ });
+    const range = screen.getByTestId('home-period-range');
+    expect(range).toHaveTextContent('2026');
+    expect(screen.getAllByText('March 2026').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('All open balances')).toHaveLength(2);
+  });
+
+  it('keeps Net Profit as a non-clickable card without a scope caption', async () => {
+    renderHome(ALL);
+    await screen.findByRole('button', { name: /Cash and Banks/ });
+    const card = screen.getByText('Net Profit').closest('.home__kpi-card')!;
+    expect(card.tagName).toBe('DIV');
+    expect(card.querySelector('.home__kpi-scope')).toBeNull();
+  });
+
+  it('uses the whole fiscal-year range in the subtitle in all-year mode', async () => {
+    renderHome(ALL, dateContext({ periodMode: 'all', selectedPeriodId: null }));
+    await screen.findByRole('button', { name: /Revenue/ });
+    expect(screen.getByTestId('home-period-range')).toHaveTextContent(/2026.*2026/);
+    expect(screen.getByText(/Aggregate Financial Summary – Full Year 2026/)).toBeInTheDocument();
+  });
+
+  it('renders the Arabic scope captions', async () => {
+    await i18n.changeLanguage('ar');
+    renderHome(ALL);
+    await screen.findByRole('button', { name: /النقد والبنوك/ });
+    expect(screen.getAllByText('كل الأرصدة المفتوحة')).toHaveLength(2);
+  });
 });

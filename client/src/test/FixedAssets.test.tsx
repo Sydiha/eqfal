@@ -83,4 +83,36 @@ describe('Fixed Assets close discovery',()=>{
   render(<FixedAssets {...props}/>);expect(await screen.findByText('FA-ACQUIRED')).toBeInTheDocument();expect(screen.getByText('FA-SCHEDULED')).toBeInTheDocument();expect(screen.queryByText('FA-OUTSIDE')).not.toBeInTheDocument();
  });
  it('ignores invalid close context without loading depreciation discovery',async()=>{window.history.replaceState(null,'','/?page=assets&assetFrom=bad&assetTo=2026-08-31');const fetchMock=mockApi();render(<FixedAssets {...props}/>);expect(await screen.findByText('FA-001')).toBeInTheDocument();expect(fetchMock.mock.calls.some(([url])=>String(url).endsWith('/depreciation'))).toBe(false)});
+ it('states the period filter, explains an empty result and lets the user clear it',async()=>{
+  window.history.replaceState(null,'','/?page=assets&assetFrom=2026-08-01&assetTo=2026-08-31');
+  const outside=asset({id:'outside',asset_number:'FA-OUTSIDE',name:'Outside',status:'active'});
+  vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request)=>{const url=String(input);if(url==='/api/assets')return new Response(JSON.stringify({assets:[outside]}));if(url==='/api/asset-categories')return new Response(JSON.stringify({categories:[category]}));if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));if(url.includes('/depreciation'))return new Response(JSON.stringify({entries:[]}));throw Error(`Unexpected request: ${url}`)}));
+  render(<FixedAssets {...props}/>);
+  expect(await screen.findByText('No assets need action in the selected period.')).toBeInTheDocument();
+  expect(screen.getByTestId('assets-period-filter')).toHaveTextContent('2026-08-01 to 2026-08-31');
+  fireEvent.click(screen.getByRole('button',{name:'Show all assets'}));
+  expect(await screen.findByText('FA-OUTSIDE')).toBeInTheDocument();
+  expect(screen.queryByTestId('assets-period-filter')).not.toBeInTheDocument();
+  expect(window.location.search).not.toContain('assetFrom');
+ });
+});
+
+describe('Fixed Assets runtime states',()=>{
+ it('shows the error instead of an endless loading state when the register fails to load',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:'Register unavailable'}),{status:500})));
+  render(<FixedAssets {...props}/>);
+  expect(await screen.findByText('Register unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+ });
+ it('reports a failed asset detail load instead of an unhandled rejection and opens a row with the keyboard',async()=>{
+  let fail=true;
+  vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request)=>{const url=String(input);if(url==='/api/assets')return new Response(JSON.stringify({assets:[asset()]}));if(url==='/api/asset-categories')return new Response(JSON.stringify({categories:[category]}));if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));if(url==='/api/assets/asset-1'){if(fail)return new Response(JSON.stringify({error:'Detail unavailable'}),{status:500});return new Response(JSON.stringify(asset()))}if(url.endsWith('/depreciation'))return new Response(JSON.stringify({entries:[]}));throw Error(`Unexpected request: ${url}`)}));
+  render(<FixedAssets {...props}/>);
+  const row=(await screen.findByText('FA-001')).closest('tr')!;
+  fireEvent.click(row);
+  expect(await screen.findByText('Detail unavailable')).toBeInTheDocument();
+  fail=false;fireEvent.keyDown(row,{key:'Enter'});
+  expect(await screen.findByText('Laptop — FA-001')).toBeInTheDocument();
+  expect(screen.queryByText('Detail unavailable')).not.toBeInTheDocument();
+ });
 });
