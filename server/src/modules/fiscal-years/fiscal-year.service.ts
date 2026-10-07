@@ -8,6 +8,7 @@ import {
 import { FiscalYearConflictError } from './fiscal-year-errors';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { MonthlyCloseProvisioningService } from '../monthly-close/monthly-close.service';
 import {
   FiscalYearCloseBlockedError,
   getFiscalYearCloseReadiness,
@@ -131,8 +132,9 @@ export class FiscalYearService {
    * Create a new fiscal year.
    *
    * Date validation is pure (no DB) and runs before the transaction.
-   * The advisory lock + overlap check + INSERT + audit entry all execute
-   * on the same connection inside one transaction.
+   * The advisory lock + overlap check + INSERT + period provisioning + audit entry
+   * all execute on the same connection inside one transaction.
+   * If period provisioning fails, the entire fiscal year creation rolls back.
    */
   async createFiscalYear(
     input: CreateFiscalYearInput,
@@ -149,6 +151,17 @@ export class FiscalYearService {
       );
 
       const fy = await this.fyRepo.create(input, client);
+
+      // Auto-provision all expected monthly close periods for the fiscal year
+      // within the same transaction. If provisioning fails, FY creation rolls back.
+      const provisioningService = new MonthlyCloseProvisioningService(this.pool);
+      await provisioningService.provisionDefaultPeriods(
+        fy.id,
+        input.company_id,
+        input.start_date,
+        input.end_date,
+        client,
+      );
 
       await this.auditRepo.logEvent(
         {
