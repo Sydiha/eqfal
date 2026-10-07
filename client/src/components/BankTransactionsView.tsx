@@ -246,7 +246,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
         </div>
         {pagedTransactions.map((tx) => {
           const selected = selectedId === tx.id;
-          return <article className={`bank-transaction-row bank-transaction-row--${tx.reconciliation_status}`} key={tx.id} tabIndex={0} aria-selected={selected} onClick={() => setSelectedId(tx.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(tx.id); } }}>
+          return <article className={`bank-transaction-row bank-transaction-row--${tx.reconciliation_status}`} key={tx.id} tabIndex={0} aria-selected={selected} onClick={() => setSelectedId(tx.id)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelectedId(tx.id); } }}>
             <div className="bank-transaction-main">
               <time className="bank-transaction-date" dir="ltr">{displayDate(tx.transaction_date)}</time>
               <div className="bank-transaction-description">

@@ -866,7 +866,7 @@ export function Accounting({
                 <form key="new-account" className="ac-approved__fields" onSubmit={createAccount}>
                   <label>
                     <span>{t("accounting.code")}</span>
-                    <input name="code" required maxLength={50} />
+                    <input name="code" dir="ltr" required maxLength={50} />
                   </label>
                   <label>
                     <span>{t("accounting.nameAr")}</span>
@@ -932,7 +932,7 @@ export function Accounting({
                       <>
                         <label>
                           <span>{t("accounting.code")}</span>
-                          <input value={d.code} maxLength={50} disabled={!editing || locks.code || saving} readOnly={!editing} onChange={(e) => set({ code: e.target.value })} />
+                          <input value={d.code} dir="ltr" maxLength={50} disabled={!editing || locks.code || saving} readOnly={!editing} onChange={(e) => set({ code: e.target.value })} />
                           {editing && locks.code && lockNote("accounting.chart.lock.code")}
                         </label>
                         <label>
