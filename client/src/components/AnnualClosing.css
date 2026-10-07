@@ -49,7 +49,7 @@
 .annual-closing-view .ac-card .panel{margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}
 .annual-closing-view .ac-card section h2{margin:0 0 8px;font-size:14px;font-weight:600}
 .annual-closing-view .ac-card section h3{margin:8px 0;font-size:13px;font-weight:600}
-.annual-closing-view .ac-card dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 16px;margin:0 0 8px}
+.annual-closing-view .ac-card dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr) minmax(0,1fr));gap:8px 16px;margin:0 0 8px}
 .annual-closing-view .ac-card dt{color:var(--ac-muted);font-size:11px}
 .annual-closing-view .ac-card dd{margin:2px 0 0;font-size:12px}
 .annual-closing-view .ac-card table{width:100%;border-collapse:collapse;font-size:12px}
@@ -76,3 +76,6 @@
  .annual-closing-view .ac-summary article{padding:4px 12px}
  .annual-closing-view .ac-summary article:nth-child(odd){border-inline-start:0}
 }
+
+/* Wave 3: label/value pairs (dt/dd) must stay on the same row; an odd auto-fit column count split them */
+@media(max-width:64em){.annual-closing-view .ac-card dl{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}

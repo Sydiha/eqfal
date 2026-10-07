@@ -81,3 +81,6 @@
   .acc-view .acc-groups,.acc-view .acc-group-body{grid-template-columns:minmax(0,1fr)}
   .acc-view .acc-group-body label{padding-block:8px}
 }
+
+/* Wave 3: Audit Log filters lay out as a compact grid on wide screens instead of a full-width stack */
+@media(min-width:48em){.acc-view form.acc-form[role="search"]{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-items:start;gap:12px 16px}.acc-view form.acc-form[role="search"] .modal-actions{grid-column:1/-1}}

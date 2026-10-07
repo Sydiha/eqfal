@@ -106,7 +106,7 @@ export function AuditLog({ canView, onUnauthorized }: { canView: boolean; onUnau
       </tr></thead><tbody>
         {entries.length === 0 ? <tr><td colSpan={8} className="acc-empty">{t(filtered ? 'auditLog.noResults' : 'auditLog.empty')}</td></tr> : entries.map((e) => <Fragment key={e.id}>
           <tr>
-            <td dir="ltr">{formatDisplayDateTime(e.created_at, i18n.language)}</td>
+            <td dir="ltr">{formatDisplayDateTime(e.created_at, i18n.language).replace(/[\u200e\u200f]/g, '')}</td>
             <td dir="ltr">{actor(e)}</td>
             <td title={e.action}><StatusBadge status="open">{auditActionLabel(e.action, lang)}</StatusBadge></td>
             <td title={e.entity_type}>{auditEntityLabel(e.entity_type, lang)}</td>
