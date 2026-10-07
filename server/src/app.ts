@@ -10,6 +10,7 @@ import { documentSettlementRouter } from './modules/banking/document-settlement.
 import { custodyRouter } from './modules/banking/custody.router';
 import { partnerRouter } from './modules/partners/partner.router';
 import { obligationRouter } from './modules/obligations/obligation.router';
+import { obligationAgingRouter } from './modules/obligations/obligation-aging';
 import { monthlyCloseRouter } from './modules/monthly-close/monthly-close.router';
 import { vatRouter } from './modules/vat/vat.router';
 import { vatReportRouter } from './modules/vat/vat-report.router';
@@ -55,6 +56,7 @@ app.use('/api', bankReconciliationRouter);
 app.use('/api', documentSettlementRouter);
 app.use('/api', custodyRouter);
 app.use('/api', partnerRouter);
+app.use('/api', obligationAgingRouter);
 app.use('/api', obligationRouter);
 app.use('/api', monthlyCloseRouter);
 app.use('/api', vatRouter);
