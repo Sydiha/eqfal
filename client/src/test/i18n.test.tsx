@@ -129,3 +129,17 @@ describe('i18n — language persistence', () => {
     expect(getSavedLang()).toBe('en');
   });
 });
+
+describe('i18n — Task 35D Phase 2 error codes', () => {
+  it('has distinct, non-empty AR and EN messages for every Phase 2 code', async () => {
+    const { PHASE2_ERROR_CODES } = await import('../api/apiError');
+    for (const code of PHASE2_ERROR_CODES) {
+      const ar = i18n.getResource('ar', 'translation', `errors.${code}`) as string;
+      const en = i18n.getResource('en', 'translation', `errors.${code}`) as string;
+      expect(ar, `ar ${code}`).toBeTruthy();
+      expect(en, `en ${code}`).toBeTruthy();
+      expect(ar).not.toBe(en);
+    }
+    expect(PHASE2_ERROR_CODES).toHaveLength(12);
+  });
+});

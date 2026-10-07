@@ -13,7 +13,7 @@ export interface ManagedCompany {
 }
 
 export class CompanyAccessError extends Error {
-  constructor(readonly kind: 'not_found' | 'forbidden' | 'conflict') { super(kind); }
+  constructor(readonly kind: 'not_found' | 'forbidden' | 'conflict', readonly code?: 'COMPANY_LAST_ACTIVE_CONFLICT') { super(kind); }
 }
 
 interface CompanyRow { id: string; slug: string; name: string; name_ar: string | null; is_active: boolean; created_at: Date }
@@ -145,7 +145,7 @@ export class CompanyManagementService {
            WHERE m.user_id = $1 AND m.is_active = TRUE AND m.company_id <> $2 LIMIT 1`,
           [actorUserId, id],
         );
-        if (before.is_active && others.rows.length === 0) throw new CompanyAccessError('conflict');
+        if (before.is_active && others.rows.length === 0) throw new CompanyAccessError('conflict', 'COMPANY_LAST_ACTIVE_CONFLICT');
       }
       const { rows } = await client.query<CompanyRow>(
         `UPDATE companies SET is_active = $2, updated_at = NOW() WHERE id = $1

@@ -33,10 +33,11 @@ function handleKnownError(error: unknown, res: Response): boolean {
   if (error instanceof CompanyAccessError) {
     if (error.kind === 'not_found') res.status(404).json({ error: 'Not found' });
     else if (error.kind === 'forbidden') res.status(403).json({ error: 'Forbidden' });
-    else res.status(409).json({ error: 'Conflict' });
+    else res.status(409).json({ error: 'Conflict', ...(error.code ? { code: error.code } : {}) });
     return true;
   }
-  if ((error as { code?: string }).code === '23505') { res.status(409).json({ error: 'Conflict' }); return true; }
+  // companies has a single unique index (slug), so 23505 is a slug conflict.
+  if ((error as { code?: string }).code === '23505') { res.status(409).json({ error: 'Conflict', code: 'COMPANY_SLUG_CONFLICT' }); return true; }
   return false;
 }
 

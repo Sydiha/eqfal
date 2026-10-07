@@ -90,7 +90,9 @@ describe('company management permission enforcement', () => {
   it('maps duplicate slugs to 409', async () => {
     login(['company.create']);
     mocks.create.mockRejectedValue(Object.assign(new Error('dup'), { code: '23505' }));
-    expect((await request(app).post('/api/companies').set(...cookie).send({ slug: 'dup', name: 'Dup' })).status).toBe(409);
+    const response = await request(app).post('/api/companies').set(...cookie).send({ slug: 'dup', name: 'Dup' });
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ error: 'Conflict', code: 'COMPANY_SLUG_CONFLICT' });
   });
 
   it('edits only name fields; slug and is_active are rejected', async () => {
@@ -113,7 +115,15 @@ describe('company management permission enforcement', () => {
     mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('not_found'));
     expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: true })).status).toBe(404);
     mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('conflict'));
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false })).status).toBe(409);
+    const plain = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false });
+    expect(plain.status).toBe(409);
+    expect(plain.body).toEqual({ error: 'Conflict' });
+    mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('conflict', 'COMPANY_LAST_ACTIVE_CONFLICT'));
+    const last = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false });
+    expect(last.status).toBe(409);
+    expect(last.body).toEqual({ error: 'Conflict', code: 'COMPANY_LAST_ACTIVE_CONFLICT' });
+    mocks.update.mockRejectedValueOnce(new CompanyAccessError('forbidden'));
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ name: 'x' })).body).toEqual({ error: 'Forbidden' });
   });
 
   it('validates the enable/disable body and exposes no delete route', async () => {

@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/apiError';
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import './AccessAdministration.css';
@@ -14,11 +15,12 @@ interface Props {
 type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflict';
 type Dialogs = { kind: 'create' } | { kind: 'edit'; company: ManagedCompany } | null;
 
-class ApiError extends Error { constructor(readonly status: number) { super(`Companies API returned ${status}`); } }
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options });
-  if (response.status === 401) { onUnauthorized(); throw new ApiError(401); }
-  if (!response.ok) throw new ApiError(response.status);
+  let response: Response;
+  try { response = await fetch(url, { credentials: 'same-origin', ...options }); }
+  catch (reason) { throw reason instanceof DOMException && reason.name === 'AbortError' ? reason : toApiError(reason); }
+  if (response.status === 401) onUnauthorized();
+  if (!response.ok) throw await parseApiError(response);
   return response;
 }
 function errorKeyFor(reason: unknown): ErrorKey {
@@ -44,11 +46,12 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
   const [loading, setLoading] = useState(canView);
   const [loaded, setLoaded] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true); setErrorKey(null);
+    setLoading(true); setErrorKey(null); setFailure(null);
     try {
       const response = await request('/api/companies', { signal }, onUnauthorized);
       setCompanies(((await response.json()) as { companies: ManagedCompany[] }).companies);
@@ -56,7 +59,7 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
     } catch (reason) {
       const aborted = reason instanceof DOMException && reason.name === 'AbortError';
       const unauthorized = reason instanceof ApiError && reason.status === 401;
-      if (!aborted && !unauthorized) setErrorKey(errorKeyFor(reason));
+      if (!aborted && !unauthorized) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); }
     } finally { if (!signal?.aborted) setLoading(false); }
   }, [onUnauthorized]);
 
@@ -68,9 +71,9 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
   }, [canView, load]);
 
   const mutate = async (work: () => Promise<unknown>, afterSuccess?: () => void) => {
-    setBusy(true); setErrorKey(null);
+    setBusy(true); setErrorKey(null); setFailure(null);
     try { await work(); afterSuccess?.(); await load(); await onChanged(); }
-    catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) setErrorKey(errorKeyFor(reason)); }
+    catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); } }
     finally { setBusy(false); }
   };
 
@@ -94,7 +97,8 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
   const setActive = (company: ManagedCompany, isActive: boolean) =>
     mutate(() => request(`/api/companies/${company.id}/active`, json('PATCH', { is_active: isActive }), onUnauthorized));
 
-  const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{t(`companies.${errorKey}`)}</div> : null;
+  const errorText = errorKey ? (failure && apiErrorMessage(failure, t)) || t(`companies.${errorKey}`) : '';
+  const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{errorText}</div> : null;
   const actions = (onCancel: () => void, label: string) => <div className="modal-actions"><button type="button" className="acc-ghost" onClick={onCancel}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('companies.saving') : label}</button></div>;
 
   return <section className="panel acc-view" aria-labelledby="companies-title">
@@ -102,7 +106,7 @@ export function CompaniesManagement({ capabilities, onUnauthorized, onChanged }:
       <div><h2 id="companies-title">{t('companies.title')}</h2><p>{t('companies.description')}</p></div>
       {can('company.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog({ kind: 'create' }); }}>{t('companies.create')}</button>}
     </header>
-    {errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('companies.retry')}</button>}>{t(`companies.${errorKey}`)}</WorkspaceState>}
+    {errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('companies.retry')}</button>}>{errorText}</WorkspaceState>}
     {loading && !loaded ? <WorkspaceState>{t('companies.loading')}</WorkspaceState> : loaded && <div className="acc-card">
       <p className="acc-hint">{t('companies.disableHint')}</p>
       <div className="acc-table"><table><thead><tr><th>{t('companies.name')}</th><th>{t('companies.slug')}</th><th>{t('companies.status')}</th><th>{t('companies.actions')}</th></tr></thead>

@@ -15,6 +15,7 @@ import { accessAdministrationRouter } from '../src/modules/memberships/access-ad
 import { SessionRepository } from '../src/modules/auth/session.repository';
 import { MembershipRepository } from '../src/modules/memberships/membership.repository';
 import { MembershipService } from '../src/modules/memberships/membership.service';
+import { AccessPolicyError } from '../src/modules/memberships/access-policy-error';
 
 const ROLE = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def';
 const app = express();
@@ -74,10 +75,21 @@ describe('POST /access/roles/:id/capabilities/bulk — router', () => {
     as([GRANT]);
     mocks.changeRoleCapabilities.mockRejectedValueOnce(new Error("Ceiling violation: granter lacks capability 'x.y'"));
     expect((await bulk({ grants: ['x.y'] })).status).toBe(403);
+    mocks.changeRoleCapabilities.mockRejectedValueOnce(new AccessPolicyError("Ceiling violation: granter lacks capability 'x.y'", 'ACCESS_ROLE_CEILING'));
+    const ceiling = await bulk({ grants: ['x.y'] });
+    expect(ceiling.status).toBe(403);
+    expect(ceiling.body).toEqual({ error: 'Forbidden', code: 'ACCESS_ROLE_CEILING' });
+    expect(JSON.stringify(ceiling.body)).not.toContain('x.y');
+    mocks.changeRoleCapabilities.mockRejectedValueOnce(new Error('Cross-company violation'));
+    expect((await bulk({ grants: ['x.y'] })).body).toEqual({ error: 'Forbidden' });
     mocks.changeRoleCapabilities.mockRejectedValueOnce(new Error('Role not found'));
     expect((await bulk({ grants: ['x.y'] })).status).toBe(404);
     mocks.changeRoleCapabilities.mockRejectedValueOnce(new Error('Full Access role capabilities cannot be changed'));
     expect((await bulk({ grants: ['x.y'] })).status).toBe(403);
+    mocks.changeRoleCapabilities.mockRejectedValueOnce(new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE'));
+    const immutable = await bulk({ grants: ['x.y'] });
+    expect(immutable.status).toBe(403);
+    expect(immutable.body).toEqual({ error: 'Forbidden', code: 'ACCESS_FULL_ACCESS_IMMUTABLE' });
   });
 });
 

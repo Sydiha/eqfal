@@ -5,6 +5,7 @@ import logger from '../../shared/logger';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import bcrypt from 'bcrypt';
 import { UserRepository } from '../users/user.repository';
+import { AccessPolicyError } from './access-policy-error';
 
 /**
  * MembershipService
@@ -138,9 +139,9 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
-      if (role.is_full_access) throw new Error('Full Access role capabilities cannot be changed');
+      if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
       const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      if (add && !actorCapabilities.includes(capabilityId)) throw new Error(`Ceiling violation: granter lacks capability '${capabilityId}'`);
+      if (add && !actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
       const before = await this.repo.getRoleCapabilities(roleId, client);
       if (add) await this.repo.addCapabilityToRole(roleId, capabilityId, client);
       else await this.repo.removeCapabilityFromRole(roleId, capabilityId, client);
@@ -160,9 +161,9 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
-      if (role.is_full_access) throw new Error('Full Access role capabilities cannot be changed');
+      if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
       const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      for (const id of grants) if (!actorCapabilities.includes(id)) throw new Error(`Ceiling violation: granter lacks capability '${id}'`);
+      for (const id of grants) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
       const before = await this.repo.getRoleCapabilities(roleId, client);
       for (const id of grants) await this.repo.addCapabilityToRole(roleId, id, client);
       for (const id of revokes) await this.repo.removeCapabilityFromRole(roleId, id, client);
@@ -182,14 +183,14 @@ export class MembershipService {
   private async assertCanAssign(membership: Membership, role: Role, actorUserId: string, client?: PoolClient): Promise<void> {
     if (role.company_id !== membership.company_id) throw new Error('Cross-company violation');
     if (role.is_full_access && !(await this.repo.hasActiveFullAccessRole(actorUserId, membership.company_id, client))) {
-      throw new Error('Full Access violation: granter must hold Full Access in the target company');
+      throw new AccessPolicyError('Full Access violation: granter must hold Full Access in the target company', 'ACCESS_ROLE_CEILING');
     }
     const [granterCaps, roleCaps] = await Promise.all([
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
       this.repo.getRoleCapabilities(role.id, client),
     ]);
     for (const capability of roleCaps) {
-      if (!granterCaps.includes(capability)) throw new Error(`Ceiling violation: granter lacks capability '${capability}'`);
+      if (!granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
     }
   }
 
@@ -268,8 +269,9 @@ export class MembershipService {
       role.is_full_access &&
       !(await this.repo.hasActiveFullAccessRole(granterUserId, membership.company_id))
     ) {
-      throw new Error(
+      throw new AccessPolicyError(
         'Full Access violation: granter must hold Full Access in the target company',
+        'ACCESS_ROLE_CEILING',
       );
     }
 
@@ -284,9 +286,10 @@ export class MembershipService {
     const granterCapSet = new Set(granterCaps);
     for (const cap of roleCaps) {
       if (!granterCapSet.has(cap)) {
-        throw new Error(
+        throw new AccessPolicyError(
           `Ceiling violation: granter lacks capability '${cap}' — ` +
           `cannot grant a role that includes it`,
+          'ACCESS_ROLE_CEILING',
         );
       }
     }

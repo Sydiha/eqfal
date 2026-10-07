@@ -199,4 +199,31 @@ describe('AccessAdministration', () => {
     renderIt(['access.view']);
     expect(await screen.findByRole('alert')).toHaveTextContent('not allowed');
   });
+
+  it.each([
+    ['ACCESS_ROLE_CEILING', 'You cannot grant a role or permissions beyond your own access level in this company.'],
+    ['ACCESS_FULL_ACCESS_IMMUTABLE', 'The Full Access role has fixed permissions and cannot be modified.'],
+  ])('shows the translated message for %s without raw backend text', async (code, message) => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return new Response(JSON.stringify({ error: 'Forbidden', code }), { status: 403 });
+      if (url === '/api/access/memberships') return new Response(JSON.stringify({ memberships: members }), { status: 200 });
+      if (url === '/api/access/roles') return new Response(JSON.stringify({ roles }), { status: 200 });
+      return new Response(JSON.stringify({ capabilities: allCapabilities }), { status: 200 });
+    }));
+    renderIt(ALL);
+    const row = (await screen.findByText('clerk@example.com')).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Enable membership' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText('Forbidden')).toBeNull();
+  });
+
+  it('keeps a code-less 403 generic and shows the shared network message on connection failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })));
+    const first = renderIt(['access.view']);
+    expect(await screen.findByRole('alert')).toHaveTextContent('not allowed');
+    first.unmount();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    renderIt(['access.view']);
+    expect(await screen.findByText('Could not connect to the server. Check your connection and try again.')).toBeInTheDocument();
+  });
 });
