@@ -180,4 +180,13 @@ describe('VAT summary drill-down',()=>{
   await screen.findByRole('cell',{name:'u1.pdf'});
   expect(drillButtons()).toEqual([null,null,null]);
  });
+
+ it('Input VAT drill-down lists only positive-VAT contributors, not zero-VAT documents',async()=>{
+  stub([doc('p1','purchase','3.00'),doc('z1','purchase','0.00'),doc('s1','sale','15.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'z1.pdf'});
+  fireEvent.click(screen.getByRole('button',{name:/Input VAT/}));
+  expect(screen.getByRole('cell',{name:'p1.pdf'})).toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'z1.pdf'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('cell',{name:'s1.pdf'})).not.toBeInTheDocument();
+ });
 });
