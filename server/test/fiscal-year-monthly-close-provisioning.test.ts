@@ -166,21 +166,29 @@ describeDatabase('FY creation auto-provisions monthly periods (PostgreSQL)', () 
 
   it('provisioning failure rolls back the fiscal year row too (atomic)', async () => {
     const company = await newCompany();
+    // The real pooled client is never mutated: the service receives a delegating wrapper,
+    // and release() hands the untouched real client back to the pool.
+    const executed: string[] = [];
     const failing = {
       connect: async () => {
-        const client = await pool.connect();
-        const original = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
-        (client as unknown as { query: unknown }).query = (...args: unknown[]) => {
-          if (typeof args[0] === 'string' && /INSERT INTO monthly_close_periods/.test(args[0])) return Promise.reject(new Error('injected provisioning failure'));
-          return original(...args);
+        const real = await pool.connect();
+        return {
+          query: (...args: unknown[]) => {
+            const text = typeof args[0] === 'string' ? args[0] : '';
+            executed.push(text.trim().split(/\s+/)[0]!.toUpperCase());
+            if (/INSERT INTO monthly_close_periods/.test(text)) return Promise.reject(new Error('injected provisioning failure'));
+            return (real.query as (...a: unknown[]) => Promise<unknown>).apply(real, args);
+          },
+          release: (err?: Error | boolean) => real.release(err as never),
         };
-        return client;
       },
       query: pool.query.bind(pool),
     } as unknown as Pool;
     await expect(new FiscalYearService(failing).createFiscalYear(
       { company_id: company, name: 'FY Rollback', start_date: '2026-01-01', end_date: '2026-12-31' }, userId,
     )).rejects.toThrow('injected provisioning failure');
+    expect(executed).toContain('ROLLBACK');
+    expect(executed).not.toContain('COMMIT');
     expect((await pool.query('SELECT 1 FROM fiscal_years WHERE company_id=$1', [company])).rowCount).toBe(0);
     expect((await pool.query('SELECT 1 FROM monthly_close_periods WHERE company_id=$1', [company])).rowCount).toBe(0);
     expect((await pool.query("SELECT 1 FROM audit_log WHERE company_id=$1 AND action='fiscal_year.create'", [company])).rowCount).toBe(0);
