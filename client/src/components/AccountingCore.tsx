@@ -1,6 +1,9 @@
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ExportButtons } from "./ExportButtons";
+import { useActiveCompanyName } from "../context/CompanyContext";
+import { generalLedgerExport, generatedStamp, statementExport, trialBalanceExport, type StatementKind } from "../export/reportExport";
 import "./AccountingApproved.css";
 import "./AccountEdit.css";
 import "./AccountingTabs.css";
@@ -216,6 +219,9 @@ export function Accounting({
   const [reportScope, setReportScope] = useState<Record<string, string>>({});
   const [statement, setStatement] = useState<StatementReport | null>(null);
   const [statementBlocked, setStatementBlocked] = useState(false);
+  const companyName = useActiveCompanyName() ?? "";
+  // What each loaded report was run for; export files and print headers read from this, never re-query.
+  const [exportMeta, setExportMeta] = useState<{ trial?: { yearName: string }; ledger?: { yearName: string; accountLabel: string; accountCode: string }; statement?: { kind: StatementKind; yearName: string; start?: string; end?: string; asOf?: string } }>({});
   const [changesInEquityYearId, setChangesInEquityYearId] = useState("");
   const [sources, setSources] = useState<OperationalSource[]>([]);
   const [loading, setLoading] = useState(canView);
@@ -680,7 +686,8 @@ export function Accounting({
     e.preventDefault();
     const d = new FormData(e.currentTarget);
     const year = String(d.get("fiscal_year_id"));
-    const yearLabel = `${t("accounting.fiscalYear")}: ${years.find((y) => y.id === year)?.name ?? ""}`;
+    const yearName = years.find((y) => y.id === year)?.name ?? "";
+    const yearLabel = `${t("accounting.fiscalYear")}: ${yearName}`;
     setStatementBlocked(false);
     try {
       if (kind === "trial") {
@@ -691,6 +698,7 @@ export function Accounting({
         );
         setTrial(((await r.json()) as { accounts: TrialRow[] }).accounts);
         setReportScope((p) => ({ ...p, trial: yearLabel }));
+        setExportMeta((m) => ({ ...m, trial: { yearName } }));
       } else if (kind === "ledger") {
         const account = String(d.get("account_id"));
         const r = await api(
@@ -701,6 +709,7 @@ export function Accounting({
         setLedger(((await r.json()) as { activity: LedgerRow[] }).activity);
         const acc = accounts.find((a) => a.id === account);
         setReportScope((p) => ({ ...p, ledger: `${yearLabel} · ${acc ? `${acc.code} — ${accountName(acc)}` : ""}` }));
+        setExportMeta((m) => ({ ...m, ledger: { yearName, accountLabel: acc ? `${acc.code} — ${accountName(acc)}` : "", accountCode: acc?.code ?? "" } }));
       } else {
         const endpoint = kind === "financialPosition" ? "financial-position" : kind === "profitOrLoss" ? "profit-or-loss" : kind === "changesInEquity" ? "changes-in-equity" : "cash-flow";
         const dates = kind === "financialPosition"
@@ -709,6 +718,7 @@ export function Accounting({
         setStatement(null);
         const r = await api(`/api/financial-statements/${endpoint}?fiscal_year_id=${encodeURIComponent(year)}${dates}`, {}, onUnauthorized);
         setStatement((await r.json()) as StatementReport);
+        setExportMeta((m) => ({ ...m, statement: { kind, yearName, ...(kind === "financialPosition" ? { asOf: String(d.get("as_of_date")) } : { start: String(d.get("start_date")), end: String(d.get("end_date")) }) } }));
         setReportScope((p) => ({ ...p, [kind]: kind === "financialPosition" ? `${yearLabel} · ${t("accounting.statements.asOf")} ${String(d.get("as_of_date"))}` : `${yearLabel} · ${String(d.get("start_date"))} — ${String(d.get("end_date"))}` }));
       }
     } catch (reportError) {
@@ -716,6 +726,14 @@ export function Accounting({
       else setError(true);
     }
   };
+  const exportBase = { ar: i18n.language.startsWith("ar"), company: companyName, generatedAt: generatedStamp() };
+  const trialExport = reportScope.trial && exportMeta.trial && trial.length > 0 ? trialBalanceExport({ ...exportBase, t, accountName, sum: sumAmounts, rows: trial, yearName: exportMeta.trial.yearName }) : null;
+  const ledgerExport = reportScope.ledger && exportMeta.ledger && ledger.length > 0 ? generalLedgerExport({ ...exportBase, t, sum: sumAmounts, rows: ledger, ...exportMeta.ledger }) : null;
+  const statementMeta = exportMeta.statement;
+  const statementExportDoc = statement && !statementBlocked && statementMeta && statementMeta.kind === tab && statement.statement === ({ financialPosition: "financial_position", profitOrLoss: "profit_or_loss", changesInEquity: "changes_in_equity", cashFlow: "cash_flow" } as Record<string, string>)[tab]
+    ? statementExport({ ...exportBase, t, accountName, kind: statementMeta.kind, yearName: statementMeta.yearName, startDate: statementMeta.start, endDate: statementMeta.end, asOfDate: statementMeta.asOf, data: statement }) : null;
+  const exportLines = (doc: { rows: unknown[][] } | null) => (doc ? doc.rows.slice(1, Math.max(1, doc.rows.findIndex((r) => r.length === 0))).map((r) => r.join(": ")) : []);
+  const exportButtons = (doc: ReturnType<typeof trialBalanceExport> | null, title: string, landscape: boolean) => <ExportButtons language={i18n.language} document={doc} printTitle={title} printLines={exportLines(doc)} landscape={landscape} />;
   return (
     <section className="panel ac-approved" aria-labelledby="accounting-title">
       <PageHeader
@@ -1482,6 +1500,7 @@ export function Accounting({
               <h2 id="accounting-trial-title">{t("accounting.tabs.trial")}</h2>
               {reportScope.trial && <p className="ac-tab__context" dir="auto">{reportScope.trial}</p>}
             </div>
+            {exportButtons(trialExport, t("accounting.tabs.trial"), true)}
             <div className="table-wrap ac-tab__table ac-tab__table--trial">
               <table>
                 <thead>
@@ -1574,6 +1593,7 @@ export function Accounting({
               <h2 id="accounting-ledger-title">{t("accounting.tabs.ledger")}</h2>
               {reportScope.ledger && <p className="ac-tab__context" dir="auto">{reportScope.ledger}</p>}
             </div>
+            {exportButtons(ledgerExport, t("accounting.tabs.ledger"), true)}
             <div className="table-wrap ac-tab__table ac-tab__table--ledger">
               <table>
                 <thead>
@@ -1631,6 +1651,7 @@ export function Accounting({
           {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
             <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
+            {exportButtons(statementExportDoc, t(`accounting.tabs.${tab}`), false)}
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>

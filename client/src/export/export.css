@@ -1,0 +1,12 @@
+.eqfal-export-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.eqfal-print-header{display:none}
+@media print{
+  .eqfal-print-header{display:block;margin:0 0 12px}
+  .eqfal-print-header h1{font-size:18px;margin:0 0 4px}
+  .eqfal-print-header p{margin:0;font-size:12px}
+  .app-shell .topbar,.app-shell .sidebar,.mantine-AppShell-header,.mantine-AppShell-navbar,.mantine-AppShell-aside,.mobile-brand,
+  .workspace-tabs,.ac-tab__report-form,.ob-aging__form,.ob-aging__head,.eqfal-export-actions,.shared-state button{display:none!important}
+  .mantine-AppShell-main{padding:0!important;margin:0!important}
+  .table-wrap{overflow:visible!important;max-height:none!important}
+  table{width:100%;font-size:11px}thead{display:table-header-group}tr{break-inside:avoid}
+}
