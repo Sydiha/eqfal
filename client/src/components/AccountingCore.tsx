@@ -30,10 +30,16 @@ type Year = { id: string; name: string; start_date: string; end_date: string };
 type Journal = JournalResponse;
 type Line = JournalLineEditor;
 type TrialRow = Account & {
+  account_id?: string;
   debit_movement: string;
   credit_movement: string;
   debit_balance: string;
   credit_balance: string;
+};
+// Sums server-provided decimal strings in integer cents so report totals never drift.
+const sumAmounts = (values: string[]) => {
+  const cents = values.reduce((total, value) => total + Math.round(Number(value) * 100), 0);
+  return (cents / 100).toFixed(2);
 };
 type LedgerRow = {
   accounting_date: string;
@@ -43,6 +49,7 @@ type LedgerRow = {
   debit: string;
   credit: string;
   running_balance: string;
+  line_id?: string;
 };
 type StatementSection = {
   category: string;
@@ -1487,7 +1494,7 @@ export function Accounting({
                 </thead>
                 <tbody>
                   {trial.map((r) => (
-                    <tr key={r.id}>
+                    <tr key={r.account_id ?? r.id}>
                       <td className="ac-tab__wide">
                         {r.code} — {accountName(r)}
                       </td>
@@ -1502,7 +1509,33 @@ export function Accounting({
                       </td>
                     </tr>
                   ))}
+                  {reportScope.trial && trial.length === 0 && (
+                    <tr><td colSpan={4}>{t("accounting.trialEmpty")}</td></tr>
+                  )}
                 </tbody>
+                {trial.length > 0 && (() => {
+                  const debitBalance = sumAmounts(trial.map((r) => r.debit_balance));
+                  const creditBalance = sumAmounts(trial.map((r) => r.credit_balance));
+                  const balanced = debitBalance === creditBalance;
+                  return (
+                    <tfoot>
+                      <tr className="is-strong">
+                        <th scope="row">{t("accounting.statements.total")}</th>
+                        <th className="ac-tab__num">{sumAmounts(trial.map((r) => r.debit_movement))}</th>
+                        <th className="ac-tab__num">{sumAmounts(trial.map((r) => r.credit_movement))}</th>
+                        <th className="ac-tab__balance-cell">
+                          <span className="ac-tab__balance">
+                            <span>{t("accounting.debit")} {debitBalance}</span>{" "}
+                            <span>{t("accounting.credit")} {creditBalance}</span>{" "}
+                            <span className={`ac-tab__pill ${balanced ? "is-balanced" : "is-unbalanced"}`}>
+                              {t(balanced ? "accounting.balanced" : "accounting.unbalanced")}
+                            </span>
+                          </span>
+                        </th>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           </section>
@@ -1556,7 +1589,7 @@ export function Accounting({
                 <tbody>
                   {ledger.map((r) => (
                     <tr
-                      key={`${r.journal_id}-${r.accounting_date}-${r.running_balance}`}
+                      key={r.line_id ?? `${r.journal_id}-${r.accounting_date}-${r.running_balance}`}
                     >
                       <td className="ac-tab__num">{r.accounting_date}</td>
                       <td className="ac-tab__num">{r.reference ?? r.journal_id.slice(0, 8)}</td>
@@ -1566,7 +1599,20 @@ export function Accounting({
                       <td className="ac-tab__num">{r.running_balance}</td>
                     </tr>
                   ))}
+                  {reportScope.ledger && ledger.length === 0 && (
+                    <tr><td colSpan={6}>{t("accounting.ledgerEmpty")}</td></tr>
+                  )}
                 </tbody>
+                {ledger.length > 0 && (
+                  <tfoot>
+                    <tr className="is-strong">
+                      <th scope="row" colSpan={3}>{t("accounting.ledgerTotals")}</th>
+                      <th className="ac-tab__num">{sumAmounts(ledger.map((r) => r.debit))}</th>
+                      <th className="ac-tab__num">{sumAmounts(ledger.map((r) => r.credit))}</th>
+                      <th className="ac-tab__num">{ledger[ledger.length - 1]!.running_balance}</th>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </section>

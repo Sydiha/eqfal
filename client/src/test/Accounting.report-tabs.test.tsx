@@ -20,13 +20,14 @@ const trial = [
   { ...accounts[1], debit_movement: '40.00', credit_movement: '0.00', debit_balance: '40.00', credit_balance: '0.00' },
 ];
 
-const stub = () => {
+const stub = (overrides: { trial?: unknown[]; ledger?: unknown[] } = {}) => {
   const fetchMock = vi.fn(async (url: string) => {
+    if (url.startsWith('/api/general-ledger')) return new Response(JSON.stringify({ activity: overrides.ledger ?? [] }));
     if (url === '/api/accounts') return new Response(JSON.stringify({ accounts }));
     if (url === '/api/fiscal-years') return new Response(JSON.stringify({ fiscalYears: [year] }));
     if (url === '/api/journals') return new Response(JSON.stringify({ journals: [journal] }));
     if (url === `/api/journals/${journal.id}`) return new Response(JSON.stringify({ ...journal, lines }));
-    if (url.startsWith('/api/trial-balance')) return new Response(JSON.stringify({ accounts: trial }));
+    if (url.startsWith('/api/trial-balance')) return new Response(JSON.stringify({ accounts: overrides.trial ?? trial }));
     return new Response(JSON.stringify({ sources: [] }));
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -64,6 +65,54 @@ describe('Accounting report and journal tabs (Figma 246:*)', () => {
     expect(screen.getByText('2000 — Payable').closest('tr')!.lastElementChild).toHaveTextContent('40.00 Debit');
     expect(fetchMock).toHaveBeenCalledWith(`/api/trial-balance?fiscal_year_id=${year.id}`, expect.anything());
     expect(screen.getByText('Fiscal year: 2026')).toBeInTheDocument();
+  });
+
+  it('totals the trial balance and flags an unbalanced result without hiding it', async () => {
+    stub();
+    render(ui());
+    fireEvent.click(await screen.findByRole('tab', { name: 'Trial Balance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+    const total = (await screen.findByRole('rowheader', { name: 'Total' })).closest('tr')!;
+    expect(total.children[1]).toHaveTextContent('40.00');
+    expect(total.children[2]).toHaveTextContent('100.00');
+    expect(total.children[3]).toHaveTextContent('Debit 40.00');
+    expect(total.children[3]).toHaveTextContent('Credit 100.00');
+    expect(within(total).getByText('Unbalanced')).toBeInTheDocument();
+  });
+
+  it('marks a balanced trial balance as balanced', async () => {
+    stub({ trial: [
+      { ...accounts[0], debit_movement: '75.00', credit_movement: '0.00', debit_balance: '75.00', credit_balance: '0.00' },
+      { ...accounts[1], debit_movement: '0.00', credit_movement: '75.00', debit_balance: '0.00', credit_balance: '75.00' },
+    ] });
+    render(ui());
+    fireEvent.click(await screen.findByRole('tab', { name: 'Trial Balance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+    const total = (await screen.findByRole('rowheader', { name: 'Total' })).closest('tr')!;
+    expect(within(total).getByText('Balanced')).toBeInTheDocument();
+  });
+
+  it('shows an explicit empty state for a ledger with no posted activity', async () => {
+    stub();
+    render(ui());
+    fireEvent.click(await screen.findByRole('tab', { name: 'General Ledger' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+    expect(await screen.findByText('No posted activity for this account in the selected fiscal year.')).toBeInTheDocument();
+    expect(screen.queryByRole('rowheader', { name: 'Period totals' })).not.toBeInTheDocument();
+  });
+
+  it('totals ledger activity and ends on the closing running balance', async () => {
+    stub({ ledger: [
+      { accounting_date: '2026-03-01', journal_id: 'j1', line_id: 'a', reference: 'R1', description: 'Sale', debit: '500.00', credit: '0.00', running_balance: '500.00' },
+      { accounting_date: '2026-04-01', journal_id: 'j2', line_id: 'b', reference: 'R2', description: 'Payment', debit: '0.00', credit: '120.50', running_balance: '379.50' },
+    ] });
+    render(ui());
+    fireEvent.click(await screen.findByRole('tab', { name: 'General Ledger' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }));
+    const total = (await screen.findByRole('rowheader', { name: 'Period totals' })).closest('tr')!;
+    expect(total.children[1]).toHaveTextContent('500.00');
+    expect(total.children[2]).toHaveTextContent('120.50');
+    expect(total.children[3]).toHaveTextContent('379.50');
   });
 
   it('scopes every new style rule to the non-chart tabs', () => {
