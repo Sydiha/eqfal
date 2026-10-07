@@ -465,7 +465,13 @@ export function Home({
       const scope = kpiScopeLabel(k.key);
       if (!m) return { label, scope, state: "unavailable" as const };
       if (m.state === "hidden") return { label, scope, state: "hidden" as const };
-      if (k.key === "bank_balances") return { label, scope, state: "available" as const, amount: sumDecimals((m.accounts ?? []).filter((a: any) => a.balance.state === "available").map((a: any) => a.balance.amount)) };
+      if (k.key === "bank_balances") {
+        // Never add balances of different currencies into one exported amount (no FX conversion here).
+        const available = (m.accounts ?? []).filter((a: any) => a.balance.state === "available");
+        const currencies = [...new Set<string>(available.map((a: any) => a.currency_code))];
+        if (currencies.length > 1) return { label, scope, state: "mixed" as const };
+        return { label, scope: currencies[0] ?? scope, state: "available" as const, amount: sumDecimals(available.map((a: any) => a.balance.amount)) };
+      }
       return { label, scope, state: "available" as const, amount: m.amount };
     });
     const bank = snapshot.metrics.bank_balances as FinancialSnapshot["metrics"]["bank_balances"] | undefined;
@@ -477,7 +483,7 @@ export function Home({
       if (selected.has_hidden_blockers) closeRows.push([isArabic ? "المعوقات" : "Blockers", isArabic ? "مقيّدة" : "Restricted"]);
       else for (const area of blockerAreas) closeRows.push([isArabic ? area.labelAr : area.labelEn, { num: String(area.count), int: true }]);
     }
-    return managementSummaryExport({ ar: isArabic, company, generatedAt: stamp, asOf: stamp.slice(0, 10), periodLabel: monthYear, from: periodRange?.from, to: periodRange?.to, metrics, bankAccounts, closeRows, hiddenText: isArabic ? "مقيّد" : "Restricted", unavailableText: isArabic ? "غير متاح" : "Unavailable" });
+    return managementSummaryExport({ ar: isArabic, company, generatedAt: stamp, asOf: stamp.slice(0, 10), periodLabel: monthYear, from: periodRange?.from, to: periodRange?.to, metrics, bankAccounts, closeRows, hiddenText: isArabic ? "مقيّد" : "Restricted", unavailableText: isArabic ? "غير متاح" : "Unavailable", mixedText: isArabic ? "غير متاح – عملات مختلفة" : "Unavailable – mixed currencies" });
   })();
 
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {

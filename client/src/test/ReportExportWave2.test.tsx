@@ -187,6 +187,25 @@ describe('Wave 2 screens: export actions, filenames, print', () => {
     expect(csv).toContain('Prepaid expense,Prepaid rent,REF-1,—,1500 — Prepaid'); expect(csv).toContain('900.00,1,2,Approved'); expect(csv).toContain('Prepaid expense,1,900.00');
   });
 
+  it('management summary never sums different bank currencies into one exported amount', async () => {
+    const snapshot = { metrics: { bank_balances: { state: 'available', accounts: [
+      { id: 'k1', display_name: 'Main SAR', currency_code: 'SAR', balance: { state: 'available', amount: '500.00' } },
+      { id: 'k2', display_name: 'Dollar', currency_code: 'USD', balance: { state: 'available', amount: '100.00' } }] }, amounts_to_collect: { state: 'hidden' }, amounts_to_pay: { state: 'hidden' }, current_month_sales: { state: 'hidden' }, current_month_purchases_expenses: { state: 'hidden' } } };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/manager-financial-snapshot')) return new Response(JSON.stringify(snapshot));
+      if (url === '/api/auth/session') return new Response(JSON.stringify({ user: { id: 'u', email: 'u@x.test' }, allowedCompanies: [], activeCompanyId: null, capabilities: [] }));
+      return new Response(JSON.stringify({ periods: [] }));
+    }));
+    const cap = captureDownloads();
+    render(<AuthProvider><CompanyProvider allowedCompanies={[{ id: 'co-1', name: 'Company One' }]} initialCompanyId="co-1"><Home capabilities={['bank.view']} navigate={vi.fn()} navigateToDiscovery={vi.fn()} onUnauthorized={vi.fn()} /></CompanyProvider></AuthProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled());
+    click('Export CSV');
+    const csv = await readBlob(cap.blobs[0]!);
+    expect(csv).toContain('Cash and Banks,,Unavailable – mixed currencies');
+    expect(csv).not.toContain('600.00');
+    expect(csv).toContain('Main SAR,SAR,500.00'); expect(csv).toContain('Dollar,USD,100.00');
+  });
+
   it('management summary exports the snapshot values and stays disabled without a snapshot', async () => {
     const snapshot = { metrics: { bank_balances: { state: 'available', accounts: [{ id: 'k', display_name: 'Main', currency_code: 'SAR', balance: { state: 'available', amount: '500.00' } }] }, amounts_to_collect: { state: 'available', amount: '1200.00' }, amounts_to_pay: { state: 'hidden' }, current_month_sales: { state: 'available', amount: '3000.00' }, current_month_purchases_expenses: { state: 'available', amount: '1800.00' } } };
     let failSnapshot = true;
@@ -208,6 +227,6 @@ describe('Wave 2 screens: export actions, filenames, print', () => {
     expect(cap.names[0]).toMatch(/^eqfal-management-summary-.+\.csv$/);
     const csv = await readBlob(cap.blobs[0]!);
     expect(csv).toContain('Company One'); expect(csv).toContain('Receivables,All open balances,1200.00'); expect(csv).toContain('Payables,All open balances,Restricted');
-    expect(csv).toContain('Cash and Banks,,500.00'); expect(csv).toContain('Main,SAR,500.00'); expect(csv).not.toContain('Net Profit');
+    expect(csv).toContain('Cash and Banks,SAR,500.00'); expect(csv).toContain('Main,SAR,500.00'); expect(csv).not.toContain('Net Profit');
   });
 });

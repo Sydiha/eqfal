@@ -196,13 +196,13 @@ export function accrualsExport(p: Labels & { scopeRange: { from: string; to: str
   return doc(`eqfal-accruals-prepayments-${slug(p.scopeRange ? periodStem(p.scopeRange.from, p.scopeRange.to, p.asOf) : 'all-periods')}`, title, p, meta(title, scope, p), body, { header: [0, detailHeader] });
 }
 
-export type ManagementMetric = { label: string; scope: string | null; state: 'available' | 'hidden' | 'unavailable'; amount?: string };
+export type ManagementMetric = { label: string; scope: string | null; state: 'available' | 'hidden' | 'unavailable' | 'mixed'; amount?: string };
 export type ManagementBankAccount = { name: string; currency: string; amount: string | null };
 
-export function managementSummaryExport(p: Labels & { periodLabel: string; from?: string; to?: string; asOf: string; metrics: ManagementMetric[]; bankAccounts: ManagementBankAccount[]; closeRows: Array<[string, ExportCell]>; hiddenText: string; unavailableText: string }): ExportDocument {
+export function managementSummaryExport(p: Labels & { periodLabel: string; from?: string; to?: string; asOf: string; metrics: ManagementMetric[]; bankAccounts: ManagementBankAccount[]; closeRows: Array<[string, ExportCell]>; hiddenText: string; unavailableText: string; mixedText?: string }): ExportDocument {
   const { ar } = p;
   const body: ExportRows = [[L(ar, 'Metric', 'المؤشر'), L(ar, 'Scope', 'النطاق'), L(ar, 'Amount', 'المبلغ')]];
-  for (const m of p.metrics) body.push([m.label, m.scope, m.state === 'available' && m.amount !== undefined ? n(m.amount) : m.state === 'hidden' ? p.hiddenText : p.unavailableText]);
+  for (const m of p.metrics) body.push([m.label, m.scope, m.state === 'available' && m.amount !== undefined ? n(m.amount) : m.state === 'hidden' ? p.hiddenText : m.state === 'mixed' ? (p.mixedText ?? p.unavailableText) : p.unavailableText]);
   let accountsHeader = -1;
   if (p.bankAccounts.length) {
     body.push([]); accountsHeader = body.length;
