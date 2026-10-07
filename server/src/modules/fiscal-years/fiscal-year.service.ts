@@ -154,7 +154,7 @@ export class FiscalYearService {
 
       // Auto-provision all expected monthly close periods for the fiscal year
       // within the same transaction. If provisioning fails, FY creation rolls back.
-      const provisioningService = new MonthlyCloseProvisioningService(this.pool);
+      const provisioningService = new MonthlyCloseProvisioningService();
       await provisioningService.provisionDefaultPeriods(
         fy.id,
         input.company_id,

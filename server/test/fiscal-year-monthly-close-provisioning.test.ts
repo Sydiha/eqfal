@@ -1,391 +1,302 @@
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'node:fs';
 import { Pool, PoolClient } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { expectedMonthlyPeriods } from '../src/shared/expected-monthly-periods';
+import { expectedMonthlyPeriods as annualClosingExpected } from '../src/modules/annual-closing/annual-closing.service';
+import { MonthlyCloseProvisioningService } from '../src/modules/monthly-close/monthly-close.service';
 import { FiscalYearService } from '../src/modules/fiscal-years/fiscal-year.service';
-import { MonthlyCloseProvisioningService, expectedMonthlyPeriods } from '../src/modules/monthly-close/monthly-close.service';
+import { FiscalYearRepository } from '../src/modules/fiscal-years/fiscal-year.repository';
+import { AuditLogRepository } from '../src/modules/audit-log/audit-log.repository';
+import { getFiscalYearCloseReadiness, loadFiscalYearBounds } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
 
 const databaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
-// Real PostgreSQL (migrations applied): monthly close auto-provisioning for new fiscal years.
-describeDatabase('Fiscal-year monthly close auto-provisioning', () => {
+// ---------------------------------------------------------------------------
+// Suite 0 (no database): single shared boundary function + provisioner SQL contract
+// ---------------------------------------------------------------------------
+describe('expectedMonthlyPeriods is a single shared implementation', () => {
+  it('annual-closing re-exports the exact shared function (no second copy)', () => {
+    expect(annualClosingExpected).toBe(expectedMonthlyPeriods);
+  });
+
+  it('calendar year: 12 periods, Feb 2026 ends 2026-02-28 (not a leap year)', () => {
+    const periods = expectedMonthlyPeriods('2026-01-01', '2026-12-31');
+    expect(periods).toHaveLength(12);
+    expect(periods[0]).toEqual({ period_start: '2026-01-01', period_end: '2026-01-31' });
+    expect(periods[1]).toEqual({ period_start: '2026-02-01', period_end: '2026-02-28' });
+    expect(periods[11]).toEqual({ period_start: '2026-12-01', period_end: '2026-12-31' });
+  });
+
+  it('leap year 2024: Feb ends 2024-02-29', () => {
+    expect(expectedMonthlyPeriods('2024-01-01', '2024-12-31')[1]).toEqual({ period_start: '2024-02-01', period_end: '2024-02-29' });
+  });
+
+  it('partial fiscal year truncates first and last month', () => {
+    const periods = expectedMonthlyPeriods('2026-01-15', '2026-12-20');
+    expect(periods).toHaveLength(12);
+    expect(periods[0]).toEqual({ period_start: '2026-01-15', period_end: '2026-01-31' });
+    expect(periods[11]).toEqual({ period_start: '2026-12-01', period_end: '2026-12-20' });
+  });
+
+  it('non-calendar fiscal year (Jul 1 - Jun 30) yields 12 periods', () => {
+    const periods = expectedMonthlyPeriods('2025-07-01', '2026-06-30');
+    expect(periods).toHaveLength(12);
+    expect(periods[0]!.period_start).toBe('2025-07-01');
+    expect(periods[11]).toEqual({ period_start: '2026-06-01', period_end: '2026-06-30' });
+  });
+});
+
+describe('MonthlyCloseProvisioningService (mocked client)', () => {
+  const service = new MonthlyCloseProvisioningService();
+  const fy = randomUUID();
+  const company = randomUUID();
+
+  it('inserts exactly the expected periods as open using the real unique constraint', async () => {
+    let n = 0;
+    const query = vi.fn(async () => ({ rows: [{ id: `p${++n}` }], rowCount: 1 }));
+    const ids = await service.provisionDefaultPeriods(fy, company, '2026-01-01', '2026-12-31', { query } as unknown as PoolClient);
+    expect(ids).toHaveLength(12);
+    const calls = query.mock.calls as unknown as Array<[string, unknown[]]>;
+    expect(calls).toHaveLength(12);
+    const expected = expectedMonthlyPeriods('2026-01-01', '2026-12-31');
+    calls.forEach(([sql, params], i) => {
+      expect(sql).toContain("'open'");
+      expect(sql.replace(/\s+/g, ' ')).toContain('ON CONFLICT (company_id, period_start, period_end) DO NOTHING');
+      expect(params).toEqual([company, fy, expected[i]!.period_start, expected[i]!.period_end]);
+    });
+  });
+
+  it('full retry on the same fiscal year creates nothing (createdIds = [])', async () => {
+    const query = vi.fn(async (sql: string) => sql.startsWith('INSERT')
+      ? { rows: [], rowCount: 0 }
+      : { rows: [{ fiscal_year_id: fy }], rowCount: 1 });
+    const ids = await service.provisionDefaultPeriods(fy, company, '2026-01-01', '2026-12-31', { query } as unknown as PoolClient);
+    expect(ids).toEqual([]);
+  });
+
+  it('throws when a month already exists under another fiscal year', async () => {
+    const query = vi.fn(async (sql: string) => sql.startsWith('INSERT')
+      ? { rows: [], rowCount: 0 }
+      : { rows: [{ fiscal_year_id: randomUUID() }], rowCount: 1 });
+    await expect(service.provisionDefaultPeriods(fy, company, '2026-01-01', '2026-12-31', { query } as unknown as PoolClient))
+      .rejects.toThrow(/another fiscal year/);
+  });
+});
+
+describe('FiscalYearService.createFiscalYear provisioning failure (mocked)', () => {
+  it('rolls back, never commits and writes no audit event when provisioning fails', async () => {
+    const executed: string[] = [];
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        executed.push(sql.trim().split(/\s+/).slice(0, 3).join(' '));
+        if (/INSERT INTO monthly_close_periods/.test(sql)) throw new Error('injected provisioning failure');
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    } as unknown as PoolClient;
+    const pool = { connect: vi.fn(async () => client), query: vi.fn() } as unknown as Pool;
+    const fyRow = { id: randomUUID(), company_id: randomUUID(), name: 'FY', start_date: '2026-01-01', end_date: '2026-12-31', status: 'open', created_at: new Date(), updated_at: new Date() };
+    vi.spyOn(FiscalYearRepository.prototype, 'findOverlapping').mockResolvedValue([]);
+    vi.spyOn(FiscalYearRepository.prototype, 'create').mockResolvedValue(fyRow as never);
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue(undefined as never);
+
+    await expect(new FiscalYearService(pool).createFiscalYear(
+      { company_id: fyRow.company_id, name: 'FY', start_date: '2026-01-01', end_date: '2026-12-31' }, randomUUID(),
+    )).rejects.toThrow('injected provisioning failure');
+
+    expect(executed).toContain('ROLLBACK');
+    expect(executed).not.toContain('COMMIT');
+    expect(audit).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suites 1 and 3 (real PostgreSQL, migrations applied): run only with DATABASE_URL
+// ---------------------------------------------------------------------------
+describeDatabase('FY creation auto-provisions monthly periods (PostgreSQL)', () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const fyService = new FiscalYearService(pool);
   const companies: string[] = [];
-  const fiscalYears: string[] = [];
   const userId = randomUUID();
 
   beforeAll(async () => {
-    await pool.query("INSERT INTO users(id,email,password_hash) VALUES($1,$2,'x')", [userId, `fy-monthly-${userId}@example.test`]);
+    await pool.query("INSERT INTO users(id,email,password_hash) VALUES($1,$2,'x')", [userId, `fy-prov-${userId}@example.test`]);
   });
 
   afterAll(async () => {
     try {
-      // Clean up in dependency order
-      await pool.query('DELETE FROM monthly_close_periods WHERE fiscal_year_id = ANY($1)', [fiscalYears]);
-      await pool.query('DELETE FROM fiscal_years WHERE id = ANY($1)', [fiscalYears]);
+      await pool.query('DELETE FROM monthly_close_periods WHERE company_id = ANY($1)', [companies]);
+      await pool.query('DELETE FROM audit_log WHERE company_id = ANY($1)', [companies]);
+      await pool.query('DELETE FROM fiscal_years WHERE company_id = ANY($1)', [companies]);
       await pool.query('DELETE FROM companies WHERE id = ANY($1)', [companies]);
       await pool.query('DELETE FROM users WHERE id=$1', [userId]);
-    } catch { /* best-effort cleanup */ }
+    } catch { /* best-effort cleanup on a disposable test database */ }
     await pool.end();
   });
 
-  async function createCompany(): Promise<string> {
-    const company = randomUUID();
-    companies.push(company);
-    await pool.query("INSERT INTO companies(id,slug,name) VALUES($1,$2,'Test Company')", [company, `test-${company}`]);
-    return company;
+  async function newCompany(): Promise<string> {
+    const id = randomUUID();
+    companies.push(id);
+    await pool.query("INSERT INTO companies(id,slug,name) VALUES($1,$2,'Provisioning')", [id, `prov-${id}`]);
+    return id;
+  }
+  const create = (company: string, start: string, end: string, name = `FY ${start}`) =>
+    fyService.createFiscalYear({ company_id: company, name, start_date: start, end_date: end }, userId);
+  const periodsOf = async (company: string, fy: string) => (await pool.query<{ id: string; period_start: string; period_end: string; status: string }>(
+    'SELECT id,period_start::text,period_end::text,status FROM monthly_close_periods WHERE company_id=$1 AND fiscal_year_id=$2 ORDER BY period_start', [company, fy])).rows;
+
+  for (const [label, start, end] of [
+    ['normal Jan-Dec', '2026-01-01', '2026-12-31'],
+    ['partial Jan 15 - Dec 20', '2026-01-15', '2026-12-20'],
+    ['non-calendar Jul 1 - Jun 30', '2025-07-01', '2026-06-30'],
+  ] as const) {
+    it(`${label}: provisions exactly expectedMonthlyPeriods(), all open, no duplicates`, async () => {
+      const company = await newCompany();
+      const fy = await create(company, start, end);
+      const actual = await periodsOf(company, fy.id);
+      const expected = expectedMonthlyPeriods(start, end);
+      expect(actual.map((p) => ({ period_start: p.period_start, period_end: p.period_end }))).toEqual(expected);
+      expect(actual.every((p) => p.status === 'open')).toBe(true);
+      expect(new Set(actual.map((p) => p.period_start)).size).toBe(actual.length);
+    });
   }
 
-  // Helper to count expected periods using the canonical algorithm
-  function countExpectedMonths(startDate: string, endDate: string): number {
-    return expectedMonthlyPeriods(startDate, endDate).length;
-  }
+  it('provisioning failure rolls back the fiscal year row too (atomic)', async () => {
+    const company = await newCompany();
+    const failing = {
+      connect: async () => {
+        const client = await pool.connect();
+        const original = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
+        (client as unknown as { query: unknown }).query = (...args: unknown[]) => {
+          if (typeof args[0] === 'string' && /INSERT INTO monthly_close_periods/.test(args[0])) return Promise.reject(new Error('injected provisioning failure'));
+          return original(...args);
+        };
+        return client;
+      },
+      query: pool.query.bind(pool),
+    } as unknown as Pool;
+    await expect(new FiscalYearService(failing).createFiscalYear(
+      { company_id: company, name: 'FY Rollback', start_date: '2026-01-01', end_date: '2026-12-31' }, userId,
+    )).rejects.toThrow('injected provisioning failure');
+    expect((await pool.query('SELECT 1 FROM fiscal_years WHERE company_id=$1', [company])).rowCount).toBe(0);
+    expect((await pool.query('SELECT 1 FROM monthly_close_periods WHERE company_id=$1', [company])).rowCount).toBe(0);
+    expect((await pool.query("SELECT 1 FROM audit_log WHERE company_id=$1 AND action='fiscal_year.create'", [company])).rowCount).toBe(0);
+  });
 
-  // Helper to query periods for a fiscal year
-  async function queryPeriods(companyId: string, fiscalYearId: string) {
-    const result = await pool.query<{
-      period_start: string;
-      period_end: string;
-      status: string;
-    }>(
-      `SELECT period_start::text, period_end::text, status
-       FROM monthly_close_periods
-       WHERE company_id = $1 AND fiscal_year_id = $2
-       ORDER BY period_start`,
-      [companyId, fiscalYearId],
-    );
-    return result.rows;
-  }
+  it('full retry of provisioning creates 0 new periods and leaves exactly the expected rows', async () => {
+    const company = await newCompany();
+    const fy = await create(company, '2026-01-01', '2026-12-31');
+    const before = await periodsOf(company, fy.id);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ids = await new MonthlyCloseProvisioningService().provisionDefaultPeriods(fy.id, company, '2026-01-01', '2026-12-31', client);
+      await client.query('COMMIT');
+      expect(ids).toHaveLength(0);
+    } finally { client.release(); }
+    expect(await periodsOf(company, fy.id)).toEqual(before);
+    expect(before).toHaveLength(12);
+  });
 
-  describe('FY creation auto-provisions monthly periods', () => {
-    it('creates all 12 periods for a normal Jan-Dec fiscal year', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      const periods = await queryPeriods(company, fy.id);
-      expect(periods).toHaveLength(12);
-      expect(periods[0]!.period_start).toBe('2026-01-01');
-      expect(periods[0]!.period_end).toBe('2026-01-31');
-      expect(periods[11]!.period_start).toBe('2026-12-01');
-      expect(periods[11]!.period_end).toBe('2026-12-31');
-    });
-
-    it('generates all periods with status=open', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026 Open',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      const periods = await queryPeriods(company, fy.id);
-      expect(periods.every((p) => p.status === 'open')).toBe(true);
-    });
-
-    it('creates periods matching expectedMonthlyPeriods() exactly', async () => {
-      const company = await createCompany();
-      const startDate = '2026-01-01';
-      const endDate = '2026-12-31';
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY Verify Match',
-          start_date: startDate,
-          end_date: endDate,
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      const expected = expectedMonthlyPeriods(startDate, endDate);
-      const actual = await queryPeriods(company, fy.id);
-
-      expect(actual).toHaveLength(expected.length);
-      for (let i = 0; i < expected.length; i++) {
-        expect(actual[i]!.period_start).toBe(expected[i]!.period_start);
-        expect(actual[i]!.period_end).toBe(expected[i]!.period_end);
-      }
-    });
-
-    it('handles partial fiscal year (non-calendar start/end)', async () => {
-      const company = await createCompany();
-      const startDate = '2026-03-15';
-      const endDate = '2026-11-20';
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY Partial',
-          start_date: startDate,
-          end_date: endDate,
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      const expected = expectedMonthlyPeriods(startDate, endDate);
-      const actual = await queryPeriods(company, fy.id);
-
-      expect(actual).toHaveLength(expected.length);
-      // First period should be truncated to start_date
-      expect(actual[0]!.period_start).toBe(startDate);
-      // Last period should be truncated to end_date
-      expect(actual[actual.length - 1]!.period_end).toBe(endDate);
-    });
-
-    it('handles non-calendar fiscal year (July 1 - June 30)', async () => {
-      const company = await createCompany();
-      const startDate = '2025-07-01';
-      const endDate = '2026-06-30';
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY July-June',
-          start_date: startDate,
-          end_date: endDate,
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      const expected = expectedMonthlyPeriods(startDate, endDate);
-      const actual = await queryPeriods(company, fy.id);
-
-      expect(actual).toHaveLength(expected.length);
-      expect(expected.length).toBe(12);
-      expect(actual[0]!.period_start).toBe('2025-07-01');
-      expect(actual[11]!.period_end).toBe('2026-06-30');
-    });
-
-    it('rolls back entire FY creation if period provisioning fails', async () => {
-      const company = await createCompany();
-
-      // Create a period manually to cause a conflict
-      const startDate = '2027-01-01';
-      const endDate = '2027-12-31';
-      const existingFyId = randomUUID();
-      await pool.query(
-        `INSERT INTO fiscal_years(id,company_id,name,start_date,end_date,status)
-         VALUES($1,$2,'Pre-existing','2027-01-01','2027-12-31','open')`,
-        [existingFyId, company],
-      );
-      fiscalYears.push(existingFyId);
-
-      // Create overlapping period that will block provisioning
-      await pool.query(
-        `INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status)
-         VALUES($1,$2,$3,$4,'open')`,
-        [company, existingFyId, '2027-01-01', '2027-01-31'],
-      );
-
-      // Attempt to create a new FY with the same date range
-      // Provisioning should fail, causing the entire transaction to rollback
-      await expect(
-        fyService.createFiscalYear(
-          {
-            company_id: company,
-            name: 'FY 2027 Collision',
-            start_date: startDate,
-            end_date: endDate,
-          },
-          userId,
-        ),
-      ).rejects.toThrow(/overlap/i);
-
-      // Verify no orphaned FY was created
-      const check = await pool.query<{ id: string }>(
-        `SELECT id FROM fiscal_years
-         WHERE company_id = $1 AND name = $2`,
-        [company, 'FY 2027 Collision'],
-      );
-      expect(check.rows).toHaveLength(0);
-    });
-
-    it('does not create duplicate periods on idempotent retry', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026 Idempotent',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      // Query initial periods
-      const periods1 = await queryPeriods(company, fy.id);
-      expect(periods1).toHaveLength(12);
-
-      // Manually re-run provisioning (simulating idempotent call)
-      // Note: This is a unit test of the provisioning logic itself
+  // Suite 3: close readiness behaviour is unchanged (readiness code was not modified).
+  describe('fiscal-year close readiness unchanged', () => {
+    const blockerCodes = async (company: string, fy: string) => {
       const client = await pool.connect();
       try {
-        await client.query('BEGIN');
-        const service = new MonthlyCloseProvisioningService(pool);
-        const ids = await service.provisionDefaultPeriods(
-          fy.id,
-          company,
-          '2026-01-01',
-          '2026-12-31',
-          client,
-        );
-        await client.query('COMMIT');
-        // Should return same period IDs (ON CONFLICT DO NOTHING)
-        expect(ids).toHaveLength(12);
-      } finally {
-        client.release();
-      }
+        const readiness = await getFiscalYearCloseReadiness(client, company, await loadFiscalYearBounds(client, company, fy));
+        return new Map(readiness.blockers.map((b) => [b.code, b.count]));
+      } finally { client.release(); }
+    };
 
-      // Verify no duplicates were created
-      const periods2 = await queryPeriods(company, fy.id);
-      expect(periods2).toHaveLength(12);
-    });
-  });
-
-  describe('Fiscal-year close readiness with auto-provisioned periods', () => {
-    it('blocks fiscal year close when monthly periods are missing', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026 Missing Periods',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      // Manually delete one period to simulate missing month
-      const periods = await queryPeriods(company, fy.id);
-      const toDelete = periods[0]!;
-      await pool.query(
-        'DELETE FROM monthly_close_periods WHERE company_id = $1 AND fiscal_year_id = $2 AND period_start = $3',
-        [company, fy.id, toDelete.period_start],
-      );
-
-      // Attempt to close should be blocked
-      await expect(fyService.closeFiscalYear(fy.id, company, userId)).rejects.toThrow(/blocked/i);
+    it('blocks missing months', async () => {
+      const company = await newCompany();
+      const fy = await create(company, '2026-01-01', '2026-12-31');
+      await pool.query('DELETE FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start=$2', [fy.id, '2026-10-01']);
+      expect((await blockerCodes(company, fy.id)).get('monthly_period_missing')).toBe(1);
     });
 
-    it('blocks fiscal year close when monthly periods are open', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026 Open Periods',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      // All periods are auto-provisioned as 'open', so close is blocked
-      await expect(fyService.closeFiscalYear(fy.id, company, userId)).rejects.toThrow(/blocked/i);
+    it('blocks a fresh year whose 12 provisioned periods are all open', async () => {
+      const company = await newCompany();
+      const fy = await create(company, '2026-01-01', '2026-12-31');
+      const codes = await blockerCodes(company, fy.id);
+      expect(codes.get('monthly_period_open')).toBe(12);
+      expect(codes.has('monthly_period_missing')).toBe(false);
     });
 
-    it('allows fiscal year close when all periods are closed', async () => {
-      const company = await createCompany();
-      const fy = await fyService.createFiscalYear(
-        {
-          company_id: company,
-          name: 'FY 2026 All Closed',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-        },
-        userId,
-      );
-      fiscalYears.push(fy.id);
-
-      // Close all periods
-      await pool.query(
-        "UPDATE monthly_close_periods SET status='closed' WHERE company_id = $1 AND fiscal_year_id = $2",
-        [company, fy.id],
-      );
-
-      // Fiscal year should now be closable (assuming no other blockers)
-      // Note: This may still be blocked by other requirements (opening balances, etc.)
-      // but the period blocker should not prevent it
-      try {
-        await fyService.closeFiscalYear(fy.id, company, userId);
-        expect((await pool.query('SELECT status FROM fiscal_years WHERE id=$1', [fy.id])).rows[0]!.status).toBe('closed');
-      } catch (err) {
-        // If blocked, verify it's NOT due to monthly_close blockers
-        const msg = String(err);
-        expect(msg).not.toContain('monthly_period');
-      }
-    });
-  });
-
-  describe('expectedMonthlyPeriods function consistency', () => {
-    it('generates correct boundaries for calendar year', () => {
-      const periods = expectedMonthlyPeriods('2026-01-01', '2026-12-31');
-      expect(periods).toHaveLength(12);
-      expect(periods[0]).toEqual({ period_start: '2026-01-01', period_end: '2026-01-31' });
-      expect(periods[1]).toEqual({ period_start: '2026-02-01', period_end: '2026-02-29' });
-      expect(periods[11]).toEqual({ period_start: '2026-12-01', period_end: '2026-12-31' });
-    });
-
-    it('handles leap year correctly', () => {
-      const periods = expectedMonthlyPeriods('2024-01-01', '2024-12-31');
-      expect(periods[1]).toEqual({ period_start: '2024-02-01', period_end: '2024-02-29' });
-    });
-
-    it('truncates partial first month', () => {
-      const periods = expectedMonthlyPeriods('2026-03-15', '2026-12-31');
-      expect(periods[0]!.period_start).toBe('2026-03-15');
-      expect(periods[0]!.period_end).toBe('2026-03-31');
-    });
-
-    it('truncates partial last month', () => {
-      const periods = expectedMonthlyPeriods('2026-01-01', '2026-11-20');
-      expect(periods[10]!.period_start).toBe('2026-11-01');
-      expect(periods[10]!.period_end).toBe('2026-11-20');
-    });
-
-    it('handles single day range', () => {
-      const periods = expectedMonthlyPeriods('2026-01-15', '2026-01-15');
-      expect(periods).toHaveLength(1);
-      expect(periods[0]).toEqual({ period_start: '2026-01-15', period_end: '2026-01-15' });
+    it('raises no monthly-period blocker when all 12 periods are closed', async () => {
+      const company = await newCompany();
+      const fy = await create(company, '2026-01-01', '2026-12-31');
+      await pool.query("UPDATE monthly_close_periods SET status='closed' WHERE fiscal_year_id=$1", [fy.id]);
+      const codes = await blockerCodes(company, fy.id);
+      expect(codes.has('monthly_period_open')).toBe(false);
+      expect(codes.has('monthly_period_missing')).toBe(false);
     });
   });
 });
 
-// Unit tests for the provisioning service logic (can run without DATABASE_URL)
-describe('MonthlyCloseProvisioningService.expectedMonthlyPeriods', () => {
-  it('matches annual closing service canonical logic', () => {
-    // This verifies our reuse of the logic is correct
-    const testCases: Array<[string, string, number]> = [
-      ['2026-01-01', '2026-12-31', 12],
-      ['2026-03-15', '2026-11-20', 9],
-      ['2025-07-01', '2026-06-30', 12],
-      ['2026-01-01', '2026-01-31', 1],
-    ];
+// ---------------------------------------------------------------------------
+// Suite 2 (real PostgreSQL): FY 2026 repair migration 060. Uses the fixed production-test
+// IDs, so it SKIPS itself if that company already exists. Run only on a disposable database.
+// ---------------------------------------------------------------------------
+describeDatabase('FY 2026 repair migration 060 (PostgreSQL)', () => {
+  const pool = new Pool({ connectionString: databaseUrl });
+  const COMPANY = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def';
+  const FY = 'dcbdd629-6d8d-4ce7-82ab-7192dd3e74dc';
+  const sql = readFileSync(new URL('../migrations/060_monthly_close_periods_fy2026_repair.sql', import.meta.url), 'utf8');
+  let disposable = false;
 
-    for (const [start, end, expected] of testCases) {
-      const periods = expectedMonthlyPeriods(start, end);
-      expect(periods).toHaveLength(expected);
-      // Verify all periods are within bounds
-      expect(periods[0]!.period_start >= start).toBe(true);
-      expect(periods[0]!.period_start).toBe(start);
-      expect(periods[periods.length - 1]!.period_end).toBe(end);
+  const snapshot = async () => (await pool.query<{ period_start: string; period_end: string; status: string; id: string; updated_at: Date }>(
+    'SELECT id,period_start::text,period_end::text,status,updated_at FROM monthly_close_periods WHERE company_id=$1 ORDER BY period_start', [COMPANY])).rows;
+
+  beforeAll(async () => {
+    disposable = (await pool.query('SELECT 1 FROM companies WHERE id=$1', [COMPANY])).rowCount === 0;
+  });
+
+  afterAll(async () => {
+    if (disposable) {
+      try {
+        await pool.query('DELETE FROM monthly_close_periods WHERE company_id=$1', [COMPANY]);
+        await pool.query('DELETE FROM fiscal_years WHERE company_id=$1', [COMPANY]);
+        await pool.query('DELETE FROM companies WHERE id=$1', [COMPANY]);
+      } catch { /* best-effort cleanup */ }
     }
+    await pool.end();
+  });
+
+  it('is a no-op when the fiscal year does not exist', async (ctx) => {
+    if (!disposable) ctx.skip();
+    await pool.query(sql);
+    expect((await pool.query('SELECT 1 FROM monthly_close_periods WHERE company_id=$1', [COMPANY])).rowCount).toBe(0);
+  });
+
+  it('adds only Oct and Dec as open, preserves existing rows and FY status, and is idempotent', async (ctx) => {
+    if (!disposable) ctx.skip();
+    await pool.query("INSERT INTO companies(id,slug,name) VALUES($1,'fy2026-repair-test','FY2026 Repair')", [COMPANY]);
+    await pool.query("INSERT INTO fiscal_years(id,company_id,name,start_date,end_date,status) VALUES($1,$2,'FY 2026','2026-01-01','2026-12-31','closed')", [FY, COMPANY]);
+    const existing = expectedMonthlyPeriods('2026-01-01', '2026-12-31').filter((p) => !['2026-10-01', '2026-12-01'].includes(p.period_start));
+    for (const p of existing) {
+      await pool.query("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,$5)",
+        [COMPANY, FY, p.period_start, p.period_end, p.period_start === '2026-11-01' ? 'open' : 'closed']);
+    }
+    const before = await snapshot();
+    expect(before).toHaveLength(10);
+
+    await pool.query(sql);
+    const after = await snapshot();
+    expect(after).toHaveLength(12);
+    const byStart = new Map(after.map((r) => [r.period_start, r]));
+    expect(byStart.get('2026-10-01')).toMatchObject({ period_end: '2026-10-31', status: 'open' });
+    expect(byStart.get('2026-12-01')).toMatchObject({ period_end: '2026-12-31', status: 'open' });
+    for (const row of before) expect(byStart.get(row.period_start)).toEqual(row); // id, status, updated_at unchanged
+    expect(byStart.get('2026-01-01')!.status).toBe('closed');
+    expect(byStart.get('2026-09-01')!.status).toBe('closed');
+    expect(byStart.get('2026-11-01')!.status).toBe('open');
+    expect((await pool.query('SELECT status FROM fiscal_years WHERE id=$1', [FY])).rows[0]!.status).toBe('closed');
+
+    await pool.query(sql); // second run: identical result
+    expect(await snapshot()).toEqual(after);
   });
 });
