@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response, Router } from 'express';
+import { FiscalYearConflictError } from './fiscal-year-errors';
 import { FiscalYearCloseBlockedError } from './fiscal-year-close-readiness';
 import pool from '../../db/pool';
 import {
@@ -104,18 +105,8 @@ function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
     return;
   }
 
-  if (err.message.startsWith('Fiscal year overlap:')) {
-    res.status(409).json({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_OVERLAP' });
-    return;
-  }
-
-  if (err.message.includes('is already closed')) {
-    res.status(409).json({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_ALREADY_CLOSED' });
-    return;
-  }
-
-  if (err.message.includes('is closed and cannot be modified')) {
-    res.status(409).json({ error: 'Fiscal year state conflict', code: 'FISCAL_YEAR_CLOSED_IMMUTABLE' });
+  if (err instanceof FiscalYearConflictError) {
+    res.status(409).json({ error: 'Fiscal year state conflict', code: err.code });
     return;
   }
 

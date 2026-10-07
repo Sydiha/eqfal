@@ -27,7 +27,7 @@ describe('apiError parser', () => {
     expect(parsed.status).toBe(409);
     expect(parsed.code).toBe('FISCAL_YEAR_CLOSE_BLOCKED');
     expect(parsed.blockers).toEqual([{ code: 'draft_journals', count: 2 }]);
-    expect(parsed.warnings).toEqual([{ code: 'vat_boundary_review', count: 1 }]);
+    expect(parsed.warnings).toEqual([{ code: 'vat_boundary_review', count: 1, detail: 'hidden' }]);
 
     const html = await parseApiError(new Response('<html>502 Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }));
     expect(html.status).toBe(502);

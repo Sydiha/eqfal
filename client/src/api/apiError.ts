@@ -4,7 +4,8 @@
  * AR/EN messages under `errors.*` and never show the raw backend text.
  */
 
-export interface ApiFinding { code: string; count?: number }
+/** `detail` is kept for diagnostics only; the UI never renders it. */
+export interface ApiFinding { code: string; count?: number; detail?: unknown }
 
 /** Every stable code introduced/normalized in Task 35D Phase 1 (each needs AR + EN). */
 export const PHASE1_ERROR_CODES = [
@@ -75,7 +76,10 @@ function findings(value: unknown): ApiFinding[] {
   for (const item of value) {
     const entry = asObject(item);
     if (entry && typeof entry.code === 'string') {
-      out.push(typeof entry.count === 'number' ? { code: entry.code, count: entry.count } : { code: entry.code });
+      const finding: ApiFinding = { code: entry.code };
+      if (typeof entry.count === 'number') finding.count = entry.count;
+      if (entry.detail !== undefined) finding.detail = entry.detail;
+      out.push(finding);
     }
   }
   return out;
