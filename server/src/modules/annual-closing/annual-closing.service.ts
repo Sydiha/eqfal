@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { loadOperationalSources } from '../accounting/operational-sources';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
+import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
 
 type FiscalYear = { id: string; start_date: string; end_date: string; status: string };
@@ -8,19 +9,8 @@ type CountRow = Record<string, string>;
 
 export class AnnualClosingNotFoundError extends Error {}
 
-export function expectedMonthlyPeriods(start: string, end: string) {
-  const periods: Array<{ period_start: string; period_end: string }> = [];
-  const cursor = new Date(`${start.slice(0, 7)}-01T00:00:00Z`);
-  while (cursor.toISOString().slice(0, 10) <= end) {
-    const monthStart = cursor.toISOString().slice(0, 10);
-    const next = new Date(cursor); next.setUTCMonth(next.getUTCMonth() + 1);
-    const monthEndDate = new Date(next); monthEndDate.setUTCDate(0);
-    const monthEnd = monthEndDate.toISOString().slice(0, 10);
-    periods.push({ period_start: monthStart < start ? start : monthStart, period_end: monthEnd > end ? end : monthEnd });
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-  }
-  return periods;
-}
+// Canonical implementation lives in the shared module; re-exported for existing importers.
+export { expectedMonthlyPeriods };
 
 export function domain(blockerCount: number, summary: AnnualClosingDomain['summary'], review = false): AnnualClosingDomain {
   const status: ReadinessState = blockerCount ? 'blocked' : review ? 'needs_review' : 'ready';
