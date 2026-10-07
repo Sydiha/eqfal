@@ -160,4 +160,24 @@ describe('VAT summary drill-down',()=>{
   await screen.findByText('No VAT-relevant documents in this period.');
   expect(screen.queryByRole('button',{name:/Output VAT/})).not.toBeInTheDocument();
  });
+
+ const doc=(id:string,type:string,vat:string|null,reviewed=true)=>({id,status:'approved',original_filename:`${id}.pdf`,document_type:type,document_date:'2026-02-01',counterparty_name:'X',total_amount:'10.00',review_id:reviewed?`r-${id}`:null,tax_date:reviewed?'2026-02-01':null,treatment:reviewed?'standard':null,taxable_amount:reviewed?'10.00':null,vat_amount:vat,review_status:reviewed?'reviewed':null,review_note:null,version:1});
+ const drillButtons=()=>['Output VAT','Input VAT','Net VAT'].map(n=>screen.queryByRole('button',{name:new RegExp(n)}));
+ it('input-only period: Output VAT is plain text, Input and Net are clickable',async()=>{
+  stub([doc('p1','purchase','3.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'p1.pdf'});
+  const [out,inp,net]=drillButtons();
+  expect(out).toBeNull();expect(inp).not.toBeNull();expect(net).not.toBeNull();
+ });
+ it('output-only period: Input VAT is plain text, Output and Net are clickable',async()=>{
+  stub([doc('s1','sale','15.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'s1.pdf'});
+  const [out,inp,net]=drillButtons();
+  expect(out).not.toBeNull();expect(inp).toBeNull();expect(net).not.toBeNull();
+ });
+ it('no contributing reviewed VAT documents: no summary drill-down buttons',async()=>{
+  stub([doc('u1','sale',null,false),doc('z1','purchase','0.00')]);render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:'u1.pdf'});
+  expect(drillButtons()).toEqual([null,null,null]);
+ });
 });

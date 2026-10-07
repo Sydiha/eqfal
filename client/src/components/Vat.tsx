@@ -78,7 +78,11 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  const hasFilters=Boolean(search||reviewFilter||typeFilter||treatmentFilter||side);
  // Summary figures are sums of reviewed documents already loaded in the register, so drilling in only filters that register (no recalculation).
  const drill=(next:'output'|'input'|'net')=>()=>{const active=side===next;setSide(active?'':next);if(!active){setSearch('');setReviewFilter('');setTypeFilter('');setTreatmentFilter('');setSelectedDocument(null);window.setTimeout(()=>document.getElementById('vat-register')?.scrollIntoView?.({block:'start'}),0)}};
- const drillValue=(key:'output'|'input'|'net',value:number)=>documents.length>0?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{value.toFixed(2)}</bdi></button>:<bdi dir="ltr">{value.toFixed(2)}</bdi>;
+ // A figure is drillable only when a reviewed document with VAT > 0 actually contributes to it; otherwise it stays plain text.
+ const contributes=(d:VatDocument)=>d.review_status==='reviewed'&&Number(d.vat_amount??0)>0;
+ const hasOutput=documents.some(d=>contributes(d)&&d.document_type==='sale'),hasInput=documents.some(d=>contributes(d)&&d.document_type!=='sale');
+ const drillable={output:hasOutput,input:hasInput,net:hasOutput||hasInput};
+ const drillValue=(key:'output'|'input'|'net',value:number)=>drillable[key]?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{value.toFixed(2)}</bdi></button>:<bdi dir="ltr">{value.toFixed(2)}</bdi>;
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
   <header className="vat-header"><h2 id="vat-title">{t('vat.title')}</h2><p>{t('vat.description')}</p></header>
