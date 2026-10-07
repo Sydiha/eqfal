@@ -4,7 +4,7 @@ exports[`Chart of Accounts tab is locked > keeps the chart-only source files byt
 {
   "AccountClassificationPanel.tsx": "24f3181387a5ca14bd5461e538857057c39424b42a81a6f9978ac910f916f9de",
   "Accounting.tsx": "e9cd55850579b5af5a10413092de0e5a97eee672e1fcc6c8c6a3805fb953cd4e",
-  "AccountingApproved.css": "19d9d73d46571c301ffbc2769ab16c33f3a9ea72aec613a8f72c3e44fcb31436",
+  "AccountingApproved.css": "fcd2b9b6606c5b4a73e67d37cfc529159b3f8d0f550830f08aac32ce6906fa30",
 }
 `;
 
