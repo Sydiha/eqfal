@@ -19,6 +19,15 @@ import { FiscalYearService } from '../src/modules/fiscal-years/fiscal-year.servi
 import { FiscalYearRepository } from '../src/modules/fiscal-years/fiscal-year.repository';
 import { AuditLogRepository } from '../src/modules/audit-log/audit-log.repository';
 import { FiscalYear } from '../src/modules/fiscal-years/fiscal-year.types';
+import * as closeGate from '../src/modules/fiscal-years/fiscal-year-close-readiness';
+
+// The readiness gate has its own PostgreSQL-backed suite; here it is stubbed ready.
+vi.mock('../src/modules/fiscal-years/fiscal-year-close-readiness', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/modules/fiscal-years/fiscal-year-close-readiness')>()),
+  loadFiscalYearBounds: vi.fn(async () => ({ id: 'ffffffff-0000-0000-0000-000000000001', start_date: '2024-01-01', end_date: '2024-12-31' })),
+  lockFiscalYearCloseScope: vi.fn(async () => undefined),
+  getFiscalYearCloseReadiness: vi.fn(async () => ({ ready: true, blockers: [], warnings: [] })),
+}));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -992,5 +1001,43 @@ describe('FiscalYearService — findByIdForUpdate inside transaction', () => {
     ).rejects.toThrow(/closed and cannot be modified/i);
 
     expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+  });
+});
+
+
+describe('FiscalYearService — close readiness gate', () => {
+  it('locks the row, then scope, then re-checks readiness, then updates status (approved order)', async () => {
+    const order: string[] = [];
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockImplementation(async () => { order.push('row-lock'); return makeFiscalYear(); });
+    vi.mocked(closeGate.loadFiscalYearBounds).mockImplementationOnce(async () => { order.push('bounds'); return { id: FY_ID, start_date: '2024-01-01', end_date: '2024-12-31' }; });
+    vi.mocked(closeGate.lockFiscalYearCloseScope).mockImplementationOnce(async () => { order.push('scope-locks'); });
+    vi.mocked(closeGate.getFiscalYearCloseReadiness).mockImplementationOnce(async () => { order.push('readiness'); return { ready: true, blockers: [], warnings: [] }; });
+    vi.spyOn(fyRepo, 'updateStatus').mockImplementation(async () => { order.push('update'); return makeFiscalYear({ status: 'closed' }); });
+    vi.spyOn(auditRepo, 'logEvent').mockImplementation(async () => { order.push('audit'); return {} as never; });
+
+    await service.closeFiscalYear(FY_ID, COMPANY_A, USER_1);
+
+    expect(order).toEqual(['row-lock', 'bounds', 'scope-locks', 'readiness', 'update', 'audit']);
+  });
+
+  it('throws FiscalYearCloseBlockedError with structured blockers and writes neither status nor audit', async () => {
+    const client = makeClient();
+    const { service, fyRepo, auditRepo } = makeService(client);
+    vi.spyOn(fyRepo, 'findByIdForUpdate').mockResolvedValue(makeFiscalYear());
+    const update = vi.spyOn(fyRepo, 'updateStatus');
+    const audit = vi.spyOn(auditRepo, 'logEvent');
+    vi.mocked(closeGate.getFiscalYearCloseReadiness).mockResolvedValueOnce({
+      ready: false, blockers: [{ code: 'draft_journals', count: 2 }], warnings: [],
+    });
+
+    const err = await service.closeFiscalYear(FY_ID, COMPANY_A, USER_1).catch((e) => e);
+
+    expect(err).toBeInstanceOf(closeGate.FiscalYearCloseBlockedError);
+    expect((err as closeGate.FiscalYearCloseBlockedError).blockers).toEqual([{ code: 'draft_journals', count: 2 }]);
+    expect(update).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+    expect(vi.mocked(client.query).mock.calls.map((c) => c[0])).toContain('ROLLBACK');
   });
 });

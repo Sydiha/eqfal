@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response, Router } from 'express';
+import { FiscalYearCloseBlockedError } from './fiscal-year-close-readiness';
 import pool from '../../db/pool';
 import {
   getAuthenticatedContext,
@@ -83,6 +84,11 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 }
 
 function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
+  if (err instanceof FiscalYearCloseBlockedError) {
+    res.status(409).json({ error: 'Fiscal year close blocked', blockers: err.blockers, warnings: err.warnings });
+    return;
+  }
+
   if (!(err instanceof Error)) {
     next(err);
     return;
