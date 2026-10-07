@@ -5,6 +5,9 @@ import {clearQueryParameters,readQueryParameter} from '../navigation/queryState'
 import {useDateContext} from '../context/DateContext';
 import {StatusBadge,WorkspaceState} from './SharedUI';
 import {localizedAccountName} from './accounting-contracts';
+import {ExportButtons} from './ExportButtons';
+import {useActiveCompanyName} from '../context/CompanyContext';
+import {accrualsExport,generatedStamp} from '../export/reportExport';
 import './PeriodicAdjustments.css';
 
 type AdjustmentType='accrued_expense'|'prepaid_expense'|'accrued_income'|'deferred_income';
@@ -36,6 +39,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
   title:'Accruals & Prepayments',description:'Manage accrued and prepaid expenses/income with governed recognition schedules and posting.',newItem:'Add periodic adjustment',type:'Type',amount:'Total amount',start:'Recognition start',end:'Recognition end',descriptionLabel:'Description',reference:'Reference',notes:'Notes',balanceAccount:'Balance-sheet account',pnlAccount:'P&L account',document:'Linked document (optional)',obligation:'Linked obligation (optional)',none:'No link',save:'Save',update:'Update',cancel:'Cancel edit',items:'Periodic adjustments',schedule:'Recognition schedule',period:'Period',recognitionDate:'Recognition date',journal:'Journal',post:'Post period',submit:'Submit for review',approve:'Approve',returnDraft:'Return to draft',returnReason:'Return reason',loading:'Loading...',empty:'No periodic adjustments yet.',error:'Could not load or save data.',noAccess:'You do not have access to periodic adjustments.',draft:'Draft',in_review:'In review',approved:'Approved',completed:'Completed',pending:'Pending',posted:'Posted',accrued_expense:'Accrued expense',prepaid_expense:'Prepaid expense',accrued_income:'Accrued income',deferred_income:'Deferred income',total:'Total adjustments',pendingCount:'Pending periods',postedCount:'Posted periods',accountHint:'Account selection is accounting setup; the system determines debit/credit direction automatically.',
   progress:'Progress',recognitionPeriod:'Recognition period',status:'Status',actions:'Actions',action:'Action',viewSchedule:'View schedule',selected:'Selected',oneItem:'1 adjustment',itemsCount:(n:number)=>n===1?'1 adjustment':`${n} adjustments`,showing:(n:number)=>`Showing ${n} of ${n} adjustments`,scheduleLinked:'The recognition schedule below belongs to the selected adjustment',periodsCount:(n:number)=>`${n} periods`,scheduleAmounts:'Amounts in Saudi riyals',currency:'SAR',progressOf:(a:number,b:number)=>`${a} of ${b} periods posted`,scheduleTotal:'Recognition schedule total',postNote:'Posting is an accounting action for the selected period only; a posted period is never posted again.',posting:'Posting...',saving:'Saving...',posted_done:'Posted',noSchedule:'No recognition schedule yet; it is generated on approval.',selectPrompt:'Select an adjustment to view its recognition schedule.',close:'Close',formTitle:'Add periodic adjustment'
  };
+ const company=useActiveCompanyName()??'';
  const types:AdjustmentType[]=['accrued_expense','prepaid_expense','accrued_income','deferred_income'];
  const [items,setItems]=useState<Adjustment[]>([]),[accounts,setAccounts]=useState<Account[]>([]),[documents,setDocuments]=useState<Document[]>([]),[obligations,setObligations]=useState<Obligation[]>([]);
  const [form,setForm]=useState<FormState>(initialForm),[editing,setEditing]=useState<Adjustment|null>(null),[returnReasons,setReturnReasons]=useState<Record<string,string>>({});
@@ -82,6 +86,8 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const showForm=(canCreate&&formOpen)||(!!editing&&canEdit);
  const scheduleRows=selected?(quick==='all'?selected.schedule:entriesInScope(selected).filter(e=>e.status===quick)):[];
  const scheduleTotal=selected?scheduleRows.reduce((sum,s)=>sum+Math.round((parseFloat(s.amount)||0)*100),0)/100:0;
+ const accountLabel=(id:string)=>{const a=accounts.find(x=>x.id===id);return a?`${a.code} — ${localizedAccountName(a,i18n.language)}`:''};
+ const exportDoc=!loading&&!error&&visibleItems.length>0?(()=>{const stamp=generatedStamp();const filterRows:Array<[string,string]>=[];if(quick!=='all')filterRows.push([ar?'الجدولة':'Schedule',quick==='pending'?l.pendingCount:l.postedCount]);if(typeFilter)filterRows.push([l.fType,l[typeFilter]]);if(statusFilter)filterRows.push([l.fStatus,l[statusFilter]]);return accrualsExport({ar,company,generatedAt:stamp,asOf:stamp.slice(0,10),scopeRange:scopeRange??null,scopeLabel:scopeRange?`${scopeRange.from} — ${scopeRange.to}`:l.ctxAll,filters:filterRows,pending,postedEntries:posted,rows:visibleItems.map(a=>({typeLabel:l[a.adjustment_type],description:a.description,reference:a.reference??'',document:a.document_name??'',balanceAccount:accountLabel(a.balance_account_id),pnlAccount:accountLabel(a.pnl_account_id),start:a.recognition_start,end:a.recognition_end,amount:a.total_amount,posted:a.schedule.filter(e=>e.status==='posted').length,periods:a.schedule.length,statusLabel:l[a.workflow_status]}))})})():null;
  const icon=(d:string)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d}/></svg>;
  const amountCell=(value:string)=><span className="pa-amount"><small>{l.currency}</small><strong>{money(value)}</strong></span>;
  const formBusy=busy&&busyUrl===null;
@@ -102,6 +108,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
    {filtersActive&&<button type="button" className="pa-ghost" onClick={resetFilters}>{l.fReset}</button>}
   </div>
   {error&&<WorkspaceState tone="error">{l.error}</WorkspaceState>}
+  <ExportButtons language={i18n.language} document={exportDoc} landscape/>
   {showForm&&<section className="pa-card pa-form-card" aria-label={editing?l.update:l.newItem}><div className="pa-card__head"><h3>{editing?l.update:l.formTitle}</h3></div><p className="pa-muted">{l.accountHint}</p><form className="pa-form" onSubmit={submitForm}>
    <label>{l.type}<select value={form.type} onChange={e=>setForm({...form,type:e.target.value as AdjustmentType,balanceAccountId:'',pnlAccountId:''})}>{types.map(t=><option key={t} value={t}>{l[t]}</option>)}</select></label>
    <label>{l.amount}<input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required/></label>

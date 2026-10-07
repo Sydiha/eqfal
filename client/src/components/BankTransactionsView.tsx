@@ -3,6 +3,9 @@ import { Alert, Badge, Button, Group, Loader, Stack, Text, TextInput } from '@ma
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { clearQueryParameters, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
+import { ExportButtons } from './ExportButtons';
+import { useActiveCompanyName } from '../context/CompanyContext';
+import { bankReconciliationExport, generatedStamp } from '../export/reportExport';
 import { DataWorkspace, DetailPane, WorkspaceState, WorkspaceToolbar } from './SharedUI';
 
 type ReconciliationStatus = 'unmatched' | 'matched' | 'reconciled';
@@ -128,6 +131,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
   const [matchBusy, setMatchBusy] = useState(false);
   const [filters, setFilters] = useState<Filters>(readFilters);
   const [page, setPage] = useState(1);
+  const company = useActiveCompanyName() ?? '';
 
   const counts = useMemo(() => transactions.reduce((acc, tx) => {
     acc[tx.reconciliation_status] += 1;
@@ -208,6 +212,20 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     } catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); }
   };
 
+  // Export mirrors the filtered list on screen (all pages), never a refetch.
+  const exportDoc = !loading && !error && filteredTransactions.length > 0 ? (() => {
+    const ar = i18n.language.startsWith('ar');
+    const filterRows: Array<[string, string]> = [];
+    if (filters.reconciliation) filterRows.push([s.reconciliation, s.statuses[filters.reconciliation as ReconciliationStatus]]);
+    if (filters.search.trim()) filterRows.push([s.searchTransactions, filters.search.trim()]);
+    if (filters.from) filterRows.push([s.from, filters.from]);
+    if (filters.to) filterRows.push([s.to, filters.to]);
+    if (filters.amountMin) filterRows.push([s.amountMin, filters.amountMin]);
+    if (filters.amountMax) filterRows.push([s.amountMax, filters.amountMax]);
+    const stamp = generatedStamp();
+    return bankReconciliationExport({ ar, company, generatedAt: stamp, asOf: stamp.slice(0, 10), statusLabels: s.statuses, filters: filterRows, from: filters.from || undefined, to: filters.to || undefined, rows: filteredTransactions });
+  })() : null;
+
   if (!canView) return <Text role="status">{t('banks.noAccess')}</Text>;
 
   const statusLabel = (status: ReconciliationStatus) => s.statuses[status];
@@ -231,6 +249,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       </div>
       <Button variant="default" size="compact-sm" className="bank-recon__refresh" onClick={() => void refresh()} loading={loading}>{s.refresh}</Button>
     </div>
+    <ExportButtons language={i18n.language} document={exportDoc} landscape />
 
     {!loading && <WorkspaceToolbar className="bank-recon__toolbar" ariaLabel={s.toolbar} search={<label><span className="bank-recon__sr">{s.searchTransactions}</span><input type="search" value={filters.search} placeholder={s.searchPlaceholder} onChange={event => updateFilter('search', event.target.value)}/></label>} filters={<><label>{s.reconciliation}<select value={filters.reconciliation} onChange={event => updateFilter('reconciliation', event.target.value)}><option value="">{s.allStatuses}</option>{reconciliationStatuses.map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label><label>{s.from}<input type="date" value={filters.from} onChange={event => updateFilter('from', event.target.value)}/></label><label>{s.to}<input type="date" value={filters.to} onChange={event => updateFilter('to', event.target.value)}/></label><label>{s.amountMin}<input type="number" step="any" value={filters.amountMin} onChange={event => updateFilter('amountMin', event.target.value)}/></label><label>{s.amountMax}<input type="number" step="any" value={filters.amountMax} onChange={event => updateFilter('amountMax', event.target.value)}/></label></>} resultCount={s.resultCount(filteredTransactions.length)} clearAction={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}/>}
 

@@ -1,3 +1,6 @@
+import { ExportButtons } from "./ExportButtons";
+import { useActiveCompanyName } from "../context/CompanyContext";
+import { generatedStamp, managementSummaryExport, sumDecimals, type ManagementMetric } from "../export/reportExport";
 import { useEffect, useState } from "react";
 import "@fontsource/readex-pro";
 import "./HomeApproved.css";
@@ -132,6 +135,7 @@ export function Home({
   const isArabic = i18n.language.startsWith("ar");
   const { selectedPeriodId, periodMode, selectedFiscalYearId, availableFiscalYears = [], availablePeriodsForSelectedYear = [] } = useDateContext();
 
+  const company = useActiveCompanyName() ?? "";
   const canViewClose = capabilities.includes("monthly_close.view");
   const [periods, setPeriods] = useState<Period[]>(externalPeriods);
   const [loading, setLoading] = useState(canViewClose);
@@ -451,6 +455,31 @@ export function Home({
     return null;
   };
 
+  // Management summary export: only the values the snapshot endpoint already returned (net profit has no data source, so it is not exported).
+  const exportDoc = (() => {
+    if (!snapshot || !canViewSnapshot) return null;
+    const stamp = generatedStamp();
+    const metrics: ManagementMetric[] = kpiMetrics.filter((k) => k.key !== "net_profit").map((k) => {
+      const m = (snapshot.metrics as Record<string, any>)[k.key];
+      const label = isArabic ? k.labelAr : k.labelEn;
+      const scope = kpiScopeLabel(k.key);
+      if (!m) return { label, scope, state: "unavailable" as const };
+      if (m.state === "hidden") return { label, scope, state: "hidden" as const };
+      if (k.key === "bank_balances") return { label, scope, state: "available" as const, amount: sumDecimals((m.accounts ?? []).filter((a: any) => a.balance.state === "available").map((a: any) => a.balance.amount)) };
+      return { label, scope, state: "available" as const, amount: m.amount };
+    });
+    const bank = snapshot.metrics.bank_balances as FinancialSnapshot["metrics"]["bank_balances"] | undefined;
+    const bankAccounts = bank?.state === "available" ? bank.accounts.map((a) => ({ name: a.display_name, currency: a.currency_code, amount: a.balance.state === "available" ? a.balance.amount : null })) : [];
+    const closeRows: Array<[string, string | { num: string; int?: boolean }]> = [];
+    if (canViewClose && selected) {
+      closeRows.push([isArabic ? "حالة الفترة" : "Period status", selected.status === "closed" ? (isArabic ? "مغلقة" : "Closed") : (isArabic ? "مفتوحة" : "Open")]);
+      closeRows.push([isArabic ? "الجاهزية" : "Readiness", selected.ready ? (isArabic ? "جاهز للإقفال" : "Ready to close") : (isArabic ? "غير جاهز" : "Not ready")]);
+      if (selected.has_hidden_blockers) closeRows.push([isArabic ? "المعوقات" : "Blockers", isArabic ? "مقيّدة" : "Restricted"]);
+      else for (const area of blockerAreas) closeRows.push([isArabic ? area.labelAr : area.labelEn, { num: String(area.count), int: true }]);
+    }
+    return managementSummaryExport({ ar: isArabic, company, generatedAt: stamp, asOf: stamp.slice(0, 10), periodLabel: monthYear, from: periodRange?.from, to: periodRange?.to, metrics, bankAccounts, closeRows, hiddenText: isArabic ? "مقيّد" : "Restricted", unavailableText: isArabic ? "غير متاح" : "Unavailable" });
+  })();
+
   const renderKPIValue = (kpi: typeof kpiMetrics[0]) => {
     if (!snapshot) {
       return isArabic ? "غير متاح" : "Unavailable";
@@ -550,6 +579,7 @@ export function Home({
       {/* KPI Section - Always Visible */}
       {canViewSnapshot && (
         <section className="home__kpi-section">
+          <ExportButtons language={i18n.language} document={exportDoc} />
           <div className="home__kpi-grid">
             {kpiMetrics.map((kpi) => {
               const value = renderKPIValue(kpi);
