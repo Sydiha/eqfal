@@ -24,3 +24,6 @@
 
 /* Wave 3: inputs holding dates, numbers and emails read left-to-right in RTL pages */
 input[type="date"],input[type="number"],input[type="email"]{direction:ltr}
+
+/* Wave 3: an empty table (single colspan row) must fit its wrapper so the empty message is not scrolled out of view on narrow screens */
+@media(max-width:48em){table:has(>tbody>tr>td[colspan]:only-child){min-width:0!important;width:100%!important}}
