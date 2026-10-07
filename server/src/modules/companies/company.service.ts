@@ -1,5 +1,10 @@
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import {
+  ACCOUNTANT_CAPABILITIES,
+  FINANCE_MANAGER_CAPABILITIES,
+  VIEWER_CAPABILITIES,
+} from '../memberships/default-role-capabilities';
 
 export interface ManagedCompany {
   id: string;
@@ -19,6 +24,20 @@ export class CompanyAccessError extends Error {
 interface CompanyRow { id: string; slug: string; name: string; name_ar: string | null; is_active: boolean; created_at: Date }
 
 const FULL_ACCESS_ROLE_NAME = 'Full Access';
+
+// Default roles and their capabilities for new companies
+interface DefaultRoleDefinition {
+  name: string;
+  is_full_access: boolean;
+  capabilities: string[];
+}
+
+const DEFAULT_ROLES: DefaultRoleDefinition[] = [
+  { name: 'Viewer', is_full_access: false, capabilities: [...VIEWER_CAPABILITIES] },
+  { name: 'Accountant', is_full_access: false, capabilities: [...ACCOUNTANT_CAPABILITIES] },
+  { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_CAPABILITIES] },
+  { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, capabilities: [] },
+];
 
 /**
  * CompanyManagementService
@@ -93,7 +112,7 @@ export class CompanyManagementService {
     return result;
   }
 
-  /** Creates the company, a Full Access role in it, and the actor's membership with that role. */
+  /** Creates the company, provisions all 4 default roles, and assigns creator to Full Access role. */
   async create(input: { slug: string; name: string; name_ar: string | null }, actorUserId: string): Promise<CompanyRow> {
     return this.transaction(async (client) => {
       const { rows } = await client.query<CompanyRow>(
@@ -102,13 +121,35 @@ export class CompanyManagementService {
         [input.slug, input.name, input.name_ar],
       );
       const company = rows[0] as CompanyRow;
-      const role = await client.query<{ id: string }>(
-        'INSERT INTO roles (company_id, name, is_full_access) VALUES ($1, $2, TRUE) RETURNING id',
-        [company.id, FULL_ACCESS_ROLE_NAME],
-      );
+
+      // Create all 4 default roles
+      const roleMap: Record<string, string> = {};
+      for (const roleDefn of DEFAULT_ROLES) {
+        const roleResult = await client.query<{ id: string }>(
+          'INSERT INTO roles (company_id, name, is_full_access) VALUES ($1, $2, $3) RETURNING id',
+          [company.id, roleDefn.name, roleDefn.is_full_access],
+        );
+        const roleId = roleResult.rows[0]?.id;
+        if (!roleId) throw new Error(`Failed to create role: ${roleDefn.name}`);
+        roleMap[roleDefn.name] = roleId;
+
+        // Insert capabilities for non-full-access roles
+        if (!roleDefn.is_full_access && roleDefn.capabilities.length > 0) {
+          for (const capabilityId of roleDefn.capabilities) {
+            await client.query(
+              'INSERT INTO role_capabilities (role_id, capability_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+              [roleId, capabilityId],
+            );
+          }
+        }
+      }
+
+      // Assign creator to Full Access role
+      const fullAccessRoleId = roleMap[FULL_ACCESS_ROLE_NAME];
+      if (!fullAccessRoleId) throw new Error('Failed to create Full Access role');
       await client.query(
         'INSERT INTO memberships (user_id, company_id, role_id) VALUES ($1, $2, $3)',
-        [actorUserId, company.id, role.rows[0]?.id],
+        [actorUserId, company.id, fullAccessRoleId],
       );
       await this.audit.logEvent({ company_id: company.id, actor_user_id: actorUserId, action: 'company.create', entity_type: 'company', entity_id: company.id, before_data: null, after_data: this.snapshot(company) }, client);
       return company;
