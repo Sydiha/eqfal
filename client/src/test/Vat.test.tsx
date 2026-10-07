@@ -189,4 +189,7 @@ describe('VAT summary drill-down',()=>{
   expect(screen.queryByRole('cell',{name:'z1.pdf'})).not.toBeInTheDocument();
   expect(screen.queryByRole('cell',{name:'s1.pdf'})).not.toBeInTheDocument();
  });
+ it('row keyboard handler selects on the row itself but does not swallow keys from inner action buttons',async()=>{mock();render(<Vat canView canReview canClose canReopen onUnauthorized={vi.fn()}/>);const cell=await screen.findByRole('cell',{name:'sale-acme.pdf'});const row=cell.closest('tr') as HTMLElement;const inner=within(row).getByRole('button');
+  expect(fireEvent.keyDown(inner,{key:' '})).toBe(true);expect(row).toHaveAttribute('aria-selected','false');
+  expect(fireEvent.keyDown(row,{key:'Enter'})).toBe(false);expect(row).toHaveAttribute('aria-selected','true')});
 });

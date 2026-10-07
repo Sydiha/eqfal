@@ -34,7 +34,7 @@
 .ac-approved .ac-approved__prefixed select{appearance:none;flex:1;min-width:0;width:auto;max-width:none;min-height:0;height:28px;margin:0;padding:0;padding-inline-end:14px;border:0;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat;background-size:10px;background-position:left 0 center;color:var(--ac-ink);font-size:11px;box-shadow:none}
 .ac-approved__create{display:inline-flex;align-items:center;gap:4px;min-width:0;min-height:0;height:30px;margin-inline-start:auto;padding:0 14px;border:0;border-radius:6px;background:var(--ac-primary);color:#fff;font-size:12px;font-weight:700;line-height:normal;white-space:nowrap;cursor:pointer}
 
-.ac-approved__table{overflow-x:auto;border:1px solid var(--ac-border);border-radius:8px}
+.ac-approved__table{position:relative;overflow-x:auto;border:1px solid var(--ac-border);border-radius:8px}
 .ac-approved__table table,.ac-mapping__table table{width:100%;margin:0;border-collapse:collapse;font-size:12px}
 .ac-approved__table th{height:28px;padding:0 12px;border-bottom:1px solid var(--ac-border);background:var(--ac-soft);color:var(--ac-muted);font-size:11px;font-weight:600;text-align:start;white-space:nowrap}
 .ac-approved__table td{height:31px;padding:0 12px;border-bottom:1px solid var(--ac-border);color:var(--ac-ink);text-align:start;white-space:nowrap}

@@ -56,4 +56,14 @@ describe('WHT review granular capabilities', () => {
       body: JSON.stringify({ version: 3, payment_service_category: 'Consulting', basis_reference: 'Updated agreement' }),
     })));
   });
+
+  it('renders workflow status and the professional-review flag in the active language', async () => {
+    renderReviews();
+    expect(await screen.findByText('Needs review')).toBeInTheDocument();
+    expect(screen.getByText('Yes')).toBeInTheDocument();
+    await i18n.changeLanguage('ar');
+    expect(await screen.findByText('يحتاج مراجعة')).toBeInTheDocument();
+    expect(screen.getByText('نعم')).toBeInTheDocument();
+    expect(screen.queryByText('needs_review')).toBeNull();
+  });
 });
