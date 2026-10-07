@@ -5,8 +5,14 @@
   /* Print only the report document: every other body child (app root, portals, modals) is removed from layout. */
   body > *:not(.eqfal-print-doc){display:none!important}
   .eqfal-print-doc{display:block;color:#152536;font-family:Arial,"Segoe UI",Tahoma,sans-serif;font-size:10pt}
-  .eqfal-print-brand{font-size:9pt;font-weight:700;color:#0b5c5a;letter-spacing:.04em;margin:0 0 2mm}
-  .eqfal-print-doc h1{font-size:15pt;margin:0 0 2mm}
+  .eqfal-print-header{display:flex;justify-content:space-between;align-items:center;gap:6mm;margin:0 0 2.5mm}
+  .eqfal-print-company{display:flex;align-items:center;gap:3mm;min-width:0}
+  .eqfal-print-logo{max-height:14mm;max-width:42mm;width:auto;height:auto;object-fit:contain;flex:none}
+  .eqfal-print-company-name{font-size:11pt;font-weight:700;color:#152536}
+  .eqfal-print-brand{display:flex;align-items:center;gap:1.5mm;flex:none;font-size:8pt;font-weight:700;color:#0b5c5a;letter-spacing:.04em;opacity:.85}
+  .eqfal-print-brand .eqfal-brand-mark{width:6mm;height:6mm;display:inline-block}
+  .eqfal-print-brand .eqfal-brand-mark svg{width:6mm;height:6mm;display:block}
+  .eqfal-print-doc h1{font-size:14pt;margin:0}
   .eqfal-print-meta{display:flex;flex-wrap:wrap;gap:1mm 8mm;margin:0 0 4mm;padding:0 0 2mm;border-bottom:1.2pt solid #0b5c5a;font-size:9pt}
   .eqfal-print-meta div{display:flex;gap:1.5mm}
   .eqfal-print-meta dt{font-weight:700;color:#595959;margin:0}.eqfal-print-meta dt::after{content:":"}

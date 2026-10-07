@@ -213,3 +213,8 @@ export function useCompany(): CompanyContextValue {
 export function useActiveCompanyName(): string | null {
   return useContext(CompanyContext)?.activeCompany?.name ?? null;
 }
+
+/** Non-throwing variant for optional consumers (e.g. report branding): null outside a CompanyProvider. */
+export function useOptionalCompany(): CompanyContextValue | null {
+  return useContext(CompanyContext);
+}

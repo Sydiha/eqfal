@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { applyPrintPage, downloadCsv, downloadXlsx, type ExportDocument } from '../export/downloadExport';
 import type { ExportCell } from '../export/xlsx-builder';
+import { loadReportBranding, type ReportBranding } from '../export/branding';
+import { useOptionalCompany } from '../context/CompanyContext';
+import { EqfalBrandMark } from './EqfalBrand';
 import '../export/export.css';
 
 interface Props {
@@ -15,7 +18,8 @@ const money = (v: string) => { const x = Number(v); return Number.isFinite(x) ? 
 const show = (c: ExportCell) => (c === null ? '' : typeof c === 'object' ? (c.int ? c.num : money(c.num)) : c);
 
 /** Print-only report: a compact table generated from the same rows as the exports. Hidden on screen. */
-function PrintDocument({ doc, ar }: { doc: ExportDocument; ar: boolean }) {
+function PrintDocument({ doc, ar, logo }: { doc: ExportDocument; ar: boolean; logo: string | null }) {
+  const [logoOk, setLogoOk] = useState(true);
   const { rows, layout } = doc;
   const bodyStart = layout.metaEnd + 1;
   const meta = rows.slice(1, layout.metaEnd);
@@ -25,8 +29,16 @@ function PrintDocument({ doc, ar }: { doc: ExportDocument; ar: boolean }) {
   const numeric = Array.from({ length: cols }, (_, c) => body.some((r) => typeof r[c] === 'object' && r[c] !== null));
   const kind = (abs: number) => (layout.totalRows.includes(abs) ? 't' : layout.sectionRows.includes(abs) ? 's' : layout.headerRows.includes(abs) ? 'h' : '');
   return <div className="eqfal-print-doc" dir={ar ? 'rtl' : 'ltr'} lang={ar ? 'ar' : 'en'} aria-hidden="true">
-    <div className="eqfal-print-brand">{ar ? 'إقفال | EQFAL' : 'EQFAL | إقفال'}</div>
-    <h1>{String(rows[0]?.[0] ?? '')}</h1>
+    <header className="eqfal-print-header">
+      <div className="eqfal-print-company">
+        {logo && logoOk && <img className="eqfal-print-logo" src={logo} alt="" onError={() => setLogoOk(false)} />}
+        <div className="eqfal-print-titles">
+          <div className="eqfal-print-company-name">{show(rows[1]?.[1] ?? null)}</div>
+          <h1>{String(rows[0]?.[0] ?? '')}</h1>
+        </div>
+      </div>
+      <div className="eqfal-print-brand"><EqfalBrandMark compact /><span>{ar ? 'إقفال | EQFAL' : 'EQFAL | إقفال'}</span></div>
+    </header>
     <dl className="eqfal-print-meta">{meta.map((r, i) => <div key={i}><dt>{show(r[0] ?? null)}</dt><dd>{show(r[1] ?? null)}</dd></div>)}</dl>
     <table>
       <thead>{rows[first] && <tr>{Array.from({ length: cols }, (_, c) => <th key={c} className={numeric[c] ? 'n' : ''}>{show(rows[first]![c] ?? null)}</th>)}</tr>}</thead>
@@ -45,6 +57,16 @@ function PrintDocument({ doc, ar }: { doc: ExportDocument; ar: boolean }) {
 export function ExportButtons({ language, document: doc, landscape = false }: Props) {
   const ar = language.startsWith('ar');
   const off = !doc;
+  // Optional company branding is loaded in the background; a missing/broken logo only means the fallback header.
+  const companyId = useOptionalCompany()?.activeCompanyId ?? null;
+  const [branding, setBranding] = useState<ReportBranding | null>(null);
+  useEffect(() => {
+    setBranding(null);
+    if (!companyId) return;
+    let live = true;
+    void loadReportBranding(companyId).then((b) => { if (live) setBranding(b); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [companyId]);
   // The print document only exists in the DOM while a print run is in progress.
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
@@ -57,9 +79,9 @@ export function ExportButtons({ language, document: doc, landscape = false }: Pr
   }, [printing, landscape]);
   useEffect(() => { if (!doc) setPrinting(false); }, [doc]);
   return <>
-    {doc && printing && createPortal(<PrintDocument doc={doc} ar={ar} />, document.body)}
+    {doc && printing && createPortal(<PrintDocument doc={doc} ar={ar} logo={branding?.logoDataUrl ?? null} />, document.body)}
     <div className="eqfal-export-actions" role="group" aria-label={ar ? 'تصدير التقرير' : 'Export report'}>
-      <button type="button" disabled={off} onClick={() => doc && downloadXlsx(doc)}>{ar ? 'تصدير Excel' : 'Export Excel'}</button>
+      <button type="button" disabled={off} onClick={() => doc && downloadXlsx(doc, branding ? { company: branding.logoPng, eqfal: branding.eqfalPng } : undefined)}>{ar ? 'تصدير Excel' : 'Export Excel'}</button>
       <button type="button" disabled={off} onClick={() => doc && downloadCsv(doc)}>{ar ? 'تصدير CSV' : 'Export CSV'}</button>
       <button type="button" disabled={off} onClick={() => setPrinting(true)}>{ar ? 'طباعة / PDF' : 'Print / Save PDF'}</button>
     </div>
