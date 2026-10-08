@@ -104,6 +104,7 @@ describe('Phase 1 ACCOUNTING_PERIOD_CLOSED stays consistent', () => {
     const res = await request(ob)
       .post('/api/opening-balances/11111111-1111-4111-8111-111111111111/approve')
       .set('Cookie', `${SESSION_COOKIE}=tok`)
+      .set('Sec-Fetch-Site', 'same-origin')
       .send({});
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('ACCOUNTING_PERIOD_CLOSED');

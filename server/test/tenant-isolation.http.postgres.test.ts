@@ -34,7 +34,7 @@ describeDatabase('Tenant isolation over HTTP (two companies, two users, PostgreS
     cookie = '';
     constructor(private readonly email: string) {}
     async req(method: string, url: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
-      const headers: Record<string, string> = { ...extra };
+      const headers: Record<string, string> = { origin: base, ...extra };
       if (this.cookie) headers['cookie'] = this.cookie;
       let payload: Buffer | string | undefined;
       if (body !== undefined) {

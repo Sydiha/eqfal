@@ -31,6 +31,8 @@ const session = { id: 's', user_id: 'user', user_email: 'u@example.com', token_h
 const companies = [{ membership_id: 'm', company_id: 'company-a', company_name: 'A', company_name_ar: null, role_id: 'r' }];
 const COMPANY_ID = '0e8574b6-5828-40c6-9b56-7dbd1c7e9def';
 const cookie = ['Cookie', 'eqfal_session=token'] as const;
+process.env['APP_PUBLIC_ORIGINS'] = 'http://app.test';
+const origin = ['Origin', 'http://app.test'] as const;
 
 function login(caps: string[], activeCompanyId: string | null = 'company-a') {
   vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue({ ...session, active_company_id: activeCompanyId });
@@ -58,31 +60,31 @@ describe('company management permission enforcement', () => {
 
   it('requires an active company', async () => {
     login([], null);
-    expect((await request(app).get('/api/companies').set(...cookie)).status).toBe(403);
+    expect((await request(app).get('/api/companies').set(...cookie).set(...origin)).status).toBe(403);
   });
 
   it('requires company.view for listing and company.create for creating', async () => {
     login([]);
-    expect((await request(app).get('/api/companies').set(...cookie)).status).toBe(403);
+    expect((await request(app).get('/api/companies').set(...cookie).set(...origin)).status).toBe(403);
     login(['company.view']);
-    expect((await request(app).post('/api/companies').set(...cookie).send({ slug: 'new-co', name: 'New' })).status).toBe(403);
+    expect((await request(app).post('/api/companies').set(...cookie).set(...origin).send({ slug: 'new-co', name: 'New' })).status).toBe(403);
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('lists with company.view and uses the session user, never request input', async () => {
     login(['company.view']);
-    const res = await request(app).get('/api/companies?user_id=attacker').set(...cookie);
+    const res = await request(app).get('/api/companies?user_id=attacker').set(...cookie).set(...origin);
     expect(res.status).toBe(200);
     expect(mocks.listForUser).toHaveBeenCalledWith('user');
   });
 
   it('creates a company with company.create and validates the body strictly', async () => {
     login(['company.create']);
-    const ok = await request(app).post('/api/companies').set(...cookie).send({ slug: 'new-co', name: ' New Co ', name_ar: 'شركة' });
+    const ok = await request(app).post('/api/companies').set(...cookie).set(...origin).send({ slug: 'new-co', name: ' New Co ', name_ar: 'شركة' });
     expect(ok.status).toBe(201);
     expect(mocks.create).toHaveBeenCalledWith({ slug: 'new-co', name: 'New Co', name_ar: 'شركة' }, 'user');
     for (const body of [{}, { slug: 'Bad Slug', name: 'x' }, { slug: 'ok', name: '' }, { slug: 'ok', name: 'x', is_active: false }, { slug: 'ok', name: 'x', name_ar: 5 }]) {
-      expect((await request(app).post('/api/companies').set(...cookie).send(body)).status).toBe(400);
+      expect((await request(app).post('/api/companies').set(...cookie).set(...origin).send(body)).status).toBe(400);
     }
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
@@ -90,20 +92,20 @@ describe('company management permission enforcement', () => {
   it('maps duplicate slugs to 409', async () => {
     login(['company.create']);
     mocks.create.mockRejectedValue(Object.assign(new Error('dup'), { code: '23505' }));
-    const response = await request(app).post('/api/companies').set(...cookie).send({ slug: 'dup', name: 'Dup' });
+    const response = await request(app).post('/api/companies').set(...cookie).set(...origin).send({ slug: 'dup', name: 'Dup' });
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ error: 'Conflict', code: 'COMPANY_SLUG_CONFLICT' });
   });
 
   it('edits only name fields; slug and is_active are rejected', async () => {
     login([]);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ name: 'New' })).status).toBe(200);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ name: 'New' })).status).toBe(200);
     expect(mocks.update).toHaveBeenCalledWith(COMPANY_ID, { name: 'New' }, 'user');
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ slug: 'x' })).status).toBe(400);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ is_active: false })).status).toBe(400);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({})).status).toBe(400);
-    expect((await request(app).patch('/api/companies/not-a-uuid').set(...cookie).send({ name: 'x' })).status).toBe(400);
-    const clear = await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ name_ar: '' });
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ slug: 'x' })).status).toBe(400);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ is_active: false })).status).toBe(400);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({})).status).toBe(400);
+    expect((await request(app).patch('/api/companies/not-a-uuid').set(...cookie).set(...origin).send({ name: 'x' })).status).toBe(400);
+    const clear = await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ name_ar: '' });
     expect(clear.status).toBe(200);
     expect(mocks.update).toHaveBeenLastCalledWith(COMPANY_ID, { name_ar: null }, 'user');
   });
@@ -111,32 +113,32 @@ describe('company management permission enforcement', () => {
   it('translates service authorization outcomes (403 / 404 / 409)', async () => {
     login([]);
     mocks.update.mockRejectedValueOnce(new CompanyAccessError('forbidden'));
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ name: 'x' })).status).toBe(403);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ name: 'x' })).status).toBe(403);
     mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('not_found'));
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: true })).status).toBe(404);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: true })).status).toBe(404);
     mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('conflict'));
-    const plain = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false });
+    const plain = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: false });
     expect(plain.status).toBe(409);
     expect(plain.body).toEqual({ error: 'Conflict' });
     mocks.setActive.mockRejectedValueOnce(new CompanyAccessError('conflict', 'COMPANY_LAST_ACTIVE_CONFLICT'));
-    const last = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false });
+    const last = await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: false });
     expect(last.status).toBe(409);
     expect(last.body).toEqual({ error: 'Conflict', code: 'COMPANY_LAST_ACTIVE_CONFLICT' });
     mocks.update.mockRejectedValueOnce(new CompanyAccessError('forbidden'));
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).send({ name: 'x' })).body).toEqual({ error: 'Forbidden' });
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin).send({ name: 'x' })).body).toEqual({ error: 'Forbidden' });
   });
 
   it('validates the enable/disable body and exposes no delete route', async () => {
     login([]);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: 'no' })).status).toBe(400);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false, extra: 1 })).status).toBe(400);
-    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).send({ is_active: false })).status).toBe(200);
-    expect((await request(app).delete(`/api/companies/${COMPANY_ID}`).set(...cookie)).status).toBe(404);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: 'no' })).status).toBe(400);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: false, extra: 1 })).status).toBe(400);
+    expect((await request(app).patch(`/api/companies/${COMPANY_ID}/active`).set(...cookie).set(...origin).send({ is_active: false })).status).toBe(200);
+    expect((await request(app).delete(`/api/companies/${COMPANY_ID}`).set(...cookie).set(...origin)).status).toBe(404);
   });
 
   it('rejects cross-origin writes', async () => {
     login(['company.create']);
-    const res = await request(app).post('/api/companies').set(...cookie).set('Origin', 'https://evil.example').send({ slug: 'x-co', name: 'X' });
+    const res = await request(app).post('/api/companies').set(...cookie).set(...origin).set('Origin', 'https://evil.example').send({ slug: 'x-co', name: 'X' });
     expect(res.status).toBe(403);
     expect(mocks.create).not.toHaveBeenCalled();
   });
