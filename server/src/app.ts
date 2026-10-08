@@ -35,11 +35,14 @@ import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import logger from './shared/logger';
 import config from './config';
+import { securityHeaders } from './shared/security-headers';
 
 const app = express();
 
 // Client IP (used by login rate limiting) honours X-Forwarded-For only for the proxies named in TRUST_PROXY.
 app.set('trust proxy', config.trustProxy);
+app.disable('x-powered-by');
+app.use(securityHeaders(config.env === 'production'));
 
 app.use(express.json({ limit: '64kb' }));
 
@@ -92,6 +95,12 @@ app.use((_req: Request, res: Response) => {
 
 // Central error boundary: log server-side details, return a generic response.
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  // Client errors raised by body parsing (malformed JSON, oversized body): fixed messages, never the parser's text.
+  const status = (err as { status?: unknown } | null)?.status;
+  if (status === 400 || status === 413) {
+    res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Invalid request body' });
+    return;
+  }
   logger.error({ err }, 'Unhandled request error');
   res.status(500).json({ error: 'Internal server error' });
 });

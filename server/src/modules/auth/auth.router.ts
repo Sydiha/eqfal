@@ -43,23 +43,20 @@ function readCookie(req: Request, name: string): string | null {
   return null;
 }
 
+/** Session cookie flags. Secure is mandatory in production; HttpOnly and SameSite=Lax always. */
+export function sessionCookieOptions(env: string = config.env) {
+  return { httpOnly: true, sameSite: 'lax' as const, secure: env === 'production', path: '/' };
+}
+
 function setSessionCookie(res: Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: config.env === 'production',
-    path: '/',
+    ...sessionCookieOptions(),
     maxAge: COOKIE_MAX_AGE_MS,
   });
 }
 
 function clearSessionCookie(res: Response): void {
-  res.clearCookie(SESSION_COOKIE, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: config.env === 'production',
-    path: '/',
-  });
+  res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
 }
 
 authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) => {
