@@ -14,6 +14,8 @@ const config = {
   trustProxy: parseTrustProxy(process.env['TRUST_PROXY']),
   logLevel: process.env['LOG_LEVEL'] ?? 'info',
   documentStorageDir: process.env['DOCUMENT_STORAGE_DIR'] ?? path.resolve(process.cwd(), '.data/documents'),
+  // Built React app served by Express in production only (see docs/PRODUCTION_SERVING.md).
+  frontendDistDir: process.env['FRONTEND_DIST_DIR'] ?? path.resolve(__dirname, '../../../client/dist'),
   bankStorageDir: process.env['BANK_STORAGE_DIR'] ?? path.resolve(process.cwd(), '.data/bank-imports'),
 } as const;
 

@@ -36,6 +36,7 @@ import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import logger from './shared/logger';
 import config from './config';
 import { securityHeaders } from './shared/security-headers';
+import { frontendRouter } from './shared/frontend-static';
 
 const app = express();
 
@@ -87,6 +88,10 @@ app.use('/api', homeAlertsRouter);
 app.use('/api', managerFinancialSnapshotRouter);
 app.use('/api', whtReviewRouter);
 app.use('/api', auditLogRouter);
+
+// Production only: serve the built React app (client/dist) and SPA routes from the same origin as the API.
+// Development keeps the Vite dev server + proxy and is unaffected.
+if (config.env === 'production') app.use(frontendRouter(config.frontendDistDir));
 
 // 404
 app.use((_req: Request, res: Response) => {
