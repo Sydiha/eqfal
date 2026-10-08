@@ -3,10 +3,14 @@ import config from './config';
 import logger from './shared/logger';
 import pool from './db/pool';
 import { runMigrations } from './db/migrate';
+import { frontendBuildAvailable } from './shared/frontend-static';
 import { assertProductionConfig, productionConfigWarnings } from './config/production-config';
 
 async function start(): Promise<void> {
   assertProductionConfig();
+  if (config.env === 'production' && !frontendBuildAvailable(config.frontendDistDir)) {
+    throw new Error('Frontend build not found: run `npm run build` before `npm start` (expected index.html in the client dist directory)');
+  }
   for (const warning of productionConfigWarnings(process.env)) logger.warn(warning);
   if (pool) {
     // DATABASE_URL is set: a connection or migration failure is fatal.
