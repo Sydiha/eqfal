@@ -7,6 +7,8 @@
     "build": "tsc --project tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "bootstrap:admin": "tsx src/cli/bootstrap-admin.ts",
+    "bootstrap:admin:compiled": "node dist/cli/bootstrap-admin.js",
     "test": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run"
   },
   "dependencies": {
