@@ -19,6 +19,13 @@ DATABASE_URL=... npm run bootstrap:admin -- \
   --company-slug my-company --company-name "My Company" [--company-name-ar "..."] \
   --confirm-slug my-company
 ```
+Production / compiled output (no `tsx` or dev dependencies needed; run `npm run build -w server` first):
+```
+cd server
+DATABASE_URL=... node dist/cli/bootstrap-admin.js --email ... --company-slug ... --company-name ... --confirm-slug ...
+```
+(`npm run bootstrap:admin:compiled -- <args>` is the same command.)
+
 `--confirm-slug` must equal `--company-slug` (explicit operator confirmation). The password is prompted twice (hidden) in a terminal; if stdin is piped, the first line is used (e.g. from a secrets manager, never `echo` in shell history).
 
 ## Tests

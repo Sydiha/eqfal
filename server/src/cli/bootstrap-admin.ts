@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline';
 import { Pool } from 'pg';
+import { readHidden } from './read-hidden';
 import { BootstrapError, bootstrapInitialAdmin, BootstrapInput } from '../modules/bootstrap/bootstrap.service';
 
 const USAGE = `Usage: bootstrap-admin --email <email> --company-slug <slug> --company-name <name> [--company-name-ar <name>] --confirm-slug <slug>
@@ -18,27 +19,10 @@ function parseArgs(argv: string[]): Record<string, string> {
   return out;
 }
 
-function readHidden(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
-    process.stderr.write(prompt);
-    stdin.setRawMode(true); stdin.resume(); stdin.setEncoding('utf8');
-    let value = '';
-    const onData = (chunk: string): void => {
-      for (const ch of chunk) {
-        if (ch === '\r' || ch === '\n') { stdin.setRawMode(false); stdin.pause(); stdin.off('data', onData); process.stderr.write('\n'); return resolve(value); }
-        if (ch === '\u0003') { stdin.setRawMode(false); return reject(new Error('Cancelled.')); }
-        if (ch === '\u007f' || ch === '\b') value = value.slice(0, -1); else value += ch;
-      }
-    };
-    stdin.on('data', onData);
-  });
-}
-
 async function readPassword(): Promise<string> {
   if (process.stdin.isTTY) {
-    const first = await readHidden('Administrator password: ');
-    const second = await readHidden('Repeat password: ');
+    const first = await readHidden('Administrator password: ', process.stdin, process.stderr);
+    const second = await readHidden('Repeat password: ', process.stdin, process.stderr);
     if (first !== second) throw new BootstrapError('INVALID_INPUT', 'Passwords do not match.');
     return first;
   }

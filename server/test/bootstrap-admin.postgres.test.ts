@@ -118,6 +118,15 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       expect(again.status).toBe(2);
       expect(again.stdout + again.stderr).not.toContain(PASSWORD);
     }, 60_000);
+    it('runs from compiled output with plain node (no tsx)', async () => {
+      const dist = path.resolve(__dirname, '../dist/cli/bootstrap-admin.js');
+      const build = spawnSync('npx', ['tsc', '--project', 'tsconfig.json'], { encoding: 'utf8', cwd: path.resolve(__dirname, '..') });
+      expect(build.status, build.stdout).toBe(0);
+      const r = spawnSync(process.execPath, [dist, ...good], { input: `${PASSWORD}\n`, encoding: 'utf8', env: { PATH: '', DATABASE_URL: testUrl.toString() } });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout + r.stderr).not.toContain(PASSWORD);
+      expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+    }, 120_000);
     it('rejects a password passed as an argument', () => {
       const r = run([...good, '--password', PASSWORD], '');
       expect(r.status).toBe(1);
