@@ -1,6 +1,6 @@
 # BACKUP_RESTORE — النسخ الاحتياطي والاستعادة (Foundation v1)
 
-> **تنبيه:** هذه الأداة لا تغطي Object Storage بعد. أمر `backup` يرفض العمل مع `STORAGE_BACKEND=object` إلى أن يكتمل Task 6C-2B. انظر `docs/OBJECT_STORAGE.md`.
+> **Object Storage (Task 6C-2B):** الأداة تغطي الآن `STORAGE_BACKEND=object` (انظر قسم «نسخ Object Storage» أدناه). الكود **غير مفعّل**: لم يُنشأ bucket ولم يُغيَّر أي إعداد في Replit/Staging/Production، ومفتاح `OBJECT_STORAGE_BACKUP_SUPPORT_CONFIRMED` يبقى قرار المالك بعد المراجعة. أول نسخة حقيقية من Object Storage لم تُجرَّب بعد (الاختبارات تستخدم عميلاً وهمياً).
 
 أدوات يدوية في `tools/backup/`. **لا جدولة تلقائية ولا رفع خارجي** في هذه المرحلة (قرار المالك). كل أمر يُشغَّل يدوياً.
 
@@ -94,3 +94,19 @@ COMMENT ON DATABASE eqfal_restore_drill1 IS 'EQFAL_DISPOSABLE_RESTORE_TARGET';
 - **حجم البيانات:** الأرشفة تمرّ على كامل المجلدات في كل نسخة (لا تزايدية).
 - الاستعادة تحتاج `pg_dump`/`pg_restore` من نفس الإصدار الرئيسي لـ PostgreSQL. لم يعد `tar` مطلوباً.
 - النسخة المؤقتة المفكوكة أثناء الاستعادة تُكتب في `RESTORE_TMP_DIR` (أو tmp) بصلاحية 700 وبحجم النسخة غير المشفّرة؛ تأكد من المساحة، ولا تستعمل بيانات حقيقية في بيئة غير موثوقة.
+
+## نسخ Object Storage (Task 6C-2B)
+عند `STORAGE_BACKEND=object` يعمل `backup` هكذا:
+1. يلزم `OBJECT_STORAGE_BUCKET_ID` صريحاً (لا يُستخدم الـ bucket الافتراضي أبداً). قيمة `STORAGE_BACKEND` غير المعروفة، أو `local` على نشر Replit Production، يُرفض (لا نسخة فارغة صامتة).
+2. لقطة واحدة متسقة: `pg_export_snapshot()` داخل معاملة `REPEATABLE READ`؛ `pg_dump --snapshot` وقراءة قائمة الملفات المرجعية (`documents.storage_key/sha256/size_bytes` و`bank_import_batches.storage_key/file_sha256`) من اللقطة نفسها. فلا تختلف قائمة الملفات عن القاعدة المنسوخة حتى لو رُفعت ملفات أثناء النسخ.
+3. كل ملف مرجعي يُنزَّل (قراءة فقط: لا رفع ولا حذف ولا list) ويُقارن بـ SHA-256 (وبالحجم للمستندات) المسجل في القاعدة، ثم يُكتب مباشرة في الأرشيف المشفّر (لا ملف غير مشفّر على القرص).
+4. **يفشل النسخ كاملاً** (ولا يبقى مجلد نسخة جزئي) عند: ملف مفقود ("No such object")، عدم تطابق SHA-256 أو الحجم، مفتاح تخزين غير آمن، أو أي خطأ خدمة/شبكة/صلاحيات (يُبلَّغ كخطأ خدمة لا كملف مفقود).
+5. الملفات في الـ bucket غير المشار إليها من القاعدة (يتيمة) لا تُنسخ.
+
+**التوافق:** صيغة الأرشيف (`EQFALAR1`) وأسماء الملفات (`documents.archive.gz.enc`, `bank-imports.archive.gz.enc`) وصيغة الـ manifest (`format: 2`) لم تتغير؛ أُضيف حقل `storage` (`backend`, `environment_label`, `referenced_files`) فقط. النسخ القديمة بلا الحقل تُعامل كـ local وتُتحقق وتُستعاد كما كانت، ونسخ `local` الجديدة لا تتغير. أرشيف Object Storage مطابق بايتاً ببايت لأرشيف مجلد يحوي الملفات نفسها (يغطيه اختبار).
+
+**الاستعادة:** تبقى دائماً إلى بيئة معزولة (قاعدة `eqfal_restore_*` موسومة + مجلدات محلية فارغة خارج مجلدات التخزين الحية). أمر `restore` **لا يتصل بـ Object Storage إطلاقاً** ولا يكتب فيه، فلا يمكن أن يستعيد إلى تخزين الإنتاج. بعد الاستعادة تُفحص الملفات المستعادة (وجود، SHA-256، حجم) مقابل الصفوف المستعادة بالفاحص نفسه المستخدم لنسخ local.
+
+متغيرات إضافية لـ `backup`: `STORAGE_BACKEND=object`, `OBJECT_STORAGE_BUCKET_ID`. مجلدا `DOCUMENT_STORAGE_DIR`/`BANK_STORAGE_DIR` يُتجاهلان في هذا الوضع. البادئة داخل الـ bucket (`prod/` أو `nonprod/` حسب `NODE_ENV`/Replit) تطابق `storage.factory.ts` (يتحقق منها اختبار).
+
+**لم يُتحقق منه:** سلوك `@replit/object-storage` الفعلي على Replit (صيغة رسالة 404، الحدود، الأداء/زمن نسخ ملفات كثيرة أو كبيرة: كل ملف يُحمَّل كاملاً في الذاكرة ويُنزَّل تسلسلياً). على المالك تجربة أول نسخة حقيقية بعد تفعيل Object Storage، ثم اختبار استعادة معزولة، قبل ضبط `OBJECT_STORAGE_BACKUP_SUPPORT_CONFIRMED`.

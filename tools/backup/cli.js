@@ -4,6 +4,7 @@ const path = require('path');
 try { require('dotenv').config({ path: path.resolve(__dirname, '../../.env') }); } catch { /* optional: lets the live DATABASE_URL in .env be compared against the restore target */ }
 const lib = require('./lib');
 const core = require('./core');
+const objectstore = require('./objectstore');
 
 const USAGE = `EQFAL backup & restore (manual use only; nothing here schedules or uploads)
 
@@ -14,6 +15,7 @@ const USAGE = `EQFAL backup & restore (manual use only; nothing here schedules o
 
 Environment:
   DATABASE_URL, DOCUMENT_STORAGE_DIR, BANK_STORAGE_DIR   source (backup)
+  STORAGE_BACKEND=object + OBJECT_STORAGE_BUCKET_ID   source files are read from Object Storage (download only; the storage dirs are ignored)
   RESTORE_DATABASE_URL, RESTORE_DOCUMENT_DIR, RESTORE_BANK_DIR   isolated test target (restore); the database must be named
     eqfal_restore_<x> and marked: COMMENT ON DATABASE eqfal_restore_<x> IS 'EQFAL_DISPOSABLE_RESTORE_TARGET'
   BACKUP_PASSPHRASE_FILE (chmod 600; preferred) or BACKUP_PASSPHRASE   >= 16 characters
@@ -30,14 +32,14 @@ async function main() {
   const cmd = process.argv[2];
   const env = process.env;
   if (cmd === 'backup') {
-    // Object Storage files are NOT covered by this tool until Task 6C-2B: refuse rather than write archives of empty local folders.
-    if ((env.STORAGE_BACKEND ?? '').trim().toLowerCase() === 'object') {
-      throw new lib.BackupError('STORAGE_BACKEND=object: this backup tool does not include Object Storage files yet (Task 6C-2B). Refusing to create an incomplete backup.');
-    }
     const dirs = core.defaultStorageDirs(env);
+    // STORAGE_BACKEND=object: the referenced files are read (download only) from the bucket named by OBJECT_STORAGE_BUCKET_ID.
+    const objectStorage = objectstore.isObjectBackend(env)
+      ? { client: objectstore.createReplitClient((env.OBJECT_STORAGE_BUCKET_ID ?? '').trim()), env }
+      : null;
     const out = arg('out') ?? env.BACKUP_OUTPUT_DIR;
     if (!out) throw new lib.BackupError('--out <dir> is required');
-    const { backupDir } = await core.createBackup({ databaseUrl: env.DATABASE_URL, documentsDir: dirs.documents, bankDir: dirs.bank, outDir: out, passphrase: lib.readPassphrase(env), log });
+    const { backupDir } = await core.createBackup({ databaseUrl: env.DATABASE_URL, documentsDir: dirs.documents, bankDir: dirs.bank, outDir: out, passphrase: lib.readPassphrase(env), log, objectStorage });
     console.error('NOTE: backup CREATED but NOT verified. Run "verify" (artifact integrity) and then an isolated restore test; neither has been run for this backup yet.');
     console.log(backupDir);
   } else if (cmd === 'verify') {

@@ -63,4 +63,20 @@ async function seedSynthetic(dbUrl, docsDir, bankDir) {
   } finally { await c.end(); }
 }
 
-module.exports = { sha, mkTmp, PASS, hasPgTools, withDb, adminExec, seedSynthetic };
+// In-memory stand-in for the @replit/object-storage Client (Result objects, "No such object" 404 wording).
+// Records every call so tests can prove the backup is download-only.
+class FakeObjectClient {
+  constructor() { this.objects = new Map(); this.calls = []; this.failWith = null; }
+  put(name, data) { this.objects.set(name, Buffer.from(data)); }
+  async downloadAsBytes(name) {
+    this.calls.push(['download', name]);
+    if (this.failWith) return { ok: false, error: { message: this.failWith, statusCode: 500 } };
+    const v = this.objects.get(name);
+    return v ? { ok: true, value: [Buffer.from(v)] } : { ok: false, error: { message: 'No such object: ' + name, statusCode: 404 } };
+  }
+  async uploadFromBytes(name) { this.calls.push(['upload', name]); throw new Error('backup must never upload'); }
+  async delete(name) { this.calls.push(['delete', name]); throw new Error('backup must never delete'); }
+  async exists(name) { this.calls.push(['exists', name]); throw new Error('backup must not need exists'); }
+}
+
+module.exports = { FakeObjectClient, sha, mkTmp, PASS, hasPgTools, withDb, adminExec, seedSynthetic };

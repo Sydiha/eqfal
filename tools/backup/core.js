@@ -1,6 +1,7 @@
 'use strict';
 const lib = require('./lib');
 const archive = require('./archive');
+const objectstore = require('./objectstore');
 const { BackupError, fs, path } = lib;
 
 const TOOL_VERSION = 2;
@@ -34,9 +35,45 @@ async function queryRows(url, sql) {
 }
 
 // ---------------- backup ----------------
-async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passphrase, now = new Date(), log = () => {}, hooks = {} }) {
+const META_SQL = `SELECT current_database() AS db, current_setting('server_version') AS pg_version,
+              (SELECT count(*)::int FROM _schema_migrations) AS migration_count,
+              (SELECT max(filename) FROM _schema_migrations) AS last_migration`;
+const OBJECT_ARCHIVES = [
+  { ...ARCHIVES[0], objectKind: 'documents', refSql: `SELECT storage_key AS key, sha256, size_bytes::text AS size FROM documents` },
+  { ...ARCHIVES[1], objectKind: 'bank-imports', refSql: `SELECT storage_key AS key, file_sha256 AS sha256 FROM bank_import_batches` },
+];
+
+// Object Storage mode: pg_dump and the list of referenced files come from ONE exported snapshot, so every file the
+// restored database references is exactly the set we archive (later uploads/deletes cannot desynchronise them).
+async function dumpWithSnapshot({ databaseUrl, backupDir, passphrase, log }) {
+  const { Client } = loadPg();
+  const c = new Client({ connectionString: databaseUrl });
+  await c.connect();
+  try {
+    await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const snapshot = (await c.query('SELECT pg_export_snapshot() AS s')).rows[0].s;
+    const meta = (await c.query(META_SQL)).rows[0];
+    const refs = {};
+    for (const a of OBJECT_ARCHIVES) {
+      refs[a.objectKind] = (await c.query(a.refSql)).rows.map((r) => ({ key: r.key, sha256: r.sha256, size: r.size === undefined ? undefined : Number(r.size) }));
+    }
+    const startedAt = new Date().toISOString();
+    log('pg_dump (custom format, exported snapshot) ...');
+    const dump = lib.spawnProc('pg_dump', ['-Fc', '--no-owner', '--no-acl', `--snapshot=${snapshot}`], { env: lib.pgEnv(databaseUrl) });
+    const dumpEnc = await lib.encryptStream(dump.child.stdout, path.join(backupDir, 'database.dump.enc'), passphrase);
+    const res = await dump.done;
+    if (res.code !== 0) throw new BackupError(`pg_dump failed (exit ${res.code}): ${res.stderr.trim().slice(0, 500)}`);
+    await c.query('COMMIT');
+    return { meta, refs, dumpEnc, startedAt, finishedAt: new Date().toISOString() };
+  } finally {
+    await c.end().catch(() => {});
+  }
+}
+
+async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passphrase, now = new Date(), log = () => {}, hooks = {}, objectStorage = null }) {
   if (!databaseUrl) throw new BackupError('DATABASE_URL (source) is required');
-  const dirs = { documents: path.resolve(documentsDir), bank: path.resolve(bankDir) };
+  const useObjects = Boolean(objectStorage);
+  const dirs = useObjects ? {} : { documents: path.resolve(documentsDir), bank: path.resolve(bankDir) };
   const out = path.resolve(outDir);
   for (const dir of Object.values(dirs)) {
     if (lib.isInside(lib.nearestExisting(out), dir)) throw new BackupError('Backup output directory must not be inside a storage directory');
@@ -47,25 +84,52 @@ async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passph
   const artifacts = [];
 
   try {
-    const meta = (await queryRows(databaseUrl,
-      `SELECT current_database() AS db, current_setting('server_version') AS pg_version,
-              (SELECT count(*)::int FROM _schema_migrations) AS migration_count,
-              (SELECT max(filename) FROM _schema_migrations) AS last_migration`))[0];
-
-    // Consistency strategy: (1) database snapshot first, (2) storage archives afterwards.
-    // Files are write-once and written BEFORE their DB row is committed, so every row visible in the snapshot
-    // has its file on disk when the archives are taken. Files newer than the snapshot are harmless orphans.
-    const dumpStartedAt = new Date().toISOString();
-    log('pg_dump (custom format) ...');
-    const dump = lib.spawnProc('pg_dump', ['-Fc', '--no-owner', '--no-acl'], { env: lib.pgEnv(databaseUrl) });
-    const dumpEnc = await lib.encryptStream(dump.child.stdout, path.join(backupDir, 'database.dump.enc'), passphrase);
-    const dumpRes = await dump.done;
-    if (dumpRes.code !== 0) throw new BackupError(`pg_dump failed (exit ${dumpRes.code}): ${dumpRes.stderr.trim().slice(0, 500)}`);
-    const dumpFinishedAt = new Date().toISOString();
-    artifacts.push({ name: 'database.dump.enc', kind: 'postgres-custom-dump', ...dumpEnc });
+    let meta;
+    let dumpStartedAt;
+    let dumpFinishedAt;
+    let refs = null;
+    if (useObjects) {
+      const snap = await dumpWithSnapshot({ databaseUrl, backupDir, passphrase, log });
+      ({ meta, refs } = snap);
+      dumpStartedAt = snap.startedAt; dumpFinishedAt = snap.finishedAt;
+      artifacts.push({ name: 'database.dump.enc', kind: 'postgres-custom-dump', ...snap.dumpEnc });
+    } else {
+      meta = (await queryRows(databaseUrl, META_SQL))[0];
+      // Consistency strategy: (1) database snapshot first, (2) storage archives afterwards.
+      // Files are write-once and written BEFORE their DB row is committed, so every row visible in the snapshot
+      // has its file on disk when the archives are taken. Files newer than the snapshot are harmless orphans.
+      dumpStartedAt = new Date().toISOString();
+      log('pg_dump (custom format) ...');
+      const dump = lib.spawnProc('pg_dump', ['-Fc', '--no-owner', '--no-acl'], { env: lib.pgEnv(databaseUrl) });
+      const dumpEnc = await lib.encryptStream(dump.child.stdout, path.join(backupDir, 'database.dump.enc'), passphrase);
+      const dumpRes = await dump.done;
+      if (dumpRes.code !== 0) throw new BackupError(`pg_dump failed (exit ${dumpRes.code}): ${dumpRes.stderr.trim().slice(0, 500)}`);
+      dumpFinishedAt = new Date().toISOString();
+      artifacts.push({ name: 'database.dump.enc', kind: 'postgres-custom-dump', ...dumpEnc });
+    }
 
     const filesScannedAt = new Date().toISOString();
-    for (const a of ARCHIVES) {
+    const storage = { backend: 'local' };
+    if (useObjects) {
+      // Same archive format and artifact names as a local backup, so verify/restore (and old tooling) work unchanged.
+      // Every referenced object is downloaded, checked against the database SHA-256 (and size) and streamed straight
+      // into the encrypted archive (no plaintext on disk). Any missing/mismatching object aborts the whole backup.
+      const env = objectStorage.env ?? process.env;
+      storage.backend = 'object';
+      storage.environment_label = objectstore.environmentLabel(env);
+      storage.referenced_files = {};
+      for (const a of OBJECT_ARCHIVES) {
+        const prefix = objectstore.prefixFor(a.objectKind, env);
+        const items = objectstore.itemsFor(objectStorage.client, prefix, refs[a.objectKind], a.objectKind);
+        log(`archiving ${items.length} ${a.kind} object(s) from Object Storage ...`);
+        const result = await archive.writeItemsArchive(items, path.join(backupDir, a.name), (src, d) => lib.encryptStream(src, d, passphrase));
+        if (result.files !== items.length) throw new BackupError(`${a.kind}: archived ${result.files} of ${items.length} referenced objects`);
+        result.attempts = 1;
+        artifacts.push({ name: a.name, kind: a.kind, ...result });
+        storage.referenced_files[a.objectKind] = items.length;
+      }
+    }
+    for (const a of useObjects ? [] : ARCHIVES) {
       const dest = path.join(backupDir, a.name);
       let result;
       for (let attempt = 1; ; attempt++) {
@@ -93,7 +157,9 @@ async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passph
       tool_version: TOOL_VERSION,
       created_at: now.toISOString(),
       source: { database: meta.db, postgres_version: meta.pg_version, migration_count: meta.migration_count, last_migration: meta.last_migration },
-      consistency: { strategy: 'database-snapshot-then-files', dump_started_at: dumpStartedAt, dump_finished_at: dumpFinishedAt, files_scanned_at: filesScannedAt },
+      // Additive field (old backups have none = local). Does not change the archive format.
+      storage,
+      consistency: { strategy: useObjects ? 'database-snapshot-with-referenced-objects' : 'database-snapshot-then-files', dump_started_at: dumpStartedAt, dump_finished_at: dumpFinishedAt, files_scanned_at: filesScannedAt },
       encryption: { algorithm: 'aes-256-gcm', kdf: lib.KDF.name, kdf_params: { N: lib.KDF.N, r: lib.KDF.r, p: lib.KDF.p } },
       verification_status: 'not-verified: backup created only; run verify and an isolated restore test',
       artifacts,

@@ -107,6 +107,45 @@ function archiveStream(root, { hooks = {}, stats } = {}) {
   return gz;
 }
 
+// Same on-disk format as archiveStream, but the entries come from memory instead of a directory (Object Storage
+// backups). `items` = [{ key, load: async () => Buffer }]; `load` is responsible for verifying the content and
+// must throw on any problem, which aborts the archive (nothing partial is ever certified). No plaintext touches disk.
+function archiveItemsStream(items, { stats } = {}) {
+  const sorted = [...items].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  async function* gen() {
+    yield MAGIC;
+    let count = 0;
+    let bytes = 0;
+    const seen = new Set();
+    for (const { key, load } of sorted) {
+      validateKey(key);
+      if (seen.has(key.toLowerCase())) throw new ArchiveError(`Duplicate archive entry: ${key}`);
+      seen.add(key.toLowerCase());
+      const data = await load();
+      const header = Buffer.from(JSON.stringify({ key, size: data.length }));
+      const len = Buffer.alloc(4); len.writeUInt32BE(header.length);
+      yield Buffer.concat([len, header]);
+      yield data;
+      yield crypto.createHash('sha256').update(data).digest();
+      count++; bytes += data.length;
+    }
+    const end = Buffer.alloc(8); end.writeUInt32BE(0, 0); end.writeUInt32BE(count, 4);
+    yield end;
+    if (stats) { stats.files = count; stats.bytes = bytes; }
+  }
+  const gz = zlib.createGzip();
+  const src = Readable.from(gen());
+  src.on('error', (e) => gz.destroy(e));
+  src.pipe(gz);
+  return gz;
+}
+
+async function writeItemsArchive(items, destPath, encryptFn) {
+  const stats = {};
+  const enc = await encryptFn(archiveItemsStream(items, { stats }), destPath);
+  return { ...enc, files: stats.files, bytes: stats.bytes };
+}
+
 // Pull-style byte reader over an async iterable of Buffers.
 class ByteReader {
   constructor(iterable) { this.it = iterable[Symbol.asyncIterator](); this.buf = Buffer.alloc(0); this.done = false; }
@@ -197,4 +236,4 @@ async function writeArchive(root, destPath, encryptFn, opts) {
   return { ...enc, files: stats.files, bytes: stats.bytes };
 }
 
-module.exports = { ArchiveError, ConcurrentChangeError, validateKey, listRegularFiles, archiveStream, readArchive, writeArchive, MAGIC };
+module.exports = { ArchiveError, ConcurrentChangeError, validateKey, listRegularFiles, archiveStream, archiveItemsStream, readArchive, writeArchive, writeItemsArchive, MAGIC };
