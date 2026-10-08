@@ -63,6 +63,12 @@ export function trustedPublicOrigins(
   req: Request,
   environment: NodeJS.ProcessEnv = process.env,
 ): Set<string> {
+  // Production: the explicit APP_PUBLIC_ORIGINS allowlist is authoritative. The request-derived
+  // origin (Host header) and legacy Replit variables are never added, so forged Host or
+  // X-Forwarded-* headers cannot widen it.
+  if (environment['NODE_ENV'] === 'production') {
+    return new Set(configuredOrigins(environment['APP_PUBLIC_ORIGINS']));
+  }
   return new Set([
     directRequestOrigin(req),
     ...configuredOrigins(environment['APP_PUBLIC_ORIGINS']),

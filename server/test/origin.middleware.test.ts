@@ -99,3 +99,47 @@ describe('requireSameOrigin', () => {
     expect(response.body).not.toEqual({ error: 'Invalid request origin' });
   });
 });
+
+describe('production origin allowlist is authoritative', () => {
+  function prod(headers: Request['headers'], protocol = 'https', extraEnv: Record<string, string> = {}) {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_PUBLIC_ORIGINS', 'https://app.example.com');
+    for (const [k, v] of Object.entries(extraEnv)) vi.stubEnv(k, v);
+    return invoke(headers, protocol);
+  }
+  const allowed = (r: ReturnType<typeof invoke>) => expect(r.next).toHaveBeenCalledOnce();
+  const rejected = (r: ReturnType<typeof invoke>) => {
+    expect(r.next).not.toHaveBeenCalled();
+    expect(r.status).toHaveBeenCalledWith(403);
+  };
+
+  it('accepts the configured origin', () => {
+    allowed(prod({ host: 'internal:3001', origin: 'https://app.example.com' }));
+  });
+  it('ignores legacy Replit variables', () => {
+    const env = { REPLIT_DOMAINS: 'x.replit.app', REPLIT_DEV_DOMAIN: 'y.replit.dev' };
+    rejected(prod({ host: 'internal:3001', origin: 'https://x.replit.app' }, 'https', env));
+    rejected(prod({ host: 'internal:3001', origin: 'https://y.replit.dev' }, 'https', env));
+  });
+  it('rejects a forged Host that matches the attacker origin', () => {
+    rejected(prod({ host: 'attacker.example', origin: 'https://attacker.example' }));
+    rejected(prod({ host: 'attacker.example', origin: 'http://attacker.example' }, 'http'));
+  });
+  it('rejects the server own host origin when it is not in the allowlist', () => {
+    rejected(prod({ host: 'internal:3001', origin: 'https://internal:3001' }));
+  });
+  it('rejects forwarded headers pointing at an attacker', () => {
+    rejected(prod({
+      host: 'internal:3001',
+      origin: 'https://attacker.example',
+      'x-forwarded-host': 'attacker.example',
+      'x-forwarded-proto': 'https',
+      forwarded: 'host=attacker.example;proto=https',
+    }));
+  });
+  it('rejects everything when the allowlist is empty', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_PUBLIC_ORIGINS', '');
+    rejected(invoke({ host: 'app.example.com', origin: 'https://app.example.com' }, 'https'));
+  });
+});
