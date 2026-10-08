@@ -166,46 +166,19 @@ function pgEnv(url) {
   return env;
 }
 
-// ---------- tar ----------
-function tarCreateStream(dir) {
-  const args = fs.existsSync(dir)
-    ? ['-czf', '-', '-C', dir, '.']
-    : ['-czf', '-', '--files-from=/dev/null'];
-  const p = spawnProc('tar', args);
-  return { stream: p.child.stdout, done: p.done };
-}
-
-function checkTarListing(listing) {
-  const entries = [];
-  for (const line of listing.split('\n').filter(Boolean)) {
-    const type = line[0];
-    if (type !== '-' && type !== 'd') throw new BackupError(`Archive contains a non-regular entry (${type}); refusing`);
-    // tar -tv: perms owner size date time name
-    const name = line.replace(/^\S+\s+\S+\s+\d+\s+\S+\s+\S+\s+/, '');
-    if (name.startsWith('/') || name.split('/').includes('..')) throw new BackupError(`Unsafe path in archive: ${name}`);
-    if (type === '-') entries.push(name);
+// Fully decrypts and authenticates `srcPath` into a NEW private file, so that every later step (pg_restore,
+// archive extraction) reads one fixed, already-authenticated copy instead of re-reading a file that could change.
+async function decryptToFile(srcPath, destPath, passphrase) {
+  const plain = decryptStream(srcPath, passphrase);
+  const fd = fs.openSync(destPath, 'wx', 0o600);
+  const out = fs.createWriteStream(null, { fd });
+  try {
+    await pipeline(plain, out);
+  } catch (err) {
+    fs.rmSync(destPath, { force: true });
+    throw err;
   }
-  return entries;
-}
-
-async function listAndCheckTar(plainStream) {
-  const p = spawnProc('tar', ['-tvzf', '-'], { stdin: 'pipe' });
-  let out = '';
-  p.child.stdout.on('data', (d) => { out += d.toString(); });
-  p.child.stdin.on('error', () => {});
-  await pipeline(plainStream, p.child.stdin).catch(() => {});
-  const { code, stderr } = await p.done;
-  if (code !== 0) throw new BackupError(`tar listing failed: ${stderr.trim().slice(0, 300)}`);
-  return checkTarListing(out);
-}
-
-async function extractTar(plainStream, destDir) {
-  const p = spawnProc('tar', ['-xzf', '-', '-C', destDir, '--no-same-owner', '--no-same-permissions'], { stdin: 'pipe' });
-  p.child.stdout.resume();
-  p.child.stdin.on('error', () => {});
-  await pipeline(plainStream, p.child.stdin).catch(() => {});
-  const { code, stderr } = await p.done;
-  if (code !== 0) throw new BackupError(`tar extract failed: ${stderr.trim().slice(0, 300)}`);
+  return plain.plainResult();
 }
 
 // ---------- filesystem ----------
@@ -257,7 +230,7 @@ function readAndVerifyManifest(backupDir, passphrase) {
   const file = path.join(backupDir, 'manifest.json');
   if (!fs.existsSync(file)) throw new BackupError(`manifest.json not found in ${backupDir}`);
   const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (manifest.format !== 1 || !manifest.mac_salt || !manifest.manifest_mac) throw new BackupError('Unsupported or malformed manifest');
+  if (manifest.format !== 2 || !manifest.mac_salt || !manifest.manifest_mac) throw new BackupError('Unsupported or malformed manifest');
   const expected = Buffer.from(manifestMac(manifest, passphrase), 'hex');
   const actual = Buffer.from(String(manifest.manifest_mac), 'hex');
   if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
@@ -311,7 +284,7 @@ function utcStamp(d = new Date()) {
 
 module.exports = {
   BackupError, KDF, MIN_PASSPHRASE_LENGTH, readPassphrase, deriveKey, sha256File, encryptStream, decryptStream,
-  spawnProc, runToCompletion, parseDbUrl, pgEnv, tarCreateStream, checkTarListing, listAndCheckTar, extractTar,
+  spawnProc, runToCompletion, parseDbUrl, pgEnv, decryptToFile,
   walkFiles, isInside, nearestExisting, canonical, sealManifest, readAndVerifyManifest, planRetention,
   parseBackupDirName, utcStamp, os, fs, path,
 };

@@ -1,11 +1,18 @@
 'use strict';
 const lib = require('./lib');
+const archive = require('./archive');
 const { BackupError, fs, path } = lib;
-const { pipeline } = require('stream/promises');
 
-const TOOL_VERSION = 1;
-const SAFE_DB_NAME_RE = /(restore|test|scratch|drill)/i;
+const TOOL_VERSION = 2;
+const ARCHIVE_ATTEMPTS = 3;
+// A restore target must be created on purpose: right name AND an explicit marker comment on the database.
+const TARGET_NAME_RE = /^eqfal_restore_[a-z0-9_]{1,40}$/;
+const TARGET_MARKER = 'EQFAL_DISPOSABLE_RESTORE_TARGET';
 const LOCAL_HOSTS = new Set(['', 'localhost', '127.0.0.1', '::1', '[::1]']);
+const ARCHIVES = [
+  { name: 'documents.archive.gz.enc', kind: 'documents-archive', dirKey: 'documents' },
+  { name: 'bank-imports.archive.gz.enc', kind: 'bank-imports-archive', dirKey: 'bank' },
+];
 
 function defaultStorageDirs(env = process.env) {
   return {
@@ -19,7 +26,7 @@ function loadPg() {
   return require('pg');
 }
 
-async function queryOne(url, sql) {
+async function queryRows(url, sql) {
   const { Client } = loadPg();
   const c = new Client({ connectionString: url });
   await c.connect();
@@ -27,30 +34,27 @@ async function queryOne(url, sql) {
 }
 
 // ---------------- backup ----------------
-async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passphrase, now = new Date(), log = () => {} }) {
+async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passphrase, now = new Date(), log = () => {}, hooks = {} }) {
   if (!databaseUrl) throw new BackupError('DATABASE_URL (source) is required');
-  const docs = path.resolve(documentsDir);
-  const bank = path.resolve(bankDir);
+  const dirs = { documents: path.resolve(documentsDir), bank: path.resolve(bankDir) };
   const out = path.resolve(outDir);
-  for (const dir of [docs, bank]) {
+  for (const dir of Object.values(dirs)) {
     if (lib.isInside(lib.nearestExisting(out), dir)) throw new BackupError('Backup output directory must not be inside a storage directory');
   }
   fs.mkdirSync(out, { recursive: true, mode: 0o700 });
   const backupDir = path.join(out, `eqfal-backup-${lib.utcStamp(now)}`);
   fs.mkdirSync(backupDir, { mode: 0o700 }); // fails if it already exists
   const artifacts = [];
-  const warnings = [];
 
   try {
-    const meta = (await queryOne(databaseUrl,
+    const meta = (await queryRows(databaseUrl,
       `SELECT current_database() AS db, current_setting('server_version') AS pg_version,
               (SELECT count(*)::int FROM _schema_migrations) AS migration_count,
               (SELECT max(filename) FROM _schema_migrations) AS last_migration`))[0];
 
     // Consistency strategy: (1) database snapshot first, (2) storage archives afterwards.
-    // Files are write-once and written BEFORE their DB row is committed, so every row visible in
-    // the snapshot has its file on disk when the archives are taken. Files newer than the snapshot
-    // are harmless orphans. See docs/BACKUP_RESTORE.md.
+    // Files are write-once and written BEFORE their DB row is committed, so every row visible in the snapshot
+    // has its file on disk when the archives are taken. Files newer than the snapshot are harmless orphans.
     const dumpStartedAt = new Date().toISOString();
     log('pg_dump (custom format) ...');
     const dump = lib.spawnProc('pg_dump', ['-Fc', '--no-owner', '--no-acl'], { env: lib.pgEnv(databaseUrl) });
@@ -61,29 +65,41 @@ async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passph
     artifacts.push({ name: 'database.dump.enc', kind: 'postgres-custom-dump', ...dumpEnc });
 
     const filesScannedAt = new Date().toISOString();
-    for (const [name, dir, kind] of [['documents.tar.gz.enc', docs, 'documents-tar-gz'], ['bank-imports.tar.gz.enc', bank, 'bank-imports-tar-gz']]) {
-      const scan = lib.walkFiles(dir);
-      log(`archiving ${kind} (${scan.length} files) ...`);
-      const tar = lib.tarCreateStream(dir);
-      const enc = await lib.encryptStream(tar.stream, path.join(backupDir, name), passphrase);
-      const res = await tar.done;
-      if (res.code === 1) warnings.push(`${name}: tar reported "file changed as we read it" (a file was being written); expected orphan only`);
-      else if (res.code !== 0) throw new BackupError(`tar failed (exit ${res.code}): ${res.stderr.trim().slice(0, 300)}`);
-      artifacts.push({ name, kind, ...enc, files_at_scan: scan.length, bytes_at_scan: scan.reduce((s, f) => s + f.size, 0) });
+    for (const a of ARCHIVES) {
+      const dest = path.join(backupDir, a.name);
+      let result;
+      for (let attempt = 1; ; attempt++) {
+        log(`archiving ${a.kind} (attempt ${attempt}) ...`);
+        try {
+          result = await archive.writeArchive(dirs[a.dirKey], dest, (src, d) => lib.encryptStream(src, d, passphrase), { hooks: hooks[a.dirKey] ?? {} });
+          result.attempts = attempt;
+          break;
+        } catch (err) {
+          // A file changed/disappeared while being read: never certify that archive. Retry the archive step
+          // only (the database snapshot was already taken, so the consistency order is preserved).
+          if (!(err instanceof archive.ConcurrentChangeError) || attempt >= ARCHIVE_ATTEMPTS) {
+            throw err instanceof archive.ConcurrentChangeError
+              ? new BackupError(`Storage changed while archiving ${a.kind} (${attempt} attempts): ${err.message}. Re-run during a quiet period; no backup was certified.`)
+              : err;
+          }
+          log(`  ${err.message}; retrying`);
+        }
+      }
+      artifacts.push({ name: a.name, kind: a.kind, ...result });
     }
 
     const manifest = lib.sealManifest({
-      format: 1,
+      format: 2,
       tool_version: TOOL_VERSION,
       created_at: now.toISOString(),
       source: { database: meta.db, postgres_version: meta.pg_version, migration_count: meta.migration_count, last_migration: meta.last_migration },
       consistency: { strategy: 'database-snapshot-then-files', dump_started_at: dumpStartedAt, dump_finished_at: dumpFinishedAt, files_scanned_at: filesScannedAt },
       encryption: { algorithm: 'aes-256-gcm', kdf: lib.KDF.name, kdf_params: { N: lib.KDF.N, r: lib.KDF.r, p: lib.KDF.p } },
+      verification_status: 'not-verified: backup created only; run verify and an isolated restore test',
       artifacts,
-      warnings,
     }, passphrase);
     fs.writeFileSync(path.join(backupDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
-    log(`backup complete: ${backupDir}`);
+    log(`backup created: ${backupDir}`);
     return { backupDir, manifest };
   } catch (err) {
     fs.rmSync(backupDir, { recursive: true, force: true });
@@ -91,51 +107,88 @@ async function createBackup({ databaseUrl, documentsDir, bankDir, outDir, passph
   }
 }
 
-// ---------------- verify artifacts (no target needed) ----------------
-async function drain(stream) { for await (const _ of stream) { /* consume to completion; auth tag is checked at end */ } }
+// ---------------- artifact verification (cryptographic / structural ONLY) ----------------
+// Proves: manifest authentic, every artifact has the recorded checksums, decrypts and authenticates, and each
+// storage archive parses with only safe entries. It does NOT prove the database restores.
+async function drain(stream) { for await (const _ of stream) { /* consume to the end so the auth tag is checked */ } }
 
 async function verifyArtifacts(backupDir, passphrase, log = () => {}) {
   const manifest = lib.readAndVerifyManifest(backupDir, passphrase);
-  const results = [];
+  if (manifest.format !== 2) throw new BackupError(`Unsupported backup format ${manifest.format}`);
   for (const a of manifest.artifacts) {
     const file = path.join(backupDir, a.name);
     if (!fs.existsSync(file)) throw new BackupError(`Artifact missing: ${a.name}`);
-    const encSha = await lib.sha256File(file);
-    if (encSha !== a.encrypted_sha256) throw new BackupError(`Checksum mismatch for ${a.name}`);
+    if (await lib.sha256File(file) !== a.encrypted_sha256) throw new BackupError(`Checksum mismatch for ${a.name}`);
     const plain = lib.decryptStream(file, passphrase);
-    await drain(plain);
+    if (a.kind.endsWith('-archive')) {
+      const entries = await archive.readArchive(plain, null);
+      await drain(plain).catch(() => {});
+      if (entries.length !== a.files) throw new BackupError(`Archive entry count mismatch for ${a.name}`);
+    } else {
+      await drain(plain);
+    }
     const res = plain.plainResult();
     if (res.plain_sha256 !== a.plain_sha256) throw new BackupError(`Plaintext checksum mismatch for ${a.name}`);
-    if (a.kind.endsWith('tar-gz')) {
-      await lib.listAndCheckTar(lib.decryptStream(file, passphrase)); // rejects links/devices/traversal
-    }
-    log(`ok ${a.name}`);
-    results.push({ name: a.name, ok: true });
+    log(`artifact integrity ok: ${a.name}`);
   }
-  return { manifest, results };
+  return { manifest };
 }
 
-// ---------------- restore safety ----------------
-async function assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs = [], backupDir }) {
+// ---------------- restore target safety ----------------
+async function serverIdentity(url) {
+  const r = (await queryRows(url,
+    `SELECT pg_postmaster_start_time()::text AS started, (SELECT oid::text FROM pg_database WHERE datname=current_database()) AS datoid,
+            current_database() AS db,
+            (SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()) AS marker`))[0];
+  return { id: `${r.started}|${r.datoid}`, db: r.db, marker: r.marker };
+}
+
+// True when both URLs reach the same database of the same server instance, however the host is spelled.
+async function sameServerDatabase(urlA, urlB) {
+  return (await serverIdentity(urlA)).id === (await serverIdentity(urlB)).id;
+}
+
+function productionCandidates(env, extra) {
+  const urls = new Set([extra, env.DATABASE_URL].filter(Boolean));
+  if (env.PGDATABASE) {
+    const host = env.PGHOST || 'localhost';
+    urls.add(`postgresql://${encodeURIComponent(env.PGUSER ?? '')}:${encodeURIComponent(env.PGPASSWORD ?? '')}@${host}:${env.PGPORT || 5432}/${env.PGDATABASE}`);
+  }
+  return [...urls];
+}
+
+async function assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs = [], backupDir, env = process.env }) {
   if (!restoreDatabaseUrl) throw new BackupError('RESTORE_DATABASE_URL is required');
   const target = lib.parseDbUrl(restoreDatabaseUrl);
-  if (!SAFE_DB_NAME_RE.test(target.database)) {
-    throw new BackupError(`Target database name "${target.database}" must contain restore, test, scratch or drill`);
+  if (!TARGET_NAME_RE.test(target.database)) {
+    throw new BackupError(`Target database name "${target.database}" must match ${TARGET_NAME_RE} (create a dedicated database for restore tests)`);
   }
   if (!LOCAL_HOSTS.has(target.host) && !target.host.startsWith('/')) {
     throw new BackupError(`Target host "${target.host}" is not local; restore tests run only on localhost or a unix socket`);
   }
-  if (productionDatabaseUrl) {
-    const prod = lib.parseDbUrl(productionDatabaseUrl);
-    const norm = (h) => (LOCAL_HOSTS.has(h) ? 'local' : h);
+
+  // Cheap textual comparison first, then the real identity check against the server itself.
+  const norm = (h) => (LOCAL_HOSTS.has(h) ? 'local' : h);
+  const candidates = productionCandidates(env, productionDatabaseUrl);
+  for (const cand of candidates) {
+    const prod = lib.parseDbUrl(cand);
     if (norm(prod.host) === norm(target.host) && prod.port === target.port && prod.database === target.database) {
-      throw new BackupError('Target database is the same as DATABASE_URL; refusing');
+      throw new BackupError('Target database is the same as the configured application database; refusing');
     }
   }
 
-  const dirs = { documents: restoreDocumentsDir, bank: restoreBankDir };
+  const me = await serverIdentity(restoreDatabaseUrl); // also proves the target is reachable
+  if (me.marker !== TARGET_MARKER) {
+    throw new BackupError(`Target database is not marked as a disposable restore target. Create it on purpose with: COMMENT ON DATABASE ${target.database} IS '${TARGET_MARKER}';`);
+  }
+  for (const cand of candidates) {
+    let other;
+    try { other = await serverIdentity(cand); } catch { continue; } // unreachable candidate cannot be the same live DB we just reached
+    if (other.id === me.id) throw new BackupError('Target resolves to the same server database as the configured application database (alias); refusing');
+  }
+
   const resolved = {};
-  for (const [label, dir] of Object.entries(dirs)) {
+  for (const [label, dir] of [['documents', restoreDocumentsDir], ['bank', restoreBankDir]]) {
     if (!dir) throw new BackupError(`Restore ${label} directory is required`);
     if (!path.isAbsolute(dir)) throw new BackupError(`Restore ${label} directory must be an absolute path`);
     if (fs.existsSync(dir)) {
@@ -158,7 +211,7 @@ async function assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir
     }
   }
 
-  const rows = await queryOne(restoreDatabaseUrl,
+  const rows = await queryRows(restoreDatabaseUrl,
     `SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'
         AND c.relkind IN ('r','v','m','S','f','p')`);
@@ -169,6 +222,7 @@ async function assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir
 // ---------------- verify restored state ----------------
 async function verifyRestored({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, manifest }) {
   const { Client } = loadPg();
+  const crypto = require('crypto');
   const c = new Client({ connectionString: restoreDatabaseUrl });
   await c.connect();
   const failures = [];
@@ -180,8 +234,7 @@ async function verifyRestored({ restoreDatabaseUrl, restoreDocumentsDir, restore
       failures.push(`migration mismatch: restored ${mig.n}/${mig.last}, backup ${manifest.source.migration_count}/${manifest.source.last_migration}`);
     }
 
-    const crypto = require('crypto');
-    const checkFiles = async (label, dir, rows, getKey, getSha, getSize) => {
+    const checkFiles = (label, dir, rows, getKey, getSha, getSize) => {
       let ok = 0;
       const referenced = new Set();
       for (const r of rows) {
@@ -194,13 +247,10 @@ async function verifyRestored({ restoreDatabaseUrl, restoreDocumentsDir, restore
         if (getSize && data.length !== getSize(r)) { failures.push(`${label}: size mismatch for ${key}`); continue; }
         ok++;
       }
-      const orphans = lib.walkFiles(dir).filter((f) => !referenced.has(f.key)).length;
-      report.checks[label] = { records: rows.length, verified: ok, orphan_files: orphans };
+      report.checks[label] = { records: rows.length, verified: ok, orphan_files: lib.walkFiles(dir).filter((f) => !referenced.has(f.key)).length };
     };
-    const docs = (await c.query(`SELECT storage_key, sha256, size_bytes FROM documents`)).rows;
-    await checkFiles('documents', restoreDocumentsDir, docs, (r) => r.storage_key, (r) => r.sha256, (r) => r.size_bytes);
-    const batches = (await c.query(`SELECT storage_key, file_sha256 FROM bank_import_batches`)).rows;
-    await checkFiles('bank_import_batches', restoreBankDir, batches, (r) => r.storage_key, (r) => r.file_sha256);
+    checkFiles('documents', restoreDocumentsDir, (await c.query(`SELECT storage_key, sha256, size_bytes FROM documents`)).rows, (r) => r.storage_key, (r) => r.sha256, (r) => r.size_bytes);
+    checkFiles('bank_import_batches', restoreBankDir, (await c.query(`SELECT storage_key, file_sha256 FROM bank_import_batches`)).rows, (r) => r.storage_key, (r) => r.file_sha256);
 
     // Read-only accounting integrity checks (no business logic is reimplemented).
     const unbalanced = (await c.query(
@@ -229,30 +279,36 @@ async function verifyRestored({ restoreDatabaseUrl, restoreDocumentsDir, restore
 }
 
 // ---------------- restore ----------------
-async function restoreBackup({ backupDir, passphrase, restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs, confirmed, log = () => {} }) {
+async function restoreBackup({ backupDir, passphrase, restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs, confirmed, env = process.env, log = () => {} }) {
   if (!confirmed) throw new BackupError('Refusing to restore without --i-confirm-isolated-test-target');
-  log('verifying backup artifacts ...');
+  log('checking backup artifacts (integrity only) ...');
   const { manifest } = await verifyArtifacts(backupDir, passphrase, log);
-  await assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs, backupDir });
+  await assertSafeRestoreTarget({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, productionDatabaseUrl, protectedDirs, backupDir, env });
 
-  const createdDirs = [];
+  // Every artifact is first decrypted+authenticated into ONE private copy; all later steps read only that copy,
+  // so nothing can change between validation and use, and a late authentication failure can never be ignored.
+  const tmp = fs.mkdtempSync(path.join(env.RESTORE_TMP_DIR || require('os').tmpdir(), 'eqfal-restore-')); // mode 0700
   try {
-    for (const d of [restoreDocumentsDir, restoreBankDir]) {
-      if (!fs.existsSync(d)) { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); createdDirs.push(d); }
+    const priv = {};
+    for (const a of manifest.artifacts) {
+      priv[a.name] = path.join(tmp, a.name.replace(/\.enc$/, ''));
+      const res = await lib.decryptToFile(path.join(backupDir, a.name), priv[a.name], passphrase);
+      if (res.plain_sha256 !== a.plain_sha256) throw new BackupError(`Plaintext checksum mismatch for ${a.name}`);
     }
+
+    for (const d of [restoreDocumentsDir, restoreBankDir]) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+
     log('pg_restore (single transaction) ...');
-    const dumpFile = path.join(backupDir, 'database.dump.enc');
-    const pr = lib.spawnProc('pg_restore', ['--no-owner', '--no-acl', '--exit-on-error', '--single-transaction', '-d', lib.parseDbUrl(restoreDatabaseUrl).database],
-      { env: lib.pgEnv(restoreDatabaseUrl), stdin: 'pipe' });
-    pr.child.stdout.resume();
-    pr.child.stdin.on('error', () => {});
-    await pipeline(lib.decryptStream(dumpFile, passphrase), pr.child.stdin).catch(() => {});
-    const prRes = await pr.done;
-    if (prRes.code !== 0) throw new BackupError(`pg_restore failed (exit ${prRes.code}): ${prRes.stderr.trim().slice(0, 500)}`);
+    await lib.runToCompletion('pg_restore', ['--no-owner', '--no-acl', '--exit-on-error', '--single-transaction', '-d', lib.parseDbUrl(restoreDatabaseUrl).database, priv['database.dump.enc'].replace(/\.enc$/, '')],
+      { env: lib.pgEnv(restoreDatabaseUrl) });
 
     log('extracting storage archives ...');
-    await lib.extractTar(lib.decryptStream(path.join(backupDir, 'documents.tar.gz.enc'), passphrase), restoreDocumentsDir);
-    await lib.extractTar(lib.decryptStream(path.join(backupDir, 'bank-imports.tar.gz.enc'), passphrase), restoreBankDir);
+    for (const a of ARCHIVES) {
+      const dest = a.dirKey === 'documents' ? restoreDocumentsDir : restoreBankDir;
+      const entries = await archive.readArchive(fs.createReadStream(priv[a.name].replace(/\.enc$/, '')), dest);
+      const expected = manifest.artifacts.find((x) => x.name === a.name).files;
+      if (entries.length !== expected) throw new BackupError(`${a.name}: extracted ${entries.length} files, manifest says ${expected}`);
+    }
 
     log('verifying restored data ...');
     const report = await verifyRestored({ restoreDatabaseUrl, restoreDocumentsDir, restoreBankDir, manifest });
@@ -260,6 +316,8 @@ async function restoreBackup({ backupDir, passphrase, restoreDatabaseUrl, restor
   } catch (err) {
     err.partialRestore = true;
     throw err;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -271,4 +329,4 @@ function pruneBackups(root, { apply = false, policy } = {}) {
   return { ...plan, applied: apply };
 }
 
-module.exports = { createBackup, verifyArtifacts, assertSafeRestoreTarget, verifyRestored, restoreBackup, pruneBackups, defaultStorageDirs, SAFE_DB_NAME_RE };
+module.exports = { createBackup, verifyArtifacts, assertSafeRestoreTarget, sameServerDatabase, serverIdentity, verifyRestored, restoreBackup, pruneBackups, defaultStorageDirs, TARGET_NAME_RE, TARGET_MARKER };

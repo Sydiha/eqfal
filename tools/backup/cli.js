@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 const path = require('path');
+try { require('dotenv').config({ path: path.resolve(__dirname, '../../.env') }); } catch { /* optional: lets the live DATABASE_URL in .env be compared against the restore target */ }
 const lib = require('./lib');
 const core = require('./core');
 
@@ -13,7 +14,8 @@ const USAGE = `EQFAL backup & restore (manual use only; nothing here schedules o
 
 Environment:
   DATABASE_URL, DOCUMENT_STORAGE_DIR, BANK_STORAGE_DIR   source (backup)
-  RESTORE_DATABASE_URL, RESTORE_DOCUMENT_DIR, RESTORE_BANK_DIR   isolated test target (restore)
+  RESTORE_DATABASE_URL, RESTORE_DOCUMENT_DIR, RESTORE_BANK_DIR   isolated test target (restore); the database must be named
+    eqfal_restore_<x> and marked: COMMENT ON DATABASE eqfal_restore_<x> IS 'EQFAL_DISPOSABLE_RESTORE_TARGET'
   BACKUP_PASSPHRASE_FILE (chmod 600; preferred) or BACKUP_PASSPHRASE   >= 16 characters
 `;
 
@@ -32,10 +34,19 @@ async function main() {
     const out = arg('out') ?? env.BACKUP_OUTPUT_DIR;
     if (!out) throw new lib.BackupError('--out <dir> is required');
     const { backupDir } = await core.createBackup({ databaseUrl: env.DATABASE_URL, documentsDir: dirs.documents, bankDir: dirs.bank, outDir: out, passphrase: lib.readPassphrase(env), log });
+    console.error('NOTE: backup CREATED but NOT verified. Run "verify" (artifact integrity) and then an isolated restore test; neither has been run for this backup yet.');
     console.log(backupDir);
   } else if (cmd === 'verify') {
     const { manifest } = await core.verifyArtifacts(path.resolve(arg('backup') ?? ''), lib.readPassphrase(env), log);
-    console.log(JSON.stringify({ ok: true, created_at: manifest.created_at, artifacts: manifest.artifacts.map((a) => a.name) }, null, 2));
+    console.log(JSON.stringify({
+      check: 'artifact-integrity-only',
+      artifact_integrity: 'passed',
+      restore_tested: false,
+      recovery_verified: false,
+      note: 'Cryptographic/structural check only. It does NOT prove the database or files can be restored; run an isolated restore test.',
+      created_at: manifest.created_at,
+      artifacts: manifest.artifacts.map((a) => a.name),
+    }, null, 2));
   } else if (cmd === 'restore') {
     const dirs = core.defaultStorageDirs(env);
     const { report } = await core.restoreBackup({
@@ -44,8 +55,17 @@ async function main() {
       productionDatabaseUrl: env.DATABASE_URL, protectedDirs: [dirs.documents, dirs.bank],
       confirmed: flag('i-confirm-isolated-test-target'), log,
     });
-    console.log(JSON.stringify(report, null, 2));
-    if (!report.ok) process.exitCode = 2;
+    const ok = report.ok === true;
+    console.log(JSON.stringify({
+      check: 'isolated-restore-test',
+      restore_verification: ok ? 'passed' : 'FAILED',
+      recovery_verified: ok,
+      scope: ok
+        ? 'This backup restored into the disposable target and checked (files, checksums, records, accounting). Does not prove production recovery, an off-server copy, or the RTO.'
+        : 'Restore verification FAILED: this backup is NOT proven recoverable. See failures.',
+      ...report,
+    }, null, 2));
+    if (!ok) process.exitCode = 2;
   } else if (cmd === 'prune') {
     const res = core.pruneBackups(path.resolve(arg('root') ?? ''), { apply: flag('apply') });
     console.log(JSON.stringify(res, null, 2));

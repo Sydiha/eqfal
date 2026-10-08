@@ -20,7 +20,7 @@ test('backup/restore round trip (synthetic data)', { skip, timeout: 240000 }, as
   assert.ok(adminUrl, 'DATABASE_URL is required when REQUIRE_POSTGRES_TESTS=true');
   const run = crypto.randomBytes(4).toString('hex');
   const srcName = `eqfal_bk_src_${run}`;
-  const dstName = `eqfal_bk_restore_test_${run}`;
+  const dstName = `eqfal_restore_${run}`;
   const srcUrl = withDb(adminUrl, srcName);
   const dstUrl = withDb(adminUrl, dstName);
   const work = mkTmp();
@@ -34,6 +34,7 @@ test('backup/restore round trip (synthetic data)', { skip, timeout: 240000 }, as
 
   await adminExec(adminUrl, `CREATE DATABASE ${srcName}`);
   await adminExec(adminUrl, `CREATE DATABASE ${dstName}`);
+  await adminExec(adminUrl, `COMMENT ON DATABASE ${dstName} IS '${core.TARGET_MARKER}'`);
   t.after(async () => {
     await adminExec(adminUrl, `DROP DATABASE IF EXISTS ${srcName} WITH (FORCE)`);
     await adminExec(adminUrl, `DROP DATABASE IF EXISTS ${dstName} WITH (FORCE)`);
@@ -44,12 +45,14 @@ test('backup/restore round trip (synthetic data)', { skip, timeout: 240000 }, as
   assert.equal(mig.status, 0, mig.stderr);
   const seed = await seedSynthetic(srcUrl, srcDocs, srcBank);
 
-  const { backupDir, manifest } = await core.createBackup({ databaseUrl: srcUrl, documentsDir: srcDocs, bankDir: srcBank, outDir: out, passphrase: PASS });
-  assert.deepEqual(manifest.artifacts.map((a) => a.name), ['database.dump.enc', 'documents.tar.gz.enc', 'bank-imports.tar.gz.enc']);
-  assert.equal(manifest.artifacts[1].files_at_scan, 3);
-  assert.equal(manifest.consistency.strategy, 'database-snapshot-then-files');
-  assert.ok(manifest.source.migration_count >= 61);
-  assert.equal(fs.statSync(backupDir).mode & 0o777, 0o700);
+  // A file's metadata changes while the documents archive is being written: the first attempt must be discarded, the retry certified.
+  let tripped = false;
+  const hooks = { documents: { afterRead: (k) => { if (!tripped) { tripped = true; const t = new Date(Date.now() + 5000); fs.utimesSync(path.join(srcDocs, k), t, t); } } } };
+  const { backupDir, manifest } = await core.createBackup({ databaseUrl: srcUrl, documentsDir: srcDocs, bankDir: srcBank, outDir: out, passphrase: PASS, hooks });
+  assert.deepEqual(manifest.artifacts.map((a) => a.name), ['database.dump.enc', 'documents.archive.gz.enc', 'bank-imports.archive.gz.enc']);
+  assert.equal(manifest.artifacts[1].files, 3);
+  assert.equal(manifest.artifacts[1].attempts, 2, 'concurrent change forced a retry');
+  assert.match(manifest.verification_status, /^not-verified/);
   // nothing readable in the artifacts
   for (const a of manifest.artifacts) {
     const raw = fs.readFileSync(path.join(backupDir, a.name));
@@ -57,12 +60,21 @@ test('backup/restore round trip (synthetic data)', { skip, timeout: 240000 }, as
   }
   await core.verifyArtifacts(backupDir, PASS);
 
+  // Command output must never imply recovery was proven by an integrity check.
+  const cli = spawnSync('node', [path.join(REPO, 'tools/backup/cli.js'), 'verify', '--backup', backupDir], { env: { ...process.env, BACKUP_PASSPHRASE: PASS }, encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
+  const verifyOut = JSON.parse(cli.stdout);
+  assert.equal(verifyOut.check, 'artifact-integrity-only');
+  assert.equal(verifyOut.restore_tested, false);
+  assert.equal(verifyOut.recovery_verified, false);
+  assert.ok(!/recover(y|ed) (verified|ok|success)/i.test(cli.stdout.replace(/"recovery_verified": false/, '')));
+
   const base = { backupDir, passphrase: PASS, restoreDatabaseUrl: dstUrl, restoreDocumentsDir: dstDocs, restoreBankDir: dstBank, productionDatabaseUrl: srcUrl, protectedDirs: [srcDocs, srcBank], confirmed: true };
 
   await t.test('refuses unsafe targets', async () => {
     await assert.rejects(core.restoreBackup({ ...base, confirmed: false }), /i-confirm-isolated/);
-    await assert.rejects(core.restoreBackup({ ...base, restoreDatabaseUrl: srcUrl }), /must contain restore|same as DATABASE_URL|not empty/);
-    await assert.rejects(core.restoreBackup({ ...base, restoreDatabaseUrl: withDb(adminUrl, 'postgres') }), /must contain restore/);
+    await assert.rejects(core.restoreBackup({ ...base, restoreDatabaseUrl: srcUrl }), /must match/);
+    await assert.rejects(core.restoreBackup({ ...base, restoreDatabaseUrl: withDb(adminUrl, 'postgres') }), /must match/);
     await assert.rejects(core.restoreBackup({ ...base, restoreDatabaseUrl: dstUrl.replace(/@[^/]+\//, '@db.example.com:5432/') }), /not local/);
     await assert.rejects(core.restoreBackup({ ...base, restoreDocumentsDir: srcDocs }), /overlaps a live storage|not empty/);
     await assert.rejects(core.restoreBackup({ ...base, restoreDocumentsDir: path.join(srcDocs, 'sub') }), /overlaps a live storage/);
@@ -75,10 +87,37 @@ test('backup/restore round trip (synthetic data)', { skip, timeout: 240000 }, as
     assert.equal(fs.existsSync(dstDocs), false, 'nothing created by refused attempts');
   });
 
+  await t.test('isolation proof does not depend on DATABASE_URL or on how the host is spelled', async () => {
+    const unmarked = `eqfal_restore_unmarked_${run}`;
+    const live = `eqfal_restore_live_${run}`;
+    await adminExec(adminUrl, `CREATE DATABASE ${unmarked}`);
+    await adminExec(adminUrl, `CREATE DATABASE ${live}`);
+    await adminExec(adminUrl, `COMMENT ON DATABASE ${live} IS '${core.TARGET_MARKER}'`);
+    await adminExec(withDb(adminUrl, live), 'CREATE TABLE precious(id int)');
+    t.after(async () => {
+      await adminExec(adminUrl, `DROP DATABASE IF EXISTS ${unmarked} WITH (FORCE)`);
+      await adminExec(adminUrl, `DROP DATABASE IF EXISTS ${live} WITH (FORCE)`);
+    });
+    const noEnv = { ...base, productionDatabaseUrl: undefined, env: {} }; // DATABASE_URL unset
+    // right name, local host, empty, but never marked as disposable -> refused even with no production URL known
+    await assert.rejects(core.restoreBackup({ ...noEnv, restoreDatabaseUrl: withDb(adminUrl, unmarked) }), /not marked as a disposable/);
+    // marked + right name but populated (a "renamed live database") -> refused
+    await assert.rejects(core.restoreBackup({ ...noEnv, restoreDatabaseUrl: withDb(adminUrl, live) }), /not empty/);
+    // production URL spelled differently (localhost vs 127.0.0.1) still matches
+    const alias = new URL(dstUrl); alias.hostname = alias.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+    await assert.rejects(core.restoreBackup({ ...base, productionDatabaseUrl: alias.toString() }), /same as the configured|alias/);
+    // server-side identity check (independent of URL text) recognises the same database and tells databases apart
+    assert.equal(await core.sameServerDatabase(dstUrl, alias.toString()), true);
+    assert.equal(await core.sameServerDatabase(dstUrl, srcUrl), false);
+    // PG* environment variables count as "the live database" too
+    const u = new URL(dstUrl);
+    await assert.rejects(core.restoreBackup({ ...noEnv, env: { PGDATABASE: dstName, PGHOST: u.hostname, PGPORT: u.port || '5432', PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password) } }), /same as the configured/);
+  });
+
   await t.test('detects tampered artifact before touching the target', async () => {
     const copy = path.join(work, 'tampered');
     fs.cpSync(backupDir, copy, { recursive: true });
-    const f = path.join(copy, 'documents.tar.gz.enc');
+    const f = path.join(copy, 'documents.archive.gz.enc');
     const b = fs.readFileSync(f); b[b.length - 100] ^= 1; fs.writeFileSync(f, b);
     await assert.rejects(core.restoreBackup({ ...base, backupDir: copy }), /Checksum mismatch/);
     const { Client } = require('pg');

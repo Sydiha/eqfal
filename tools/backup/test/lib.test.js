@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
-const { spawnSync } = require('child_process');
 const lib = require('../lib');
 const core = require('../core');
 const { mkTmp, PASS, sha } = require('./helpers');
@@ -38,6 +37,17 @@ test('wrong passphrase, bit-flip and truncation are all rejected', async () => {
   assert.throws(() => lib.decryptStream(path.join(dir, 'tiny.enc'), PASS), /truncated/);
 });
 
+test('decryptToFile rejects a bad authentication tag, removes the output and never reports success', async () => {
+  const dir = mkTmp();
+  const f = path.join(dir, 'a.enc');
+  await lib.encryptStream(Readable.from([Buffer.alloc(50000, 3)]), f, PASS);
+  const bytes = fs.readFileSync(f);
+  bytes[bytes.length - 1] ^= 1; // only the final tag byte: the whole ciphertext stream is otherwise intact
+  fs.writeFileSync(path.join(dir, 'badtag.enc'), bytes);
+  await assert.rejects(lib.decryptToFile(path.join(dir, 'badtag.enc'), path.join(dir, 'out'), PASS));
+  assert.equal(fs.existsSync(path.join(dir, 'out')), false);
+});
+
 test('passphrase rules: min length and file permissions', () => {
   assert.throws(() => lib.readPassphrase({ BACKUP_PASSPHRASE: 'short' }), /at least/);
   assert.throws(() => lib.readPassphrase({}), /Set BACKUP_PASSPHRASE/);
@@ -52,30 +62,13 @@ test('passphrase rules: min length and file permissions', () => {
 
 test('manifest MAC detects tampering and wrong passphrase', () => {
   const dir = mkTmp();
-  const m = lib.sealManifest({ format: 1, artifacts: [{ name: 'x', encrypted_sha256: 'a' }] }, PASS);
+  const m = lib.sealManifest({ format: 2, artifacts: [{ name: 'x', encrypted_sha256: 'a' }] }, PASS);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m));
   assert.ok(lib.readAndVerifyManifest(dir, PASS));
   assert.throws(() => lib.readAndVerifyManifest(dir, PASS + 'z'), /authentication failed/);
   m.artifacts[0].encrypted_sha256 = 'b';
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m));
   assert.throws(() => lib.readAndVerifyManifest(dir, PASS), /authentication failed/);
-});
-
-test('tar listing check rejects traversal, absolute paths and links', () => {
-  const ok = '-rw-r--r-- u/g 12 2026-10-08 08:00 ./a/b\ndrwxr-xr-x u/g 0 2026-10-08 08:00 ./a/\n';
-  assert.deepEqual(lib.checkTarListing(ok), ['./a/b']);
-  assert.throws(() => lib.checkTarListing('-rw-r--r-- u/g 1 2026-10-08 08:00 ../evil\n'), /Unsafe path/);
-  assert.throws(() => lib.checkTarListing('-rw-r--r-- u/g 1 2026-10-08 08:00 /etc/passwd\n'), /Unsafe path/);
-  assert.throws(() => lib.checkTarListing('lrwxrwxrwx u/g 0 2026-10-08 08:00 ./l -> /etc\n'), /non-regular/);
-});
-
-test('real tar archive with path traversal is rejected end to end', async () => {
-  const dir = mkTmp();
-  fs.mkdirSync(path.join(dir, 'src'));
-  fs.writeFileSync(path.join(dir, 'src', 'f'), 'x');
-  const tarPath = path.join(dir, 'evil.tar.gz');
-  assert.equal(spawnSync('tar', ['-czf', tarPath, '-C', path.join(dir, 'src'), '--transform', 's,^,../escape/,', 'f']).status, 0);
-  await assert.rejects(lib.listAndCheckTar(fs.createReadStream(tarPath)), /Unsafe path/);
 });
 
 test('retention keeps 7 daily, 4 weekly, 3 monthly and ignores unrelated names', () => {
