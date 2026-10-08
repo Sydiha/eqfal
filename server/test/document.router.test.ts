@@ -1,5 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
+import { createHash } from 'crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -57,7 +58,7 @@ const pdf = Buffer.from('%PDF-1.7\ncontent');
 const document = {
   id: 'doc-1', company_id: 'co-a', uploaded_by_user_id: 'u1', status: 'uploaded',
   original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: pdf.length,
-  storage_key: 'co-a/file-1', sha256: 'a'.repeat(64), reviewed_by_user_id: null, reviewed_at: null, review_note: null,
+  storage_key: 'co-a/file-1', sha256: createHash('sha256').update(pdf).digest('hex'), reviewed_by_user_id: null, reviewed_at: null, review_note: null,
   created_at: new Date(), updated_at: new Date(),
   document_type: null, counterparty_id: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null,
 };
@@ -180,6 +181,15 @@ describe('Document API security boundary', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
     expect(mocks.storageGet).toHaveBeenCalledWith('co-a/file-1');
+  });
+
+  it('refuses to serve a file whose bytes do not match the stored SHA-256', async () => {
+    setContext(['document.view']);
+    mocks.findById.mockResolvedValue(document);
+    mocks.storageGet.mockResolvedValue(Buffer.from('%PDF-1.7\ntampered'));
+    const res = await request(app).get('/api/documents/doc-1/file');
+    expect(res.status).toBe(500);
+    expect(res.headers['content-type']).not.toContain('application/pdf');
   });
 
   it('allows document.submit to submit an uploaded document for review', async () => {

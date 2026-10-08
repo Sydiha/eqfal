@@ -4,10 +4,12 @@ import logger from './shared/logger';
 import pool from './db/pool';
 import { runMigrations } from './db/migrate';
 import { frontendBuildAvailable } from './shared/frontend-static';
+import { assertStorageConfig, verifyStorageReady } from './storage/storage.factory';
 import { assertProductionConfig, productionConfigWarnings } from './config/production-config';
 
 async function start(): Promise<void> {
   assertProductionConfig();
+  assertStorageConfig(process.env);
   if (config.env === 'production' && !frontendBuildAvailable(config.frontendDistDir)) {
     throw new Error('Frontend build not found: run `npm run build` before `npm start` (expected index.html in the client dist directory)');
   }
@@ -26,6 +28,9 @@ async function start(): Promise<void> {
   } else {
     logger.warn('DATABASE_URL not set — DB features disabled');
   }
+
+  // Object storage must be reachable before serving traffic; failure aborts startup (no local fallback).
+  await verifyStorageReady({ documents: config.documentStorageDir, 'bank-imports': config.bankStorageDir });
 
   app.listen(config.port, () => {
     logger.info({ port: config.port, env: config.env }, 'Server started');

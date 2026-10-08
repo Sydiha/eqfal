@@ -5,7 +5,8 @@ import { inflateRawSync } from 'zlib';
 import { Pool, PoolClient } from 'pg';
 import pool from '../../db/pool';
 import config from '../../config';
-import { LocalStorageAdapter } from '../../storage/local.storage';
+import { getStorage } from '../../storage/storage.factory';
+import { readVerified } from '../../storage/integrity';
 import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
@@ -24,7 +25,7 @@ const MAX_ROWS = 10_000;
 const MAX_PREVIEW_ROWS = 50;
 const CSV_MIME = 'text/csv';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const storage = new LocalStorageAdapter(config.bankStorageDir);
+const storage = getStorage('bank-imports', config.bankStorageDir);
 const rawParser = express.raw({ type: () => true, limit: MAX_FILE_SIZE });
 
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
@@ -913,7 +914,7 @@ export class BankService {
     const batch=await this.repo.batch(batchId,companyId); if(!batch) throw new BankNotFoundError('Bank import not found');
     const mapping=mappingOverride ?? batch.column_mapping; if(!mapping) throw new BankConflictError('Column mapping required');
     const account=await this.repo.account(batch.bank_account_id,companyId); if(!account) throw new BankNotFoundError('Bank account not found');
-    const table=parseBankFile(batch.source_format,await this.files.get(batch.storage_key));
+    const table=parseBankFile(batch.source_format,await readVerified(this.files,batch.storage_key,batch.file_sha256));
     const refs=[...new Set(table.rows.map((row)=>{
       const date=normalizeDate(row[mapping.transaction_date.index]??null,mapping.date_format); let amount:string|null=null;
       if(mapping.amount_mode==='signed') amount=normalizeMoney(row[mapping.amount!.index]??null);
@@ -934,7 +935,7 @@ export class BankService {
     return this.tx(async(client)=>{
       const batch=await this.repo.batch(batchId,companyId,client,true); if(!batch) throw new BankNotFoundError('Bank import not found'); if(batch.status==='confirmed') return {batch,importedRows:batch.valid_rows,duplicateRows:batch.duplicate_rows,idempotent:true}; if(!batch.column_mapping||batch.status!=='preview_ready') throw new BankConflictError('Preview required before confirm');
       const accountResult=await client.query<BankAccount>('SELECT * FROM bank_accounts WHERE id=$1 AND company_id=$2',[batch.bank_account_id,companyId]); const account=accountResult.rows[0]; if(!account) throw new BankNotFoundError('Bank account not found'); if(!account.is_active) throw new BankConflictError('Bank account is inactive');
-      const table=parseBankFile(batch.source_format,await this.files.get(batch.storage_key)); const provisional=this.normalize(table,batch.column_mapping,account,new Set()); const existing=await this.repo.fingerprintsTx(companyId,account.id,provisional.rows.map((r)=>r.fingerprint),client); const preview=this.normalize(table,batch.column_mapping,account,existing); if(preview.invalidRows>0) throw new BankConflictError('Bank import contains invalid rows');
+      const table=parseBankFile(batch.source_format,await readVerified(this.files,batch.storage_key,batch.file_sha256)); const provisional=this.normalize(table,batch.column_mapping,account,new Set()); const existing=await this.repo.fingerprintsTx(companyId,account.id,provisional.rows.map((r)=>r.fingerprint),client); const preview=this.normalize(table,batch.column_mapping,account,existing); if(preview.invalidRows>0) throw new BankConflictError('Bank import contains invalid rows');
       let imported=0; let duplicates=0;
       for(const row of preview.rows){ if(row.status==='duplicate'){duplicates++;continue;} await assertAccountingDateWritable(companyId,row.transaction_date,client); const inserted=await this.repo.insertTransaction({...row,companyId,accountId:account.id,batchId:batch.id,currency:account.currency_code},client); if(inserted) imported++; else duplicates++; }
       const confirmed=await this.repo.confirmBatch(batch.id,companyId,actor,{valid:imported,duplicates},client); await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'bank_import.confirm',entity_type:'bank_import_batch',entity_id:batch.id,before_data:{status:batch.status},after_data:{status:'confirmed',bank_account_id:account.id,file_sha256:batch.file_sha256,total_rows:preview.totalRows,imported_rows:imported,duplicate_rows:duplicates}},client); return {batch:confirmed,importedRows:imported,duplicateRows:duplicates,idempotent:false};

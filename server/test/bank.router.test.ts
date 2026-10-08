@@ -1,5 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
+import { createHash } from 'crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -24,7 +25,7 @@ const app=express(); app.use(express.json()); app.use('/api',bankRouter); app.us
 const account={id:'a1',company_id:'co-a',display_name:'Main',bank_name:'Bank',currency_code:'SAR',is_active:true,created_by:'u1',created_at:new Date(),updated_at:new Date()};
 const inactiveAccount={...account,is_active:false};
 const mapping={amount_mode:'signed' as const,date_format:'YYYY-MM-DD' as const,transaction_date:{index:0,label:'Date'},amount:{index:2,label:'Amount'},description:{index:1,label:'Description'},bank_reference:{index:3,label:'Reference'}};
-const batch={id:'b1',company_id:'co-a',bank_account_id:'a1',original_filename:'statement.csv',mime_type:'text/csv',source_format:'csv' as const,storage_key:'co-a/file',file_sha256:'x',status:'preview_ready' as const,column_mapping:mapping,total_rows:2,valid_rows:2,duplicate_rows:0,invalid_rows:0,created_by:'u1',created_at:new Date(),confirmed_by:null,confirmed_at:null};
+const batch={id:'b1',company_id:'co-a',bank_account_id:'a1',original_filename:'statement.csv',mime_type:'text/csv',source_format:'csv' as const,storage_key:'co-a/file',file_sha256:createHash('sha256').update(Buffer.from('Date,Description,Amount,Reference\n2026-08-01,Sale,100.00,R1\n2026-08-02,Fee,-5.25,R2\n')).digest('hex'),status:'preview_ready' as const,column_mapping:mapping,total_rows:2,valid_rows:2,duplicate_rows:0,invalid_rows:0,created_by:'u1',created_at:new Date(),confirmed_by:null,confirmed_at:null};
 const confirmedBatch={...batch,status:'confirmed' as const,confirmed_by:'u1',confirmed_at:new Date()};
 function setContext(capabilities:string[],companyId:string|null='co-a'){mocks.context={user:{id:'u1',email:'u@example.com'},allowedCompanies:[{id:'co-a',name:'A',name_ar:null}],activeCompanyId:companyId,capabilities};}
 const csv=Buffer.from('Date,Description,Amount,Reference\n2026-08-01,Sale,100.00,R1\n2026-08-02,Fee,-5.25,R2\n');
@@ -81,7 +82,7 @@ describe('Bank import validation and duplicate semantics',()=>{
   it('marks mapped XLSX formula cells invalid',async()=>{
     const formulaBatch={...batch,source_format:'xlsx' as const,storage_key:'co-a/formula',column_mapping:{amount_mode:'signed' as const,date_format:'YYYY-MM-DD' as const,transaction_date:{index:0},amount:{index:1}}};
     const fakeDb={query:vi.fn().mockResolvedValueOnce({rows:[formulaBatch]}).mockResolvedValueOnce({rows:[account]}).mockResolvedValueOnce({rows:[]})};
-    const files={get:vi.fn().mockResolvedValue(formulaXlsx()),put:vi.fn(),delete:vi.fn()};
+    const xlsxBytes=formulaXlsx();formulaBatch.file_sha256=createHash('sha256').update(xlsxBytes).digest('hex');const files={get:vi.fn().mockResolvedValue(xlsxBytes),put:vi.fn(),delete:vi.fn()};
     const service=new BankService(fakeDb as never,files as never); const result=await service.preview('b1','co-a');
     expect(result.invalidRows).toBe(1);expect(result.rows[0]?.error).toBe('Formula cells are not allowed');
   });

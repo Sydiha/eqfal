@@ -1,7 +1,9 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import pool from '../../db/pool';
 import config from '../../config';
-import { LocalStorageAdapter } from '../../storage/local.storage';
+import { getStorage } from '../../storage/storage.factory';
+import { readVerified, StorageIntegrityError } from '../../storage/integrity';
+import { StorageUnavailableError } from '../../storage/object.storage';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { BankColumnMapping, BankService, parseBankFile } from './bank.router';
 
@@ -16,6 +18,7 @@ type ResumeBatch = {
   original_filename: string;
   source_format: 'csv' | 'xlsx';
   storage_key: string;
+  file_sha256: string;
   status: 'mapping_required' | 'preview_ready' | 'confirmed';
   column_mapping: BankColumnMapping | null;
   total_rows: number;
@@ -41,6 +44,7 @@ bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requi
       original_filename,
       source_format,
       storage_key,
+      file_sha256,
       status,
       column_mapping,
       total_rows,
@@ -57,8 +61,8 @@ bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requi
   if(batch.source_format!=='csv'&&batch.source_format!=='xlsx'){res.status(409).json({error:'Bank import source format cannot be resumed'});return;}
 
   try {
-    const files=new LocalStorageAdapter(config.bankStorageDir);
-    const table=parseBankFile(batch.source_format,await files.get(batch.storage_key));
+    const files=getStorage('bank-imports',config.bankStorageDir);
+    const table=parseBankFile(batch.source_format,await readVerified(files,batch.storage_key,batch.file_sha256));
 
     let preview=null;
     if(batch.status==='preview_ready'&&batch.column_mapping){
@@ -67,13 +71,16 @@ bankImportResumeRouter.get('/bank-import-batches/:id/resume', requireAuth, requi
       preview={...result,rows:result.rows.slice(0,50)};
     }
 
+    const { file_sha256: _fileSha256, ...publicBatch }=batch;
     res.json({
-      batch,
+      batch:publicBatch,
       columns:table.headers,
       mapping:batch.column_mapping,
       preview,
     });
-  } catch {
+  } catch (err) {
+    // A storage outage or integrity failure is a server problem, not an unresumable import.
+    if(err instanceof StorageUnavailableError||err instanceof StorageIntegrityError) throw err;
     res.status(409).json({error:'Stored bank import cannot be resumed'});
   }
 }));
