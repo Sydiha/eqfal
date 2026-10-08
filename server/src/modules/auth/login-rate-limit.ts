@@ -45,18 +45,23 @@ export class LoginRateLimiter {
       [`email:${normalizedEmail}`, this.options.maxPerEmail],
     ];
     const now = this.now();
-    this.prune(now);
+    this.pruneExpired(now);
 
     let retryAt = 0;
+    let newKeys = 0;
     for (const [key, max] of keys) {
       const bucket = this.buckets.get(key);
-      if (bucket && bucket.resetAt > now && bucket.count >= max) retryAt = Math.max(retryAt, bucket.resetAt);
+      if (!bucket) { newKeys += 1; continue; }
+      if (bucket.count >= max) retryAt = Math.max(retryAt, bucket.resetAt);
     }
+    // Bounded memory, fail closed: never evict live buckets (that would let key flooding reset lockouts).
+    // When full, only attempts that need NEW buckets are refused, until the earliest bucket expires.
+    if (retryAt === 0 && this.buckets.size + newKeys > this.options.maxEntries) retryAt = this.earliestReset();
     if (retryAt > 0) return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((retryAt - now) / 1000)) };
 
     const charged = keys.map(([key]) => {
       let bucket = this.buckets.get(key);
-      if (!bucket || bucket.resetAt <= now) {
+      if (!bucket) {
         bucket = { count: 0, resetAt: now + this.options.windowMs };
         this.buckets.set(key, bucket);
       }
@@ -76,15 +81,14 @@ export class LoginRateLimiter {
   size(): number { return this.buckets.size; }
   reset(): void { this.buckets.clear(); }
 
-  private prune(now: number): void {
-    const limit = this.options.maxEntries - 3; // room for the 3 buckets one attempt may add
-    if (this.buckets.size <= limit) return;
+  private pruneExpired(now: number): void {
     for (const [key, bucket] of this.buckets) if (bucket.resetAt <= now) this.buckets.delete(key);
-    // Still full: drop oldest entries (Map keeps insertion order) so memory stays bounded under key-flooding.
-    for (const key of this.buckets.keys()) {
-      if (this.buckets.size <= limit) break;
-      this.buckets.delete(key);
-    }
+  }
+
+  private earliestReset(): number {
+    let earliest = Infinity;
+    for (const bucket of this.buckets.values()) earliest = Math.min(earliest, bucket.resetAt);
+    return earliest === Infinity ? this.now() + this.options.windowMs : earliest;
   }
 }
 

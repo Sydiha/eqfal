@@ -89,6 +89,15 @@ describe('H1 login rate limiting', () => {
     expect((await bad(app, 'another@example.com', '198.51.100.8')).status).toBe(401);
   });
 
+  it('TRUST_PROXY=1: client-forged leading X-Forwarded-For entries cannot rotate the rate-limit IP (only the proxy-appended hop counts)', async () => {
+    vi.spyOn(SessionService.prototype, 'login').mockResolvedValue(null);
+    const app = makeApp(1);
+    let last = 0;
+    // The attacker forges the left side; the trusted proxy appends the real client address on the right.
+    for (let i = 0; i < 31; i++) last = (await bad(app, `u${i}@example.com`, `10.${i}.0.1, 198.51.100.9`)).status;
+    expect(last).toBe(429);
+  });
+
   it('does not count malformed requests', async () => {
     const app = makeApp();
     for (let i = 0; i < 40; i++) expect((await request(app).post('/api/auth/login').send({})).status).toBe(400);
@@ -103,6 +112,23 @@ describe('H1 login rate limiting', () => {
     expect(limiter.reserve('1.1.1.1', 'a@x.com').allowed).toBe(true);
     for (let i = 0; i < 50; i++) limiter.reserve(`9.9.9.${i}`, `e${i}@x.com`);
     expect(limiter.size()).toBeLessThanOrEqual(5);
+  });
+
+  it('key flooding cannot evict active buckets and reset a lockout (fails closed instead)', () => {
+    let now = 1_000;
+    const limiter = new LoginRateLimiter({ windowMs: 60_000, maxPerIp: 100, maxPerEmailIp: 1, maxPerEmail: 100, maxEntries: 30 }, () => now);
+    expect(limiter.reserve('1.1.1.1', 'victim@x.com').allowed).toBe(true);
+    expect(limiter.reserve('1.1.1.1', 'victim@x.com').allowed).toBe(false);
+    for (let i = 0; i < 200; i++) limiter.reserve(`9.9.${Math.floor(i / 250)}.${i}`, `e${i}@x.com`);
+    expect(limiter.size()).toBeLessThanOrEqual(30);
+    const again = limiter.reserve('1.1.1.1', 'victim@x.com');
+    expect(again.allowed).toBe(false);
+    // while full, brand-new keys are refused (bounded memory, fail closed) with a usable Retry-After
+    const fresh = limiter.reserve('7.7.7.7', 'new@x.com');
+    expect(fresh.allowed).toBe(false);
+    if (!fresh.allowed) expect(fresh.retryAfterSeconds).toBeGreaterThan(0);
+    now += 60_001;
+    expect(limiter.reserve('7.7.7.7', 'new@x.com').allowed).toBe(true);
   });
 
   it('parses TRUST_PROXY safely (default: trust nothing)', () => {
