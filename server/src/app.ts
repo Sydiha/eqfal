@@ -34,8 +34,12 @@ import { managerFinancialSnapshotRouter } from './modules/manager-financial-snap
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import logger from './shared/logger';
+import config from './config';
 
 const app = express();
+
+// Client IP (used by login rate limiting) honours X-Forwarded-For only for the proxies named in TRUST_PROXY.
+app.set('trust proxy', config.trustProxy);
 
 app.use(express.json({ limit: '64kb' }));
 

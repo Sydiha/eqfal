@@ -3,6 +3,7 @@ import pool from '../../db/pool';
 import config from '../../config';
 import { SessionService } from './session.service';
 import { requireSameOrigin } from './origin.middleware';
+import { loginRateLimiter } from './login-rate-limit';
 
 const SESSION_COOKIE = 'eqfal_session';
 const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -73,12 +74,26 @@ authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) =>
   const service = serviceOr503(res);
   if (!service) return;
 
-  const result = await service.login(email, password);
+  const attempt = loginRateLimiter.reserve(req.ip ?? 'unknown', email);
+  if (!attempt.allowed) {
+    res.setHeader('Retry-After', String(attempt.retryAfterSeconds));
+    res.status(429).json({ error: 'Too many login attempts', code: 'LOGIN_RATE_LIMITED' });
+    return;
+  }
+
+  let result;
+  try {
+    result = await service.login(email, password);
+  } catch (error) {
+    attempt.release(true); // infrastructure failure is not a failed guess
+    throw error;
+  }
   if (!result) {
     res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
     return;
   }
 
+  attempt.release(true);
   const { token, ...context } = result;
   setSessionCookie(res, token);
   res.status(200).json(context);

@@ -23,7 +23,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  const context = await new SessionService(pool).getContext(token);
+  let context: AuthSessionContext | null;
+  try {
+    context = await new SessionService(pool).getContext(token);
+  } catch (error) {
+    // Express 4 does not catch async rejections: forward to the central error boundary (generic 500, details only in logs).
+    next(error);
+    return;
+  }
   if (!context) {
     res.status(401).json({ error: 'Unauthenticated' });
     return;
