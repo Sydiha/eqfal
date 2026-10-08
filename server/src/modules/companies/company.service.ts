@@ -117,7 +117,12 @@ export class CompanyManagementService {
 
   /** Creates the company, provisions all 4 default roles, and assigns creator to Full Access role. */
   async create(input: { slug: string; name: string; name_ar: string | null }, actorUserId: string): Promise<CompanyRow> {
-    return this.transaction(async (client) => {
+    return this.transaction((client) => this.createWithClient(client, input, actorUserId));
+  }
+
+  /** Same workflow as create(), inside a caller-owned transaction (used by the initial bootstrap CLI). */
+  async createWithClient(client: PoolClient, input: { slug: string; name: string; name_ar: string | null }, actorUserId: string): Promise<CompanyRow> {
+    {
       const { rows } = await client.query<CompanyRow>(
         `INSERT INTO companies (slug, name, name_ar) VALUES ($1, $2, $3)
          RETURNING id, slug, name, name_ar, is_active, created_at`,
@@ -156,7 +161,7 @@ export class CompanyManagementService {
       );
       await this.audit.logEvent({ company_id: company.id, actor_user_id: actorUserId, action: 'company.create', entity_type: 'company', entity_id: company.id, before_data: null, after_data: this.snapshot(company) }, client);
       return company;
-    });
+    }
   }
 
   async update(id: string, patch: { name?: string; name_ar?: string | null }, actorUserId: string): Promise<CompanyRow> {
