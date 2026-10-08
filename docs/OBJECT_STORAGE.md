@@ -1,11 +1,11 @@
 # Object Storage (Replit App Storage) — Task 6C-2A
 
-## تحذير: لا يُفعَّل في الإنتاج قبل Task 6C-2B
-أداة النسخ الاحتياطي (`tools/backup`) **لا تغطي Object Storage بعد**. لذلك:
+## تحذير: لا يُفعَّل في الإنتاج قبل مراجعة Task 6C-2B وقرار المالك
+أداة النسخ الاحتياطي (`tools/backup`) صارت تغطي Object Storage (Task 6C-2B، انظر `docs/BACKUP_RESTORE.md`) لكن لم تُجرَّب على bucket حقيقي. لذلك:
 - الكود جاهز لكنه **غير مفعّل**: لم يُنشأ أي bucket ولم يُغيَّر أي إعداد في Replit/Staging/Production.
 - في الإنتاج يرفض النظام الإقلاع بـ `STORAGE_BACKEND=object` ما لم يُضبط `OBJECT_STORAGE_BACKUP_SUPPORT_CONFIRMED=true` (مفتاح يقرره المالك بعد دمج 6C-2B ومراجعته).
-- أمر `backup` يرفض العمل إذا كان `STORAGE_BACKEND=object` (بدل إنتاج أرشيفات فارغة).
-- نتيجة ذلك عملياً: نشر Replit Production مع هذا الكود وبدون المفتاح **لن يقلع** (fail-closed مقصود) إلى أن يكتمل 6C-2B.
+- أمر `backup` مع `STORAGE_BACKEND=object` ينسخ الملفات المرجعية من الـ bucket (قراءة فقط) ويفشل عند أي ملف مفقود أو عدم تطابق SHA-256.
+- نتيجة ذلك عملياً: نشر Replit Production مع هذا الكود وبدون المفتاح **لن يقلع** (fail-closed مقصود) إلى أن يضبط المالك المفتاح بعد مراجعة 6C-2B.
 
 ## السلوك
 | البند | التفصيل |
