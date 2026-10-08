@@ -219,3 +219,34 @@ export function managementSummaryExport(p: Labels & { periodLabel: string; from?
   const scope: Array<[string, string]> = [[L(ar, 'Period', 'الفترة'), p.periodLabel], [L(ar, 'As of', 'كما في'), p.asOf]];
   return doc(`eqfal-management-summary-${slug(periodStem(p.from, p.to, p.asOf))}`, title, p, meta(title, scope, p), body, { header: [0, accountsHeader, closeHeader].filter((i) => i >= 0) });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Annual closing: the readiness tab (domains + package manifest) and the governed package table, exactly as shown.
+// ---------------------------------------------------------------------------------------------
+export type AnnualReadinessRow = { name: string; state: string; items: number };
+export type AnnualManifestRow = { name: string; state: string; items: number | string | null };
+
+export function annualClosingExport(p: Labels & { fiscalYear: string; startDate: string; endDate: string; labels: { title: string; fiscalYear: string; range: string; overall: string; unresolved: string; fsReadiness: string; zakat: string; domains: string; domainsNote: string; manifest: string; manifestNote: string; domain: string; section: string; state: string; items: string; total: string }; overall: string; unresolvedTotal: number; fsReadinessState: string; zakatState: string; domains: AnnualReadinessRow[]; manifest: AnnualManifestRow[] }): ExportDocument {
+  const { labels: X } = p;
+  const body: ExportRows = []; const header: number[] = []; const section: number[] = []; const total: number[] = [];
+  section.push(body.length); body.push([X.domains]); body.push([X.domainsNote]);
+  header.push(body.length); body.push([X.domain, X.state, X.items]);
+  for (const d of p.domains) body.push([d.name, d.state, ni(String(d.items))]);
+  total.push(body.length); body.push([X.total, null, ni(String(p.unresolvedTotal))]);
+  body.push([]);
+  section.push(body.length); body.push([X.manifest]); body.push([X.manifestNote]);
+  header.push(body.length); body.push([X.section, X.state, X.items]);
+  for (const m of p.manifest) body.push([m.name, m.state, m.items === null ? '—' : typeof m.items === 'number' ? ni(String(m.items)) : m.items]);
+  const scope: Array<[string, string]> = [[X.fiscalYear, p.fiscalYear], [X.range, `${p.startDate} — ${p.endDate}`], [X.overall, p.overall], [X.unresolved, String(p.unresolvedTotal)], [X.fsReadiness, p.fsReadinessState], [X.zakat, p.zakatState]];
+  return doc(`eqfal-annual-closing-${slug(p.fiscalYear) || 'year'}`, X.title, p, meta(X.title, scope, p), body, { header, section, total });
+}
+
+export type AnnualPackageRow = { name: string; state: string; source: string; blockers: string };
+
+export function annualPackageExport(p: Labels & { fiscalYear: string; startDate: string; endDate: string; title: string; labels: { fiscalYear: string; range: string; packageState: string; section: string; state: string; source: string; blockers: string; snapshot: string }; packageState: string; snapshotLines: string[]; rows: AnnualPackageRow[] }): ExportDocument {
+  const { labels: X } = p;
+  const body: ExportRows = [[X.section, X.state, X.source, X.blockers], ...p.rows.map((r): ExportCell[] => [r.name, r.state, r.source, r.blockers || '—'])];
+  for (const line of p.snapshotLines) body.push([line]);
+  const scope: Array<[string, string]> = [[X.fiscalYear, p.fiscalYear], [X.range, `${p.startDate} — ${p.endDate}`], [X.packageState, p.packageState]];
+  return doc(`eqfal-annual-closing-package-${slug(p.fiscalYear) || 'year'}`, p.title, p, meta(p.title, scope, p), body, { header: [0] });
+}
