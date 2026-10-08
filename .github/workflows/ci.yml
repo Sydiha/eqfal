@@ -18,6 +18,26 @@ jobs:
     permissions:
       contents: read
 
+    # Throwaway database for the PostgreSQL-backed server tests (no external service, no cost).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eqfal
+          POSTGRES_PASSWORD: eqfal_ci
+          POSTGRES_DB: eqfal_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eqfal -d eqfal_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://eqfal:eqfal_ci@127.0.0.1:5432/eqfal_ci
+      REQUIRE_POSTGRES_TESTS: 'true'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +61,9 @@ jobs:
 
       - name: TypeScript
         run: npm run typecheck
+
+      - name: Apply database migrations
+        run: npx tsx server/src/db/migrate-cli.ts
 
       - name: Tests
         run: npm test

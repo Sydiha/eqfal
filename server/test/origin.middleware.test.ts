@@ -93,7 +93,9 @@ describe('requireSameOrigin', () => {
       .set('Origin', 'https://dev-app.replit.dev')
       .send({});
 
-    expect(response.status).toBe(503);
+    // Past the origin check the request must stop at authentication:
+    // 503 when no database is configured, 401 (no session) when one is.
+    expect(response.status).toBe(process.env['DATABASE_URL'] ? 401 : 503);
     expect(response.body).not.toEqual({ error: 'Invalid request origin' });
   });
 });
