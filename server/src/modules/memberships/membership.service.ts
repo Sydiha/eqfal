@@ -107,6 +107,8 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const before = await this.repo.findMembershipById(id, client);
       if (!before || before.company_id !== companyId) throw new Error('Membership not found');
+      await this.assertCanManageTarget(before, actorUserId, client);
+      if (!active) await this.assertNotLastFullAccess(before, null, client);
       const after = await this.repo.setMembershipActive(id, companyId, active, client);
       if (!after) throw new Error('Membership not found');
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: active ? 'access.membership.enable' : 'access.membership.disable', entity_type: 'membership', entity_id: id, before_data: this.membershipSnapshot(before), after_data: this.membershipSnapshot(after) }, client);
@@ -128,7 +130,9 @@ export class MembershipService {
       const role = await this.repo.findRoleById(roleId, client);
       if (!before || before.company_id !== companyId) throw new Error('Membership not found');
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
+      await this.assertCanManageTarget(before, actorUserId, client);
       await this.assertCanAssign(before, role, actorUserId, client);
+      await this.assertNotLastFullAccess(before, role, client);
       const after = await this.repo.assignRoleToMembership(membershipId, roleId, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.role.assign', entity_type: 'membership', entity_id: membershipId, before_data: this.membershipSnapshot(before), after_data: this.membershipSnapshot(after) }, client);
       return after;
@@ -141,7 +145,7 @@ export class MembershipService {
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
       const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      if (add && !actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+      if (!actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
       const before = await this.repo.getRoleCapabilities(roleId, client);
       if (add) await this.repo.addCapabilityToRole(roleId, capabilityId, client);
       else await this.repo.removeCapabilityFromRole(roleId, capabilityId, client);
@@ -163,7 +167,7 @@ export class MembershipService {
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
       const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      for (const id of grants) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+      for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
       const before = await this.repo.getRoleCapabilities(roleId, client);
       for (const id of grants) await this.repo.addCapabilityToRole(roleId, id, client);
       for (const id of revokes) await this.repo.removeCapabilityFromRole(roleId, id, client);
@@ -178,6 +182,42 @@ export class MembershipService {
 
   private roleSnapshot(value: Role): Record<string, unknown> {
     return { company_id: value.company_id, name: value.name, is_full_access: value.is_full_access };
+  }
+
+  /**
+   * Authority over the target's EXISTING privileges (not just over the role being assigned): the actor may
+   * only change a membership whose current role is within the actor's own authority. A Full Access target
+   * requires a Full Access actor; any other target role must be a subset of the actor's capabilities.
+   */
+  private async assertCanManageTarget(target: Membership, actorUserId: string, client: PoolClient): Promise<void> {
+    if (!target.role_id) return;
+    const targetRole = await this.repo.findRoleById(target.role_id, client);
+    if (!targetRole || targetRole.company_id !== target.company_id) return;
+    if (targetRole.is_full_access) {
+      if (!(await this.repo.hasActiveFullAccessRole(actorUserId, target.company_id, client))) {
+        throw new AccessPolicyError('Target privilege violation: only Full Access can modify a Full Access member', 'ACCESS_TARGET_PRIVILEGE');
+      }
+      return;
+    }
+    const [actorCaps, targetCaps] = await Promise.all([
+      this.repo.getActiveCapabilities(actorUserId, target.company_id, client),
+      this.repo.getRoleCapabilities(targetRole.id, client),
+    ]);
+    for (const capability of targetCaps) {
+      if (!actorCaps.includes(capability)) throw new AccessPolicyError(`Target privilege violation: member holds capability '${capability}' beyond the actor`, 'ACCESS_TARGET_PRIVILEGE');
+    }
+  }
+
+  /** Blocks disabling or moving off Full Access when the target is the last active Full Access member (row-locked). */
+  private async assertNotLastFullAccess(target: Membership, newRole: Role | null, client: PoolClient): Promise<void> {
+    if (!target.is_active || !target.role_id) return;
+    if (newRole?.is_full_access) return;
+    const currentRole = await this.repo.findRoleById(target.role_id, client);
+    if (!currentRole?.is_full_access) return;
+    const activeFullAccess = await this.repo.lockActiveFullAccessMembershipIds(target.company_id, client);
+    if (!activeFullAccess.some((id) => id !== target.id)) {
+      throw new AccessPolicyError('The last active Full Access member cannot be disabled or demoted', 'ACCESS_LAST_FULL_ACCESS');
+    }
   }
 
   private async assertCanAssign(membership: Membership, role: Role, actorUserId: string, client?: PoolClient): Promise<void> {

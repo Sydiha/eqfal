@@ -208,6 +208,23 @@ export class MembershipRepository {
     );
   }
 
+  /**
+   * Row-locks (FOR UPDATE) every active Full Access membership of the company and returns their ids.
+   * Concurrent disable/demote transactions serialize here, so the "last Full Access member" check cannot be raced.
+   */
+  async lockActiveFullAccessMembershipIds(companyId: string, client: PoolClient): Promise<string[]> {
+    const { rows } = await client.query<{ id: string }>(
+      `SELECT m.id
+       FROM memberships m
+       JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       WHERE m.company_id = $1 AND m.is_active = TRUE AND r.is_full_access = TRUE
+       ORDER BY m.id
+       FOR UPDATE OF m`,
+      [companyId],
+    );
+    return rows.map((row) => row.id);
+  }
+
   /** Whether the user currently holds an active Full Access role in this company. */
   async hasActiveFullAccessRole(userId: string, companyId: string, client?: PoolClient): Promise<boolean> {
     const runner: QueryRunner = client ?? this.pool;

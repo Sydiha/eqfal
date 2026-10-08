@@ -144,7 +144,7 @@ describe('disabled membership and permission change behavior', () => {
     expect((await service.getContext('t'))?.capabilities).not.toContain('document.view');
   });
 
-  it('revokes a capability inside a transaction with an audit record and no ceiling requirement', async () => {
+  it('revokes a capability inside a transaction with an audit record, only for a capability the actor holds', async () => {
     const { MembershipService } = await vi.importActual<typeof import('../src/modules/memberships/membership.service')>('../src/modules/memberships/membership.service');
     const client = { query: vi.fn().mockResolvedValue({ rows: [] }), release: vi.fn() } as unknown as PoolClient;
     const service = new MembershipService({ connect: vi.fn().mockResolvedValue(client), query: vi.fn() } as unknown as Pool);
@@ -155,6 +155,10 @@ describe('disabled membership and permission change behavior', () => {
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]);
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['document.view', 'document.edit']);
     const remove = vi.spyOn(repo, 'removeCapabilityFromRole').mockResolvedValue(undefined);
+    // H3: revocation is bounded by the actor's own capabilities, like grants.
+    await expect(service.changeRoleCapability('r', 'document.edit', 'company-a', 'user', false)).rejects.toMatchObject({ code: 'ACCESS_ROLE_CEILING' });
+    expect(remove).not.toHaveBeenCalled();
+    vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['document.edit']);
     await service.changeRoleCapability('r', 'document.edit', 'company-a', 'user', false);
     expect(remove).toHaveBeenCalledWith('r', 'document.edit', client);
     expect(audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({ company_id: 'company-a', action: 'access.role.capability.remove', after_data: { capabilities: ['document.view'] } }), client);
