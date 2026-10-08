@@ -13,6 +13,7 @@ describeDatabase('Document approval with PostgreSQL DATE values', () => {
   const companyId = randomUUID();
   const uploaderId = randomUUID();
   const reviewerId = randomUUID();
+  const supplierId = randomUUID();
   const documentIds: string[] = [];
   const storage: StorageAdapter = {
     put: async () => undefined,
@@ -31,6 +32,12 @@ describeDatabase('Document approval with PostgreSQL DATE values', () => {
        VALUES ($1, $2, 'test-only'), ($3, $4, 'test-only')`,
       [uploaderId, `phase8-uploader-${uploaderId}@example.test`, reviewerId, `phase8-reviewer-${reviewerId}@example.test`],
     );
+    // Approving a purchase document requires a valid company supplier.
+    await pool.query(
+      `INSERT INTO counterparties (id, company_id, name, type, created_by_user_id)
+       VALUES ($1, $2, 'Phase 8 VAT supplier', 'supplier', $3)`,
+      [supplierId, companyId, uploaderId],
+    );
   });
 
   afterAll(async () => {
@@ -38,6 +45,7 @@ describeDatabase('Document approval with PostgreSQL DATE values', () => {
       await pool.query("DELETE FROM audit_log WHERE entity_type = 'document' AND entity_id = ANY($1::uuid[])", [documentIds]);
       await pool.query('DELETE FROM documents WHERE id = ANY($1::uuid[])', [documentIds]);
     }
+    await pool.query('DELETE FROM counterparties WHERE company_id = $1', [companyId]);
     await pool.query('DELETE FROM companies WHERE id = $1', [companyId]);
     await pool.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [[uploaderId, reviewerId]]);
     await pool.end();
@@ -50,11 +58,11 @@ describeDatabase('Document approval with PostgreSQL DATE values', () => {
       `INSERT INTO documents
          (id, company_id, uploaded_by_user_id, status, original_filename, mime_type,
           size_bytes, storage_key, sha256, document_type, counterparty_name,
-          document_date, reference_number, total_amount)
+          document_date, reference_number, total_amount, counterparty_id)
        VALUES
          ($1, $2, $3, 'needs_review', 'phase8-vat.pdf', 'application/pdf',
-          1, $4, $5, 'purchase', 'Phase 8 VAT Valid', $6::date, 'P8-VAT-OK-001', $7::numeric)`,
-      [id, companyId, uploaderId, `${companyId}/${id}`, 'a'.repeat(64), documentDate, totalAmount],
+          1, $4, $5, 'purchase', 'Phase 8 VAT Valid', $6::date, 'P8-VAT-OK-001', $7::numeric, $8)`,
+      [id, companyId, uploaderId, `${companyId}/${id}`, 'a'.repeat(64), documentDate, totalAmount, supplierId],
     );
     return id;
   }
@@ -92,7 +100,7 @@ describeDatabase('Document approval with PostgreSQL DATE values', () => {
 
     await expect(new DocumentService(pool, storage).review({
       documentId, companyId, actorUserId: reviewerId, decision: 'approved', note: null,
-    })).rejects.toBeInstanceOf(DocumentReviewConflictError);
+    })).rejects.toSatisfy((e: unknown) => e instanceof DocumentReviewConflictError && e.code === 'DOCUMENT_APPROVAL_DATA_INCOMPLETE');
 
     const { rows } = await pool.query(
       'SELECT status, reviewed_at, reviewed_by_user_id FROM documents WHERE id = $1 AND company_id = $2',
