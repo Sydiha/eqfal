@@ -25,6 +25,8 @@ const app = express(); app.use(express.json()); app.use('/api', companyRouter);
 app.use((e: unknown, _q: Request, res: Response, _n: NextFunction) => res.status(500).json({ error: String(e) }));
 const session = { id: 's', user_id: 'user', user_email: 'u@example.com', token_hash: 'h', active_company_id: A, expires_at: new Date(Date.now() + 60_000), created_at: new Date(), updated_at: new Date() };
 const cookie = ['Cookie', 'eqfal_session=token'] as const;
+process.env['APP_PUBLIC_ORIGINS'] = 'http://app.test';
+const origin = ['Origin', 'http://app.test'] as const;
 const login = (caps: string[]) => {
   vi.spyOn(SessionRepository.prototype, 'findActiveByTokenHash').mockResolvedValue(session);
   vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue([{ membership_id: 'm', company_id: A, company_name: 'A', company_name_ar: null, role_id: 'r' }]);
@@ -57,7 +59,7 @@ describe('company logo routes', () => {
   it('uploads and replaces a valid logo (PNG, JPEG, WebP) using the session user', async () => {
     login([]);
     for (const [type, body] of [['image/png', png()], ['image/jpeg', jpeg()], ['image/webp', webp()]] as const) {
-      const res = await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set('Content-Type', type).send(body);
+      const res = await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set(...origin).set('Content-Type', type).send(body);
       expect(res.status).toBe(200);
       expect(mocks.setLogo).toHaveBeenLastCalledWith(A, type, body, 'user');
     }
@@ -65,7 +67,7 @@ describe('company logo routes', () => {
   });
   it('rejects invalid types: SVG, mismatched content type, junk bytes, empty body', async () => {
     login([]);
-    const put = (type: string, body: Buffer | string) => request(app).put(`/api/companies/${A}/logo`).set(...cookie).set('Content-Type', type).send(body);
+    const put = (type: string, body: Buffer | string) => request(app).put(`/api/companies/${A}/logo`).set(...cookie).set(...origin).set('Content-Type', type).send(body);
     expect((await put('image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"/>')).status).toBe(400);
     expect((await put('image/png', jpeg())).status).toBe(400);
     expect((await put('image/png', Buffer.from('not an image at all, just text bytes..........'))).status).toBe(400);
@@ -76,41 +78,41 @@ describe('company logo routes', () => {
   it('rejects oversized files', async () => {
     login([]);
     const big = Buffer.concat([png(), Buffer.alloc(MAX_LOGO_BYTES + 10)]);
-    const res = await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set('Content-Type', 'image/png').send(big);
+    const res = await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set(...origin).set('Content-Type', 'image/png').send(big);
     expect(res.status).toBe(413);
     expect(mocks.setLogo).not.toHaveBeenCalled();
   });
   it('blocks unauthorized update and remove (service forbids / hides other companies)', async () => {
     login([]);
     mocks.setLogo.mockRejectedValueOnce(new CompanyAccessError('forbidden'));
-    expect((await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set('Content-Type', 'image/png').send(png())).status).toBe(403);
+    expect((await request(app).put(`/api/companies/${A}/logo`).set(...cookie).set(...origin).set('Content-Type', 'image/png').send(png())).status).toBe(403);
     mocks.removeLogo.mockRejectedValueOnce(new CompanyAccessError('not_found'));
-    expect((await request(app).delete(`/api/companies/${B}/logo`).set(...cookie)).status).toBe(404);
+    expect((await request(app).delete(`/api/companies/${B}/logo`).set(...cookie).set(...origin)).status).toBe(404);
   });
   it('removes a logo', async () => {
     login([]);
     mocks.removeLogo.mockResolvedValue(undefined);
-    expect((await request(app).delete(`/api/companies/${A}/logo`).set(...cookie)).status).toBe(204);
+    expect((await request(app).delete(`/api/companies/${A}/logo`).set(...cookie).set(...origin)).status).toBe(204);
     expect(mocks.removeLogo).toHaveBeenCalledWith(A, 'user');
   });
   it('serves the active company logo with safe headers and ETag; 304 on match', async () => {
     login([]);
     mocks.getLogo.mockResolvedValue({ mime_type: 'image/png', sha256: 'a'.repeat(64), size_bytes: 33, data: png() });
-    const res = await request(app).get(`/api/companies/${A}/logo`).set(...cookie);
+    const res = await request(app).get(`/api/companies/${A}/logo`).set(...cookie).set(...origin);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('image/png');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['content-security-policy']).toContain("default-src 'none'");
     expect(res.headers['etag']).toBe(`"${'a'.repeat(64)}"`);
-    expect((await request(app).get(`/api/companies/${A}/logo`).set(...cookie).set('If-None-Match', `"${'a'.repeat(64)}"`)).status).toBe(304);
+    expect((await request(app).get(`/api/companies/${A}/logo`).set(...cookie).set(...origin).set('If-None-Match', `"${'a'.repeat(64)}"`)).status).toBe(304);
   });
   it('returns 404 when no logo exists and never reads another company logo', async () => {
     login([]);
     mocks.getLogo.mockResolvedValue(null);
-    expect((await request(app).get(`/api/companies/${A}/logo`).set(...cookie)).status).toBe(404);
+    expect((await request(app).get(`/api/companies/${A}/logo`).set(...cookie).set(...origin)).status).toBe(404);
     mocks.getLogo.mockClear();
-    expect((await request(app).get(`/api/companies/${B}/logo`).set(...cookie)).status).toBe(404);
-    expect((await request(app).get('/api/companies/not-a-uuid/logo').set(...cookie)).status).toBe(404);
+    expect((await request(app).get(`/api/companies/${B}/logo`).set(...cookie).set(...origin)).status).toBe(404);
+    expect((await request(app).get('/api/companies/not-a-uuid/logo').set(...cookie).set(...origin)).status).toBe(404);
     expect(mocks.getLogo).not.toHaveBeenCalled();
   });
 });

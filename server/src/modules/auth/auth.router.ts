@@ -4,8 +4,8 @@ import config from '../../config';
 import { SessionService } from './session.service';
 import { requireSameOrigin } from './origin.middleware';
 import { loginRateLimiter } from './login-rate-limit';
+import { SESSION_COOKIE } from './session-cookie';
 
-const SESSION_COOKIE = 'eqfal_session';
 const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 export const authRouter = Router();

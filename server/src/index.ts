@@ -3,10 +3,11 @@ import config from './config';
 import logger from './shared/logger';
 import pool from './db/pool';
 import { runMigrations } from './db/migrate';
-import { assertProductionConfig } from './config/production-config';
+import { assertProductionConfig, productionConfigWarnings } from './config/production-config';
 
 async function start(): Promise<void> {
   assertProductionConfig();
+  for (const warning of productionConfigWarnings(process.env)) logger.warn(warning);
   if (pool) {
     // DATABASE_URL is set: a connection or migration failure is fatal.
     // Continuing with an unknown schema state risks silent data corruption.
