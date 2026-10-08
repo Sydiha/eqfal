@@ -81,6 +81,11 @@ describeDatabase('Tenant isolation over HTTP (two companies, two users, PostgreS
     out['document'] = r.json?.document?.id;
     r = await client.req('POST', '/bank-accounts', { display_name: `Bank ${tag}`, bank_name: 'X', currency_code: 'SAR' });
     out['bank'] = r.json?.account?.id;
+    const csv = Buffer.from(`Date,Description,Amount\n2026-02-01,ISO-LINE-${tag},1234.50\n`);
+    r = await client.req('POST', '/bank-import-batches', csv, { 'content-type': 'text/csv', 'x-file-name': `iso-${tag}.csv`, 'x-bank-account-id': out['bank']! });
+    out['bankBatch'] = r.json?.batch?.id ?? r.json?.id;
+    r = await client.req('POST', `/annual-closing/${out['fy']}/package`, {});
+    out['packageStatus'] = String(r.status);
     r = await client.req('POST', '/obligations', { direction: 'payable', counterparty_id: out['counterparty'], original_amount: '250.00', recognized_on: '2026-02-01', verification_status: 'unconfirmed', source_type: 'manual', source_note: 'x' });
     out['obligation'] = r.json?.id;
     r = await client.req('POST', '/partners', { name: `Partner ${tag}` });
@@ -270,14 +275,26 @@ describeDatabase('Tenant isolation over HTTP (two companies, two users, PostgreS
     expect(xlsx.status).toBeLessThan(500);
     expect(xlsx.headers.get('content-type') ?? '').not.toContain('spreadsheetml');
 
-    const pkg = await A.req('GET', `/annual-closing/${seedB['fy']}/package`);
+    // Annual package: B reads its own package (positive), A is denied for the exact same fiscal-year id.
+    expect(seedB['packageStatus']).toBe('201');
+    const pkgPath = `/annual-closing/${seedB['fy']}/package`;
+    const bPkg = await B.req('GET', pkgPath);
+    expect(bPkg.status).toBe(200);
+    expect(bPkg.text).toContain(seedB['fy']);
+    const pkg = await A.req('GET', pkgPath);
     expect(pkg.status).toBeGreaterThanOrEqual(400);
     expect(pkg.status).toBeLessThan(500);
-    expect(pkg.text).not.toContain(markers.name);
+    expect(pkg.text).not.toContain(seedB['fy']!);
 
-    const preview = await A.req('GET', `/bank-import-batches/${randomUUID()}/preview`);
-    expect(preview.status).toBeGreaterThanOrEqual(400);
-    expect(preview.status).toBeLessThan(500);
+    // Bank import preview: B previews its own uploaded batch (positive), A is denied for the same batch id.
+    expect(seedB['bankBatch']).toMatch(/^[0-9a-f-]{36}$/);
+    const previewPath = `/bank-import-batches/${seedB['bankBatch']}/preview`;
+    const bPreview = await B.req('GET', previewPath);
+    expect(bPreview.status, bPreview.text.slice(0, 200)).toBe(200);
+    expect(bPreview.text).toContain(`ISO-LINE-B${run}`);
+    const preview = await A.req('GET', previewPath);
+    expect(preview.status).toBe(404);
+    expect(preview.text).not.toContain(`ISO-LINE-B${run}`);
   });
 
   it('unauthenticated callers get 401 on the same read, file and export routes', async () => {
