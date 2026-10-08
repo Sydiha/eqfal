@@ -2,7 +2,8 @@ import express, { NextFunction, Request, RequestHandler, Response, Router } from
 import path from 'path';
 import pool from '../../db/pool';
 import config from '../../config';
-import { LocalStorageAdapter } from '../../storage/local.storage';
+import { getStorage } from '../../storage/storage.factory';
+import { readVerified } from '../../storage/integrity';
 import {
   getAuthenticatedContext,
   requireActiveCompany,
@@ -33,7 +34,7 @@ const MIME_EXTENSIONS: Record<string, Set<string>> = {
   'image/webp': new Set(['.webp']),
 };
 
-const storage = new LocalStorageAdapter(config.documentStorageDir);
+const storage = getStorage('documents', config.documentStorageDir);
 const rawParser = express.raw({ type: () => true, limit: MAX_FILE_SIZE });
 
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
@@ -331,7 +332,7 @@ documentRouter.get(
 
     let data: Buffer;
     try {
-      data = await storage.get(document.storage_key);
+      data = await readVerified(storage, document.storage_key, document.sha256);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         res.status(404).json({ error: 'Document file not found' });

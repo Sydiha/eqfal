@@ -30,6 +30,10 @@ async function main() {
   const cmd = process.argv[2];
   const env = process.env;
   if (cmd === 'backup') {
+    // Object Storage files are NOT covered by this tool until Task 6C-2B: refuse rather than write archives of empty local folders.
+    if ((env.STORAGE_BACKEND ?? '').trim().toLowerCase() === 'object') {
+      throw new lib.BackupError('STORAGE_BACKEND=object: this backup tool does not include Object Storage files yet (Task 6C-2B). Refusing to create an incomplete backup.');
+    }
     const dirs = core.defaultStorageDirs(env);
     const out = arg('out') ?? env.BACKUP_OUTPUT_DIR;
     if (!out) throw new lib.BackupError('--out <dir> is required');

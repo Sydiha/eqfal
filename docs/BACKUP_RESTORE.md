@@ -1,5 +1,7 @@
 # BACKUP_RESTORE — النسخ الاحتياطي والاستعادة (Foundation v1)
 
+> **تنبيه:** هذه الأداة لا تغطي Object Storage بعد. أمر `backup` يرفض العمل مع `STORAGE_BACKEND=object` إلى أن يكتمل Task 6C-2B. انظر `docs/OBJECT_STORAGE.md`.
+
 أدوات يدوية في `tools/backup/`. **لا جدولة تلقائية ولا رفع خارجي** في هذه المرحلة (قرار المالك). كل أمر يُشغَّل يدوياً.
 
 ## الأهداف
