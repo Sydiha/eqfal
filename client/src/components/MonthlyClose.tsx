@@ -6,6 +6,9 @@ import { readQueryParameter, writeQueryParameters } from '../navigation/querySta
 import { Dialog } from './Dialog';
 import { WorkspacePage, WorkspaceState } from './SharedUI';
 import { useDateContext } from '../context/DateContext';
+import { ExportButtons } from './ExportButtons';
+import { useActiveCompanyName } from '../context/CompanyContext';
+import { generatedStamp, monthlyCloseExport } from '../export/reportExport';
 import './MonthlyClose.css';
 
 type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number};
@@ -32,6 +35,7 @@ const IcBook=()=><Ic><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 
 export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId: _unused}:Props){
  const {t,i18n}=useTranslation();
  const { selectedPeriodId, periodMode } = useDateContext();
+ const company=useActiveCompanyName()??'';
  const [periods,setPeriods]=useState<Period[]>([]),[years,setYears]=useState<FiscalYear[]>([]);
  const [selectedId,setSelectedId]=useState<string|null>(null),[yearFilter,setYearFilter]=useState('');
  const [loading,setLoading]=useState(canView),[error,setError]=useState(false),[failure,setFailure]=useState<ApiError|null>(null),[creating,setCreating]=useState(false),[reopen,setReopen]=useState<Period|null>(null),[saving,setSaving]=useState(false);
@@ -62,6 +66,8 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
   {key:'periodicAdjustments',allowed:viewCapabilities.periodicAdjustments,label:t('monthlyClose.periodicAdjustments'),count:selected.blockers.periodic_adjustments,icon:<IcCalendar/>,go:()=>drill('periodicAdjustments',{adjustmentFrom:selected.period_start,adjustmentTo:selected.period_end})},
   {key:'ledger',allowed:viewCapabilities.accounting,label:`${t('accounting.title')} / ${t('accounting.tabs.ledger')}`,count:selected.blockers.ledger,icon:<IcBook/>,go:()=>drill('accounting',{accountingTab:'sources',sourceFrom:selected.period_start,sourceTo:selected.period_end})},
  ].filter(domain=>domain.allowed&&domain.count!==undefined):[];
+ const arabic=i18n.language.startsWith('ar');
+ const exportDoc=selected&&!loading&&!error?monthlyCloseExport({ar:arabic,company,generatedAt:generatedStamp(),fiscalYear:years.find(y=>y.id===selected.fiscal_year_id)?.name??'—',periodStart:selected.period_start.slice(0,10),periodEnd:selected.period_end.slice(0,10),statusLabel:t(`monthlyClose.${selected.status}`),readinessLabel:selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady'),hiddenBlockers:selected.has_hidden_blockers,domains:domains.map(d=>({label:d.label,count:d.count as number})),labels:{domain:t('monthlyClose.colDomain'),status:t('monthlyClose.colStatus'),count:t('monthlyClose.colCount'),needsAction:t('monthlyClose.needsAction'),clear:t('monthlyClose.noBlockers'),total:arabic?'الإجمالي':'Total',hidden:t('monthlyClose.blockedHidden'),empty:arabic?'لا توجد مجالات متاحة للعرض':'No close areas available to view',title:t('monthlyClose.title'),fiscalYear:t('monthlyClose.fiscalYear'),period:arabic?'الفترة':'Period',periodStatus:t('monthlyClose.colStatus'),readiness:t('monthlyClose.readinessTitle')}}):null;
  const clearDomains=domains.filter(domain=>domain.count===0).length,actionDomains=domains.length-clearDomains;
  const showClose=!!selected&&canClose&&selected.status==='open',showReopen=!!selected&&canReopen&&selected.status==='closed';
  return <section className="panel mc-view" aria-labelledby="monthly-close-title">
@@ -81,6 +87,7 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
       <div className="mc-summary__identity"><h3>{monthLabel(selected.period_start)}</h3><span className={`mc-badge mc-badge--${selected.status==='open'?'neutral':'closed'}`}>{t(`monthlyClose.${selected.status}`)}</span><span className="mc-summary__dates">{rangeLabel(selected)}</span></div>
       <span className={`mc-badge ${selected.ready?'mc-badge--ok':'mc-badge--warn'}`}>{selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady')}</span>
      </div>
+     <ExportButtons language={i18n.language} document={exportDoc} landscape={false}/>
      {!selected.ready&&<div className="mc-summary__metrics">
       <div className="mc-metric mc-metric--blockers"><strong>{selected.has_hidden_blockers?t('monthlyClose.blockedHidden'):t('monthlyClose.blocked',{count:selected.disclosed_total})}</strong>{!selected.has_hidden_blockers&&<span>{t('monthlyClose.domainsNeedAction',{count:actionDomains})}</span>}</div>
       {!selected.has_hidden_blockers&&<div className="mc-metric mc-metric--clear"><strong>{t('monthlyClose.domainsClear',{clear:clearDomains,total:domains.length})}</strong><span>{t('monthlyClose.domainsClearNote')}</span></div>}
