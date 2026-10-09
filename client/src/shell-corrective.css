@@ -82,9 +82,9 @@
 }
 
 .eqfal-nav-group__label {
-  color: #8fa8bf;
-  font-size: 11px;
-  font-weight: 700;
+  color: #c3d3e3;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .sidebar-compliance-footer {
@@ -144,7 +144,7 @@
 .eqfal-nav-group__toggle:hover {
   border-color: transparent;
   background: rgba(255, 255, 255, .055);
-  color: #c3d3e3;
+  color: #e6eef6;
 }
 
 .eqfal-nav-group__toggle[aria-disabled="true"] {
@@ -158,6 +158,8 @@
 
 .eqfal-nav-group__chevron {
   flex: none;
+  width: 18px;
+  height: 18px;
   transition: transform .15s ease;
 }
 

@@ -6,8 +6,12 @@ const css = readFileSync(resolve(__dirname, '../shell-corrective.css'), 'utf8').
 const rule = (selector: string) => css.split('}').map(block => block.trim()).find(block => block.startsWith(`${selector} {`)) ?? '';
 
 describe('sidebar group header styles', () => {
-  it('uses the readable #8fa8bf label color on the navy sidebar', () => {
-    expect(rule('.eqfal-nav-group__label')).toContain('color: #8fa8bf');
+  it('uses a readable 14px / 600 #c3d3e3 label that the chevron inherits', () => {
+    const label = rule('.eqfal-nav-group__label');
+    expect(label).toContain('color: #c3d3e3');
+    expect(label).toContain('font-size: 14px');
+    expect(label).toContain('font-weight: 600');
+    expect(rule('.eqfal-nav-group__chevron')).toMatch(/width: 18px;\s*height: 18px/);
   });
 
   it('overrides the global button hover so group headers never turn white or gray-bordered', () => {
