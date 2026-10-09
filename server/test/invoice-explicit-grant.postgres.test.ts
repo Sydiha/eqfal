@@ -98,7 +98,8 @@ describeDatabase('explicit-grant-only invoice capabilities (PostgreSQL)', () => 
   });
 
   it('existing-role regression: Full Access still resolves every pre-existing capability and no invoice permission', async () => {
-    const expected = (await pool.query<{ id: string }>('SELECT id FROM capabilities WHERE implicit_full_access = TRUE ORDER BY id')).rows.map((r) => r.id);
+    // Sort in JS on both sides: the database collation (CI image) orders punctuation differently from a JS sort.
+    const expected = (await pool.query<{ id: string }>('SELECT id FROM capabilities WHERE implicit_full_access = TRUE')).rows.map((r) => r.id).sort();
     expect(expected.length).toBeGreaterThanOrEqual(127);
     expect(expected.some((c) => c.startsWith('invoice.'))).toBe(false);
     const viaRepo = (await caps(ids.owner, ids.coA)).sort();
