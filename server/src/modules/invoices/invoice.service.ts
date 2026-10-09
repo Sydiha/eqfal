@@ -9,7 +9,7 @@ import { computeLine, computeTotals, InvoiceMathError, LineAmounts } from './inv
  */
 
 export type InvoiceErrorCode =
-  | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_VERSION_CONFLICT'
+  | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED' | 'INVOICE_EMPTY' | 'INVOICE_VERSION_CONFLICT'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID';
 
 export class InvoiceError extends Error {
@@ -229,6 +229,51 @@ export class InvoiceDraftService {
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.draft.update', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
       return after!;
     });
+  }
+
+  /** draft -> submitted. Freezes the draft for review; no numbering, obligation, journal or VAT effect. */
+  async submit(companyId: string, actorUserId: string, invoiceId: string, expectedVersion: number) {
+    return this.tx(async (client) => {
+      const current = await this.lockForTransition(client, companyId, invoiceId, 'draft', 'INVOICE_NOT_DRAFT', 'Only draft invoices can be submitted', expectedVersion);
+      const before = await this.read(client, companyId, invoiceId);
+      if (!before || before.lines.length === 0) throw new InvoiceError(409, 'INVOICE_EMPTY', 'An invoice without lines cannot be submitted');
+      const cp = (await client.query<{ type: string; is_active: boolean }>(
+        'SELECT type, is_active FROM counterparties WHERE id = $1 AND company_id = $2', [before.counterparty_id, companyId])).rows[0];
+      if (!cp || !cp.is_active) throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', 'Counterparty not found or inactive');
+      if ((current.direction === 'sales' && cp.type === 'supplier') || (current.direction === 'purchase' && cp.type === 'customer')) {
+        throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', `Counterparty type ${cp.type} cannot be used on a ${current.direction} invoice`);
+      }
+      await client.query(
+        `UPDATE invoices SET status = 'submitted', version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status = 'draft'`,
+        [invoiceId, companyId]);
+      const after = await this.read(client, companyId, invoiceId);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.submit', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
+      return after!;
+    });
+  }
+
+  /** submitted -> draft (return for correction). */
+  async returnToDraft(companyId: string, actorUserId: string, invoiceId: string, expectedVersion: number) {
+    return this.tx(async (client) => {
+      await this.lockForTransition(client, companyId, invoiceId, 'submitted', 'INVOICE_NOT_SUBMITTED', 'Only submitted invoices can be returned to draft', expectedVersion);
+      const before = await this.read(client, companyId, invoiceId);
+      await client.query(
+        `UPDATE invoices SET status = 'draft', version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status = 'submitted'`,
+        [invoiceId, companyId]);
+      const after = await this.read(client, companyId, invoiceId);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.return', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
+      return after!;
+    });
+  }
+
+  private async lockForTransition(client: PoolClient, companyId: string, invoiceId: string, from: string,
+    wrongState: 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED', wrongStateMessage: string, expectedVersion: number) {
+    const current = (await client.query<{ status: string; version: number; direction: Direction }>(
+      'SELECT status, version, direction FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [invoiceId, companyId])).rows[0];
+    if (!current) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
+    if (current.status !== from) throw new InvoiceError(409, wrongState, wrongStateMessage);
+    if (current.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
+    return current;
   }
 
   async get(companyId: string, invoiceId: string) {

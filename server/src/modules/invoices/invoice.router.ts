@@ -68,3 +68,25 @@ invoiceRouter.put('/invoices/:id', ...write, requireCapability('invoice.edit'), 
   const { companyId, actorUserId } = companyAndActor(req);
   res.json({ invoice: await svc.update(companyId, actorUserId, req.params.id!, version as number, input) });
 })));
+
+function parseVersion(req: Request): number {
+  const body = req.body as Record<string, unknown>;
+  const version = body && typeof body === 'object' ? body.version : undefined;
+  if (!Number.isInteger(version) || (version as number) < 1) throw new InvoiceError(400, 'INVOICE_VALIDATION', 'version must be a positive integer');
+  return version as number;
+}
+
+// PR-3A: submit / return. invoice.submit is explicit-grant-only (migration 064). Final approval is NOT exposed.
+invoiceRouter.post('/invoices/:id/submit', ...write, requireCapability('invoice.submit'), route((req, res) => handle(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  const version = parseVersion(req);
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.json({ invoice: await svc.submit(companyId, actorUserId, req.params.id!, version) });
+})));
+
+invoiceRouter.post('/invoices/:id/return', ...write, requireCapability('invoice.submit'), route((req, res) => handle(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  const version = parseVersion(req);
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.json({ invoice: await svc.returnToDraft(companyId, actorUserId, req.params.id!, version) });
+})));

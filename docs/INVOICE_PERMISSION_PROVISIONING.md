@@ -1,6 +1,6 @@
 # Invoice permission provisioning (owner-authorized procedure, NOT executed)
 
-`invoice.view`, `invoice.create` and `invoice.edit` are explicit-grant-only (migration 063,
+`invoice.view`, `invoice.create`, `invoice.edit` and `invoice.submit` (migration 064) are explicit-grant-only (migration 063,
 `capabilities.implicit_full_access = FALSE`). No role, including Full Access, holds them after the migration.
 The role-management API cannot grant them either: the ceiling rule requires the granter to already hold the
 capability, and Full Access roles are immutable. The first grant therefore happens outside the application, by
