@@ -254,7 +254,7 @@ interface FakeDb {
  */
 function makeFakePool(db: FakeDb): Pool {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (!/JOIN capabilities cap ON r\.is_full_access = TRUE/.test(sql)) {
+    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)/.test(sql)) {
       throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
     }
     const [userId, companyId] = params as [string, string];
@@ -313,7 +313,7 @@ describe('Real repository authorization', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('m.is_active  = TRUE');
-    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/);
+    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/);
   });
 
   describe('Multi-company isolation', () => {

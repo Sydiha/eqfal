@@ -276,12 +276,12 @@ describeDatabase('invoice foundation (migration 062) with PostgreSQL', () => {
     expect((await pool.query('SELECT 1 FROM invoices WHERE id=$1', [draft])).rowCount).toBe(1);
   });
 
-  it('permissions: no invoice.* capability is registered, so no role (including Full Access) gains one', async () => {
-    expect((await pool.query("SELECT 1 FROM capabilities WHERE id LIKE 'invoice.%'")).rowCount).toBe(0);
-    expect((await pool.query("SELECT 1 FROM role_capabilities WHERE capability_id LIKE 'invoice.%'")).rowCount).toBe(0);
-    const role = (await pool.query<{ id: string }>("INSERT INTO roles(company_id,name,is_full_access) VALUES($1,'FullInv',TRUE) RETURNING id", [coA])).rows[0]!.id;
-    const resolved = await pool.query("SELECT cap.id FROM roles r JOIN capabilities cap ON r.is_full_access = TRUE WHERE r.id=$1 AND cap.id LIKE 'invoice.%'", [role]);
-    expect(resolved.rowCount).toBe(0);
+  it('permissions: invoice.* is explicit-grant-only (see invoice-explicit-grant.postgres.test.ts), never implicit for Full Access', async () => {
+    // Migration 063 registers invoice.view/create/edit with implicit_full_access = FALSE and grants them to no role.
+    // (Row-level "no grants" checks live in invoice-explicit-grant.postgres.test.ts, which owns its own fixtures.)
+    expect(readFileSync(path.join(migrationsDir, '063_explicit_grant_capabilities.sql'), 'utf8')).not.toMatch(/INSERT\s+INTO\s+role_capabilities/i);
+    const registered = await pool.query("SELECT id FROM capabilities WHERE id LIKE 'invoice.%' AND implicit_full_access = TRUE");
+    expect(registered.rowCount).toBe(0);
   });
 
   it('migration 062 leaves existing accounting data byte-identical', async () => {

@@ -81,7 +81,7 @@ export class CompanyManagementService {
       `SELECT cap.id AS capability_id
        FROM memberships m
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON r.is_full_access = TRUE
+       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
          OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id)
        WHERE m.user_id = $1 AND m.company_id = $2 AND m.is_active = TRUE`,
       [userId, companyId],
