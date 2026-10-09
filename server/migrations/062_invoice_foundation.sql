@@ -12,6 +12,7 @@ CREATE TABLE invoices (
   direction             TEXT          NOT NULL CHECK (direction IN ('sales','purchase')),
   status                TEXT          NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','approved','cancelled')),
   counterparty_id       UUID          NOT NULL,
+  fiscal_year_id        UUID,
   internal_number       BIGINT        CHECK (internal_number > 0),
   external_reference    TEXT          CHECK (external_reference IS NULL OR char_length(btrim(external_reference)) BETWEEN 1 AND 100),
   issue_date            DATE          NOT NULL,
@@ -28,19 +29,31 @@ CREATE TABLE invoices (
   created_by_user_id    UUID          NOT NULL REFERENCES users(id),
   approved_by_user_id   UUID          REFERENCES users(id),
   approved_at           TIMESTAMPTZ,
+  cancelled_by_user_id  UUID          REFERENCES users(id),
+  cancelled_at          TIMESTAMPTZ,
+  cancellation_reason   TEXT          CHECK (cancellation_reason IS NULL OR char_length(btrim(cancellation_reason)) BETWEEN 1 AND 500),
   version               INTEGER       NOT NULL DEFAULT 1 CHECK (version > 0),
   created_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   UNIQUE (id, company_id),
   UNIQUE (id, company_id, direction),
+  CONSTRAINT invoices_fiscal_year_company_fk FOREIGN KEY (fiscal_year_id, company_id) REFERENCES fiscal_years(id, company_id) ON DELETE RESTRICT,
   CONSTRAINT invoices_counterparty_company_fk FOREIGN KEY (counterparty_id, company_id) REFERENCES counterparties(id, company_id) ON DELETE RESTRICT,
   CONSTRAINT invoices_total_check CHECK (total_amount = subtotal_amount + vat_amount),
   CONSTRAINT invoices_due_date_check CHECK (due_date IS NULL OR due_date >= issue_date),
-  CONSTRAINT invoices_number_only_when_approved CHECK ((internal_number IS NOT NULL) = (status = 'approved')),
-  CONSTRAINT invoices_approval_fields_check CHECK ((status = 'approved') = (approved_at IS NOT NULL AND approved_by_user_id IS NOT NULL)),
+  -- Numbering scope is company + direction + fiscal year. Number, fiscal year and approval metadata exist together:
+  -- always on approved invoices, never on draft/submitted ones, and preserved on an approved invoice that is later cancelled.
+  CONSTRAINT invoices_numbering_fields_check CHECK ((internal_number IS NULL) = (fiscal_year_id IS NULL)),
+  CONSTRAINT invoices_approval_fields_check CHECK (
+    (approved_at IS NOT NULL) = (approved_by_user_id IS NOT NULL) AND (approved_at IS NOT NULL) = (internal_number IS NOT NULL)
+    AND (status <> 'approved' OR approved_at IS NOT NULL)
+    AND (status NOT IN ('draft','submitted') OR approved_at IS NULL)),
+  CONSTRAINT invoices_cancellation_fields_check CHECK (
+    (status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL AND cancellation_reason IS NOT NULL)
+    AND (status = 'cancelled' OR (cancelled_at IS NULL AND cancelled_by_user_id IS NULL AND cancellation_reason IS NULL))),
   CONSTRAINT invoices_recurrence_fields_check CHECK ((origin = 'recurring') = (recurring_template_id IS NOT NULL AND recurrence_occurrence_date IS NOT NULL))
 );
-CREATE UNIQUE INDEX invoices_company_direction_number_uidx ON invoices (company_id, direction, internal_number) WHERE internal_number IS NOT NULL;
+CREATE UNIQUE INDEX invoices_company_direction_fy_number_uidx ON invoices (company_id, direction, fiscal_year_id, internal_number) WHERE internal_number IS NOT NULL;
 CREATE UNIQUE INDEX invoices_purchase_supplier_reference_uidx ON invoices (company_id, counterparty_id, external_reference) WHERE direction = 'purchase' AND external_reference IS NOT NULL;
 CREATE UNIQUE INDEX invoices_recurrence_occurrence_uidx ON invoices (company_id, recurring_template_id, recurrence_occurrence_date) WHERE origin = 'recurring';
 CREATE INDEX invoices_company_list_idx ON invoices (company_id, direction, status, issue_date DESC);
@@ -68,16 +81,18 @@ CREATE TABLE invoice_lines (
 CREATE TABLE invoice_number_counters (
   company_id  UUID        NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   direction   TEXT        NOT NULL CHECK (direction IN ('sales','purchase')),
+  fiscal_year_id UUID     NOT NULL,
   last_number BIGINT      NOT NULL CHECK (last_number > 0),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (company_id, direction)
+  PRIMARY KEY (company_id, direction, fiscal_year_id),
+  CONSTRAINT invoice_number_counters_fiscal_year_fk FOREIGN KEY (fiscal_year_id, company_id) REFERENCES fiscal_years(id, company_id) ON DELETE CASCADE
 );
 
 -- Atomically reserves the next number. The counter row lock is held until the caller's transaction ends,
 -- so concurrent callers serialize and a rolled-back transaction does not consume a number.
-CREATE FUNCTION allocate_invoice_number(p_company_id UUID, p_direction TEXT) RETURNS BIGINT AS $$
-  INSERT INTO invoice_number_counters (company_id, direction, last_number) VALUES (p_company_id, p_direction, 1)
-  ON CONFLICT (company_id, direction) DO UPDATE SET last_number = invoice_number_counters.last_number + 1, updated_at = NOW()
+CREATE FUNCTION allocate_invoice_number(p_company_id UUID, p_direction TEXT, p_fiscal_year_id UUID) RETURNS BIGINT AS $$
+  INSERT INTO invoice_number_counters (company_id, direction, fiscal_year_id, last_number) VALUES (p_company_id, p_direction, p_fiscal_year_id, 1)
+  ON CONFLICT (company_id, direction, fiscal_year_id) DO UPDATE SET last_number = invoice_number_counters.last_number + 1, updated_at = NOW()
   RETURNING last_number;
 $$ LANGUAGE sql;
 
@@ -129,21 +144,45 @@ CREATE TABLE invoice_source_links (
 -- (the company row is already gone); the product never hard-deletes companies.
 -- ---------------------------------------------------------------------------------------------
 CREATE FUNCTION guard_invoice_header() RETURNS trigger AS $$
+DECLARE
+  -- bookkeeping columns that may change on any update
+  meta_keys TEXT[] := ARRAY['updated_at','version'];
+  -- columns written only by the approval step / cancellation step
+  approval_keys TEXT[] := ARRAY['status','internal_number','fiscal_year_id','approved_by_user_id','approved_at'];
+  cancel_keys TEXT[] := ARRAY['status','cancelled_by_user_id','cancelled_at','cancellation_reason'];
+  old_j JSONB; new_j JSONB;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     IF NOT EXISTS (SELECT 1 FROM companies WHERE id = OLD.company_id) THEN RETURN OLD; END IF;
     IF OLD.status <> 'draft' THEN RAISE EXCEPTION 'only draft invoices can be deleted' USING ERRCODE = '23514'; END IF;
     RETURN OLD;
   END IF;
-  IF OLD.status IN ('approved','cancelled') THEN
-    RAISE EXCEPTION 'approved or cancelled invoices are immutable' USING ERRCODE = '23514';
-  END IF;
   IF NEW.id <> OLD.id OR NEW.company_id <> OLD.company_id OR NEW.direction <> OLD.direction OR NEW.created_at <> OLD.created_at THEN
     RAISE EXCEPTION 'invoice identity columns are immutable' USING ERRCODE = '23514';
   END IF;
-  IF NOT ((OLD.status = 'draft' AND NEW.status IN ('draft','submitted','cancelled'))
-       OR (OLD.status = 'submitted' AND NEW.status IN ('submitted','draft','approved','cancelled'))) THEN
+  old_j := to_jsonb(OLD); new_j := to_jsonb(NEW);
+  IF OLD.status = 'cancelled' THEN
+    RAISE EXCEPTION 'cancelled invoices are immutable' USING ERRCODE = '23514';
+  ELSIF OLD.status = 'approved' THEN
+    -- the only permitted change is cancellation, which adds cancellation metadata and keeps number and approval history
+    IF NEW.status <> 'cancelled' OR (old_j - cancel_keys - meta_keys) <> (new_j - cancel_keys - meta_keys) THEN
+      RAISE EXCEPTION 'approved invoices are immutable except for cancellation' USING ERRCODE = '23514';
+    END IF;
+  ELSIF OLD.status = 'submitted' THEN
+    -- a submitted header cannot be materially altered; it must first be returned to draft
+    IF NEW.status = 'submitted' THEN
+      IF (old_j - meta_keys) <> (new_j - meta_keys) THEN RAISE EXCEPTION 'submitted invoices cannot be altered; return to draft first' USING ERRCODE = '23514'; END IF;
+    ELSIF NEW.status = 'draft' THEN
+      IF (old_j - meta_keys - 'status') <> (new_j - meta_keys - 'status') THEN RAISE EXCEPTION 'returning to draft cannot also alter the invoice' USING ERRCODE = '23514'; END IF;
+    ELSIF NEW.status = 'approved' THEN
+      IF (old_j - meta_keys - approval_keys) <> (new_j - meta_keys - approval_keys) THEN RAISE EXCEPTION 'approval cannot also alter the invoice' USING ERRCODE = '23514'; END IF;
+    ELSIF NEW.status = 'cancelled' THEN
+      IF (old_j - meta_keys - cancel_keys) <> (new_j - meta_keys - cancel_keys) THEN RAISE EXCEPTION 'cancellation cannot also alter the invoice' USING ERRCODE = '23514'; END IF;
+    END IF;
+  ELSIF NOT (NEW.status IN ('draft','submitted','cancelled')) THEN
     RAISE EXCEPTION 'invalid invoice status transition % -> %', OLD.status, NEW.status USING ERRCODE = '23514';
+  ELSIF NEW.status = 'cancelled' AND (old_j - meta_keys - cancel_keys) <> (new_j - meta_keys - cancel_keys) THEN
+    RAISE EXCEPTION 'cancellation cannot also alter the invoice' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END; $$ LANGUAGE plpgsql;
