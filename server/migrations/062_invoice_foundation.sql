@@ -6,6 +6,15 @@
 -- Recurring readiness: invoices carries origin / recurring_template_id / recurrence_occurrence_date so a
 -- future template can generate drafts, with a unique index preventing duplicate generation per occurrence.
 
+-- FUTURE ACCOUNTING RULE (owner decision 2026-10-09; documentation only, NOT enforced by this migration):
+--   * The row guard below permits the state change approved -> cancelled (keeping number and approval history), but
+--     that only keeps the data model ready. Cancelling an approved-but-unposted invoice must require explicit
+--     authorization and accounting safeguards (open period, no settlements, linked draft entry and VAT review handled).
+--   * A posted invoice must never be cancelled directly; correction goes through the approved adjustment/reversal
+--     workflow (credit/debit notes in invoice_adjustments plus reversal entries).
+--   * No cancellation API/route may be enabled until these rules are enforced in the service layer (and, for the
+--     posted case, by a database guard added in the migration that introduces posting links).
+
 CREATE TABLE invoices (
   id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id            UUID          NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
