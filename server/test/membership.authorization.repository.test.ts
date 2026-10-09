@@ -28,7 +28,7 @@ describe('MembershipRepository authorization queries', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('m.is_active  = TRUE');
     expect(sql).toContain('c.is_active = TRUE');
-    expect(sql).toContain('JOIN capabilities cap ON r.is_full_access = TRUE');
+    expect(sql).toContain('JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)');
     expect(sql).toContain('FROM role_capabilities rc');
     expect(sql).toContain('rc.capability_id = cap.id');
     expect(result).toEqual(['report.view']);
@@ -41,7 +41,7 @@ describe('MembershipRepository authorization queries', () => {
     await repo.getActiveCapabilities('user-1', 'company-a');
 
     const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/i);
+    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/i);
     expect(sql).toMatch(/FROM role_capabilities rc[\s\S]*rc\.role_id = r\.id[\s\S]*rc\.capability_id = cap\.id/i);
     expect(sql).not.toMatch(/INSERT INTO role_capabilities/i);
   });
