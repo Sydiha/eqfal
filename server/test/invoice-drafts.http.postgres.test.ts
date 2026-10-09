@@ -203,6 +203,110 @@ describeDatabase('invoice drafts API (PostgreSQL)', () => {
     });
   });
 
+  describe('replacement atomicity and immutability (migration 062 guards)', () => {
+    const snapshot = async (id: string) => ({
+      header: (await pool.query('SELECT md5(i::text) h FROM invoices i WHERE id=$1', [id])).rows[0]?.h,
+      lines: (await pool.query("SELECT md5(coalesce(string_agg(l::text,'|' ORDER BY line_number),'')) h FROM invoice_lines l WHERE invoice_id=$1", [id])).rows[0].h,
+      link: (await pool.query("SELECT md5(coalesce(string_agg(l::text,'|'),'')) h FROM invoice_source_links l WHERE invoice_id=$1", [id])).rows[0].h,
+      audit: (await pool.query('SELECT COUNT(*)::int n FROM audit_log WHERE entity_id=$1', [id])).rows[0].n,
+    });
+    const mkDoc = async () => (await pool.query<{ id: string }>(
+      "INSERT INTO documents(company_id,uploaded_by_user_id,original_filename,mime_type,size_bytes,storage_key,sha256) VALUES($1,$2,'x.pdf','application/pdf',1,$3,$4) RETURNING id",
+      [ids.coA, ids.ownerA, `k-${randomUUID()}`, 'd'.repeat(64)])).rows[0]!.id;
+    const twoLines = [
+      { description: 'L1', quantity: '1', unit_price: '10.00', vat_rate: '15' },
+      { description: 'L2', quantity: '2', unit_price: '5.00', vat_rate: '0' },
+    ];
+
+    it('replaces header, every line and the evidence link in one step', async () => {
+      const d1 = await mkDoc(), d2 = await mkDoc();
+      const inv = (await clients.editor!.req('POST', '/invoices', draft({ source_document_id: d1, lines: twoLines }))).json.invoice;
+      const res = await clients.editor!.req('PUT', `/invoices/${inv.id}`, {
+        version: 1, counterparty_id: ids.customerA, issue_date: '2026-10-05', source_document_id: d2,
+        lines: [{ description: 'Only', quantity: '1', unit_price: '50.00', vat_rate: '15' }],
+      });
+      expect(res.status).toBe(200);
+      const lines = (await pool.query('SELECT line_number, description FROM invoice_lines WHERE invoice_id=$1 ORDER BY line_number', [inv.id])).rows;
+      expect(lines).toEqual([{ line_number: 1, description: 'Only' }]);
+      const links = (await pool.query('SELECT document_id FROM invoice_source_links WHERE invoice_id=$1', [inv.id])).rows;
+      expect(links).toEqual([{ document_id: d2 }]);
+      // the old document is free again
+      expect((await clients.editor!.req('POST', '/invoices', draft({ source_document_id: d1 }))).status).toBe(201);
+    });
+
+    it('a replacement that fails after the old lines were removed rolls everything back', async () => {
+      const d1 = await mkDoc();
+      const inv = (await clients.editor!.req('POST', '/invoices', draft({ source_document_id: d1, lines: twoLines }))).json.invoice;
+      const before = await snapshot(inv.id);
+      // Fault injection, isolated test database only: fail the INSERT of a marked line, i.e. after the
+      // service has already deleted the existing lines and link inside the transaction.
+      const fn = `inv_fault_${run.replace(/-/g, '')}`;
+      await pool.query(`CREATE FUNCTION ${fn}() RETURNS trigger AS $$ BEGIN
+        IF NEW.description = 'FAULT-${run}' THEN RAISE EXCEPTION 'injected fault'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
+      await pool.query(`CREATE TRIGGER ${fn} BEFORE INSERT ON invoice_lines FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+      try {
+        const res = await clients.editor!.req('PUT', `/invoices/${inv.id}`, {
+          version: 1, counterparty_id: ids.customerA, issue_date: '2026-10-09', notes: 'should not persist',
+          lines: [{ description: 'ok', quantity: '1', unit_price: '1.00', vat_rate: '15' }, { description: `FAULT-${run}`, quantity: '1', unit_price: '1.00', vat_rate: '15' }],
+        });
+        expect(res.status).toBe(500);
+      } finally {
+        await pool.query(`DROP TRIGGER ${fn} ON invoice_lines`);
+        await pool.query(`DROP FUNCTION ${fn}()`);
+      }
+      expect(await snapshot(inv.id)).toEqual(before);
+    });
+
+    it('a rejected replacement (conflict or validation) leaves header, lines, link and audit untouched', async () => {
+      const d1 = await mkDoc();
+      const inv = (await clients.editor!.req('POST', '/invoices', draft({ source_document_id: d1, lines: twoLines }))).json.invoice;
+      const taken = (await clients.editor!.req('POST', '/invoices', draft({ source_document_id: await mkDoc() }))).json.invoice;
+      const before = await snapshot(inv.id);
+      const attempts = [
+        { version: 1, counterparty_id: ids.customerA, issue_date: '2026-10-01', source_document_id: taken.source_document_id, lines: twoLines },
+        { version: 7, counterparty_id: ids.customerA, issue_date: '2026-10-01', lines: twoLines },
+        { version: 1, counterparty_id: ids.customerB, issue_date: '2026-10-01', lines: twoLines },
+        { version: 1, counterparty_id: ids.customerA, issue_date: '2026-10-01', lines: [{ description: 'x', quantity: '1', unit_price: '1.00', vat_rate: '15', discount_amount: '2.00' }] },
+      ];
+      for (const body of attempts) {
+        const res = await clients.editor!.req('PUT', `/invoices/${inv.id}`, body);
+        expect(res.status, JSON.stringify(body)).toBeGreaterThanOrEqual(400);
+        expect(await snapshot(inv.id)).toEqual(before);
+      }
+    });
+
+    it('submitted, approved and cancelled invoices keep their lines and links, through the API and direct SQL', async () => {
+      const fy = (await pool.query<{ id: string }>("INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,$2,'2031-01-01','2031-12-31') RETURNING id", [ids.coA, `FY2-${run}`])).rows[0]!.id;
+      const toState = async (state: 'submitted' | 'approved' | 'cancelled', n: number) => {
+        const inv = (await clients.editor!.req('POST', '/invoices', draft({ source_document_id: await mkDoc(), lines: twoLines }))).json.invoice;
+        await pool.query("UPDATE invoices SET status='submitted' WHERE id=$1", [inv.id]);
+        if (state === 'approved') await pool.query("UPDATE invoices SET status='approved', internal_number=$2, fiscal_year_id=$3, approved_at=NOW(), approved_by_user_id=$4 WHERE id=$1", [inv.id, n, fy, ids.ownerA]);
+        if (state === 'cancelled') await pool.query("UPDATE invoices SET status='cancelled', cancelled_at=NOW(), cancelled_by_user_id=$2, cancellation_reason='t' WHERE id=$1", [inv.id, ids.ownerA]);
+        return inv.id as string;
+      };
+      const rejects = async (sql: string, params: unknown[]) => {
+        const error = await pool.query(sql, params).then(() => undefined, (e: { code?: string }) => e);
+        expect(error, sql).toBeDefined();
+        expect(error!.code).toBe('23514');
+      };
+      let n = 0;
+      for (const state of ['submitted', 'approved', 'cancelled'] as const) {
+        const id = await toState(state, ++n);
+        const before = await snapshot(id);
+        const api = await clients.editor!.req('PUT', `/invoices/${id}`, { version: 1, counterparty_id: ids.customerA, issue_date: '2026-10-01', lines: twoLines });
+        expect(api.status, state).toBe(409);
+        expect(api.json.code).toBe('INVOICE_NOT_DRAFT');
+        await rejects('DELETE FROM invoice_lines WHERE invoice_id=$1', [id]);
+        await rejects("UPDATE invoice_lines SET description='changed' WHERE invoice_id=$1", [id]);
+        await rejects("INSERT INTO invoice_lines(company_id,invoice_id,line_number,description,quantity,unit_price,vat_rate,net_amount,vat_amount,total_amount) VALUES($1,$2,99,'x',1,1,0,1,0,1)", [ids.coA, id]);
+        await rejects('DELETE FROM invoice_source_links WHERE invoice_id=$1', [id]);
+        await rejects('INSERT INTO invoice_source_links(company_id,invoice_id,document_id,created_by_user_id) VALUES($1,$2,$3,$4)', [ids.coA, id, await mkDoc(), ids.ownerA]);
+        await rejects("UPDATE invoices SET notes='changed', total_amount=0, subtotal_amount=0, vat_amount=0 WHERE id=$1", [id]);
+        expect(await snapshot(id), state).toEqual(before);
+      }
+    });
+  });
+
   describe('validation', () => {
     const bad = async (body: unknown, code = 'INVOICE_VALIDATION') => {
       const res = await clients.editor!.req('POST', '/invoices', body);

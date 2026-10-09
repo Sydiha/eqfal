@@ -152,7 +152,10 @@ export class InvoiceDraftService {
     const cp = (await client.query<{ type: string; is_active: boolean }>(
       'SELECT type, is_active FROM counterparties WHERE id = $1 AND company_id = $2', [input.counterparty_id, companyId])).rows[0];
     if (!cp || !cp.is_active) throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', 'Counterparty not found or inactive');
-    // A sales invoice cannot be issued to a supplier-only party, nor a purchase recorded from a customer-only party.
+    // counterparties.type CHECK (migration 017): customer | supplier | government | other.
+    // A sales invoice cannot be issued to a supplier, nor a purchase recorded from a customer.
+    // ASSUMPTION (documented, not an accounting policy): government and other are accepted in both directions
+    // for drafts. Approval (a later PR) may tighten this once the owner decides.
     if ((direction === 'sales' && cp.type === 'supplier') || (direction === 'purchase' && cp.type === 'customer')) {
       throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', `Counterparty type ${cp.type} cannot be used on a ${direction} invoice`);
     }
