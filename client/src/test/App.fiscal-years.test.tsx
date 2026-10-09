@@ -32,7 +32,7 @@ describe('Fiscal year shell integration', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<AuthProvider><App/></AuthProvider>);
-    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Fiscal Years' }));
+    { const nav = within(await screen.findByRole('navigation', { name: 'Main navigation' })); fireEvent.click(nav.getByRole('button', { name: 'Closing' })); fireEvent.click(nav.getByRole('button', { name: 'Fiscal Years' })); }
     expect(await screen.findByText('Alpha FY')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Switch active company'), { target: { value: 'co-b' } });
     await waitFor(() => expect(screen.queryByText('Alpha FY')).not.toBeInTheDocument());
@@ -52,7 +52,7 @@ describe('Fiscal year shell integration', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<AuthProvider><App/></AuthProvider>);
-    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Fiscal Years' }));
+    { const nav = within(await screen.findByRole('navigation', { name: 'Main navigation' })); fireEvent.click(nav.getByRole('button', { name: 'Closing' })); fireEvent.click(nav.getByRole('button', { name: 'Fiscal Years' })); }
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 });

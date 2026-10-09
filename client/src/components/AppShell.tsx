@@ -54,17 +54,17 @@ export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] 
   { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears'] },
   { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'auditLog'] },
 ];
-const COLLAPSED_STORAGE_KEY = 'eqfal.nav.collapsedGroups';
+const EXPANDED_STORAGE_KEY = 'eqfal.nav.expandedGroups';
 
-function readCollapsedGroups(): NavGroupId[] {
+function readExpandedGroups(): NavGroupId[] {
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(COLLAPSED_STORAGE_KEY) ?? '[]');
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(EXPANDED_STORAGE_KEY) ?? '[]');
     return Array.isArray(parsed) ? NAV_GROUPS.map(g => g.id).filter(id => parsed.includes(id)) : [];
   } catch { return []; }
 }
 
-function writeCollapsedGroups(ids: NavGroupId[]) {
-  try { window.localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(ids)); } catch { /* preference only */ }
+function writeExpandedGroups(ids: NavGroupId[]) {
+  try { window.localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(ids)); } catch { /* preference only */ }
 }
 
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
@@ -72,10 +72,10 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
   useEffect(close, [page, close]);
-  const [collapsedGroups, setCollapsedGroups] = useState<NavGroupId[]>(readCollapsedGroups);
-  const toggleGroup = (id: NavGroupId) => setCollapsedGroups(current => {
+  const [expandedGroups, setExpandedGroups] = useState<NavGroupId[]>(readExpandedGroups);
+  const toggleGroup = (id: NavGroupId) => setExpandedGroups(current => {
     const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
-    writeCollapsedGroups(next);
+    writeExpandedGroups(next);
     return next;
   });
   const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
@@ -97,7 +97,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     const visible = pages.filter(item => canShowNavigationPage(item, capabilities));
     if (visible.length === 0) return null;
     const containsActive = visible.includes(page);
-    const expanded = containsActive || !collapsedGroups.includes(id);
+    const expanded = containsActive || expandedGroups.includes(id);
     return (
       <Stack gap={4} className="eqfal-nav-group" key={id} data-group={id}>
         <button

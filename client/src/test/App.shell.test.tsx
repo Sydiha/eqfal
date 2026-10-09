@@ -19,6 +19,8 @@ describe('authenticated application shell', () => {
     expect(within(navigation).queryByRole('button', { name: 'Accounting' })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Invoices' })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Administration' })).not.toBeInTheDocument();
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Closing' }));
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Operations' }));
     const fiscal = within(navigation).getByRole('button', { name: 'Fiscal Years' });
     const documents = within(navigation).getByRole('button', { name: 'Documents' });
     fireEvent.click(fiscal); expect(fiscal).toHaveAttribute('aria-current', 'page');
@@ -32,11 +34,15 @@ describe('authenticated application shell', () => {
     expect(within(navigation).queryByRole('button', { name: 'Sales Invoices' })).not.toBeInTheDocument();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [{ id: 'co-1', name: 'Company One', name_ar: null }], activeCompanyId: 'co-1', capabilities: ['document.view', 'obligation.view'] }), { status: 200 })));
     render(<AuthProvider><App/></AuthProvider>);
+    const invoiceToggles = await screen.findAllByRole('button', { name: 'Invoices' });
+    fireEvent.click(invoiceToggles[invoiceToggles.length - 1]);
     expect((await screen.findAllByRole('button', { name: 'Sales Invoices' })).length).toBeGreaterThan(0);
   });
   it('hides operational navigation without each relevant view capability', async () => {
     render(<AuthProvider><App/></AuthProvider>);
     const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Operations' }));
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Operations' }));
     expect(within(navigation).getByRole('button', { name: 'Documents' })).toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Banking' })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole('button', { name: 'Obligations' })).not.toBeInTheDocument();
@@ -45,46 +51,62 @@ describe('authenticated application shell', () => {
   describe('collapsible groups', () => {
     const session = (capabilities: string[]) => vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: { id: 'u1', email: 'user@example.com' }, allowedCompanies: [{ id: 'co-1', name: 'Company One', name_ar: null }], activeCompanyId: 'co-1', capabilities }), { status: 200 })));
     beforeEach(() => { window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
+    it('starts compact on first visit with only Home and group headers visible', async () => {
+      session(['document.view', 'obligation.view', 'fiscal_year.view']);
+      render(<AuthProvider><App/></AuthProvider>);
+      const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+      for (const name of ['Invoices', 'Operations', 'Closing']) expect(within(navigation).getByRole('button', { name })).toHaveAttribute('aria-expanded', 'false');
+      for (const name of ['Sales Invoices', 'Purchase Invoices', 'Documents', 'Fiscal Years']) expect(within(navigation).queryByRole('button', { name })).not.toBeInTheDocument();
+      expect(within(navigation).getByRole('button', { name: 'Home' })).toBeInTheDocument();
+    });
     it('places Sales and Purchases under Invoices with invoice labels', async () => {
       session(['document.view', 'obligation.view']);
       render(<AuthProvider><App/></AuthProvider>);
       const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
       const toggle = within(navigation).getByRole('button', { name: 'Invoices' });
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
       const panel = document.getElementById(toggle.getAttribute('aria-controls')!)!;
       expect(within(panel).getByRole('button', { name: 'Sales Invoices' })).toBeInTheDocument();
       expect(within(panel).getByRole('button', { name: 'Purchase Invoices' })).toBeInTheDocument();
-      expect(within(navigation).getByRole('button', { name: 'Documents' })).toBeInTheDocument();
     });
-    it('collapses, persists the preference, and hides empty groups', async () => {
+    it('expands, persists the preference, and hides empty groups', async () => {
       session(['document.view', 'fiscal_year.view']);
       render(<AuthProvider><App/></AuthProvider>);
       const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
       expect(within(navigation).queryByRole('button', { name: 'Invoices' })).not.toBeInTheDocument();
       const toggle = within(navigation).getByRole('button', { name: 'Closing' });
-      expect(toggle).toHaveAttribute('aria-expanded', 'true');
       fireEvent.click(toggle);
-      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(within(navigation).getByRole('button', { name: 'Fiscal Years' })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem('eqfal.nav.expandedGroups')!)).toEqual(['closing']);
+      fireEvent.click(toggle);
       expect(within(navigation).queryByRole('button', { name: 'Fiscal Years' })).not.toBeInTheDocument();
-      expect(JSON.parse(window.localStorage.getItem('eqfal.nav.collapsedGroups')!)).toEqual(['closing']);
     });
-    it('keeps the active page group open despite a stored collapsed preference', async () => {
-      window.localStorage.setItem('eqfal.nav.collapsedGroups', JSON.stringify(['operations', 'closing']));
+    it('restores saved expanded groups and always opens the active page group', async () => {
+      window.localStorage.setItem('eqfal.nav.expandedGroups', JSON.stringify(['closing']));
       window.history.replaceState(null, '', '/?page=documents');
       session(['document.view', 'fiscal_year.view']);
       render(<AuthProvider><App/></AuthProvider>);
       const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
-      const operations = within(navigation).getByRole('button', { name: 'Operations' });
-      expect(operations).toHaveAttribute('aria-expanded', 'true');
+      expect(within(navigation).getByRole('button', { name: 'Operations' })).toHaveAttribute('aria-expanded', 'true');
       expect(within(navigation).getByRole('button', { name: 'Documents' })).toHaveAttribute('aria-current', 'page');
-      expect(within(navigation).getByRole('button', { name: 'Closing' })).toHaveAttribute('aria-expanded', 'false');
-      fireEvent.click(within(navigation).getByRole('button', { name: 'Closing' }));
+      expect(within(navigation).getByRole('button', { name: 'Closing' })).toHaveAttribute('aria-expanded', 'true');
       expect(within(navigation).getByRole('button', { name: 'Fiscal Years' })).toBeInTheDocument();
+    });
+    it('tolerates corrupt saved preferences', async () => {
+      window.localStorage.setItem('eqfal.nav.expandedGroups', '{not json');
+      session(['document.view', 'fiscal_year.view']);
+      render(<AuthProvider><App/></AuthProvider>);
+      const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+      expect(within(navigation).getByRole('button', { name: 'Closing' })).toHaveAttribute('aria-expanded', 'false');
     });
     it('uses Arabic group and invoice labels', async () => {
       await i18n.changeLanguage('ar');
       session(['document.view', 'obligation.view']);
       render(<AuthProvider><App/></AuthProvider>);
       const navigation = await screen.findByRole('navigation', { name: 'التنقل الرئيسي' });
+      fireEvent.click(within(navigation).getByRole('button', { name: 'الفواتير' }));
       expect(within(navigation).getByRole('button', { name: 'الفواتير' })).toBeInTheDocument();
       expect(within(navigation).getByRole('button', { name: 'فواتير المبيعات' })).toBeInTheDocument();
       expect(within(navigation).getByRole('button', { name: 'فواتير المشتريات' })).toBeInTheDocument();

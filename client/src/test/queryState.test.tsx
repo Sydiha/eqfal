@@ -64,6 +64,7 @@ describe('shared search and navigation behavior', () => {
   it('restores valid pages through browser history and safely ignores invalid pages', async () => {
     render(<AuthProvider><App /></AuthProvider>);
     const navigation = await screen.findByRole('navigation', { name: 'Main navigation' });
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Operations' }));
     fireEvent.click(within(navigation).getByRole('button', { name: 'Documents' }));
     expect(window.location.search).toBe('?page=documents');
     act(() => { window.history.pushState(null, '', '/?page=future-page&status=bad'); window.dispatchEvent(new PopStateEvent('popstate')); });
