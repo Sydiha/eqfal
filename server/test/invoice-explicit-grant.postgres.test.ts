@@ -92,7 +92,7 @@ describeDatabase('explicit-grant-only invoice capabilities (PostgreSQL)', () => 
 
   it('registers invoice.* as explicit-only and assigns it to no role', async () => {
     const rows = (await pool.query<{ id: string; implicit_full_access: boolean }>("SELECT id, implicit_full_access FROM capabilities WHERE id LIKE 'invoice.%' ORDER BY id")).rows;
-    expect(rows.map((r) => r.id)).toEqual(['invoice.create', 'invoice.edit', 'invoice.view']);
+    expect(rows.map((r) => r.id)).toEqual(['invoice.create', 'invoice.edit', 'invoice.submit', 'invoice.view']);
     expect(rows.every((r) => r.implicit_full_access === false)).toBe(true);
     expect((await pool.query("SELECT 1 FROM role_capabilities WHERE capability_id LIKE 'invoice.%' AND role_id IN ($1,$2)", [ids.fullA, ids.fullB])).rowCount).toBe(0);
   });
@@ -186,7 +186,7 @@ describeDatabase('explicit-grant-only invoice capabilities (PostgreSQL)', () => 
     const sql = fs.readFileSync(path.resolve(__dirname, '../migrations/063_explicit_grant_capabilities.sql'), 'utf8');
     await pool.query(sql);
     const rows = (await pool.query("SELECT implicit_full_access FROM capabilities WHERE id LIKE 'invoice.%'")).rows;
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows.every((r) => r.implicit_full_access === false)).toBe(true);
   });
 });
