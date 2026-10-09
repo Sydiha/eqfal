@@ -225,6 +225,96 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     expect(await code(q(`UPDATE invoices SET status='approved', internal_number=999, fiscal_year_id=$2, approved_by_user_id=$3, approved_at=NOW() WHERE id=$1`, [d, A.fy, approver]))).toBe('23514');
   });
 
+  describe('hardening: settlement and journal protection', () => {
+    let S: Co;
+    let bankAcct: string; let batch: string;
+    let seq = 0;
+    const bankTx = async (co: Co, amount: string, date = '2026-08-05') => {
+      seq++;
+      return (await q(`INSERT INTO bank_transactions (company_id, bank_account_id, import_batch_id, transaction_date, amount, currency_code, source_row_number, fingerprint, fingerprint_strength)
+        VALUES ($1,$2,$3,$4,$5,'SAR',$6,$7,'strong') RETURNING id`, [co.id, bankAcct, batch, date, amount, seq, `fp-${run}-${seq}`]))[0].id as string;
+    };
+    const obligations = async () => new (await import('../src/modules/obligations/obligation.router')).ObligationService(pool);
+    const accounting = async () => new (await import('../src/modules/accounting/accounting.router')).AccountingService(pool);
+    beforeAll(async () => {
+      S = await company('s'); await mapAll(S);
+      bankAcct = (await q(`INSERT INTO bank_accounts (company_id, display_name, currency_code, created_by) VALUES ($1,'Bank','SAR',$2) RETURNING id`, [S.id, approver]))[0].id;
+      batch = (await q(`INSERT INTO bank_import_batches (company_id, bank_account_id, original_filename, mime_type, source_format, storage_key, file_sha256, status, created_by)
+        VALUES ($1,$2,'f.csv','text/csv','csv','k',$3,'confirmed',$4) RETURNING id`, [S.id, bankAcct, `sha-${run}`, approver]))[0].id;
+    });
+
+    it('blocks bank settlement of an invoice obligation until its journal is posted (service and database), then allows it', async () => {
+      const id = await submitted(S, 'sales', '2026-08-01', 0);
+      const out = await approve(S, approver, id, await version(id));
+      const tx = await bankTx(S, '100.00');
+      const svc = await obligations();
+      await expect(svc.settle(S.id, approver, out.obligation_id, tx, '100.00', null)).rejects.toThrow();
+      expect(await code(q(`INSERT INTO obligation_settlements (company_id, obligation_id, bank_transaction_id, amount, created_by_user_id) VALUES ($1,$2,$3,100,$4)`, [S.id, out.obligation_id, tx, approver]))).toBe('23514');
+      expect(await n('SELECT count(*) n FROM obligation_settlements WHERE obligation_id=$1', [out.obligation_id])).toBe(0);
+      expect(await n(`SELECT count(*) n FROM audit_log WHERE company_id=$1 AND action LIKE 'obligation.settle%'`, [S.id])).toBe(0);
+      await (await accounting()).post(S.id, approver, out.journal_id);
+      await svc.settle(S.id, approver, out.obligation_id, tx, '100.00', null);
+      expect(await n('SELECT count(*) n FROM obligation_settlements WHERE obligation_id=$1', [out.obligation_id])).toBe(1);
+    });
+
+    it('another company cannot settle the obligation', async () => {
+      const id = await submitted(S, 'sales', '2026-08-02', 0);
+      const out = await approve(S, approver, id, await version(id));
+      await (await accounting()).post(S.id, approver, out.journal_id);
+      const tx = await bankTx(S, '100.00');
+      await expect((await obligations()).settle(A.id, approver, out.obligation_id, tx, '100.00', null)).rejects.toThrow();
+      expect(await n('SELECT count(*) n FROM obligation_settlements WHERE obligation_id=$1', [out.obligation_id])).toBe(0);
+    });
+
+    it('invoice journal lines cannot be replaced, edited, added or deleted; memo stays writable for VAT recognition', async () => {
+      const id = await submitted(S, 'sales', '2026-08-03');
+      const out = await approve(S, approver, id, await version(id));
+      const acc = await accounting();
+      const before = await q('SELECT id, account_id, debit::text, credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence', [out.journal_id]);
+      await expect(acc.replaceLines(S.id, approver, out.journal_id, [
+        { accountId: S.acc.receivable, debit: '115.00', credit: '0.00', memo: null, sequence: 1 },
+        { accountId: S.acc.sales_revenue, debit: '0.00', credit: '115.00', memo: null, sequence: 2 }] as never)).rejects.toThrow();
+      const line = before[0].id;
+      expect(await code(q('UPDATE journal_lines SET debit=1 WHERE id=$1', [line]))).toBe('23514');
+      expect(await code(q('UPDATE journal_lines SET account_id=$2 WHERE id=$1', [line, S.acc.vat_input]))).toBe('23514');
+      expect(await code(q('DELETE FROM journal_lines WHERE id=$1', [line]))).toBe('23514');
+      expect(await code(q('INSERT INTO journal_lines (company_id, journal_entry_id, account_id, debit, credit, sequence) VALUES ($1,$2,$3,0,1,9)', [S.id, out.journal_id, S.acc.sales_revenue]))).toBe('23514');
+      expect(await code(q(`UPDATE journal_lines SET memo='VAT_OUTPUT' WHERE id=$1`, [before[2].id]))).toBe('ok');
+      expect(await code(q('DELETE FROM journal_entries WHERE id=$1', [out.journal_id]))).toBe('23514');
+      expect(await code(q(`UPDATE journal_entries SET accounting_date='2026-08-04' WHERE id=$1`, [out.journal_id]))).toBe('23514');
+      expect(await code(q(`UPDATE journal_entries SET source_type=NULL, source_id=NULL WHERE id=$1`, [out.journal_id]))).toBe('23514');
+      expect(await code(q(`UPDATE journal_entries SET description='edited' WHERE id=$1`, [out.journal_id]))).toBe('ok');
+      expect(await q('SELECT id, account_id, debit::text, credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence', [out.journal_id])).toEqual(before);
+    });
+
+    it('a failed protected write rolls back the whole transaction', async () => {
+      const id = await submitted(S, 'sales', '2026-08-06', 0);
+      const out = await approve(S, approver, id, await version(id));
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        await c.query(`UPDATE journal_entries SET description='in tx' WHERE id=$1`, [out.journal_id]);
+        await expect(c.query('DELETE FROM journal_lines WHERE journal_entry_id=$1', [out.journal_id])).rejects.toMatchObject({ code: '23514' });
+        await c.query('ROLLBACK');
+      } finally { c.release(); }
+      expect((await q('SELECT description FROM journal_entries WHERE id=$1', [out.journal_id]))[0].description).not.toBe('in tx');
+      expect(await n('SELECT count(*) n FROM journal_lines WHERE journal_entry_id=$1', [out.journal_id])).toBe(2);
+    });
+
+    it('ordinary journals of the same company are not affected; other companies cannot touch invoice journals', async () => {
+      const acc = await accounting();
+      const j = await acc.createJournal(S.id, approver, { fiscalYearId: S.fy, accountingDate: '2026-08-10', description: 'Manual', reference: null, sourceType: null, sourceId: null, entryType: 'standard' } as never);
+      await acc.replaceLines(S.id, approver, j.id, [
+        { accountId: S.acc.receivable, debit: '10.00', credit: '0.00', memo: null, sequence: 1 },
+        { accountId: S.acc.sales_revenue, debit: '0.00', credit: '10.00', memo: null, sequence: 2 }] as never);
+      expect(await code(q('DELETE FROM journal_lines WHERE journal_entry_id=$1', [j.id]))).toBe('ok');
+      const id = await submitted(S, 'sales', '2026-08-07', 0);
+      const out = await approve(S, approver, id, await version(id));
+      await expect(acc.replaceLines(A.id, approver, out.journal_id, [] as never)).rejects.toThrow();
+      expect(await n('SELECT count(*) n FROM journal_lines WHERE journal_entry_id=$1', [out.journal_id])).toBe(2);
+    });
+  });
+
   describe('account mappings', () => {
     let F: Co;
     beforeAll(async () => { F = await company('f'); });
