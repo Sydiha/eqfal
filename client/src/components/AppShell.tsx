@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -46,12 +46,39 @@ function ShellIcon({ name }: { name: IconName }) {
 
 const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', auditLog: 'auditLog' };
 
+type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
+export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
+  { id: 'invoices', pages: ['sales', 'purchases'] },
+  { id: 'operations', pages: ['documents', 'banks', 'obligations'] },
+  { id: 'accounting', pages: ['accounting', 'openingBalances', 'periodicAdjustments', 'assets', 'vat'] },
+  { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears'] },
+  { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'auditLog'] },
+];
+const EXPANDED_STORAGE_KEY = 'eqfal.nav.expandedGroups';
+
+function readExpandedGroups(): NavGroupId[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(EXPANDED_STORAGE_KEY) ?? '[]');
+    return Array.isArray(parsed) ? NAV_GROUPS.map(g => g.id).filter(id => parsed.includes(id)) : [];
+  } catch { return []; }
+}
+
+function writeExpandedGroups(ids: NavGroupId[]) {
+  try { window.localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(ids)); } catch { /* preference only */ }
+}
+
 export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
   useEffect(close, [page, close]);
-  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
+  const [expandedGroups, setExpandedGroups] = useState<NavGroupId[]>(readExpandedGroups);
+  const toggleGroup = (id: NavGroupId) => setExpandedGroups(current => {
+    const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+    writeExpandedGroups(next);
+    return next;
+  });
+  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
@@ -66,19 +93,35 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     />
   );
 
-  const navGroup = (label: string, items: ReactNode) => (
-    <Stack gap={4} className="eqfal-nav-group">
-      <Text className="nav-caption eqfal-nav-group__label" size="xs" fw={700}>{label}</Text>
-      <Stack gap={4}>{items}</Stack>
-    </Stack>
-  );
+  const navGroup = (id: NavGroupId, label: string, pages: readonly Page[]) => {
+    const visible = pages.filter(item => canShowNavigationPage(item, capabilities));
+    if (visible.length === 0) return null;
+    const containsActive = visible.includes(page);
+    const expanded = containsActive || expandedGroups.includes(id);
+    return (
+      <Stack gap={4} className="eqfal-nav-group" key={id} data-group={id}>
+        <button
+          type="button"
+          className="nav-caption eqfal-nav-group__label eqfal-nav-group__toggle"
+          aria-expanded={expanded}
+          aria-controls={`eqfal-nav-group-${id}`}
+          aria-disabled={containsActive || undefined}
+          onClick={() => { if (!containsActive) toggleGroup(id); }}
+        >
+          <span>{label}</span>
+          <svg className="eqfal-nav-group__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        <Stack gap={4} id={`eqfal-nav-group-${id}`} hidden={!expanded} className="eqfal-nav-group__items">{visible.map(item => <Fragment key={item}>{nav(item)}</Fragment>)}</Stack>
+      </Stack>
+    );
+  };
 
   const isAr = i18n.language === 'ar';
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
   const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
   const groupLabels = i18n.language === 'ar'
-    ? { operations: 'التشغيل', accounting: 'المحاسبة', administration: 'الإدارة' }
-    : { operations: 'Operations', accounting: 'Accounting', administration: 'Administration' };
+    ? { invoices: 'الفواتير', operations: 'التشغيل', accounting: 'المحاسبة', closing: 'الإقفال', administration: 'الإدارة' }
+    : { invoices: 'Invoices', operations: 'Operations', accounting: 'Accounting', closing: 'Closing', administration: 'Administration' };
 
   return (
     <MantineAppShell
@@ -194,9 +237,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
         <Divider my="lg" className="sidebar-divider" />
         <Stack component="nav" aria-label={t('nav.main')} gap="lg" className="eqfal-nav-groups">
           <Stack gap={4}>{nav('home')}</Stack>
-          {navGroup(groupLabels.operations, <>{canShowNavigationPage('sales', capabilities)&&nav('sales')}{canShowNavigationPage('purchases', capabilities)&&nav('purchases')}{canShowNavigationPage('documents', capabilities)&&nav('documents')}{canShowNavigationPage('banks', capabilities)&&nav('banks')}{canShowNavigationPage('obligations', capabilities)&&nav('obligations')}</>)}
-          {navGroup(groupLabels.accounting, <>{canShowNavigationPage('accounting', capabilities)&&nav('accounting')}{canShowNavigationPage('annualClosing', capabilities)&&nav('annualClosing')}{canShowNavigationPage('openingBalances', capabilities)&&nav('openingBalances')}{canShowNavigationPage('periodicAdjustments', capabilities)&&nav('periodicAdjustments')}{canShowNavigationPage('assets', capabilities)&&nav('assets')}{canShowNavigationPage('vat', capabilities)&&nav('vat')}{canShowNavigationPage('monthlyClose', capabilities)&&nav('monthlyClose')}{canShowNavigationPage('fiscalYears', capabilities)&&nav('fiscalYears')}</>)}
-          {navGroup(groupLabels.administration, <>{canShowNavigationPage('partners', capabilities)&&nav('partners')}{canShowNavigationPage('companyProfile', capabilities)&&nav('companyProfile')}{canShowNavigationPage('companies', capabilities)&&nav('companies')}{canShowNavigationPage('access', capabilities)&&nav('access')}{canShowNavigationPage('auditLog', capabilities)&&nav('auditLog')}</>)}
+          {NAV_GROUPS.map(group => navGroup(group.id, groupLabels[group.id], group.pages))}
         </Stack>
         <Text className="sidebar-compliance-footer">{i18n.language === 'ar' ? 'EQFAL — نظام إدارة الإقفال المالي' : 'EQFAL — Financial Close Management'}</Text>
       </MantineAppShell.Navbar>
