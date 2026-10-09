@@ -126,3 +126,47 @@
 .app-shell--v2 .topbar .topbar-company-group select { background-color: #fff; }
 .app-shell--v2 .topbar .topbar-icon-button { min-height: 0; }
 .app-shell--v2 .topbar .topbar-icon-button:hover { background: #f1f5f9; }
+
+/* Collapsible navigation groups */
+.eqfal-nav-group__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: 7px;
+}
+
+.eqfal-nav-group__toggle[aria-disabled="true"] {
+  cursor: default;
+}
+
+.eqfal-nav-group__toggle:focus-visible {
+  outline: 2px solid var(--brand-teal);
+  outline-offset: 1px;
+}
+
+.eqfal-nav-group__chevron {
+  flex: none;
+  transition: transform .15s ease;
+}
+
+.eqfal-nav-group__toggle[aria-expanded="false"] .eqfal-nav-group__chevron {
+  transform: rotate(-90deg);
+}
+
+[dir="rtl"] .eqfal-nav-group__toggle[aria-expanded="false"] .eqfal-nav-group__chevron {
+  transform: rotate(90deg);
+}
+
+.eqfal-nav-group__items[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eqfal-nav-group__chevron { transition: none; }
+}
