@@ -106,6 +106,12 @@ export async function postJournalInTransaction(
     ).rows[0]!.matches;
     if (!amount) throw new JournalPostingValidationError('Journal total must match the operational source amount');
 
+    // Owner decision A3/A5: invoice VAT is not recognized or posted until the dedicated VAT review integration exists.
+    const invoiceVat = journal.source_type === 'obligation' ? operationalSource.context?.invoice_vat_amount : undefined;
+    if (typeof invoiceVat === 'string' && Number(invoiceVat) > 0) {
+      throw new JournalPostingConflictError('Invoice VAT recognition is not enabled yet; this journal cannot be posted');
+    }
+
     if (journal.source_type === 'asset_depreciation') {
       const mapped = (
         await client.query<{ valid: boolean }>(
