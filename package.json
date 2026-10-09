@@ -4,7 +4,7 @@
   "private": true,
   "workspaces": ["server", "client"],
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev": "node tools/dev/dev.js",
     "typecheck": "npm run orchestrator:typecheck && npm run typecheck -w server && npm run typecheck -w client",
     "test": "npm run orchestrator:test && npm run backup:test && npm run test -w server && npm run test -w client",
     "build": "npm run orchestrator:build && npm run build -w server && npm run build -w client",
@@ -13,8 +13,5 @@
     "orchestrator:build": "tsc -p tools/orchestrator/tsconfig.json",
     "start": "npm run start -w server",
     "backup:test": "node --test tools/backup/test/*.test.js"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
   }
 }
