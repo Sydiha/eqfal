@@ -33,6 +33,7 @@ import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
 import { managerFinancialSnapshotRouter } from './modules/manager-financial-snapshot/manager-financial-snapshot.router';
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import { auditLogRouter } from './modules/audit-log/audit-log.router';
+import { invoiceRouter } from './modules/invoices/invoice.router';
 import logger from './shared/logger';
 import config from './config';
 import { securityHeaders } from './shared/security-headers';
@@ -88,6 +89,7 @@ app.use('/api', homeAlertsRouter);
 app.use('/api', managerFinancialSnapshotRouter);
 app.use('/api', whtReviewRouter);
 app.use('/api', auditLogRouter);
+app.use('/api', invoiceRouter);
 
 // Production only: serve the built React app (client/dist) and SPA routes from the same origin as the API.
 // Development keeps the Vite dev server + proxy and is unaffected.
