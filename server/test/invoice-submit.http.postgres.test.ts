@@ -44,8 +44,8 @@ describeDatabase('invoice submit/return API (PostgreSQL)', () => {
   const email = (label: string) => `invsub-${label}-${run}@example.test`;
 
   const draft = () => ({
-    direction: 'sales', counterparty_id: ids.customerA, issue_date: '2026-10-01',
-    lines: [{ description: 'Consulting', quantity: '1', unit_price: '1000.00', vat_rate: '15' }],
+    direction: 'sales', counterparty_id: ids.customerA, issue_date: '2026-10-01', tax_point_date: '2026-10-01',
+    lines: [{ description: 'Consulting', quantity: '1', unit_price: '1000.00', vat_rate: '15', vat_treatment: 'standard' }],
   });
   const putBody = () => { const { direction: _d, ...rest } = draft(); return rest; };
   const count = async (sql: string, p: unknown[]) => Number((await pool.query<{ n: string }>(sql, p)).rows[0]!.n);

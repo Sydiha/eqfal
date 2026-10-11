@@ -9,6 +9,7 @@ function dbWith(status:'open'|'closed',adjustments:unknown[]=[]){
   let call=0;
   const calls:QueryCall[]=[];
   const db={query: async(sql:string,params:unknown[]=[])=>{
+    if(/^SELECT r\.id review_id/.test(sql))return {rows:[]}; // no reviewed invoices: document-only figures stay as before
     calls.push({sql,params});
     call++;
     if(call===1)return {rows:[{id:periodId,period_start:'2026-01-01',period_end:'2026-03-31',status,company_name:'Test Company'}]};

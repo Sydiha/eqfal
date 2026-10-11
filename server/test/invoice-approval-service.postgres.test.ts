@@ -37,6 +37,12 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     const id = (await q(
       `INSERT INTO invoices (company_id, direction, counterparty_id, issue_date, subtotal_amount, vat_amount, total_amount, created_by_user_id)
        VALUES ($1,$2,$3,$4,100,$5::numeric,100+$5::numeric,$6) RETURNING id`, [co.id, direction, direction === 'sales' ? co.cust : co.supp, issue, vat, creator]))[0].id;
+    if (direction === 'sales') {
+      // V1: every sales line carries an explicit treatment (standard 15% when VAT is charged, otherwise zero-rated).
+      await q(`INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, vat_rate, net_amount, vat_amount, total_amount, vat_treatment)
+               VALUES ($1,$2,1,'Line',1,100,$3,100,$4::numeric,100+$4::numeric,$5)`, [co.id, id, vat > 0 ? '15' : '0', vat, vat > 0 ? 'standard' : 'zero_rated']);
+      await q('UPDATE invoices SET tax_point_date = issue_date WHERE id=$1', [id]);
+    }
     await q(`UPDATE invoices SET status='submitted', version=version+1 WHERE id=$1`, [id]);
     return id as string;
   }
@@ -56,7 +62,7 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
   });
   afterAll(async () => { await pool?.end(); });
 
-  it('approves atomically: number, confirmed obligation, balanced draft journal, audit; nothing posted, no VAT memo', async () => {
+  it('approves atomically: number, confirmed obligation, balanced draft journal, audit; nothing posted, VAT_OUTPUT memo on the VAT line', async () => {
     const id = await submitted(A);
     const v = await version(id);
     const out = await approve(A, approver, id, v);
@@ -71,19 +77,19 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     expect(lines).toEqual([
       { account_id: A.acc.receivable, debit: '115.00', credit: '0.00', memo: null },
       { account_id: A.acc.sales_revenue, debit: '0.00', credit: '100.00', memo: null },
-      { account_id: A.acc.vat_output, debit: '0.00', credit: '15.00', memo: null }]);
+      { account_id: A.acc.vat_output, debit: '0.00', credit: '15.00', memo: 'VAT_OUTPUT' }]);
     for (const action of ['invoice.approve', 'obligation.create', 'journal.create']) {
       expect(await n(`SELECT count(*) n FROM audit_log WHERE company_id=$1 AND action=$2 AND created_at > NOW() - interval '1 minute'`, [A.id, action])).toBeGreaterThan(0);
     }
     expect(await n(`SELECT count(*) n FROM journal_entries WHERE company_id=$1 AND status='posted'`, [A.id])).toBe(0);
   });
 
-  it('posting the draft journal of a VAT-bearing invoice is refused (VAT not recognized yet)', async () => {
+  it('posting the draft journal of a VAT-bearing sales invoice works only because it matches the reviewed snapshot', async () => {
     const id = await submitted(A);
     const out = await approve(A, approver, id, await version(id));
     const { AccountingService } = await import('../src/modules/accounting/accounting.router');
-    await expect(new AccountingService(pool).post(A.id, approver, out.journal_id)).rejects.toThrow(/VAT recognition is not enabled/);
-    expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('draft');
+    await new AccountingService(pool).post(A.id, approver, out.journal_id);
+    expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('posted');
   });
 
   it('a zero-VAT invoice journal posts through the existing service and reconciles with the obligation', async () => {

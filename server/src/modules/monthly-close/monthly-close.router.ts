@@ -6,6 +6,7 @@ import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapa
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { lockAccountingRange } from './accounting-period.guard';
 import { VatService } from '../vat/vat.router';
+import { DOCUMENT_CARRIED_BY_APPROVED_INVOICE } from '../vat/vat-invoice';
 import { loadOperationalSources } from '../accounting/operational-sources';
 
 export const monthlyCloseRouter = Router();
@@ -15,7 +16,7 @@ type Period = { id:string; company_id:string; fiscal_year_id:string; period_star
 type FiscalYearOption = { id:string; company_id:string; name:string; start_date:string; end_date:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
 type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; opening_balances:number; periodic_adjustments:number; total:number };
 type BlockerCategory = Exclude<keyof Blockers,'total'>;
-type RequirementRow={documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string;vat_applicable?:string;vat_requires_resolution?:string;opening_balances_applicable?:string;opening_balance_approved?:string};
+type RequirementRow={documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string;vat_applicable?:string;invoice_vat_mismatches?:string;vat_requires_resolution?:string;opening_balances_applicable?:string;opening_balance_approved?:string};
 const BLOCKER_CAPABILITIES:Record<BlockerCategory,string>={documents:'document.view',obligations:'obligation.view',bank_transactions:'bank.view',vat:'vat.view',ledger:'accounting.view',assets:'asset.view',opening_balances:'opening_balance.view',periodic_adjustments:'periodic_adjustment.view'};
 export class MonthlyCloseValidationError extends Error { constructor(message:string,readonly code?:string){super(message);} }
 export class MonthlyCloseNotFoundError extends Error {}
@@ -37,6 +38,7 @@ export class MonthlyCloseService {
       SELECT d.id,d.document_type,d.document_date,d.total_amount,r.review_status,r.vat_amount
       FROM documents d LEFT JOIN document_vat_reviews r ON r.document_id=d.id AND r.company_id=d.company_id
       WHERE d.company_id=$1 AND d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND d.document_date BETWEEN $2 AND $3
+      AND NOT ${DOCUMENT_CARRIED_BY_APPROVED_INVOICE}
     ), obligation_path AS (
       SELECT m.id document_id,o.id source_id,EXISTS(SELECT 1 FROM journal_entries j WHERE j.company_id=$1 AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted') posted
       FROM material m JOIN obligations o ON o.document_id=m.id AND o.company_id=$1 AND o.source_type='document' AND o.verification_status='confirmed' AND NOT o.is_cancelled
@@ -87,6 +89,14 @@ export class MonthlyCloseService {
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
       ))::text bank_transactions,
+      (SELECT COUNT(*) FROM invoice_vat_reviews r JOIN invoices i ON i.id=r.invoice_id AND i.company_id=r.company_id
+        JOIN obligations ob ON ob.company_id=i.company_id AND ob.invoice_id=i.id AND ob.source_type='invoice' AND NOT ob.is_cancelled AND ob.verification_status='confirmed'
+        JOIN journal_entries je ON je.company_id=ob.company_id AND je.source_type='obligation' AND je.source_id=ob.id AND je.status='posted'
+        WHERE r.company_id=$1 AND i.issue_date BETWEEN $2 AND $3 AND NOT (
+          COALESCE((SELECT array_agg(g.vat_amount ORDER BY g.vat_amount) FROM invoice_vat_review_groups g WHERE g.review_id=r.id AND g.company_id=r.company_id AND g.vat_treatment='standard' AND g.vat_amount>0),ARRAY[]::numeric[])
+          = COALESCE((SELECT array_agg(l.credit ORDER BY l.credit) FROM journal_lines l WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id AND l.memo='VAT_OUTPUT'),ARRAY[]::numeric[])
+          AND NOT EXISTS (SELECT 1 FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id
+            AND l.memo IN ('VAT_INPUT','VAT_OUTPUT') AND NOT (l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0 AND l.credit>0))))::text invoice_vat_mismatches,
       COALESCE((SELECT CASE
         WHEN p.vat_status='not_registered' THEN FALSE
         WHEN p.vat_status='registered' THEN p.vat_registered_from IS NULL OR $3::date>=p.vat_registered_from
@@ -118,7 +128,10 @@ export class MonthlyCloseService {
     const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
     const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
     const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
-    const ledger=incompleteDocuments.size+unpostedSources+independentDrafts;
+    // Sales invoices (V1): a posted journal is already required above (their obligation is an operational source). Here the VAT lines
+    // must also match the reviewed snapshot exactly; missing_posted_journal is not counted twice.
+    const invoiceVatMismatches=vatApplicable?Number(row.invoice_vat_mismatches??0):0;
+    const ledger=incompleteDocuments.size+unpostedSources+independentDrafts+invoiceVatMismatches;
     const assetCounts=(await client.query<{pending:string;drafts:string}>(`SELECT
       (SELECT COUNT(*) FROM asset_depreciation_entries WHERE company_id=$1 AND status='pending' AND period_end BETWEEN $2 AND $3)::text pending,
       (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND source_type='document' AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
