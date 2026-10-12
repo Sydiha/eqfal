@@ -3,6 +3,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
+import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError } from './journal-posting-errors';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
@@ -106,10 +107,18 @@ export async function postJournalInTransaction(
     ).rows[0]!.matches;
     if (!amount) throw new JournalPostingValidationError('Journal total must match the operational source amount');
 
-    // Owner decision A3/A5: invoice VAT is not recognized or posted until the dedicated VAT review integration exists.
-    const invoiceVat = journal.source_type === 'obligation' ? operationalSource.context?.invoice_vat_amount : undefined;
-    if (typeof invoiceVat === 'string' && Number(invoiceVat) > 0) {
-      throw new JournalPostingConflictError('Invoice VAT recognition is not enabled yet; this journal cannot be posted');
+    // Invoice VAT (V1, sales only). A journal that carries invoice VAT is postable only when it matches the immutable reviewed VAT
+    // snapshot exactly (one VAT_OUTPUT line per standard-rate group, liability credit, no tolerance). Purchases with VAT stay blocked (V2).
+    const invoiceId = journal.source_type === 'obligation' ? operationalSource.context?.invoice_id : undefined;
+    if (typeof invoiceId === 'string') {
+      const direction = (await client.query<{ direction: string }>('SELECT direction FROM invoices WHERE id=$1 AND company_id=$2', [invoiceId, companyId])).rows[0]?.direction;
+      if (direction === 'sales') {
+        if (!(await invoiceVatRecognitionIsExact(client, companyId, id, invoiceId))) {
+          throw new JournalPostingConflictError('Invoice VAT recognition does not match the reviewed VAT snapshot; this journal cannot be posted');
+        }
+      } else if (Number(operationalSource.context?.invoice_vat_amount ?? 0) > 0) {
+        throw new JournalPostingConflictError('Purchase invoice VAT recognition is not enabled yet; this journal cannot be posted');
+      }
     }
 
     if (journal.source_type === 'asset_depreciation') {

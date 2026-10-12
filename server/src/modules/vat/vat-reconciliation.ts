@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { loadInvoiceVatReconciliation, toHalalas, VatInvoiceReconciliationRow } from './vat-invoice';
 
 type QueryRunner = Pick<Pool, 'query'>;
 export type RecoverabilityStatus = 'not_applicable'|'fully_recoverable'|'non_recoverable'|'partially_recoverable'|'needs_review';
@@ -14,10 +15,12 @@ export interface VatReconciliationDocument {
 export interface VatReconciliation {
   totals:{reviewed_output_vat:number;reviewed_input_vat:number;gross_reviewed_input_vat:number;recoverable_input_vat:number;non_recoverable_input_vat:number;ledger_output_vat:number;ledger_input_vat:number;output_difference:number;input_difference:number};
   counts:{total_in_scope:number;reconciled:number;unreconciled:number}; documents:VatReconciliationDocument[];
+  /** Sales invoices (V1). Present only when the period has reviewed invoices, so document-only results are unchanged. */
+  invoices?:VatInvoiceReconciliationRow[];
 }
 
 /** Unresolved recoverability is deliberately excluded: readiness reports that control separately. */
-export async function loadVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
+async function loadDocumentVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
  const result=await db.query<VatReconciliationDocument&{adjusted_output_vat:string;adjusted_gross_input_vat:string;adjusted_recoverable_input_vat:string}>(`WITH scoped AS (
   SELECT d.id document_id,o.id obligation_id,d.document_type,r.tax_date,r.treatment,r.vat_amount reviewed_vat_amount,
     r.recoverability_status,
@@ -69,4 +72,21 @@ export async function loadVatReconciliation(db:QueryRunner,companyId:string,peri
  let output=adjustedOutput,grossInput=adjustedGrossInput,recoverableInput=adjustedRecoverableInput,nonRecoverableInput=adjustedGrossInput-adjustedRecoverableInput,ledgerOutput=0,ledgerInput=0,reconciled=0;
  for(const d of rows){const gross=Number(d.reviewed_vat_amount),recoverable=Number(d.recoverable_vat_amount??0);if(d.document_type==='sale')output+=gross;else{grossInput+=gross;recoverableInput+=recoverable;nonRecoverableInput+=Number(d.non_recoverable_vat_amount??0)}if(d.reconciliation_status==='reconciled'){reconciled++;const ledger=Number(d.ledger_vat_amount??0);if(d.document_type==='sale')ledgerOutput+=ledger;else ledgerInput+=ledger}}
  return{totals:{reviewed_output_vat:output,reviewed_input_vat:grossInput,gross_reviewed_input_vat:grossInput,recoverable_input_vat:recoverableInput,non_recoverable_input_vat:nonRecoverableInput,ledger_output_vat:ledgerOutput,ledger_input_vat:ledgerInput,output_difference:output-ledgerOutput,input_difference:recoverableInput-ledgerInput},counts:{total_in_scope:rows.length,reconciled,unreconciled:rows.length-reconciled},documents:rows};
+}
+
+/**
+ * Document reconciliation (unchanged) plus reviewed sales invoices. With no reviewed invoice in the period the result is
+ * exactly the document-only result. Invoice figures are exact (halalas) and count towards the same totals and counts.
+ */
+export async function loadVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
+ const base=await loadDocumentVatReconciliation(db,companyId,periodStart,periodEnd);
+ const invoices=await loadInvoiceVatReconciliation(db,companyId,periodStart,periodEnd,'tax_date');
+ if(!invoices.length)return base;
+ let reviewed=0n,ledger=0n,reconciled=0;
+ for(const invoice of invoices){reviewed+=toHalalas(invoice.reviewed_vat_amount);if(invoice.reconciliation_status==='reconciled'){reconciled++;ledger+=toHalalas(invoice.ledger_vat_amount);}}
+ const output=base.totals.reviewed_output_vat+Number(reviewed)/100,ledgerOutput=base.totals.ledger_output_vat+Number(ledger)/100;
+ return{...base,
+  totals:{...base.totals,reviewed_output_vat:output,ledger_output_vat:ledgerOutput,output_difference:output-ledgerOutput},
+  counts:{total_in_scope:base.counts.total_in_scope+invoices.length,reconciled:base.counts.reconciled+reconciled,unreconciled:base.counts.unreconciled+invoices.length-reconciled},
+  invoices};
 }

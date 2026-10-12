@@ -11,6 +11,7 @@ import { computeLine, computeTotals, InvoiceMathError, LineAmounts } from './inv
 export type InvoiceErrorCode =
   | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED' | 'INVOICE_EMPTY' | 'INVOICE_VERSION_CONFLICT'
   | 'INVOICE_ALREADY_APPROVED' | 'INVOICE_FORBIDDEN' | 'INVOICE_MAPPING_MISSING' | 'INVOICE_VAT_PREREQUISITE' | 'INVOICE_SELF_APPROVAL' | 'INVOICE_FISCAL_YEAR_UNRESOLVED' | 'INVOICE_FISCAL_YEAR_CLOSED' | 'INVOICE_PERIOD_CLOSED'
+  | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID';
 
 export class InvoiceError extends Error {
@@ -25,6 +26,8 @@ const MAX_LINES = 200;
 const DIRECTIONS = ['sales', 'purchase'] as const;
 const STATUSES = ['draft', 'submitted', 'approved', 'cancelled'] as const;
 type Direction = (typeof DIRECTIONS)[number];
+const TREATMENTS = ['standard', 'zero_rated', 'exempt', 'out_of_scope'] as const;
+export type VatTreatment = (typeof TREATMENTS)[number];
 
 const isObject = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const onlyKeys = (x: Record<string, unknown>, keys: string[], what: string) => {
@@ -50,13 +53,13 @@ const text = (x: unknown, field: string, max: number, required = false): string 
 };
 
 export type DraftInput = {
-  counterparty_id: string; issue_date: string; due_date: string | null; supply_date: string | null;
+  counterparty_id: string; issue_date: string; due_date: string | null; supply_date: string | null; tax_point_date: string | null;
   external_reference: string | null; notes: string | null; source_document_id: string | null;
-  lines: Array<LineAmounts & { description: string }>;
+  lines: Array<LineAmounts & { description: string; vat_treatment: VatTreatment | null; treatment_note: string | null }>;
   totals: { subtotal_amount: string; vat_amount: string; total_amount: string };
 };
 
-const DRAFT_FIELDS = ['counterparty_id', 'issue_date', 'due_date', 'supply_date', 'external_reference', 'notes', 'source_document_id', 'lines'];
+const DRAFT_FIELDS = ['counterparty_id', 'issue_date', 'due_date', 'supply_date', 'external_reference', 'notes', 'source_document_id', 'lines', 'tax_point_date'];
 
 /** Validates a full draft body (create or full replacement on edit) and computes all amounts server-side. */
 export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput {
@@ -68,9 +71,18 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
   if (!Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > MAX_LINES) throw invalid(`lines must contain 1 to ${MAX_LINES} items`);
   const lines = body.lines.map((raw, i) => {
     if (!isObject(raw)) throw invalid(`lines[${i}] must be an object`);
-    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate'], `lines[${i}]`);
+    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate', 'vat_treatment', 'treatment_note'], `lines[${i}]`);
     try {
-      return { description: text(raw.description, `lines[${i}].description`, 500, true)!, ...computeLine(raw as never) };
+      const amounts = computeLine(raw as never);
+      // The treatment is chosen explicitly by the creator and is never derived from the rate. Only coherence is checked here.
+      const treatment = raw.vat_treatment == null ? null : raw.vat_treatment;
+      if (treatment !== null && !TREATMENTS.includes(treatment as VatTreatment)) throw invalid(`lines[${i}].vat_treatment is not valid`);
+      if (treatment === 'standard' && !(Number(amounts.vat_rate) > 0)) throw invalid(`lines[${i}]: a standard line needs a VAT rate above zero`);
+      if (treatment !== null && treatment !== 'standard' && Number(amounts.vat_rate) !== 0) throw invalid(`lines[${i}]: this treatment carries no VAT, so vat_rate must be 0`);
+      return {
+        description: text(raw.description, `lines[${i}].description`, 500, true)!, ...amounts,
+        vat_treatment: treatment as VatTreatment | null, treatment_note: text(raw.treatment_note, `lines[${i}].treatment_note`, 500),
+      };
     } catch (error) {
       if (error instanceof InvoiceMathError) throw invalid(`lines[${i}]: ${error.message}`);
       throw error;
@@ -80,7 +92,7 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
   try { totals = computeTotals(lines); } catch (error) { if (error instanceof InvoiceMathError) throw invalid(error.message); throw error; }
   return {
     counterparty_id: uuid(body.counterparty_id, 'counterparty_id'),
-    issue_date: issue, due_date: due, supply_date: optionalDate(body.supply_date, 'supply_date'),
+    issue_date: issue, due_date: due, supply_date: optionalDate(body.supply_date, 'supply_date'), tax_point_date: optionalDate(body.tax_point_date, 'tax_point_date'),
     external_reference: text(body.external_reference, 'external_reference', 100),
     notes: text(body.notes, 'notes', 2000),
     source_document_id: optionalUuid(body.source_document_id, 'source_document_id'),
@@ -114,7 +126,7 @@ export function parseListQuery(query: Record<string, unknown>): ListFilters {
 }
 
 const HEADER_COLUMNS = `i.id, i.company_id, i.direction, i.status, i.counterparty_id, c.name AS counterparty_name, i.fiscal_year_id,
-  i.internal_number, i.external_reference, i.issue_date::text, i.due_date::text, i.supply_date::text, i.currency,
+  i.internal_number, i.external_reference, i.issue_date::text, i.due_date::text, i.supply_date::text, i.tax_point_date::text, i.currency,
   i.subtotal_amount::text, i.vat_amount::text, i.total_amount::text, i.notes, i.origin, i.created_by_user_id,
   i.version, i.created_at, i.updated_at`;
 
@@ -176,9 +188,9 @@ export class InvoiceDraftService {
     for (const line of input.lines) {
       n += 1;
       await client.query(
-        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount],
+        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, treatment_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount, line.vat_treatment, line.treatment_note],
       );
     }
     if (input.source_document_id) {
@@ -194,10 +206,10 @@ export class InvoiceDraftService {
       await this.checkReferences(client, companyId, direction, input, null);
       const id = (await client.query<{ id: string }>(
         `INSERT INTO invoices (company_id, direction, status, counterparty_id, external_reference, issue_date, due_date, supply_date,
-           subtotal_amount, vat_amount, total_amount, notes, created_by_user_id)
-         VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+           subtotal_amount, vat_amount, total_amount, notes, created_by_user_id, tax_point_date)
+         VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
         [companyId, direction, input.counterparty_id, input.external_reference, input.issue_date, input.due_date, input.supply_date,
-          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes, actorUserId],
+          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes, actorUserId, input.tax_point_date],
       )).rows[0]!.id;
       await this.writeChildren(client, companyId, id, actorUserId, input);
       const after = await this.read(client, companyId, id);
@@ -220,10 +232,10 @@ export class InvoiceDraftService {
       await client.query('DELETE FROM invoice_source_links WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId]);
       await client.query(
         `UPDATE invoices SET counterparty_id=$3, external_reference=$4, issue_date=$5, due_date=$6, supply_date=$7,
-           subtotal_amount=$8, vat_amount=$9, total_amount=$10, notes=$11, version = version + 1, updated_at = NOW()
+           subtotal_amount=$8, vat_amount=$9, total_amount=$10, notes=$11, tax_point_date=$12, version = version + 1, updated_at = NOW()
          WHERE id = $1 AND company_id = $2 AND status = 'draft'`,
         [invoiceId, companyId, input.counterparty_id, input.external_reference, input.issue_date, input.due_date, input.supply_date,
-          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes],
+          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes, input.tax_point_date],
       );
       await this.writeChildren(client, companyId, invoiceId, actorUserId, input);
       const after = await this.read(client, companyId, invoiceId);
@@ -243,6 +255,11 @@ export class InvoiceDraftService {
       if (!cp || !cp.is_active) throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', 'Counterparty not found or inactive');
       if ((current.direction === 'sales' && cp.type === 'supplier') || (current.direction === 'purchase' && cp.type === 'customer')) {
         throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', `Counterparty type ${cp.type} cannot be used on a ${current.direction} invoice`);
+      }
+      // V1 sales: the creator must state the tax point and a VAT treatment for every line before review. Nothing is inferred.
+      if (current.direction === 'sales') {
+        if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'A sales invoice needs a tax point date before it can be submitted');
+        if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted');
       }
       await client.query(
         `UPDATE invoices SET status = 'submitted', version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status = 'draft'`,
@@ -298,7 +315,7 @@ export class InvoiceDraftService {
     if (!header) return null;
     const lines = (await client.query(
       `SELECT line_number, description, quantity::text, unit_price::text, discount_amount::text, vat_rate::text,
-              net_amount::text, vat_amount::text, total_amount::text
+              net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note
        FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number`, [invoiceId, companyId])).rows;
     return { ...header, lines };
   }

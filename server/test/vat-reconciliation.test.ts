@@ -8,7 +8,7 @@ const START='2026-01-01',END='2026-03-31';
 function detail(overrides:Partial<VatReconciliationDocument>={}):VatReconciliationDocument {
   return {document_id:'33333333-3333-4333-8333-333333333333',obligation_id:'44444444-4444-4444-8444-444444444444',document_type:'sale',tax_date:'2026-02-01',treatment:'standard',reviewed_vat_amount:'15.00',recoverability_status:'not_applicable',recoverable_vat_amount:null,non_recoverable_vat_amount:null,expected_vat_amount:'15.00',expected_memo:'VAT_OUTPUT',journal_entry_id:'55555555-5555-4555-8555-555555555555',journal_status:'posted',ledger_vat_amount:'15.00',reconciliation_status:'reconciled',...overrides};
 }
-function database(rows:VatReconciliationDocument[],adjustments={adjusted_output_vat:'0',adjusted_gross_input_vat:'0',adjusted_recoverable_input_vat:'0'}){return{query:vi.fn(async()=>({rows:rows.length?rows.map(row=>({...row,...adjustments})):[adjustments],rowCount:Math.max(1,rows.length)}))} as any;}
+function database(rows:VatReconciliationDocument[],adjustments={adjusted_output_vat:'0',adjusted_gross_input_vat:'0',adjusted_recoverable_input_vat:'0'}){return{query:vi.fn(async(sql:string)=>/^SELECT r\.id review_id/.test(sql)?{rows:[],rowCount:0}:({rows:rows.length?rows.map(row=>({...row,...adjustments})):[adjustments],rowCount:Math.max(1,rows.length)}))} as any;}
 
 describe('Phase 6B1 VAT reconciliation',()=>{
   it.each([
