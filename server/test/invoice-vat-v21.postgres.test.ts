@@ -199,6 +199,46 @@ describeDatabase('invoice VAT V2.1 purchase recoverability (PostgreSQL)', () => 
     expect(await n('SELECT count(*) n FROM invoice_lines WHERE company_id=$1', [b.id])).toBe(0);
   });
 
+  it('closing report and XLSX: classification comes from the amounts, and net VAT uses RECOVERABLE input VAT only', async () => {
+    const co = await company('report');
+    const period = (await q(`INSERT INTO vat_periods (company_id, fiscal_year_id, period_start, period_end, status) VALUES ($1,$2,'2026-03-01','2026-03-31','open') RETURNING id`, [co.id, co.fy]))[0].id as string;
+    const vat = new (await import('../src/modules/vat/vat.router')).VatService(pool);
+    const sale = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10',
+      lines: [{ description: 's', quantity: '1', unit_price: '1000.00', vat_rate: '15', vat_treatment: 'standard' }] }));
+    const saleSub = await drafts.submit(co.id, creator, sale.id, sale.version);
+    const invoices = [
+      { id: saleSub.id as string, version: saleSub.version as number },
+      await submitted(co, [std('fully_recoverable', undefined, '200.00')]), // VAT 30.00, recoverable 30.00
+      await submitted(co, [std('partially_recoverable', '40')]), // VAT 150.00, recoverable 60.00
+      await submitted(co, [std('non_recoverable', undefined, '100.00')]), // VAT 15.00, recoverable 0
+      await submitted(co, [std('fully_recoverable', undefined, '200.00'), std('non_recoverable', undefined, '100.00')]), // one 15% group: VAT 45.00, recoverable 30.00
+    ];
+    for (const inv of invoices) await accounting.post(co.id, approver, (await approve(co, inv)).journal_id);
+    await vat.close(co.id, approver, period);
+    const { loadVatClosingReport, buildVatWorkingPaperXlsx, netVatOf, recoverabilityOf } = await import('../src/modules/vat/vat-report');
+    const report = await loadVatClosingReport(pool, co.id, period);
+    // gross input 30+150+15+45 = 240; recoverable 30+60+0+30 = 120; non-recoverable 120; output 150
+    expect(report.totals).toMatchObject({ output_vat: 150, input_vat: 240, gross_reviewed_input_vat: 240, recoverable_input_vat: 120, non_recoverable_input_vat: 120,
+      net_vat: 30, base_net_vat: 30, fully_recoverable_documents: 1, partially_recoverable_documents: 2, non_recoverable_documents: 1 });
+    expect(netVatOf(report.totals)).toBe(30); // never output - gross input (which would be -90)
+    const text = buildVatWorkingPaperXlsx(report).toString('latin1');
+    const count = (label: string) => (text.match(new RegExp(`>${label}<`, 'g')) ?? []).length;
+    expect({ fully: count('fully_recoverable'), partial: count('partially_recoverable'), non: count('non_recoverable') }).toEqual({ fully: 1, partial: 2, non: 1 });
+    expect(text).toContain('Net VAT (Output');
+    // pure classification from amounts, including the ends and a zero-VAT group
+    expect(recoverabilityOf('150.00', '150.00')).toBe('fully_recoverable');
+    expect(recoverabilityOf('150.00', '0.00')).toBe('non_recoverable');
+    expect(recoverabilityOf('150.00', null)).toBe('non_recoverable');
+    expect(recoverabilityOf('45.00', '30.00')).toBe('partially_recoverable');
+    expect(recoverabilityOf('0.00', '0.00')).toBe('not_applicable');
+    // the approved return snapshot carries the corrected base net VAT
+    const { VatReturnService } = await import('../src/modules/vat/vat-returns.router');
+    const returns = new VatReturnService(pool);
+    const draft = await returns.create(co.id, approver, period);
+    const approved = await returns.approve(co.id, approver, draft.id, draft.version);
+    expect((approved.snapshot_json as { totals: { net_vat: number } }).totals.net_vat).toBe(30);
+  });
+
   it('sales VAT V1 is unchanged, and invoice approval stays disabled (no route, no capability)', async () => {
     const co = await company('sales');
     const draft = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10',

@@ -130,7 +130,7 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     for (const inv of [s, p]) { const out = await approve(co, inv); await post(co, out.journal_id); }
     await vat.close(co.id, approver, period);
     const report = await loadVatClosingReport(pool, co.id, period);
-    expect(report.totals).toMatchObject({ output_vat: 150, input_vat: 35, net_vat: 115, sales_total: 1250, purchase_expense_total: 375, recoverable_input_vat: 35, non_recoverable_input_vat: 0, fully_recoverable_documents: 1 });
+    expect(report.totals).toMatchObject({ output_vat: 150, input_vat: 35, net_vat: 115, base_net_vat: 115, sales_total: 1250, purchase_expense_total: 375, recoverable_input_vat: 35, non_recoverable_input_vat: 0, fully_recoverable_documents: 1 });
     expect(report.treatments.standard).toMatchObject({ count: 2, taxable_amount: 1300, vat_amount: 185 });
     expect(report.treatments.exempt).toMatchObject({ count: 1, taxable_amount: 40 });
     const sale = report.invoices!.find((i) => i.expected_memo === 'VAT_OUTPUT')!;
