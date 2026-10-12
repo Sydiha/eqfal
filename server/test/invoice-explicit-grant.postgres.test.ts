@@ -124,16 +124,33 @@ describeDatabase('explicit-grant-only invoice capabilities (PostgreSQL)', () => 
     expect(await grantRows(roles['target']!)).toEqual([]);
   });
 
-  it('privilege escalation: a Full Access owner cannot grant invoice.* via single or bulk endpoints, nor to the Full Access role', async () => {
+  it('privilege escalation: a Full Access owner cannot grant invoice.* to an ordinary role via single or bulk endpoints', async () => {
     const bulk = await owner.req('POST', `/access/roles/${roles['target']}/capabilities/bulk`, { grants: ['access.view', ...INVOICE_CAPS] });
     expect(bulk.status).toBe(403);
     expect(await grantRows(roles['target']!)).toEqual([]); // atomic: nothing from the bulk request was applied
-    const onFull = await owner.req('PUT', `/access/roles/${ids.fullA}/capabilities/invoice.view`);
-    expect(onFull.status).toBe(403);
-    expect(await grantRows(ids.fullA)).toEqual([]);
     const unknown = await owner.req('PUT', `/access/roles/${roles['target']}/capabilities/invoice.approve`);
     expect(unknown.status).toBeGreaterThanOrEqual(400);
     expect(await grantRows(roles['target']!)).toEqual([]);
+  });
+
+  it('Full Access role: an active Full Access owner manages explicit-only capabilities only; implicit ones stay immutable', async () => {
+    const grant = await owner.req('PUT', `/access/roles/${ids.fullA}/capabilities/invoice.view`);
+    expect(grant.status).toBe(204);
+    expect(await grantRows(ids.fullA)).toEqual(['invoice.view']);
+    expect((await owner.req('PUT', `/access/roles/${ids.fullA}/capabilities/access.view`)).status).toBe(403);
+    expect((await owner.req('POST', `/access/roles/${ids.fullA}/capabilities/bulk`, { grants: ['invoice.create', 'access.view'] })).status).toBe(403);
+    expect(await grantRows(ids.fullA)).toEqual(['invoice.view']); // atomic: nothing from the rejected bulk was applied
+    expect((await owner.req('POST', `/access/roles/${ids.fullA}/capabilities/bulk`, { grants: ['invoice.create'] })).status).toBe(204);
+    expect((await owner.req('DELETE', `/access/roles/${ids.fullA}/capabilities/invoice.view`)).status).toBe(204);
+    expect(await grantRows(ids.fullA)).toEqual(['invoice.create']); // revoking one grant does not clear the other
+    await pool.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_id LIKE 'invoice.%'", [ids.fullA]);
+  });
+
+  it('Full Access role: a limited administrator and another company cannot change explicit grants', async () => {
+    expect((await plain.req('PUT', `/access/roles/${ids.fullA}/capabilities/invoice.view`)).status).toBe(403);
+    expect((await owner.req('PUT', `/access/roles/${ids.fullB}/capabilities/invoice.view`)).status).toBeGreaterThanOrEqual(400);
+    expect(await grantRows(ids.fullA)).toEqual([]);
+    expect(await grantRows(ids.fullB)).toEqual([]);
   });
 
   it('privilege escalation: holding the grant right without the invoice permission is not enough', async () => {
