@@ -82,6 +82,7 @@ const ar = {
     addMember: 'إضافة عضو', addMemberTitle: 'إضافة عضو إلى الشركة', email: 'البريد الإلكتروني للمستخدم', emailHint: 'يجب أن يكون للمستخدم حساب قائم في النظام.', add: 'إضافة',
     membersEmpty: 'لا يوجد أعضاء في هذه الشركة.', rolesEmpty: 'لا توجد أدوار في هذه الشركة.',
     createRole: 'دور جديد', createRoleTitle: 'إنشاء دور', roleName: 'اسم الدور', create: 'إنشاء',
+    explicitOnlyNote: 'صلاحيات تُمنح صراحةً ولا يملكها الوصول الكامل تلقائياً. يمكن لمن يملك الوصول الكامل منحها أو سحبها هنا.',
     fullAccess: 'وصول كامل', fullAccessNote: 'هذا الدور يملك كل الصلاحيات ولا يمكن تعديل صلاحياته.',
     expandGroup: 'توسيع', collapseGroup: 'طيّ', selectAll: 'تحديد الكل', clearAll: 'مسح الكل', bulkActions: 'إجراءات الصلاحيات الجماعية', selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
     ceilingNote: 'لا يمكنك منح صلاحية لا تملكها أنت في هذه الشركة.', saving: 'جارٍ الحفظ…',

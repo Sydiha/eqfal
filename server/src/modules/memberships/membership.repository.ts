@@ -185,6 +185,13 @@ export class MembershipRepository {
     return rows.map((row) => row.id);
   }
 
+  /** Capabilities that no role (Full Access included) holds implicitly; they exist only as explicit role_capabilities rows. */
+  async listExplicitOnlyCapabilities(client?: PoolClient): Promise<string[]> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ id: string }>('SELECT id FROM capabilities WHERE implicit_full_access = FALSE ORDER BY id');
+    return rows.map((row) => row.id);
+  }
+
   async findUserIdByEmail(email: string): Promise<string | null> {
     const { rows } = await this.pool.query<{ id: string }>(
       'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',

@@ -63,6 +63,11 @@ export class MembershipService {
     return this.repo.listCapabilities();
   }
 
+  /** Capabilities Full Access does not hold implicitly (the only ones editable on a Full Access role). */
+  async listExplicitOnlyCapabilities(): Promise<string[]> {
+    return this.repo.listExplicitOnlyCapabilities();
+  }
+
   /** Resolve an existing user by email so they can be added to the active company. */
   async createMembershipByEmail(email: string, companyId: string, actorUserId: string): Promise<Membership> {
     const userId = await this.repo.findUserIdByEmail(email);
@@ -143,9 +148,11 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
-      if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
-      const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      if (!actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+      if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([capabilityId], companyId, actorUserId, client);
+      else {
+        const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
+        if (!actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+      }
       const before = await this.repo.getRoleCapabilities(roleId, client);
       if (add) await this.repo.addCapabilityToRole(roleId, capabilityId, client);
       else await this.repo.removeCapabilityFromRole(roleId, capabilityId, client);
@@ -165,15 +172,37 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
-      if (role.is_full_access) throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
-      const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-      for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+      if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([...grants, ...revokes], companyId, actorUserId, client);
+      else {
+        const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
+        for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+      }
       const before = await this.repo.getRoleCapabilities(roleId, client);
       for (const id of grants) await this.repo.addCapabilityToRole(roleId, id, client);
       for (const id of revokes) await this.repo.removeCapabilityFromRole(roleId, id, client);
       const after = [...new Set([...before, ...grants])].filter((id) => !revokes.includes(id));
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.capability.bulk_change', entity_type: 'role', entity_id: roleId, before_data: { capabilities: before }, after_data: { capabilities: after } }, client);
     });
+  }
+
+  /**
+   * Full Access roles are immutable EXCEPT for explicit-only capabilities (implicit_full_access = FALSE). The actor
+   * must hold an active Full Access role in this company; the usual ceiling (actor already holds the capability) is
+   * replaced by that check because Full Access never holds these implicitly. Any other capability is rejected.
+   */
+  private async assertCanChangeFullAccessCapabilities(ids: string[], companyId: string, actorUserId: string, client: PoolClient): Promise<void> {
+    const explicitOnly = new Set(await this.repo.listExplicitOnlyCapabilities(client));
+    if (ids.length === 0 || ids.some((id) => !explicitOnly.has(id))) {
+      throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
+    }
+    if (!(await this.repo.hasActiveFullAccessRole(actorUserId, companyId, client))) {
+      throw new AccessPolicyError('Full Access violation: only an active Full Access member can change explicit capabilities of a Full Access role', 'ACCESS_ROLE_CEILING');
+    }
+  }
+
+  /** Capabilities of a Full Access role that the (already verified) Full Access actor may pass on without holding them. */
+  private async ceilingExemptions(role: Role, actorIsFullAccess: boolean, client?: PoolClient): Promise<Set<string>> {
+    return role.is_full_access && actorIsFullAccess ? new Set(await this.repo.listExplicitOnlyCapabilities(client)) : new Set();
   }
 
   private membershipSnapshot(value: Membership): Record<string, unknown> {
@@ -229,8 +258,9 @@ export class MembershipService {
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
       this.repo.getRoleCapabilities(role.id, client),
     ]);
+    const exempt = await this.ceilingExemptions(role, true, client);
     for (const capability of roleCaps) {
-      if (!granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
+      if (!granterCaps.includes(capability) && !exempt.has(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
     }
   }
 
@@ -324,8 +354,9 @@ export class MembershipService {
     ]);
 
     const granterCapSet = new Set(granterCaps);
+    const exempt = await this.ceilingExemptions(role, true);
     for (const cap of roleCaps) {
-      if (!granterCapSet.has(cap)) {
+      if (!granterCapSet.has(cap) && !exempt.has(cap)) {
         throw new AccessPolicyError(
           `Ceiling violation: granter lacks capability '${cap}' — ` +
           `cannot grant a role that includes it`,

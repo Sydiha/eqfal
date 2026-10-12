@@ -20,7 +20,7 @@ function mockApi() {
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
     if (url === '/api/access/memberships' && !init?.method) return new Response(JSON.stringify({ memberships: members }), { status: 200 });
     if (url === '/api/access/roles' && !init?.method) return new Response(JSON.stringify({ roles }), { status: 200 });
-    if (url === '/api/access/capabilities') return new Response(JSON.stringify({ capabilities: allCapabilities }), { status: 200 });
+    if (url === '/api/access/capabilities') return new Response(JSON.stringify({ capabilities: [...allCapabilities, 'invoice.view'], explicit_only: ['invoice.view'] }), { status: 200 });
     return new Response('{}', { status: 200 });
   }));
   return calls;
@@ -183,7 +183,20 @@ describe('AccessAdministration', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
     expect(screen.getByText(/cannot be edited/)).toBeInTheDocument();
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    // Only explicit-grant capabilities are manageable; no bulk or group controls appear for a Full Access role.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+  });
+
+  it('grants an explicit-only capability on a Full Access role through the single-capability endpoint', async () => {
+    const calls = mockApi();
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.url === '/api/access/roles/r-full/capabilities/invoice.view')).toBe(true));
+    expect(calls.some((c) => c.url.endsWith('/bulk'))).toBe(false);
   });
 
   it('renders Arabic labels', async () => {
