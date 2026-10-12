@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response, Router } from 'express
 import pool from '../../db/pool';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
+import { resolveStandardRate } from './vat-standard-rate';
 import { InvoiceDraftService, InvoiceError, parseDraft, parseListQuery } from './invoice.service';
 
 /**
@@ -56,6 +57,19 @@ const requireAnyInvoiceCapability: RequestHandler = (req, res, next) => {
 invoiceRouter.get('/invoices/customers', ...read, requireAnyInvoiceCapability, route((req, res) => handle(res, async (svc) => {
   res.json(await svc.listCustomers(companyAndActor(req).companyId));
 })));
+
+// Read-only effective standard VAT rate for a tax point date. Any invoice capability suffices (vat.view is not needed).
+// Reference data only; fails closed with 404 VAT_RATE_NOT_CONFIGURED. Must be registered before '/invoices/:id'.
+invoiceRouter.get('/invoices/standard-rate', ...read, requireAnyInvoiceCapability, route(async (req, res) => {
+  const keys = Object.keys(req.query);
+  const value = req.query.date;
+  const valid = keys.length === 1 && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  if (!valid) { res.status(400).json({ error: 'date must be YYYY-MM-DD', code: 'INVOICE_VALIDATION' }); return; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
+  const resolved = await resolveStandardRate(pool, value);
+  if (!resolved) { res.status(404).json({ error: 'No standard VAT rate is configured for this date', code: 'VAT_RATE_NOT_CONFIGURED' }); return; }
+  res.json({ date: value, ...resolved });
+}));
 
 invoiceRouter.get('/invoices/:id', ...read, requireCapability('invoice.view'), route((req, res) => handle(res, async (svc) => {
   if (!UUID.test(req.params.id!)) { invalidId(res); return; }

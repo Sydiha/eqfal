@@ -8,20 +8,24 @@ export type SalesInvoiceCapabilities={canView:boolean;canCreate:boolean;canEdit:
 type Line={line_number?:number;description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;net_amount?:string;vat_amount?:string;total_amount?:string;vat_treatment:string|null};
 type Invoice={id:string;status:'draft'|'submitted'|'approved'|'cancelled';counterparty_id:string;counterparty_name:string;internal_number:string|null;external_reference:string|null;issue_date:string;due_date:string|null;supply_date:string|null;tax_point_date:string|null;currency:string;subtotal_amount:string;vat_amount:string;total_amount:string;notes:string|null;version:number;lines?:Line[]};
 type Counterparty={id:string;name:string;type:string};
-type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string};
+type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string;rate_source:'auto'|'saved'};
+type RateState={date:string;status:'loading'|'ok'|'missing'|'error';value?:string};
 type FormValues={counterparty_id:string;issue_date:string;due_date:string;supply_date:string;tax_point_date:string;external_reference:string;notes:string;lines:FormLine[]};
 const TREATMENTS=['standard','zero_rated','exempt','out_of_scope'] as const;
-const emptyLine=():FormLine=>({description:'',quantity:'1',unit_price:'',discount_amount:'',vat_rate:'',vat_treatment:''});
+const emptyLine=():FormLine=>({description:'',quantity:'1',unit_price:'',discount_amount:'',vat_rate:'',vat_treatment:'',rate_source:'auto'});
 const emptyForm=():FormValues=>({counterparty_id:'',issue_date:'',due_date:'',supply_date:'',tax_point_date:'',external_reference:'',notes:'',lines:[emptyLine()]});
-const fromInvoice=(i:Invoice):FormValues=>({counterparty_id:i.counterparty_id,issue_date:i.issue_date,due_date:i.due_date??'',supply_date:i.supply_date??'',tax_point_date:i.tax_point_date??'',external_reference:i.external_reference??'',notes:i.notes??'',lines:(i.lines??[]).map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,discount_amount:l.discount_amount==='0.00'?'':l.discount_amount,vat_rate:l.vat_rate,vat_treatment:l.vat_treatment??''}))});
+const fromInvoice=(i:Invoice):FormValues=>({counterparty_id:i.counterparty_id,issue_date:i.issue_date,due_date:i.due_date??'',supply_date:i.supply_date??'',tax_point_date:i.tax_point_date??'',external_reference:i.external_reference??'',notes:i.notes??'',lines:(i.lines??[]).map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,discount_amount:l.discount_amount==='0.00'?'':l.discount_amount,vat_rate:l.vat_rate,vat_treatment:l.vat_treatment??'',rate_source:'saved'}))});
 // Amounts are always computed by the server; the client only sends the raw inputs as strings.
-const toPayload=(v:FormValues)=>({counterparty_id:v.counterparty_id,issue_date:v.issue_date,due_date:v.due_date||null,supply_date:v.supply_date||null,tax_point_date:v.tax_point_date||null,external_reference:v.external_reference.trim()||null,notes:v.notes.trim()||null,lines:v.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,...(l.discount_amount?{discount_amount:l.discount_amount}:{}),vat_rate:l.vat_treatment&&l.vat_treatment!=='standard'?'0':l.vat_rate,vat_treatment:l.vat_treatment||null}))});
+const toPayload=(v:FormValues)=>({counterparty_id:v.counterparty_id,issue_date:v.issue_date,due_date:v.due_date||null,supply_date:v.supply_date||null,tax_point_date:v.tax_point_date||null,external_reference:v.external_reference.trim()||null,notes:v.notes.trim()||null,lines:v.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,...(l.discount_amount?{discount_amount:l.discount_amount}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:l.vat_treatment?'0':l.vat_rate,vat_treatment:l.vat_treatment||null}))});
 
 export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorized}:SalesInvoiceCapabilities&{onUnauthorized:()=>void}){
  const{t}=useTranslation();
  const unauthorizedRef=useRef(onUnauthorized);unauthorizedRef.current=onUnauthorized;
  const unauthorized=useCallback(()=>unauthorizedRef.current(),[]);
  const[list,setList]=useState<Invoice[]|null>(null),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
+ const[rate,setRate]=useState<RateState|null>(null);
+ const rateDate=form?(form.values.tax_point_date||form.values.issue_date):'';
+ const formOpen=!!form;
  const money=(value:string)=>(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
  const errorText=(code:string|undefined)=>{const key=`salesInvoice.errors.${code}`;const text=t(key);return code&&text!==key?text:t('salesInvoice.errors.generic')};
 
@@ -44,6 +48,28 @@ export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorize
   }catch{setError(errorText(undefined));return null;}
   finally{setBusy(false)}
  };
+ useEffect(()=>{
+  if(!formOpen||!rateDate){setRate(null);return;}
+  let cancelled=false;setRate({date:rateDate,status:'loading'});
+  fetch(`/api/invoices/standard-rate?date=${rateDate}`).then(async response=>{
+   if(cancelled)return;
+   if(response.status===401){unauthorized();return;}
+   if(response.ok){const payload=await response.json() as {rate:string};if(cancelled)return;setRate({date:rateDate,status:'ok',value:payload.rate});
+    // Only lines whose rate was resolved automatically (or is still empty) follow the resolved rate; a saved rate is never overwritten.
+    setForm(current=>current&&{...current,values:{...current.values,lines:current.values.lines.map(l=>l.vat_treatment==='standard'&&(l.rate_source==='auto'||l.vat_rate==='')?{...l,vat_rate:payload.rate,rate_source:'auto'}:l)}});}
+   else setRate({date:rateDate,status:response.status===404?'missing':'error'});
+  }).catch(()=>{if(!cancelled)setRate({date:rateDate,status:'error'})});
+  return()=>{cancelled=true};
+ },[formOpen,rateDate,unauthorized]);
+ const sameRate=(a:string,b:string)=>a!==''&&b!==''&&Number(a).toFixed(2)===Number(b).toFixed(2);
+ const lineRateState=(line:FormLine):'na'|'ok'|'pending'|'mismatch'|'missing'|'error'|'loading'=>{
+  if(line.vat_treatment!=='standard')return 'na';
+  if(!rate||rate.status==='loading')return 'loading';
+  if(rate.status==='missing')return 'missing';
+  if(rate.status==='error')return 'error';
+  if(line.vat_rate==='')return 'pending';
+  return sameRate(line.vat_rate,rate.value??'')?'ok':'mismatch';
+ };
  const refresh=async()=>{if(canView)await load().catch(()=>setLoadError(true))};
  const loadParties=async()=>{try{const response=await fetch('/api/invoices/customers');if(response.status===401){unauthorized();return;}if(response.ok)setParties(((await response.json()) as {customers:Counterparty[]}).customers)}catch{/* the customer list stays empty; the server still validates the choice */}};
 
@@ -64,6 +90,7 @@ export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorize
 
  if(!canView&&!canCreate)return null;
  const customers=parties;
+ const saveBlocked=!!form&&form.values.lines.some(l=>{const st=lineRateState(l);return st==='pending'||st==='loading'||(!!form.values.tax_point_date&&(st==='mismatch'||st==='missing'||st==='error'))});
  const statusLabel=(status:string)=>t(`salesInvoice.statuses.${status}`);
  return <section className="sales-invoices" aria-labelledby="sales-invoices-title">
   <div className="sales-invoices__head"><div><h2 id="sales-invoices-title">{t('salesInvoice.title')}</h2><p>{t('salesInvoice.intro')}</p></div>{canCreate&&<button type="button" className="primary" onClick={startNew}>{t('salesInvoice.add')}</button>}</div>
@@ -84,20 +111,25 @@ export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorize
     <label>{t('salesInvoice.customer')}<select required value={form.values.counterparty_id} onChange={e=>setValue({counterparty_id:e.target.value})}><option value="">{t('salesInvoice.chooseCustomer')}</option>{customers.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
     <div className="sales-invoices__row"><label>{t('salesInvoice.issueDate')}<input type="date" required value={form.values.issue_date} onChange={e=>setValue({issue_date:e.target.value})}/></label><label>{t('salesInvoice.dueDate')}<input type="date" value={form.values.due_date} onChange={e=>setValue({due_date:e.target.value})}/></label></div>
     <div className="sales-invoices__row"><label>{t('salesInvoice.supplyDate')}<input type="date" value={form.values.supply_date} onChange={e=>setValue({supply_date:e.target.value})}/></label><label>{t('salesInvoice.taxPointDate')}<input type="date" value={form.values.tax_point_date} onChange={e=>setValue({tax_point_date:e.target.value})}/></label></div>
+    {!form.values.tax_point_date&&<p className="sales-invoices__hint">{t('salesInvoice.rateProvisional')}</p>}
     <label>{t('salesInvoice.reference')}<input maxLength={100} value={form.values.external_reference} onChange={e=>setValue({external_reference:e.target.value})}/></label>
     <fieldset><legend>{t('salesInvoice.lines')}</legend>{form.values.lines.map((line,index)=><div className="sales-invoices__line" key={index} role="group" aria-label={t('salesInvoice.lineN',{n:index+1})}>
      <label>{t('salesInvoice.description')}<input required maxLength={500} value={line.description} onChange={e=>setLine(index,{description:e.target.value})}/></label>
      <label>{t('salesInvoice.quantity')}<input required inputMode="decimal" value={line.quantity} onChange={e=>setLine(index,{quantity:e.target.value})}/></label>
      <label>{t('salesInvoice.unitPrice')}<input required inputMode="decimal" value={line.unit_price} onChange={e=>setLine(index,{unit_price:e.target.value})}/></label>
      <label>{t('salesInvoice.discount')}<input inputMode="decimal" value={line.discount_amount} onChange={e=>setLine(index,{discount_amount:e.target.value})}/></label>
-     <label>{t('salesInvoice.vatTreatment')}<select value={line.vat_treatment} onChange={e=>setLine(index,{vat_treatment:e.target.value,...(e.target.value&&e.target.value!=='standard'?{vat_rate:'0'}:{})})}><option value="">{t('salesInvoice.chooseTreatment')}</option>{TREATMENTS.map(x=><option key={x} value={x}>{t(`salesInvoice.treatments.${x}`)}</option>)}</select></label>
-     <label>{t('salesInvoice.vatRate')}<input inputMode="decimal" disabled={!!line.vat_treatment&&line.vat_treatment!=='standard'} required={line.vat_treatment==='standard'} value={line.vat_rate} onChange={e=>setLine(index,{vat_rate:e.target.value})}/></label>
+     <label>{t('salesInvoice.vatTreatment')}<select value={line.vat_treatment} onChange={e=>setLine(index,{vat_treatment:e.target.value,...(e.target.value==='standard'?{vat_rate:rate?.status==='ok'?rate.value??'':'',rate_source:'auto' as const}:e.target.value?{vat_rate:'0'}:{})})}><option value="">{t('salesInvoice.chooseTreatment')}</option>{TREATMENTS.map(x=><option key={x} value={x}>{t(`salesInvoice.treatments.${x}`)}</option>)}</select></label>
+     {(()=>{const state=lineRateState(line);const shown=line.vat_treatment==='standard'?(line.vat_rate?`${line.vat_rate}%`:'—'):line.vat_treatment?'0%':'—';
+      return <div className="sales-invoices__rate-field"><span className="sales-invoices__rate-label">{t('salesInvoice.vatRate')}</span><output className="sales-invoices__rate" dir="ltr" aria-label={t('salesInvoice.vatRate')}>{shown}</output>
+       {state==='mismatch'&&<p role="alert" className="sales-invoices__error sales-invoices__rate-note">{t('salesInvoice.rateMismatch',{saved:line.vat_rate,rate:rate?.value})} <button type="button" onClick={()=>setLine(index,{vat_rate:rate?.value??'',rate_source:'auto'})}>{t('salesInvoice.applyRate',{rate:rate?.value})}</button></p>}
+       {state==='missing'&&<p role="alert" className="sales-invoices__error sales-invoices__rate-note">{t('salesInvoice.rateMissing')}</p>}
+       {state==='error'&&<p role="alert" className="sales-invoices__error sales-invoices__rate-note">{t('salesInvoice.rateError')}</p>}</div>})()}
      {form.values.lines.length>1&&<button type="button" onClick={()=>setValue({lines:form.values.lines.filter((_,i)=>i!==index)})}>{t('salesInvoice.removeLine')}</button>}
     </div>)}<button type="button" onClick={()=>setValue({lines:[...form.values.lines,emptyLine()]})}>{t('salesInvoice.addLine')}</button></fieldset>
-    <p className="sales-invoices__hint">{t('salesInvoice.totalsHint')}</p>
+    <p className="sales-invoices__hint">{t('salesInvoice.totalsHint')}</p><p className="sales-invoices__hint">{t('salesInvoice.rateScopeNote')}</p>
     <label>{t('salesInvoice.notes')}<textarea maxLength={2000} value={form.values.notes} onChange={e=>setValue({notes:e.target.value})}/></label>
     {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
-    <div className="modal-actions"><button type="button" onClick={()=>setForm(null)} disabled={busy}>{t('common.cancel')}</button><button className="primary" disabled={busy}>{t('salesInvoice.saveDraft')}</button></div>
+    <div className="modal-actions"><button type="button" onClick={()=>setForm(null)} disabled={busy}>{t('common.cancel')}</button><button className="primary" disabled={busy||saveBlocked}>{t('salesInvoice.saveDraft')}</button></div>
    </form>
   </Dialog>}
  </section>;
