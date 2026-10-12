@@ -3,6 +3,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Sales} from '../components/Sales';
 import {SalesInvoices} from '../components/SalesInvoices';
 import i18n from '../i18n';
+import {canShowNavigationPage} from '../components/navigationVisibility';
 
 const draft={id:'11111111-1111-4111-8111-111111111111',status:'draft',counterparty_id:'22222222-2222-4222-8222-222222222222',counterparty_name:'Acme',internal_number:null,external_reference:'REF-1',issue_date:'2026-10-01',due_date:'2026-10-31',supply_date:null,tax_point_date:'2026-10-01',currency:'SAR',subtotal_amount:'100.00',vat_amount:'15.00',total_amount:'115.00',notes:null,version:3,lines:[{line_number:1,description:'Service',quantity:'1',unit_price:'100.00',discount_amount:'0.00',vat_rate:'15.00',net_amount:'100.00',vat_amount:'15.00',total_amount:'115.00',vat_treatment:'standard'}]};
 const caps={canView:true,canCreate:true,canEdit:true,canSubmit:true};
@@ -139,5 +140,51 @@ describe('Sales page with invoice workflow',()=>{
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
   expect(onCreateDocument).toHaveBeenCalledTimes(1);
+ });
+});
+
+describe('Sales permission separation',()=>{
+ beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({counterparties:[]})));vi.stubGlobal('fetch',f);return f};
+
+ it('invoice-only user reaches the invoice section and never loads legacy sales data',async()=>{
+  const f=stub();
+  render(<Sales canView={false} canManage={false} invoices={caps} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText('REF-1')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Add sales invoice +'})).toBeInTheDocument();
+  expect(screen.queryByText(/need document and obligation access/i)).not.toBeInTheDocument();
+  expect(f.mock.calls.some(c=>String(c[0]).startsWith('/api/sales'))).toBe(false);
+ });
+
+ it('legacy-only user keeps the document section and sees no invoice section',async()=>{
+  const f=stub();
+  render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} onUnauthorized={vi.fn()} invoices={{canView:false,canCreate:false,canEdit:false,canSubmit:false}}/>);
+  expect((await screen.findAllByRole('button',{name:'Add sales invoice +'})).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('heading',{name:'Sales invoices'})).not.toBeInTheDocument();
+  expect(f.mock.calls.some(c=>String(c[0]).startsWith('/api/invoices'))).toBe(false);
+ });
+
+ it('user with neither permission still gets the no-access screen',async()=>{
+  const f=stub();
+  render(<Sales canView={false} canManage={false} invoices={{canView:false,canCreate:false,canEdit:false,canSubmit:false}} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText(/need document and obligation access/i)).toBeInTheDocument();
+  expect(f).not.toHaveBeenCalled();
+ });
+
+ it('user with both permissions sees both sections',async()=>{
+  stub();
+  render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} invoices={caps} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText('REF-1')).toBeInTheDocument();
+  expect((await screen.findAllByRole('button',{name:'Upload sale document'})).length).toBeGreaterThan(0);
+ });
+});
+
+describe('Sales navigation visibility',()=>{
+ it('shows Sales for invoice permissions alone or legacy permissions alone, hides it otherwise',()=>{
+  expect(canShowNavigationPage('sales',['invoice.view'])).toBe(true);
+  expect(canShowNavigationPage('sales',['invoice.create'])).toBe(true);
+  expect(canShowNavigationPage('sales',['document.view','obligation.view'])).toBe(true);
+  expect(canShowNavigationPage('sales',['document.view'])).toBe(false);
+  expect(canShowNavigationPage('purchases',['invoice.view'])).toBe(false);
  });
 });
