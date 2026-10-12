@@ -56,6 +56,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   const [members, setMembers] = useState<AccessMembership[]>([]);
   const [roles, setRoles] = useState<AccessRole[]>([]);
   const [allCapabilities, setAllCapabilities] = useState<string[]>([]);
+  const [explicitOnly, setExplicitOnly] = useState<string[]>([]);
   const [loading, setLoading] = useState(canView);
   const [loaded, setLoaded] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
@@ -75,7 +76,9 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
       ]);
       setMembers(((await m.json()) as { memberships: AccessMembership[] }).memberships);
       setRoles(((await r.json()) as { roles: AccessRole[] }).roles);
-      setAllCapabilities(((await c.json()) as { capabilities: string[] }).capabilities);
+      const catalog = (await c.json()) as { capabilities: string[]; explicit_only?: string[] };
+      setAllCapabilities(catalog.capabilities);
+      setExplicitOnly(catalog.explicit_only ?? []);
       setLoaded(true);
     } catch (reason) {
       const aborted = reason instanceof DOMException && reason.name === 'AbortError';
@@ -189,7 +192,17 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
       <div className="acc-card acc-capabilities">
         {!selectedRole ? <p className="acc-hint">{t('access.selectRole')}</p> : <>
           <h3>{t('access.capabilities')} — {selectedRole.name}</h3>
-          {selectedRole.is_full_access ? <p className="acc-hint">{t('access.fullAccessNote')}</p> : <>
+          {selectedRole.is_full_access ? <>
+            <p className="acc-hint">{t('access.fullAccessNote')}</p>
+            {explicitOnly.length > 0 && <section className="acc-group is-open">
+              <p className="acc-hint">{t('access.explicitOnlyNote')}</p>
+              <div className="acc-group-body">{explicitOnly.map((id) => {
+                const granted = selectedRole.capabilities.includes(id);
+                const canToggle = granted ? can('access.role.capability.revoke') : can('access.role.capability.grant');
+                return <label key={id} title={id}><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label>;
+              })}</div>
+            </section>}
+          </> : <>
             <p className="acc-hint">{t('access.ceilingNote')}</p>
             {(() => {
               const grantable = allCapabilities.filter((id) => !selectedRole.capabilities.includes(id) && canGrantId(id));

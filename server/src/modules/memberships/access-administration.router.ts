@@ -60,7 +60,7 @@ accessAdministrationRouter.get('/access/roles', ...readGuards, asyncRoute(async 
 
 accessAdministrationRouter.get('/access/capabilities', ...readGuards, asyncRoute(async (_req, res) => {
   const value = service(res);
-  if (value) res.json({ capabilities: await value.listCapabilities() });
+  if (value) res.json({ capabilities: await value.listCapabilities(), explicit_only: await value.listExplicitOnlyCapabilities() });
 }));
 
 accessAdministrationRouter.post('/access/memberships', ...writeGuards('access.membership.create'), asyncRoute(async (req, res) => {

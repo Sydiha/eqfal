@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createUserForCompany: vi.fn(),
   createMembershipForCompany: vi.fn(),
   listCapabilities: vi.fn(),
+  listExplicitOnlyCapabilities: vi.fn(),
   listMemberships: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock('../src/modules/memberships/membership.service', () => ({
     createUserForCompany = mocks.createUserForCompany;
     createMembershipForCompany = mocks.createMembershipForCompany;
     listCapabilities = mocks.listCapabilities;
+    listExplicitOnlyCapabilities = mocks.listExplicitOnlyCapabilities;
     listMemberships = mocks.listMemberships;
   },
 }));
@@ -55,9 +57,10 @@ describe('role/capability enforcement (server-side)', () => {
     expect((await request(app).get('/api/access/capabilities').set('Cookie', 'eqfal_session=t')).status).toBe(403);
     grant(['access.view']);
     mocks.listCapabilities.mockResolvedValue(['a.b']);
+    mocks.listExplicitOnlyCapabilities.mockResolvedValue(['a.b']);
     const ok = await request(app).get('/api/access/capabilities').set('Cookie', 'eqfal_session=t');
     expect(ok.status).toBe(200);
-    expect(ok.body).toEqual({ capabilities: ['a.b'] });
+    expect(ok.body).toEqual({ capabilities: ['a.b'], explicit_only: ['a.b'] });
   });
 });
 
