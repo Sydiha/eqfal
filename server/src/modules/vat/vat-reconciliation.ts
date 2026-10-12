@@ -15,7 +15,7 @@ export interface VatReconciliationDocument {
 export interface VatReconciliation {
   totals:{reviewed_output_vat:number;reviewed_input_vat:number;gross_reviewed_input_vat:number;recoverable_input_vat:number;non_recoverable_input_vat:number;ledger_output_vat:number;ledger_input_vat:number;output_difference:number;input_difference:number};
   counts:{total_in_scope:number;reconciled:number;unreconciled:number}; documents:VatReconciliationDocument[];
-  /** Sales invoices (V1). Present only when the period has reviewed invoices, so document-only results are unchanged. */
+  /** Reviewed invoices (V1 sales, V2 purchases). Present only when the period has reviewed invoices, so document-only results are unchanged. */
   invoices?:VatInvoiceReconciliationRow[];
 }
 
@@ -75,18 +75,27 @@ async function loadDocumentVatReconciliation(db:QueryRunner,companyId:string,per
 }
 
 /**
- * Document reconciliation (unchanged) plus reviewed sales invoices. With no reviewed invoice in the period the result is
- * exactly the document-only result. Invoice figures are exact (halalas) and count towards the same totals and counts.
+ * Document reconciliation (unchanged) plus reviewed invoices: sales add to output VAT, purchases (V2) to input VAT (gross,
+ * recoverable and, in V2 always zero, non-recoverable). With no reviewed invoice in the period the result is exactly the
+ * document-only result. Invoice figures are exact (halalas) and count towards the same totals and counts.
  */
 export async function loadVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
  const base=await loadDocumentVatReconciliation(db,companyId,periodStart,periodEnd);
  const invoices=await loadInvoiceVatReconciliation(db,companyId,periodStart,periodEnd,'tax_date');
  if(!invoices.length)return base;
- let reviewed=0n,ledger=0n,reconciled=0;
- for(const invoice of invoices){reviewed+=toHalalas(invoice.reviewed_vat_amount);if(invoice.reconciliation_status==='reconciled'){reconciled++;ledger+=toHalalas(invoice.ledger_vat_amount);}}
+ let reviewed=0n,ledger=0n,grossIn=0n,recoverableIn=0n,ledgerIn=0n,reconciled=0,purchases=0;
+ for(const invoice of invoices){
+  const purchase=invoice.direction==='purchase';if(purchase)purchases++;
+  if(purchase){grossIn+=toHalalas(invoice.reviewed_vat_amount);recoverableIn+=toHalalas(invoice.recoverable_vat_amount);}else reviewed+=toHalalas(invoice.reviewed_vat_amount);
+  if(invoice.reconciliation_status==='reconciled'){reconciled++;if(purchase)ledgerIn+=toHalalas(invoice.ledger_vat_amount);else ledger+=toHalalas(invoice.ledger_vat_amount);}
+ }
  const output=base.totals.reviewed_output_vat+Number(reviewed)/100,ledgerOutput=base.totals.ledger_output_vat+Number(ledger)/100;
+ // Sales-only periods keep exactly the V1 totals object; input figures change only when a purchase invoice is present.
+ const input=purchases?{reviewed_input_vat:base.totals.reviewed_input_vat+Number(grossIn)/100,gross_reviewed_input_vat:base.totals.gross_reviewed_input_vat+Number(grossIn)/100,
+  recoverable_input_vat:base.totals.recoverable_input_vat+Number(recoverableIn)/100,non_recoverable_input_vat:base.totals.non_recoverable_input_vat+Number(grossIn-recoverableIn)/100,
+  ledger_input_vat:base.totals.ledger_input_vat+Number(ledgerIn)/100,input_difference:base.totals.recoverable_input_vat+Number(recoverableIn)/100-(base.totals.ledger_input_vat+Number(ledgerIn)/100)}:{};
  return{...base,
-  totals:{...base.totals,reviewed_output_vat:output,ledger_output_vat:ledgerOutput,output_difference:output-ledgerOutput},
+  totals:{...base.totals,reviewed_output_vat:output,ledger_output_vat:ledgerOutput,output_difference:output-ledgerOutput,...input},
   counts:{total_in_scope:base.counts.total_in_scope+invoices.length,reconciled:base.counts.reconciled+reconciled,unreconciled:base.counts.unreconciled+invoices.length-reconciled},
   invoices};
 }

@@ -94,9 +94,11 @@ export class MonthlyCloseService {
         JOIN journal_entries je ON je.company_id=ob.company_id AND je.source_type='obligation' AND je.source_id=ob.id AND je.status='posted'
         WHERE r.company_id=$1 AND i.issue_date BETWEEN $2 AND $3 AND NOT (
           COALESCE((SELECT array_agg(g.vat_amount ORDER BY g.vat_amount) FROM invoice_vat_review_groups g WHERE g.review_id=r.id AND g.company_id=r.company_id AND g.vat_treatment='standard' AND g.vat_amount>0),ARRAY[]::numeric[])
-          = COALESCE((SELECT array_agg(l.credit ORDER BY l.credit) FROM journal_lines l WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id AND l.memo='VAT_OUTPUT'),ARRAY[]::numeric[])
+          = COALESCE((SELECT array_agg(CASE WHEN r.direction='purchase' THEN l.debit ELSE l.credit END ORDER BY CASE WHEN r.direction='purchase' THEN l.debit ELSE l.credit END) FROM journal_lines l WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id AND l.memo=CASE WHEN r.direction='purchase' THEN 'VAT_INPUT' ELSE 'VAT_OUTPUT' END),ARRAY[]::numeric[])
           AND NOT EXISTS (SELECT 1 FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id
-            AND l.memo IN ('VAT_INPUT','VAT_OUTPUT') AND NOT (l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0 AND l.credit>0))))::text invoice_vat_mismatches,
+            AND l.memo IN ('VAT_INPUT','VAT_OUTPUT') AND NOT (CASE WHEN r.direction='purchase'
+              THEN l.memo='VAT_INPUT' AND a.account_type='asset' AND l.credit=0 AND l.debit>0
+              ELSE l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0 AND l.credit>0 END))))::text invoice_vat_mismatches,
       COALESCE((SELECT CASE
         WHEN p.vat_status='not_registered' THEN FALSE
         WHEN p.vat_status='registered' THEN p.vat_registered_from IS NULL OR $3::date>=p.vat_registered_from
@@ -128,7 +130,7 @@ export class MonthlyCloseService {
     const sourceKeys=new Set(sources.map(source=>`${source.source_type}:${source.source_id}`));
     const draftJournals=(await client.query<{source_type:string|null;source_id:string|null}>("SELECT source_type,source_id FROM journal_entries WHERE company_id=$1 AND accounting_date BETWEEN $2 AND $3 AND status='draft'",[companyId,start,end])).rows;
     const independentDrafts=draftJournals.filter(journal=>!journal.source_type||!journal.source_id||!sourceKeys.has(`${journal.source_type}:${journal.source_id}`)).length;
-    // Sales invoices (V1): a posted journal is already required above (their obligation is an operational source). Here the VAT lines
+    // Reviewed invoices (V1 sales, V2 purchases): a posted journal is already required above (their obligation is an operational source). Here the VAT lines
     // must also match the reviewed snapshot exactly; missing_posted_journal is not counted twice.
     const invoiceVatMismatches=vatApplicable?Number(row.invoice_vat_mismatches??0):0;
     const ledger=incompleteDocuments.size+unpostedSources+independentDrafts+invoiceVatMismatches;

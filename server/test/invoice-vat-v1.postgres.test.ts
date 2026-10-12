@@ -207,12 +207,11 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     await expect(approve(c3, { id: s3.id, version: s3.version + 1 }, creator)).rejects.toMatchObject({ code: 'INVOICE_SELF_APPROVAL' });
   });
 
-  it('purchases with VAT stay blocked (V2); the invoice approval API stays disabled', async () => {
+  it('purchases with VAT need an explicit recoverability (V2 is covered in invoice-vat-v2); the invoice approval API stays disabled', async () => {
     const co = await company('purchase');
     const supp = (await q(`INSERT INTO counterparties (company_id, name, type, created_by_user_id) VALUES ($1,'S','supplier',$2) RETURNING id`, [co.id, creator]))[0].id;
-    const p = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supp, issue_date: '2026-03-10', lines: [line('standard', '15')] }));
-    const sub = await drafts.submit(co.id, creator, p.id, p.version);
-    await expect(approval.approve(co.id, approver, CAPS, sub.id, sub.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_PREREQUISITE' });
+    const p = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supp, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
+    await expect(drafts.submit(co.id, creator, p.id, p.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
     expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve'`)).toBe(0);
     expect(await n(`SELECT count(*) n FROM obligations WHERE company_id=$1`, [co.id])).toBe(0);
   });
@@ -471,7 +470,7 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     await expect(approve(co, { id: sub.id, version: sub.version })).rejects.toMatchObject({ code: 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' });
     const supplier = (await q(`INSERT INTO counterparties (company_id, name, type, created_by_user_id) VALUES ($1,'S','supplier',$2) RETURNING id`, [co.id, creator]))[0].id;
     const d3 = await legacyDocument(co, { recognized: false, docDate: '2026-03-07' });
-    const pdraft = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supplier, issue_date: '2026-03-10', source_document_id: d3.id, lines: [{ description: 'p', quantity: '1', unit_price: '100.00', vat_rate: '0' }] }));
+    const pdraft = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supplier, issue_date: '2026-03-10', tax_point_date: '2026-03-10', source_document_id: d3.id, lines: [{ description: 'p', quantity: '1', unit_price: '100.00', vat_rate: '0', vat_treatment: 'zero_rated' }] }));
     await allocate(d3.id);
     const psub = await drafts.submit(co.id, creator, pdraft.id, pdraft.version);
     await expect(approve(co, { id: psub.id, version: psub.version })).rejects.toMatchObject({ code: 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' });

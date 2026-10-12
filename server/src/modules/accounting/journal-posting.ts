@@ -107,17 +107,19 @@ export async function postJournalInTransaction(
     ).rows[0]!.matches;
     if (!amount) throw new JournalPostingValidationError('Journal total must match the operational source amount');
 
-    // Invoice VAT (V1, sales only). A journal that carries invoice VAT is postable only when it matches the immutable reviewed VAT
-    // snapshot exactly (one VAT_OUTPUT line per standard-rate group, liability credit, no tolerance). Purchases with VAT stay blocked (V2).
+    // Invoice VAT (V1 sales, V2 purchases). A journal that carries invoice VAT is postable only when it matches the immutable reviewed
+    // VAT snapshot exactly (one VAT line per standard-rate group: VAT_OUTPUT liability credit for sales, VAT_INPUT asset debit for
+    // purchases; no tolerance). A purchase approved before V2 has no snapshot: it stays postable only when it carries no VAT.
     const invoiceId = journal.source_type === 'obligation' ? operationalSource.context?.invoice_id : undefined;
     if (typeof invoiceId === 'string') {
-      const direction = (await client.query<{ direction: string }>('SELECT direction FROM invoices WHERE id=$1 AND company_id=$2', [invoiceId, companyId])).rows[0]?.direction;
-      if (direction === 'sales') {
+      const row = (await client.query<{ direction: string; reviewed: boolean }>(
+        'SELECT i.direction, EXISTS (SELECT 1 FROM invoice_vat_reviews r WHERE r.invoice_id=i.id AND r.company_id=i.company_id) reviewed FROM invoices i WHERE i.id=$1 AND i.company_id=$2', [invoiceId, companyId])).rows[0];
+      if (row?.direction === 'sales' || row?.reviewed) {
         if (!(await invoiceVatRecognitionIsExact(client, companyId, id, invoiceId))) {
           throw new JournalPostingConflictError('Invoice VAT recognition does not match the reviewed VAT snapshot; this journal cannot be posted');
         }
       } else if (Number(operationalSource.context?.invoice_vat_amount ?? 0) > 0) {
-        throw new JournalPostingConflictError('Purchase invoice VAT recognition is not enabled yet; this journal cannot be posted');
+        throw new JournalPostingConflictError('Purchase invoice VAT has no reviewed VAT snapshot; this journal cannot be posted');
       }
     }
 

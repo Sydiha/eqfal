@@ -42,6 +42,11 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
       await q(`INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, vat_rate, net_amount, vat_amount, total_amount, vat_treatment)
                VALUES ($1,$2,1,'Line',1,100,$3,100,$4::numeric,100+$4::numeric,$5)`, [co.id, id, vat > 0 ? '15' : '0', vat, vat > 0 ? 'standard' : 'zero_rated']);
       await q('UPDATE invoices SET tax_point_date = issue_date WHERE id=$1', [id]);
+    } else {
+      // V2: purchase lines carry an explicit treatment too, and standard lines an explicit (full) recoverability.
+      await q(`INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, vat_recoverability)
+               VALUES ($1,$2,1,'Line',1,100,$3,100,$4::numeric,100+$4::numeric,$5,$6)`, [co.id, id, vat > 0 ? '15' : '0', vat, vat > 0 ? 'standard' : 'zero_rated', vat > 0 ? 'fully_recoverable' : null]);
+      await q('UPDATE invoices SET tax_point_date = issue_date WHERE id=$1', [id]);
     }
     await q(`UPDATE invoices SET status='submitted', version=version+1 WHERE id=$1`, [id]);
     return id as string;
@@ -103,14 +108,17 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
       .toBe(Number((await q('SELECT original_amount FROM obligations WHERE id=$1', [out.obligation_id]))[0].original_amount));
   });
 
-  it('purchase without VAT: payable obligation, Dr expense / Cr payable; purchase with VAT is refused', async () => {
+  it('purchase without VAT: payable obligation, Dr expense / Cr payable; purchase with VAT books input VAT (V2)', async () => {
     const p = await submitted(A, 'purchase');
     const out = await approve(A, approver, p, await version(p));
     expect((await q('SELECT direction FROM obligations WHERE id=$1', [out.obligation_id]))[0].direction).toBe('payable');
     expect(await q('SELECT account_id, debit::text, credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence', [out.journal_id])).toEqual([
       { account_id: A.acc.purchase_expense, debit: '100.00', credit: '0.00' }, { account_id: A.acc.payable, debit: '0.00', credit: '100.00' }]);
     const pv = await submitted(A, 'purchase', '2026-03-10', 15);
-    await expect(approve(A, approver, pv, await version(pv))).rejects.toMatchObject({ code: 'INVOICE_VAT_PREREQUISITE' });
+    const outv = await approve(A, approver, pv, await version(pv));
+    expect(await q('SELECT account_id, debit::text, credit::text, memo FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence', [outv.journal_id])).toEqual([
+      { account_id: A.acc.purchase_expense, debit: '100.00', credit: '0.00', memo: null }, { account_id: A.acc.vat_input, debit: '15.00', credit: '0.00', memo: 'VAT_INPUT' },
+      { account_id: A.acc.payable, debit: '0.00', credit: '115.00', memo: null }]);
   });
 
   it('missing, inactive or wrong-type mapping rejects approval and rolls everything back', async () => {

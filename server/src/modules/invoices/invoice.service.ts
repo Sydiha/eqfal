@@ -11,7 +11,7 @@ import { computeLine, computeTotals, InvoiceMathError, LineAmounts } from './inv
 export type InvoiceErrorCode =
   | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED' | 'INVOICE_EMPTY' | 'INVOICE_VERSION_CONFLICT'
   | 'INVOICE_ALREADY_APPROVED' | 'INVOICE_FORBIDDEN' | 'INVOICE_MAPPING_MISSING' | 'INVOICE_VAT_PREREQUISITE' | 'INVOICE_SELF_APPROVAL' | 'INVOICE_FISCAL_YEAR_UNRESOLVED' | 'INVOICE_FISCAL_YEAR_CLOSED' | 'INVOICE_PERIOD_CLOSED'
-  | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
+  | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_POLICY_PENDING' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID';
 
 export class InvoiceError extends Error {
@@ -28,6 +28,9 @@ const STATUSES = ['draft', 'submitted', 'approved', 'cancelled'] as const;
 type Direction = (typeof DIRECTIONS)[number];
 const TREATMENTS = ['standard', 'zero_rated', 'exempt', 'out_of_scope'] as const;
 export type VatTreatment = (typeof TREATMENTS)[number];
+// V2 purchases: only full recovery is supported until the owner decides where non-recoverable input VAT is booked.
+const RECOVERABILITIES = ['fully_recoverable'] as const;
+export type VatRecoverability = (typeof RECOVERABILITIES)[number];
 
 const isObject = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const onlyKeys = (x: Record<string, unknown>, keys: string[], what: string) => {
@@ -55,11 +58,18 @@ const text = (x: unknown, field: string, max: number, required = false): string 
 export type DraftInput = {
   counterparty_id: string; issue_date: string; due_date: string | null; supply_date: string | null; tax_point_date: string | null;
   external_reference: string | null; notes: string | null; source_document_id: string | null;
-  lines: Array<LineAmounts & { description: string; vat_treatment: VatTreatment | null; treatment_note: string | null }>;
+  lines: Array<LineAmounts & { description: string; vat_treatment: VatTreatment | null; treatment_note: string | null; vat_recoverability: VatRecoverability | null }>;
   totals: { subtotal_amount: string; vat_amount: string; total_amount: string };
 };
 
 const DRAFT_FIELDS = ['counterparty_id', 'issue_date', 'due_date', 'supply_date', 'external_reference', 'notes', 'source_document_id', 'lines', 'tax_point_date'];
+
+/** Sales VAT is output VAT and has no recoverability; only purchase lines may carry one. */
+function assertRecoverabilityDirection(direction: Direction, input: DraftInput) {
+  if (direction === 'sales' && input.lines.some((l) => l.vat_recoverability !== null)) {
+    throw new InvoiceError(400, 'INVOICE_VALIDATION', 'vat_recoverability applies only to purchase invoice lines');
+  }
+}
 
 /** Validates a full draft body (create or full replacement on edit) and computes all amounts server-side. */
 export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput {
@@ -71,7 +81,7 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
   if (!Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > MAX_LINES) throw invalid(`lines must contain 1 to ${MAX_LINES} items`);
   const lines = body.lines.map((raw, i) => {
     if (!isObject(raw)) throw invalid(`lines[${i}] must be an object`);
-    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate', 'vat_treatment', 'treatment_note'], `lines[${i}]`);
+    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate', 'vat_treatment', 'treatment_note', 'vat_recoverability'], `lines[${i}]`);
     try {
       const amounts = computeLine(raw as never);
       // The treatment is chosen explicitly by the creator and is never derived from the rate. Only coherence is checked here.
@@ -79,9 +89,18 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
       if (treatment !== null && !TREATMENTS.includes(treatment as VatTreatment)) throw invalid(`lines[${i}].vat_treatment is not valid`);
       if (treatment === 'standard' && !(Number(amounts.vat_rate) > 0)) throw invalid(`lines[${i}]: a standard line needs a VAT rate above zero`);
       if (treatment !== null && treatment !== 'standard' && Number(amounts.vat_rate) !== 0) throw invalid(`lines[${i}]: this treatment carries no VAT, so vat_rate must be 0`);
+      // Input VAT recovery is stated explicitly (purchases only; checked against the direction by the service), never inferred.
+      const recoverability = raw.vat_recoverability == null ? null : raw.vat_recoverability;
+      if (recoverability !== null) {
+        if (!RECOVERABILITIES.includes(recoverability as VatRecoverability)) {
+          throw new InvoiceError(400, 'INVOICE_VAT_POLICY_PENDING', `lines[${i}].vat_recoverability: only fully_recoverable is supported until the owner decides how non-recoverable input VAT is booked`);
+        }
+        if (treatment !== 'standard') throw invalid(`lines[${i}]: vat_recoverability applies only to a standard line`);
+      }
       return {
         description: text(raw.description, `lines[${i}].description`, 500, true)!, ...amounts,
         vat_treatment: treatment as VatTreatment | null, treatment_note: text(raw.treatment_note, `lines[${i}].treatment_note`, 500),
+        vat_recoverability: recoverability as VatRecoverability | null,
       };
     } catch (error) {
       if (error instanceof InvoiceMathError) throw invalid(`lines[${i}]: ${error.message}`);
@@ -188,9 +207,9 @@ export class InvoiceDraftService {
     for (const line of input.lines) {
       n += 1;
       await client.query(
-        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, treatment_note)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount, line.vat_treatment, line.treatment_note],
+        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, treatment_note, vat_recoverability)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount, line.vat_treatment, line.treatment_note, line.vat_recoverability],
       );
     }
     if (input.source_document_id) {
@@ -203,6 +222,7 @@ export class InvoiceDraftService {
 
   async create(companyId: string, actorUserId: string, direction: Direction, input: DraftInput) {
     return this.tx(async (client) => {
+      assertRecoverabilityDirection(direction, input);
       await this.checkReferences(client, companyId, direction, input, null);
       const id = (await client.query<{ id: string }>(
         `INSERT INTO invoices (company_id, direction, status, counterparty_id, external_reference, issue_date, due_date, supply_date,
@@ -226,6 +246,7 @@ export class InvoiceDraftService {
       if (!current) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
       if (current.status !== 'draft') throw new InvoiceError(409, 'INVOICE_NOT_DRAFT', 'Only draft invoices can be edited');
       if (current.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
+      assertRecoverabilityDirection(current.direction, input);
       await this.checkReferences(client, companyId, current.direction, input, invoiceId);
       const before = await this.read(client, companyId, invoiceId);
       await client.query('DELETE FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId]);
@@ -257,9 +278,11 @@ export class InvoiceDraftService {
         throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', `Counterparty type ${cp.type} cannot be used on a ${current.direction} invoice`);
       }
       // V1 sales: the creator must state the tax point and a VAT treatment for every line before review. Nothing is inferred.
-      if (current.direction === 'sales') {
-        if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'A sales invoice needs a tax point date before it can be submitted');
-        if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted');
+      // V2 purchases follow the same rule, and every standard-rated purchase line also needs an explicit input VAT recoverability.
+      if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${current.direction} invoice needs a tax point date before it can be submitted`);
+      if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted');
+      if (current.direction === 'purchase' && before.lines.some((l: { vat_treatment: string | null; vat_recoverability: string | null }) => l.vat_treatment === 'standard' && !l.vat_recoverability)) {
+        throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit VAT recoverability before the invoice can be submitted');
       }
       await client.query(
         `UPDATE invoices SET status = 'submitted', version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status = 'draft'`,
@@ -315,7 +338,7 @@ export class InvoiceDraftService {
     if (!header) return null;
     const lines = (await client.query(
       `SELECT line_number, description, quantity::text, unit_price::text, discount_amount::text, vat_rate::text,
-              net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note
+              net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note, vat_recoverability
        FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number`, [invoiceId, companyId])).rows;
     return { ...header, lines };
   }
