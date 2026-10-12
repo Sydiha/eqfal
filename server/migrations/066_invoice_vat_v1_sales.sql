@@ -3,7 +3,7 @@
 -- from the VAT rate); the creator selects, the independent approver verifies; approval writes an immutable reviewed VAT snapshot
 -- (header + one group per treatment and rate) in the same transaction. Purchases stay blocked until V2.
 -- Existing rows are untouched: both new columns are nullable and are required only when a sales invoice is submitted/approved.
--- Rollback: DROP TABLE invoice_vat_review_groups, invoice_vat_reviews; DROP the three triggers/functions below; DROP the new columns.
+-- Rollback: DROP TABLE invoice_vat_review_groups, invoice_vat_reviews; DROP the triggers/functions below (incl. custody_allocations_linked_invoice_guard on custody_document_allocations); DROP the new columns.
 
 ALTER TABLE invoices ADD COLUMN tax_point_date DATE;
 ALTER TABLE invoice_lines ADD COLUMN vat_treatment TEXT CHECK (vat_treatment IN ('standard','zero_rated','exempt','out_of_scope'));
@@ -55,6 +55,22 @@ END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER invoice_vat_reviews_guard BEFORE UPDATE OR DELETE ON invoice_vat_reviews FOR EACH ROW EXECUTE FUNCTION guard_invoice_vat_snapshot();
 CREATE TRIGGER invoice_vat_review_groups_guard BEFORE UPDATE OR DELETE ON invoice_vat_review_groups FOR EACH ROW EXECUTE FUNCTION guard_invoice_vat_snapshot();
 
+-- Late inserts are refused too: a review may only be written by the transaction that approved its invoice, and its groups only by the
+-- transaction that wrote the review. After that transaction commits, the snapshot can never gain a row (same xmin technique as 065).
+CREATE FUNCTION guard_invoice_vat_snapshot_insert() RETURNS trigger AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'invoice_vat_reviews' THEN
+    IF NOT EXISTS (SELECT 1 FROM invoices WHERE id = NEW.invoice_id AND company_id = NEW.company_id AND xmin = pg_current_xact_id()::xid) THEN
+      RAISE EXCEPTION 'a VAT review can only be written by the transaction that approves the invoice' USING ERRCODE = '23514';
+    END IF;
+  ELSIF NOT EXISTS (SELECT 1 FROM invoice_vat_reviews WHERE id = NEW.review_id AND company_id = NEW.company_id AND xmin = pg_current_xact_id()::xid) THEN
+    RAISE EXCEPTION 'VAT review groups can only be written by the transaction that wrote the review' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER invoice_vat_reviews_insert_guard BEFORE INSERT ON invoice_vat_reviews FOR EACH ROW EXECUTE FUNCTION guard_invoice_vat_snapshot_insert();
+CREATE TRIGGER invoice_vat_review_groups_insert_guard BEFORE INSERT ON invoice_vat_review_groups FOR EACH ROW EXECUTE FUNCTION guard_invoice_vat_snapshot_insert();
+
 -- Exactness, checked at commit: the snapshot must reproduce the invoice with no unexplained difference.
 --   * the invoice is approved sales, reviewed by its approver, who is not its creator
 --   * groups == the invoice lines grouped by (treatment, rate), amount for amount
@@ -99,13 +115,15 @@ CREATE CONSTRAINT TRIGGER invoice_vat_reviews_exact AFTER INSERT ON invoice_vat_
   DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_invoice_vat_review();
 
 -- No duplicate recognition between a document and the invoice it is linked to (the link is evidence only).
--- A document linked to a submitted or approved invoice can no longer receive a reviewed VAT review or a document obligation.
+-- A document linked to a submitted or approved invoice can no longer receive a reviewed VAT review, a document obligation or a custody allocation.
 -- Documents already recognized stay exactly as they are; approval refuses to take over such a document (service-level check).
 CREATE FUNCTION guard_linked_document_recognition() RETURNS trigger AS $$
 DECLARE doc UUID;
 BEGIN
   IF TG_TABLE_NAME = 'document_vat_reviews' THEN
     IF NEW.review_status <> 'reviewed' THEN RETURN NEW; END IF;
+    doc := NEW.document_id;
+  ELSIF TG_TABLE_NAME = 'custody_document_allocations' THEN
     doc := NEW.document_id;
   ELSE
     IF NEW.source_type <> 'document' OR NEW.document_id IS NULL THEN RETURN NEW; END IF;
@@ -119,3 +137,4 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER document_vat_reviews_linked_invoice_guard BEFORE INSERT OR UPDATE ON document_vat_reviews FOR EACH ROW EXECUTE FUNCTION guard_linked_document_recognition();
 CREATE TRIGGER obligations_linked_invoice_guard BEFORE INSERT ON obligations FOR EACH ROW EXECUTE FUNCTION guard_linked_document_recognition();
+CREATE TRIGGER custody_allocations_linked_invoice_guard BEFORE INSERT ON custody_document_allocations FOR EACH ROW EXECUTE FUNCTION guard_linked_document_recognition();

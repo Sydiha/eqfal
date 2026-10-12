@@ -85,26 +85,29 @@ export class InvoiceApprovalService {
       'SELECT id FROM fiscal_years WHERE company_id = $1 AND $2::date BETWEEN start_date AND end_date', [companyId, before.issue_date])).rows;
     if (years.length !== 1) throw new InvoiceError(409, 'INVOICE_FISCAL_YEAR_UNRESOLVED', years.length === 0 ? 'No fiscal year covers the issue date' : 'More than one fiscal year covers the issue date');
     const fiscalYearId = years[0]!.id;
-    await assertAccountingDateWritable(companyId, before.issue_date, client);
+    // Lock order, shared with journal posting, VAT review writes, custody allocation and fiscal-year close:
+    //   fiscal-year row -> document row -> VAT month lock -> accounting month lock.
+    // Every other writer takes them in this order, so approval must too (any other order can deadlock against them).
     await assertFiscalYearOpen(companyId, fiscalYearId, before.issue_date, client);
+    const linked = (await client.query<{ document_id: string }>('SELECT document_id FROM invoice_source_links WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId])).rows[0];
+    if (linked) await client.query('SELECT 1 FROM documents WHERE id = $1 AND company_id = $2 FOR UPDATE', [linked.document_id, companyId]);
+    if (before.direction === 'sales') await lockVatDates(companyId, [before.tax_point_date!], client);
+    await assertAccountingDateWritable(companyId, before.issue_date, client);
 
     if (before.direction === 'sales') {
-      // Same serialisation as VAT review writes and VAT period close: the month lock is taken before any closed-period read.
-      await lockVatDates(companyId, [before.tax_point_date!], client);
+      // The VAT month lock was taken above, before any closed-period read.
       if ((await client.query("SELECT 1 FROM vat_periods WHERE company_id = $1 AND status = 'closed' AND $2::date BETWEEN period_start AND period_end LIMIT 1", [companyId, before.tax_point_date])).rowCount) {
         throw new InvoiceError(409, 'INVOICE_VAT_PERIOD_CLOSED', 'The tax point date falls in a closed VAT period');
       }
       await assertAccountingDateWritable(companyId, before.tax_point_date!, client);
-      // A linked document is evidence only. If it already carries its own VAT or obligation, the invoice must not recognize it again.
-      const linked = (await client.query<{ document_id: string }>('SELECT document_id FROM invoice_source_links WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId])).rows[0];
-      if (linked) {
-        await client.query('SELECT 1 FROM documents WHERE id = $1 AND company_id = $2 FOR UPDATE', [linked.document_id, companyId]);
-        const recognized = await client.query(
-          `SELECT 1 WHERE EXISTS (SELECT 1 FROM document_vat_reviews WHERE document_id = $1 AND company_id = $2 AND review_status = 'reviewed')
-              OR EXISTS (SELECT 1 FROM obligations WHERE document_id = $1 AND company_id = $2 AND source_type = 'document' AND NOT is_cancelled)
-              OR EXISTS (SELECT 1 FROM custody_document_allocations WHERE document_id = $1 AND company_id = $2)`, [linked.document_id, companyId]);
-        if (recognized.rowCount) throw new InvoiceError(409, 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED', 'The linked document is already recognized on its own and cannot also be recognized through this invoice');
-      }
+    }
+    // A linked document is evidence only. If it already carries its own VAT, obligation or custody allocation, the invoice must not recognize it again.
+    if (linked) {
+      const recognized = await client.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM document_vat_reviews WHERE document_id = $1 AND company_id = $2 AND review_status = 'reviewed')
+            OR EXISTS (SELECT 1 FROM obligations WHERE document_id = $1 AND company_id = $2 AND source_type = 'document' AND NOT is_cancelled)
+            OR EXISTS (SELECT 1 FROM custody_document_allocations WHERE document_id = $1 AND company_id = $2)`, [linked.document_id, companyId]);
+      if (recognized.rowCount) throw new InvoiceError(409, 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED', 'The linked document is already recognized on its own and cannot also be recognized through this invoice');
     }
 
     const mapped = await loadValidMappings(client, companyId);

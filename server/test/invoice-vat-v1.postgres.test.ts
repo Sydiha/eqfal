@@ -184,7 +184,7 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     expect(await code(q(`DELETE FROM invoice_vat_reviews WHERE id=$1`, [review.id]))).toBe('23514');
     expect(await code(q(`UPDATE invoice_vat_review_groups SET vat_amount=1 WHERE review_id=$1`, [review.id]))).toBe('23514');
     expect(await code(q(`DELETE FROM invoice_vat_review_groups WHERE review_id=$1`, [review.id]))).toBe('23514');
-    expect(await code(q(`INSERT INTO invoice_vat_reviews (company_id, invoice_id, tax_date, taxable_amount, vat_amount, reviewed_by_user_id) VALUES ($1,$2,'2026-03-10',100,15,$3)`, [co.id, inv.id, approver]))).toBe('23505');
+    expect(await code(q(`INSERT INTO invoice_vat_reviews (company_id, invoice_id, tax_date, taxable_amount, vat_amount, reviewed_by_user_id) VALUES ($1,$2,'2026-03-10',100,15,$3)`, [co.id, inv.id, approver]))).toBe('23514'); // late insert: refused by the insert guard, before the unique key
     // a hand-written snapshot that is off by one halala is rejected when the transaction commits
     const c2 = await company('exact');
     const sub = await drafts.create(c2.id, creator, 'sales', parseDraft({ counterparty_id: c2.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
@@ -309,9 +309,9 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     expect((await loadVatReconciliation(pool, b.id, '2026-03-01', '2026-03-31')).invoices).toBeUndefined();
     expect(await n(`SELECT count(*) n FROM invoice_vat_reviews WHERE company_id=$1`, [b.id])).toBe(0);
     await expect(approval.approve(b.id, approver, CAPS, inv.id, inv.version)).rejects.toMatchObject({ code: 'INVOICE_NOT_FOUND' });
-    // a review cannot be attached to another company's invoice (composite foreign key)
+    // a review cannot be attached to another company's invoice (insert guard first, composite foreign key as backstop)
     const unreviewed = await submitted(a, [line('standard', '15')]);
-    expect(await code(q(`INSERT INTO invoice_vat_reviews (company_id, invoice_id, tax_date, taxable_amount, vat_amount, reviewed_by_user_id) VALUES ($1,$2,'2026-03-10',100,15,$3)`, [b.id, unreviewed.id, approver]))).toBe('23503');
+    expect(await code(q(`INSERT INTO invoice_vat_reviews (company_id, invoice_id, tax_date, taxable_amount, vat_amount, reviewed_by_user_id) VALUES ($1,$2,'2026-03-10',100,15,$3)`, [b.id, unreviewed.id, approver]))).toMatch(/^(23514|23503)$/);
     const readyB = await vat.readiness(b.id, '2026-03-01', '2026-03-31');
     expect(readyB.ready).toBe(true);
   });
@@ -394,5 +394,97 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     expect(text).toContain('Invoice 1');
     expect(text).toContain('Standard 15.00%'); expect(text).toContain('Standard 5.00%'); expect(text).toContain('Exempt 0.00%');
     expect(text).toContain('reconciled');
+  });
+  it('snapshot is closed to late INSERT: groups and reviews can only be written by the approving transaction', async () => {
+    const co = await company('lateinsert');
+    const inv = await submitted(co, [line('standard', '15')]);
+    await approve(co, inv);
+    const review = (await q('SELECT id FROM invoice_vat_reviews WHERE invoice_id=$1', [inv.id]))[0];
+    const before = await n('SELECT count(*) n FROM invoice_vat_review_groups WHERE review_id=$1', [review.id]);
+    // a new group added to the committed snapshot in a later transaction (would otherwise change treatment totals silently)
+    expect(await code(q(`INSERT INTO invoice_vat_review_groups (company_id, review_id, vat_treatment, vat_rate, line_count, taxable_amount, vat_amount) VALUES ($1,$2,'exempt',0,1,0,0)`, [co.id, review.id]))).toBe('23514');
+    expect(await code(q(`INSERT INTO invoice_vat_review_groups (company_id, review_id, vat_treatment, vat_rate, line_count, taxable_amount, vat_amount) VALUES ($1,$2,'standard',5,1,10,0.50)`, [co.id, review.id]))).toBe('23514');
+    expect(await n('SELECT count(*) n FROM invoice_vat_review_groups WHERE review_id=$1', [review.id])).toBe(before);
+    // an invoice that was approved without a review cannot be given one afterwards, even with a perfectly matching snapshot
+    const late = await submitted(co, [line('standard', '15')]);
+    await q(`UPDATE invoices SET status='approved', internal_number=$3, fiscal_year_id=$4, approved_by_user_id=$2, approved_at=NOW() WHERE id=$1`, [late.id, approver, 700000 + Math.floor(Math.random() * 1e5), co.fy]);
+    expect(await code(q(`INSERT INTO invoice_vat_reviews (company_id, invoice_id, tax_date, taxable_amount, vat_amount, reviewed_by_user_id) VALUES ($1,$2,'2026-03-10',100,15,$3)`, [co.id, late.id, approver]))).toBe('23514');
+    expect(await n('SELECT count(*) n FROM invoice_vat_reviews WHERE invoice_id=$1', [late.id])).toBe(0);
+  });
+
+  it('lock order: approval never deadlocks with VAT review writes or fiscal-year close', async () => {
+    const guard = await import('../src/modules/monthly-close/accounting-period.guard');
+    const vatRouter = await import('../src/modules/vat/vat.router');
+    const closeScope = await import('../src/modules/fiscal-years/fiscal-year-close-readiness');
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const deadlock = (r: PromiseSettledResult<unknown>) => r.status === 'rejected' && (r.reason as { code?: string })?.code === '40P01';
+    // (a) writer order of a VAT review: document row -> VAT month lock -> accounting month lock
+    const coA = await company('lockorder-a');
+    const doc = await legacyDocument(coA, { recognized: false, docDate: '2026-03-05' });
+    const invA = await submitted(coA, [line('standard', '15')], { doc: doc.id });
+    const w1 = await pool.connect();
+    try {
+      await w1.query('BEGIN');
+      await w1.query('SELECT 1 FROM documents WHERE id=$1 AND company_id=$2 FOR UPDATE', [doc.id, coA.id]);
+      await vatRouter.lockVatDates(coA.id, ['2026-03-10'], w1);
+      const approving = approve(coA, invA);
+      await pause(400);                                        // approval is now waiting on the writer's locks
+      const writer = (async () => { await guard.assertAccountingDateWritable(coA.id, '2026-03-10', w1); await w1.query('COMMIT'); })();
+      const settled = await Promise.allSettled([approving, writer]);
+      expect(settled.some(deadlock)).toBe(false);
+      expect(settled[0].status).toBe('fulfilled');
+    } finally { await w1.query('ROLLBACK').catch(() => undefined); w1.release(); }
+    // (b) fiscal-year close order: fiscal-year row (FOR UPDATE) -> VAT range -> accounting range
+    const coB = await company('lockorder-b');
+    const invB = await submitted(coB, [line('standard', '15')]);
+    const w2 = await pool.connect();
+    try {
+      await w2.query('BEGIN');
+      await w2.query('SELECT 1 FROM fiscal_years WHERE id=$1 AND company_id=$2 FOR UPDATE', [coB.fy, coB.id]);
+      const approving = approve(coB, invB);
+      await pause(400);
+      const closer = (async () => { await closeScope.lockFiscalYearCloseScope(w2, coB.id, { id: coB.fy, start_date: '2026-01-01', end_date: '2026-12-31' }); await w2.query('COMMIT'); })();
+      const settled = await Promise.allSettled([approving, closer]);
+      expect(settled.some(deadlock)).toBe(false);
+      expect(settled[1].status).toBe('fulfilled');
+    } finally { await w2.query('ROLLBACK').catch(() => undefined); w2.release(); }
+  });
+
+  it('custody allocation cannot be added to a document linked to a submitted or approved invoice', async () => {
+    const co = await company('custody');
+    const holder = creator;
+    await q('INSERT INTO memberships (user_id, company_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [holder, co.id]);
+    const custody = (await q(`INSERT INTO custody_advances (company_id, holder_user_id, created_by_user_id) VALUES ($1,$2,$2) RETURNING id`, [co.id, holder]))[0].id;
+    const allocate = (docId: string) => q(`INSERT INTO custody_document_allocations (company_id, custody_id, document_id, amount, created_by_user_id) VALUES ($1,$2,$3,10,$4)`, [co.id, custody, docId, creator]);
+    // (a) submitted invoice: blocked; approved invoice: blocked
+    const d1 = await legacyDocument(co, { recognized: false, docDate: '2026-03-05' });
+    const inv1 = await submitted(co, [line('standard', '15')], { doc: d1.id });
+    expect(await code(allocate(d1.id))).toBe('23514');
+    await approve(co, inv1);
+    expect(await code(allocate(d1.id))).toBe('23514');
+    expect(await n('SELECT count(*) n FROM custody_document_allocations WHERE document_id=$1', [d1.id])).toBe(0);
+    // (b) an allocation made while the invoice was still a draft is caught at approval, for sales and for purchases
+    const d2 = await legacyDocument(co, { recognized: false, docDate: '2026-03-06' });
+    const draft = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', source_document_id: d2.id, lines: [line('standard', '15')] }));
+    await allocate(d2.id);
+    const sub = await drafts.submit(co.id, creator, draft.id, draft.version);
+    await expect(approve(co, { id: sub.id, version: sub.version })).rejects.toMatchObject({ code: 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' });
+    const supplier = (await q(`INSERT INTO counterparties (company_id, name, type, created_by_user_id) VALUES ($1,'S','supplier',$2) RETURNING id`, [co.id, creator]))[0].id;
+    const d3 = await legacyDocument(co, { recognized: false, docDate: '2026-03-07' });
+    const pdraft = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supplier, issue_date: '2026-03-10', source_document_id: d3.id, lines: [{ description: 'p', quantity: '1', unit_price: '100.00', vat_rate: '0' }] }));
+    await allocate(d3.id);
+    const psub = await drafts.submit(co.id, creator, pdraft.id, pdraft.version);
+    await expect(approve(co, { id: psub.id, version: psub.version })).rejects.toMatchObject({ code: 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' });
+    expect(await n(`SELECT count(*) n FROM invoices WHERE id IN ($1,$2) AND status='approved'`, [sub.id, psub.id])).toBe(0);
+  });
+
+  it('no route can cancel an approved invoice (cancellation is V3)', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const router = readFileSync(join(__dirname, '../src/modules/invoices/invoice.router.ts'), 'utf8');
+    expect(router).not.toMatch(/invoiceRouter\.(delete|patch)\(/);
+    expect(router).not.toMatch(/cancel/i);
+    const services = ['invoice.service.ts', 'invoice-approval.service.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
+    expect(services).not.toMatch(/SET status\s*=\s*'cancelled'/i);
   });
 });
