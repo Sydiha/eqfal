@@ -182,7 +182,7 @@ describe('AccessAdministration', () => {
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
-    expect(screen.getByText(/cannot be edited/)).toBeInTheDocument();
+    expect(screen.getByText(/implicit capability.*fixed and cannot be edited/)).toBeInTheDocument();
     // Only explicit-grant capabilities are manageable; no bulk or group controls appear for a Full Access role.
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
