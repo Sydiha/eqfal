@@ -15,6 +15,12 @@
  *   total  = net + vat
  * Invoice: subtotal = Σ net, vat = Σ vat, total = Σ line totals (always equals subtotal + vat).
  * All amounts are non-negative, so ROUND_HALF_UP is "round half away from zero".
+ *
+ * Purchase input VAT recovery (V2.1), per standard-rated line, from an explicit status and, only when partial, an explicit percent:
+ *   fully_recoverable      -> recoverable = vat
+ *   non_recoverable        -> recoverable = 0
+ *   partially_recoverable  -> recoverable = ROUND_HALF_UP(vat × percent / 100, 2), percent with up to 2 decimals, 0 < percent < 100
+ * The non-recoverable part is vat − recoverable. Nothing here is ever defaulted or inferred.
  */
 
 export class InvoiceMathError extends Error {}
@@ -22,6 +28,22 @@ export class InvoiceMathError extends Error {}
 const QUANTITY = /^\d{1,14}(?:\.\d{1,4})?$/;
 const MONEY = /^\d{1,16}(?:\.\d{1,2})?$/;
 const RATE = /^\d{1,3}(?:\.\d{1,2})?$/;
+
+/** Parses an explicit recoverable percent: a decimal string, up to 2 decimals, strictly between 0 and 100. Returns percent × 100 (scale 10^2). */
+export function parseRecoverablePercent(value: unknown): bigint {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!RATE.test(text)) throw new InvoiceMathError('vat_recoverable_percent must be a decimal string with up to 2 decimals');
+  const percentE2 = scaled(text, 2);
+  if (percentE2 <= 0n || percentE2 >= 10000n) {
+    throw new InvoiceMathError('vat_recoverable_percent must be above 0 and below 100 (use non_recoverable or fully_recoverable for the ends)');
+  }
+  return percentE2;
+}
+
+/** Recoverable part (halalas) of a line's VAT (halalas) for a partial recovery percent (scale 10^2). */
+export function recoverablePortion(vatHalalas: bigint, percentE2: bigint): bigint {
+  return roundHalfUp(vatHalalas * percentE2, 10_000n);
+}
 
 /** Parses a non-negative decimal string into an integer at the given scale (number of decimals). */
 function scaled(value: string, decimals: number): bigint {

@@ -130,7 +130,7 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     for (const inv of [s, p]) { const out = await approve(co, inv); await post(co, out.journal_id); }
     await vat.close(co.id, approver, period);
     const report = await loadVatClosingReport(pool, co.id, period);
-    expect(report.totals).toMatchObject({ output_vat: 150, input_vat: 35, net_vat: 115, sales_total: 1250, purchase_expense_total: 375, recoverable_input_vat: 35, non_recoverable_input_vat: 0, fully_recoverable_documents: 1 });
+    expect(report.totals).toMatchObject({ output_vat: 150, input_vat: 35, net_vat: 115, base_net_vat: 115, sales_total: 1250, purchase_expense_total: 375, recoverable_input_vat: 35, non_recoverable_input_vat: 0, fully_recoverable_documents: 1 });
     expect(report.treatments.standard).toMatchObject({ count: 2, taxable_amount: 1300, vat_amount: 185 });
     expect(report.treatments.exempt).toMatchObject({ count: 1, taxable_amount: 40 });
     const sale = report.invoices!.find((i) => i.expected_memo === 'VAT_OUTPUT')!;
@@ -151,20 +151,19 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     expect(text).toContain('Standard 5.00%'); expect(text).toContain('fully_recoverable'); expect(text).toContain('VAT_INPUT');
   });
 
-  it('recoverability is explicit; anything but full recovery waits for an owner policy decision', async () => {
+  it('recoverability is explicit and never defaulted (non-full recovery is covered by the V2.1 suite)', async () => {
     const co = await company('recov');
     // missing recoverability on a standard purchase line: valid draft, cannot be submitted
     const missing = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', tax_point_date: '2026-03-10',
       lines: [{ description: 'x', quantity: '1', unit_price: '100.00', vat_rate: '15', vat_treatment: 'standard' }] }));
     await expect(drafts.submit(co.id, creator, missing.id, missing.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
-    for (const value of ['non_recoverable', 'partially_recoverable']) {
-      expect(() => parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [{ ...line('standard', '15'), vat_recoverability: value }] })).toThrow(/owner decides/);
-    }
+    // values outside the approved set (e.g. a UI-style 'needs_review') are rejected, never defaulted
+    expect(() => parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [{ ...line('standard', '15'), vat_recoverability: 'needs_review' }] })).toThrow(/not valid/);
     expect(() => parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [{ ...line('exempt', '0'), vat_recoverability: 'fully_recoverable' }] })).toThrow(/only to a standard line/);
     // sales lines never carry recoverability
     await expect(drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] })))
       .rejects.toMatchObject({ code: 'INVOICE_VALIDATION' });
-    expect(await code(q(`UPDATE invoice_lines SET vat_recoverability='non_recoverable' WHERE invoice_id=$1`, [missing.id]))).toBe('23514');
+    expect(await code(q(`UPDATE invoice_lines SET vat_recoverability='partially_recoverable' WHERE invoice_id=$1`, [missing.id]))).toBe('23514'); // partial needs an explicit percent
     // missing tax point date
     const noTax = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [line('standard', '15')] }));
     await expect(drafts.submit(co.id, creator, noTax.id, noTax.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });

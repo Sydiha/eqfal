@@ -38,7 +38,7 @@ describe('VAT closing report',()=>{
     expect(calls[1]?.sql).toContain('r.tax_date BETWEEN $2 AND $3');
     expect(calls[1]?.sql).not.toContain('d.document_date BETWEEN');
     expect(report.company).toEqual({id:companyId,name:'Test Company'});
-    expect(report.totals).toEqual({output_vat:15,input_vat:7.5,net_vat:7.5,sales_total:115,purchase_expense_total:57.5,gross_reviewed_input_vat:7.5,recoverable_input_vat:5,non_recoverable_input_vat:2.5,recoverability_needs_review:0,fully_recoverable_documents:0,partially_recoverable_documents:1,non_recoverable_documents:0});
+    expect(report.totals).toEqual({output_vat:15,input_vat:7.5,net_vat:10,base_net_vat:10,sales_total:115,purchase_expense_total:57.5,gross_reviewed_input_vat:7.5,recoverable_input_vat:5,non_recoverable_input_vat:2.5,recoverability_needs_review:0,fully_recoverable_documents:0,partially_recoverable_documents:1,non_recoverable_documents:0});
     expect(report.treatments.standard).toEqual({count:2,taxable_amount:150,vat_amount:22.5});
     expect(report.documents.map(d=>d.counterparty_name)).toEqual(['Customer A','Supplier B']);
     expect(report.reconciliation.counts).toEqual({total_in_scope:1,reconciled:1,unreconciled:0});

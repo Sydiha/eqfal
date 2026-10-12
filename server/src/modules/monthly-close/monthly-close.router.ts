@@ -93,7 +93,7 @@ export class MonthlyCloseService {
         JOIN obligations ob ON ob.company_id=i.company_id AND ob.invoice_id=i.id AND ob.source_type='invoice' AND NOT ob.is_cancelled AND ob.verification_status='confirmed'
         JOIN journal_entries je ON je.company_id=ob.company_id AND je.source_type='obligation' AND je.source_id=ob.id AND je.status='posted'
         WHERE r.company_id=$1 AND i.issue_date BETWEEN $2 AND $3 AND NOT (
-          COALESCE((SELECT array_agg(g.vat_amount ORDER BY g.vat_amount) FROM invoice_vat_review_groups g WHERE g.review_id=r.id AND g.company_id=r.company_id AND g.vat_treatment='standard' AND g.vat_amount>0),ARRAY[]::numeric[])
+          COALESCE((SELECT array_agg(COALESCE(g.recoverable_vat_amount,g.vat_amount) ORDER BY COALESCE(g.recoverable_vat_amount,g.vat_amount)) FROM invoice_vat_review_groups g WHERE g.review_id=r.id AND g.company_id=r.company_id AND g.vat_treatment='standard' AND COALESCE(g.recoverable_vat_amount,g.vat_amount)>0),ARRAY[]::numeric[])
           = COALESCE((SELECT array_agg(CASE WHEN r.direction='purchase' THEN l.debit ELSE l.credit END ORDER BY CASE WHEN r.direction='purchase' THEN l.debit ELSE l.credit END) FROM journal_lines l WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id AND l.memo=CASE WHEN r.direction='purchase' THEN 'VAT_INPUT' ELSE 'VAT_OUTPUT' END),ARRAY[]::numeric[])
           AND NOT EXISTS (SELECT 1 FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id WHERE l.journal_entry_id=je.id AND l.company_id=je.company_id
             AND l.memo IN ('VAT_INPUT','VAT_OUTPUT') AND NOT (CASE WHEN r.direction='purchase'

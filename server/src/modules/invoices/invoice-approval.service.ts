@@ -5,7 +5,7 @@ import { assertFiscalYearOpen, FiscalYearClosedError } from '../accounting/fisca
 import { loadValidMappings, requiredKeys } from './invoice-account-mapping.service';
 import { InvoiceError } from './invoice.service';
 import { lockVatDates } from '../vat/vat.router';
-import { groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment } from '../vat/vat-invoice';
+import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, purchaseLineRecoverable, toHalalas } from '../vat/vat-invoice';
 
 /**
  * submitted -> approved, atomically with its confirmed obligation (A2) and balanced DRAFT journal (A1).
@@ -13,7 +13,8 @@ import { groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment } from '../vat/
  * NOT ACTIVATED: no route calls this and the invoice.approve capability is not registered (owner decision).
  * The journal is never posted here. V1 (sales): approval also writes the immutable reviewed VAT snapshot (header + one group per
  * treatment and rate) and stamps one VAT_OUTPUT line per standard-rate group. V2 (purchases): the same snapshot, with one VAT_INPUT
- * debit line per standard-rate group; input VAT must be explicitly fully recoverable (other recovery awaits an owner decision).
+ * debit line per standard-rate group for the RECOVERABLE part only (V2.1: the creator's explicit per-line recovery; the non-recoverable
+ * part is capitalized into the single expense debit; asset purchases are unsupported; nothing is inferred or defaulted).
  *
  * One transaction, all or nothing: lock invoice -> status/version -> permissions -> no self-approval -> exactly one
  * open fiscal year by issue_date -> period guard -> fiscal-year guard -> mappings -> number -> invoice update ->
@@ -67,18 +68,26 @@ export class InvoiceApprovalService {
 
     // Explicit tax point + explicit line treatments (V1 sales, V2 purchases), verified here by the independent approver. Nothing is
     // inferred. Purchases: every standard-rated line also states its input VAT recoverability; V2 supports full recovery only.
-    const vatLines = (await client.query<{ vat_treatment: InvoiceVatTreatment | null; vat_rate: string; net_amount: string; vat_amount: string; vat_recoverability: string | null }>(
-      'SELECT vat_treatment, vat_rate::text AS vat_rate, net_amount::text AS net_amount, vat_amount::text AS vat_amount, vat_recoverability FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number', [invoiceId, companyId])).rows;
+    const vatLines = (await client.query<{ vat_treatment: InvoiceVatTreatment | null; vat_rate: string; net_amount: string; vat_amount: string; vat_recoverability: string | null; vat_recoverable_percent: string | null }>(
+      'SELECT vat_treatment, vat_rate::text AS vat_rate, net_amount::text AS net_amount, vat_amount::text AS vat_amount, vat_recoverability, vat_recoverable_percent::text AS vat_recoverable_percent FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number', [invoiceId, companyId])).rows;
     if (!before.tax_point_date || !vatLines.length || vatLines.some((l) => !l.vat_treatment)) {
       throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${before.direction} invoice needs a tax point date and an explicit VAT treatment on every line`);
     }
-    if (before.direction === 'purchase' && vatLines.some((l) => l.vat_treatment === 'standard' && l.vat_recoverability !== 'fully_recoverable')) {
-      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit supported VAT recoverability');
-    }
-    if (before.direction === 'sales' && vatLines.some((l) => l.vat_recoverability !== null)) {
+    if (before.direction === 'sales' && vatLines.some((l) => l.vat_recoverability !== null || l.vat_recoverable_percent !== null)) {
       throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Sales VAT has no recoverability');
     }
-    const groups: InvoiceVatGroup[] = groupInvoiceLines(vatLines as Array<{ vat_treatment: InvoiceVatTreatment; vat_rate: string; net_amount: string; vat_amount: string }>);
+    // Purchases: the recoverable part of every line comes only from its explicit statement; a missing or incoherent one blocks approval.
+    const recoverableByLine = vatLines.map((l) => (before.direction === 'purchase'
+      ? purchaseLineRecoverable({ vat_treatment: l.vat_treatment!, vat_amount: l.vat_amount, vat_recoverability: l.vat_recoverability, vat_recoverable_percent: l.vat_recoverable_percent })
+      : undefined));
+    if (recoverableByLine.some((r) => r === null)) {
+      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit, valid VAT recoverability (and a percent when partial)');
+    }
+    const groups: InvoiceVatGroup[] = groupInvoiceLines(vatLines.map((l, i) => ({ ...l, vat_treatment: l.vat_treatment!, recoverable_vat_halalas: recoverableByLine[i] ?? undefined })));
+    const recoverableTotalH = groups.reduce((sum, g) => sum + toHalalas(g.recoverable_vat_amount), 0n);
+    const recoverableTotal = fromHalalas(recoverableTotalH);
+    // Non-recoverable input VAT is capitalized into the related expense cost (owner policy 2026-10-12).
+    const expenseDebit = fromHalalas(toHalalas(before.subtotal_amount) + toHalalas(before.vat_amount) - recoverableTotalH);
 
     const cp = (await client.query<{ is_active: boolean }>('SELECT is_active FROM counterparties WHERE id = $1 AND company_id = $2', [before.counterparty_id, companyId])).rows[0];
     if (!cp || !cp.is_active) throw new InvoiceError(400, 'INVOICE_COUNTERPARTY_INVALID', 'Counterparty not found or inactive');
@@ -114,7 +123,8 @@ export class InvoiceApprovalService {
     }
 
     const mapped = await loadValidMappings(client, companyId);
-    const needed = requiredKeys(before.direction, hasVat);
+    // A purchase needs the input-VAT account only when some VAT is actually recoverable (a fully non-recoverable VAT has no VAT_INPUT line).
+    const needed = requiredKeys(before.direction, before.direction === 'sales' ? hasVat : recoverableTotalH > 0n);
     const missing = needed.filter((k) => !mapped[k]);
     if (missing.length) throw new InvoiceError(409, 'INVOICE_MAPPING_MISSING', `Missing or invalid account mappings: ${missing.join(', ')}`);
 
@@ -136,14 +146,14 @@ export class InvoiceApprovalService {
        VALUES ($1,$2,$3,$4,$5,'obligation',$6,'standard','draft',$7) RETURNING *, accounting_date::text`,
       [companyId, fiscalYearId, before.issue_date, label, label, obligation.id, actorUserId])).rows[0];
     // Sales: Dr receivable total / Cr revenue subtotal / Cr VAT output per standard-rate group.
-    // Purchase: Dr expense subtotal / Dr VAT input per standard-rate group / Cr payable total.
+    // Purchase: Dr expense (subtotal + non-recoverable VAT) / Dr VAT input (recoverable part) per standard-rate group / Cr payable total.
     // One VAT line per standard-rate group with VAT (equal amounts stay separate lines), stamped VAT_OUTPUT or VAT_INPUT.
-    const vatGroups = groups.filter((g) => g.vat_treatment === 'standard' && Number(g.vat_amount) > 0);
+    const vatGroups = groups.filter((g) => g.vat_treatment === 'standard' && toHalalas(before.direction === 'sales' ? g.vat_amount : g.recoverable_vat_amount) > 0n);
     const lines: Array<[string, string, string, string | null]> = before.direction === 'sales'
       ? [[mapped.receivable!, before.total_amount, '0', null], [mapped.sales_revenue!, '0', before.subtotal_amount, null],
         ...vatGroups.map((g) => [mapped.vat_output!, '0', g.vat_amount, 'VAT_OUTPUT'] as [string, string, string, string])]
-      : [[mapped.purchase_expense!, before.subtotal_amount, '0', null],
-        ...vatGroups.map((g) => [mapped.vat_input!, g.vat_amount, '0', 'VAT_INPUT'] as [string, string, string, string]),
+      : [[mapped.purchase_expense!, expenseDebit, '0', null],
+        ...vatGroups.map((g) => [mapped.vat_input!, g.recoverable_vat_amount!, '0', 'VAT_INPUT'] as [string, string, string, string]),
         [mapped.payable!, '0', before.total_amount, null]];
     for (const [i, [account, debit, credit, memo]] of lines.entries()) {
       await client.query('INSERT INTO journal_lines (company_id, journal_entry_id, account_id, debit, credit, sequence, memo) VALUES ($1,$2,$3,$4,$5,$6,$7)',
@@ -154,20 +164,20 @@ export class InvoiceApprovalService {
       [journal.id, companyId, before.total_amount])).rows[0]!.ok;
     if (!balanced) throw new Error('Invoice draft journal is not balanced');
 
-    // Immutable reviewed VAT snapshot. Purchases (V2, full recovery only): recoverable VAT equals VAT on the header and every group.
+    // Immutable reviewed VAT snapshot. Purchases (V2.1): recoverable VAT is the exact sum of the explicit per-line recovery on every group and on the header.
     const purchase = before.direction === 'purchase';
     const vatReviewId = (await client.query<{ id: string }>(
       `INSERT INTO invoice_vat_reviews (company_id, invoice_id, direction, tax_date, taxable_amount, vat_amount, reviewed_by_user_id, recoverable_vat_amount)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [companyId, invoiceId, before.direction, before.tax_point_date, before.subtotal_amount, before.vat_amount, actorUserId, purchase ? before.vat_amount : null])).rows[0]!.id;
+      [companyId, invoiceId, before.direction, before.tax_point_date, before.subtotal_amount, before.vat_amount, actorUserId, purchase ? recoverableTotal : null])).rows[0]!.id;
     for (const g of groups) {
       await client.query(
         `INSERT INTO invoice_vat_review_groups (company_id, review_id, vat_treatment, vat_rate, line_count, taxable_amount, vat_amount, recoverable_vat_amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [companyId, vatReviewId, g.vat_treatment, g.vat_rate, g.line_count, g.taxable_amount, g.vat_amount, purchase ? g.vat_amount : null]);
+        [companyId, vatReviewId, g.vat_treatment, g.vat_rate, g.line_count, g.taxable_amount, g.vat_amount, purchase ? g.recoverable_vat_amount! : null]);
     }
     await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.vat_review.create', entity_type: 'invoice_vat_review', entity_id: vatReviewId, before_data: null,
       after_data: { invoice_id: invoiceId, tax_date: before.tax_point_date, taxable_amount: before.subtotal_amount, vat_amount: before.vat_amount, groups,
-        ...(purchase ? { direction: 'purchase', recoverable_vat_amount: before.vat_amount } : {}) } as never }, client);
+        ...(purchase ? { direction: 'purchase', recoverable_vat_amount: recoverableTotal } : {}) } as never }, client);
     await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.approve', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
     await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'obligation.create', entity_type: 'obligation', entity_id: obligation.id, before_data: null, after_data: obligation as never }, client);
     await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'journal.create', entity_type: 'journal_entry', entity_id: journal.id, before_data: null, after_data: { ...journal, lines: lines.map(([account, debit, credit]) => [account, debit, credit]) } as never }, client);

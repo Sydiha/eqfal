@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeLine, computeTotals, InvoiceMathError } from '../src/modules/invoices/invoice-math';
+import { computeLine, computeTotals, InvoiceMathError, parseRecoverablePercent, recoverablePortion } from '../src/modules/invoices/invoice-math';
 
 const line = (quantity: string, unit_price: string, vat_rate: string, discount_amount?: string) =>
   computeLine({ quantity, unit_price, vat_rate, discount_amount });
@@ -69,5 +69,29 @@ describe('invoice arithmetic (A6: line-level ROUND_HALF_UP)', () => {
   it('is free of floating-point drift for classic float traps', () => {
     expect(line('3', '0.10', '0').net_amount).toBe('0.30'); // 0.1*3 = 0.30000000000000004 in float
     expect(line('1', '1.15', '100').vat_amount).toBe('1.15');
+  });
+});
+
+describe('purchase VAT recoverability (V2.1): explicit percent and exact split', () => {
+  it('accepts only an explicit percent strictly between 0 and 100 with up to 2 decimals, normalized to scale 2', () => {
+    expect(parseRecoverablePercent('0.01')).toBe(1n);
+    expect(parseRecoverablePercent('99.99')).toBe(9999n);
+    expect(parseRecoverablePercent('50')).toBe(5000n);
+    expect(parseRecoverablePercent(' 12.5 ')).toBe(1250n);
+    for (const bad of ['0', '0.00', '100', '100.00', '100.01', '-1', '1.234', '', 'abc', '1e2', 50, null, undefined]) {
+      expect(() => parseRecoverablePercent(bad), String(bad)).toThrow(InvoiceMathError);
+    }
+  });
+
+  it('splits VAT with ROUND_HALF_UP on the recoverable part, so recoverable + non-recoverable always equals the VAT', () => {
+    expect(recoverablePortion(15000n, 4000n)).toBe(6000n); // 150.00 @ 40% = 60.00
+    expect(recoverablePortion(15n, 5000n)).toBe(8n); // 0.15 @ 50% = 0.075 -> 0.08 (half rounds up)
+    expect(recoverablePortion(50n, 3333n)).toBe(17n); // 0.50 @ 33.33% = 0.16665 -> 0.17
+    expect(recoverablePortion(15n, 1n)).toBe(0n); // 0.15 @ 0.01% -> 0.00
+    expect(recoverablePortion(15n, 9999n)).toBe(15n); // 0.15 @ 99.99% -> 0.15
+    for (const vat of [0n, 1n, 7n, 15n, 99n, 12345n]) for (const pct of [1n, 1250n, 3333n, 5000n, 9999n]) {
+      const rec = recoverablePortion(vat, pct);
+      expect(rec >= 0n && rec <= vat).toBe(true);
+    }
   });
 });
