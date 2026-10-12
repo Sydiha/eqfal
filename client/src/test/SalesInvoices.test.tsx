@@ -16,7 +16,7 @@ function mockApi(invoice:typeof draft|Record<string,unknown>=draft,overrides:Rec
   if(overrides[key])return Promise.resolve(overrides[key](init));
   if(key==='GET /api/invoices')return Promise.resolve(json({invoices:[invoice],total:1,limit:100,offset:0}));
   if(key===`GET /api/invoices/${draft.id}`)return Promise.resolve(json({invoice}));
-  if(key==='GET /api/counterparties')return Promise.resolve(json({counterparties:[{id:draft.counterparty_id,name:'Acme',type:'customer',is_active:true},{id:'33333333-3333-4333-8333-333333333333',name:'Vendor Co',type:'supplier',is_active:true}]}));
+  if(key==='GET /api/invoices/customers')return Promise.resolve(json({customers:[{id:draft.counterparty_id,name:'Acme',type:'customer'}]}));
   return Promise.resolve(json({},404));
  });
  vi.stubGlobal('fetch',fetchMock);
@@ -37,13 +37,14 @@ describe('Sales invoices',()=>{
   expect(screen.getByText('15.00%')).toBeInTheDocument();
  });
 
- it('creates a draft with raw string inputs, direction sales, only non-supplier customers',async()=>{
+ it('creates a draft with raw string inputs, direction sales, customers from the invoice picker endpoint',async()=>{
   const fetchMock=mockApi(draft,{'POST /api/invoices':()=>json({invoice:draft},201)});
   render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   await screen.findByRole('dialog');
   await waitFor(()=>expect(screen.getByRole('option',{name:'Acme'})).toBeInTheDocument());
-  expect(screen.queryByRole('option',{name:'Vendor Co'})).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(c=>c[0]==='/api/counterparties')).toBe(false);
+  expect(fetchMock.mock.calls.some(c=>c[0]==='/api/invoices/customers')).toBe(true);
   fireEvent.change(screen.getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
   fireEvent.change(screen.getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
@@ -131,7 +132,7 @@ describe('Sales page with invoice workflow',()=>{
 
  it('keeps document upload as a separate, relabelled action and opens the invoice form from the new action',async()=>{
   mockApi();
-  vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:100,offset:0}):json({counterparties:[]}))));
+  vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:100,offset:0}):json({customers:[]}))));
   const onCreateDocument=vi.fn();
   render(<Sales canView canManage canCreate onCreateDocument={onCreateDocument} invoices={caps} onUnauthorized={vi.fn()}/>);
   const upload=await screen.findAllByRole('button',{name:'Upload sale document'});
@@ -145,7 +146,7 @@ describe('Sales page with invoice workflow',()=>{
 
 describe('Sales permission separation',()=>{
  beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
- const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({counterparties:[]})));vi.stubGlobal('fetch',f);return f};
+ const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({customers:[]})));vi.stubGlobal('fetch',f);return f};
 
  it('invoice-only user reaches the invoice section and never loads legacy sales data',async()=>{
   const f=stub();

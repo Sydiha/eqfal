@@ -350,6 +350,13 @@ export class InvoiceDraftService {
     return { ...header, lines };
   }
 
+  /** Customer picker for sales invoices: active, non-supplier counterparties of the company, id/name/type only (same rule as checkReferences). */
+  async listCustomers(companyId: string) {
+    const rows = (await this.db.query<{ id: string; name: string; type: string }>(
+      `SELECT id, name, type FROM counterparties WHERE company_id = $1 AND is_active = TRUE AND type <> 'supplier' ORDER BY name, id`, [companyId])).rows;
+    return { customers: rows };
+  }
+
   async list(companyId: string, f: ListFilters) {
     const where = ['i.company_id = $1'];
     const params: unknown[] = [companyId];

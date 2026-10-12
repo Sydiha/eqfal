@@ -7,7 +7,7 @@ import './SalesInvoices.css';
 export type SalesInvoiceCapabilities={canView:boolean;canCreate:boolean;canEdit:boolean;canSubmit:boolean};
 type Line={line_number?:number;description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;net_amount?:string;vat_amount?:string;total_amount?:string;vat_treatment:string|null};
 type Invoice={id:string;status:'draft'|'submitted'|'approved'|'cancelled';counterparty_id:string;counterparty_name:string;internal_number:string|null;external_reference:string|null;issue_date:string;due_date:string|null;supply_date:string|null;tax_point_date:string|null;currency:string;subtotal_amount:string;vat_amount:string;total_amount:string;notes:string|null;version:number;lines?:Line[]};
-type Counterparty={id:string;name:string;type:string;is_active:boolean};
+type Counterparty={id:string;name:string;type:string};
 type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string};
 type FormValues={counterparty_id:string;issue_date:string;due_date:string;supply_date:string;tax_point_date:string;external_reference:string;notes:string;lines:FormLine[]};
 const TREATMENTS=['standard','zero_rated','exempt','out_of_scope'] as const;
@@ -45,7 +45,7 @@ export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorize
   finally{setBusy(false)}
  };
  const refresh=async()=>{if(canView)await load().catch(()=>setLoadError(true))};
- const loadParties=async()=>{try{const response=await fetch('/api/counterparties');if(response.status===401){unauthorized();return;}if(response.ok)setParties(((await response.json()) as {counterparties:Counterparty[]}).counterparties)}catch{/* the customer list stays empty; the server still validates the choice */}};
+ const loadParties=async()=>{try{const response=await fetch('/api/invoices/customers');if(response.status===401){unauthorized();return;}if(response.ok)setParties(((await response.json()) as {customers:Counterparty[]}).customers)}catch{/* the customer list stays empty; the server still validates the choice */}};
 
  const open=async(id:string)=>{setError(null);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
  const startNew=()=>{setError(null);setDetail(null);setForm({id:null,version:null,values:emptyForm()});void loadParties()};
@@ -63,7 +63,7 @@ export function SalesInvoices({canView,canCreate,canEdit,canSubmit,onUnauthorize
  const setLine=(index:number,patch:Partial<FormLine>)=>setForm(current=>current&&{...current,values:{...current.values,lines:current.values.lines.map((line,i)=>i===index?{...line,...patch}:line)}});
 
  if(!canView&&!canCreate)return null;
- const customers=parties.filter(p=>p.is_active&&p.type!=='supplier');
+ const customers=parties;
  const statusLabel=(status:string)=>t(`salesInvoice.statuses.${status}`);
  return <section className="sales-invoices" aria-labelledby="sales-invoices-title">
   <div className="sales-invoices__head"><div><h2 id="sales-invoices-title">{t('salesInvoice.title')}</h2><p>{t('salesInvoice.intro')}</p></div>{canCreate&&<button type="button" className="primary" onClick={startNew}>{t('salesInvoice.add')}</button>}</div>
