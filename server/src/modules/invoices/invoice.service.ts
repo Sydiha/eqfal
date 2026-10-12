@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
-import { computeLine, computeTotals, InvoiceMathError, LineAmounts } from './invoice-math';
+import { computeLine, computeTotals, formatMoney, InvoiceMathError, LineAmounts, parseRecoverablePercent } from './invoice-math';
 
 /**
  * Sales and purchase invoice DRAFTS (PR-2B). Drafts have no accounting, VAT or obligation effect.
@@ -11,7 +11,7 @@ import { computeLine, computeTotals, InvoiceMathError, LineAmounts } from './inv
 export type InvoiceErrorCode =
   | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED' | 'INVOICE_EMPTY' | 'INVOICE_VERSION_CONFLICT'
   | 'INVOICE_ALREADY_APPROVED' | 'INVOICE_FORBIDDEN' | 'INVOICE_MAPPING_MISSING' | 'INVOICE_VAT_PREREQUISITE' | 'INVOICE_SELF_APPROVAL' | 'INVOICE_FISCAL_YEAR_UNRESOLVED' | 'INVOICE_FISCAL_YEAR_CLOSED' | 'INVOICE_PERIOD_CLOSED'
-  | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_POLICY_PENDING' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
+  | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID';
 
 export class InvoiceError extends Error {
@@ -28,8 +28,9 @@ const STATUSES = ['draft', 'submitted', 'approved', 'cancelled'] as const;
 type Direction = (typeof DIRECTIONS)[number];
 const TREATMENTS = ['standard', 'zero_rated', 'exempt', 'out_of_scope'] as const;
 export type VatTreatment = (typeof TREATMENTS)[number];
-// V2 purchases: only full recovery is supported until the owner decides where non-recoverable input VAT is booked.
-const RECOVERABILITIES = ['fully_recoverable'] as const;
+// V2.1 purchases (owner policy 2026-10-12): the creator states the input VAT recovery explicitly; it is never inferred.
+// Partial recovery also states an explicit percent (strictly between 0 and 100). Expense purchases only; asset purchases are unsupported.
+const RECOVERABILITIES = ['fully_recoverable', 'non_recoverable', 'partially_recoverable'] as const;
 export type VatRecoverability = (typeof RECOVERABILITIES)[number];
 
 const isObject = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -58,7 +59,7 @@ const text = (x: unknown, field: string, max: number, required = false): string 
 export type DraftInput = {
   counterparty_id: string; issue_date: string; due_date: string | null; supply_date: string | null; tax_point_date: string | null;
   external_reference: string | null; notes: string | null; source_document_id: string | null;
-  lines: Array<LineAmounts & { description: string; vat_treatment: VatTreatment | null; treatment_note: string | null; vat_recoverability: VatRecoverability | null }>;
+  lines: Array<LineAmounts & { description: string; vat_treatment: VatTreatment | null; treatment_note: string | null; vat_recoverability: VatRecoverability | null; vat_recoverable_percent: string | null }>;
   totals: { subtotal_amount: string; vat_amount: string; total_amount: string };
 };
 
@@ -66,8 +67,8 @@ const DRAFT_FIELDS = ['counterparty_id', 'issue_date', 'due_date', 'supply_date'
 
 /** Sales VAT is output VAT and has no recoverability; only purchase lines may carry one. */
 function assertRecoverabilityDirection(direction: Direction, input: DraftInput) {
-  if (direction === 'sales' && input.lines.some((l) => l.vat_recoverability !== null)) {
-    throw new InvoiceError(400, 'INVOICE_VALIDATION', 'vat_recoverability applies only to purchase invoice lines');
+  if (direction === 'sales' && input.lines.some((l) => l.vat_recoverability !== null || l.vat_recoverable_percent !== null)) {
+    throw new InvoiceError(400, 'INVOICE_VALIDATION', 'vat_recoverability and vat_recoverable_percent apply only to purchase invoice lines');
   }
 }
 
@@ -81,7 +82,7 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
   if (!Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > MAX_LINES) throw invalid(`lines must contain 1 to ${MAX_LINES} items`);
   const lines = body.lines.map((raw, i) => {
     if (!isObject(raw)) throw invalid(`lines[${i}] must be an object`);
-    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate', 'vat_treatment', 'treatment_note', 'vat_recoverability'], `lines[${i}]`);
+    onlyKeys(raw, ['description', 'quantity', 'unit_price', 'discount_amount', 'vat_rate', 'vat_treatment', 'treatment_note', 'vat_recoverability', 'vat_recoverable_percent'], `lines[${i}]`);
     try {
       const amounts = computeLine(raw as never);
       // The treatment is chosen explicitly by the creator and is never derived from the rate. Only coherence is checked here.
@@ -91,16 +92,22 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
       if (treatment !== null && treatment !== 'standard' && Number(amounts.vat_rate) !== 0) throw invalid(`lines[${i}]: this treatment carries no VAT, so vat_rate must be 0`);
       // Input VAT recovery is stated explicitly (purchases only; checked against the direction by the service), never inferred.
       const recoverability = raw.vat_recoverability == null ? null : raw.vat_recoverability;
+      let percent: string | null = null;
       if (recoverability !== null) {
-        if (!RECOVERABILITIES.includes(recoverability as VatRecoverability)) {
-          throw new InvoiceError(400, 'INVOICE_VAT_POLICY_PENDING', `lines[${i}].vat_recoverability: only fully_recoverable is supported until the owner decides how non-recoverable input VAT is booked`);
-        }
+        if (!RECOVERABILITIES.includes(recoverability as VatRecoverability)) throw invalid(`lines[${i}].vat_recoverability is not valid`);
         if (treatment !== 'standard') throw invalid(`lines[${i}]: vat_recoverability applies only to a standard line`);
+      }
+      if (recoverability === 'partially_recoverable') {
+        // The percent is explicit input: missing, malformed, <= 0 or >= 100 is rejected, never defaulted. Stored with 2 decimals.
+        if (raw.vat_recoverable_percent == null) throw invalid(`lines[${i}].vat_recoverable_percent is required for partially_recoverable`);
+        percent = formatMoney(parseRecoverablePercent(raw.vat_recoverable_percent));
+      } else if (raw.vat_recoverable_percent != null) {
+        throw invalid(`lines[${i}].vat_recoverable_percent applies only to partially_recoverable`);
       }
       return {
         description: text(raw.description, `lines[${i}].description`, 500, true)!, ...amounts,
         vat_treatment: treatment as VatTreatment | null, treatment_note: text(raw.treatment_note, `lines[${i}].treatment_note`, 500),
-        vat_recoverability: recoverability as VatRecoverability | null,
+        vat_recoverability: recoverability as VatRecoverability | null, vat_recoverable_percent: percent,
       };
     } catch (error) {
       if (error instanceof InvoiceMathError) throw invalid(`lines[${i}]: ${error.message}`);
@@ -207,9 +214,9 @@ export class InvoiceDraftService {
     for (const line of input.lines) {
       n += 1;
       await client.query(
-        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, treatment_note, vat_recoverability)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount, line.vat_treatment, line.treatment_note, line.vat_recoverability],
+        `INSERT INTO invoice_lines (company_id, invoice_id, line_number, description, quantity, unit_price, discount_amount, vat_rate, net_amount, vat_amount, total_amount, vat_treatment, treatment_note, vat_recoverability, vat_recoverable_percent)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [companyId, invoiceId, n, line.description, line.quantity, line.unit_price, line.discount_amount, line.vat_rate, line.net_amount, line.vat_amount, line.total_amount, line.vat_treatment, line.treatment_note, line.vat_recoverability, line.vat_recoverable_percent],
       );
     }
     if (input.source_document_id) {
@@ -338,7 +345,7 @@ export class InvoiceDraftService {
     if (!header) return null;
     const lines = (await client.query(
       `SELECT line_number, description, quantity::text, unit_price::text, discount_amount::text, vat_rate::text,
-              net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note, vat_recoverability
+              net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note, vat_recoverability, vat_recoverable_percent::text
        FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number`, [invoiceId, companyId])).rows;
     return { ...header, lines };
   }

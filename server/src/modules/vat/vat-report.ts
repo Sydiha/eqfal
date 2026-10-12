@@ -99,7 +99,7 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     for (const invoice of invoices) {
       if (invoice.direction === 'purchase') {
         inputH += toHalalas(invoice.reviewed_vat_amount); recoverableH += toHalalas(invoice.recoverable_vat_amount); purchaseH += toHalalas(invoice.total_amount);
-        if (toHalalas(invoice.reviewed_vat_amount) > 0n) fully++;
+        if (toHalalas(invoice.reviewed_vat_amount) > 0n) { const rec = toHalalas(invoice.recoverable_vat_amount); if (rec === toHalalas(invoice.reviewed_vat_amount)) fully++; else if (rec === 0n) nonRecoverable++; else partially++; }
       } else { outputH += toHalalas(invoice.reviewed_vat_amount); salesH += toHalalas(invoice.total_amount); }
       for (const treatment of new Set(invoice.groups.map(g => g.vat_treatment))) treatmentTotals[treatment].count += 1;
       for (const group of invoice.groups) { treatmentTotals[group.vat_treatment].taxable_amount += Number(toHalalas(group.taxable_amount)) / 100; treatmentTotals[group.vat_treatment].vat_amount += Number(toHalalas(group.vat_amount)) / 100; }

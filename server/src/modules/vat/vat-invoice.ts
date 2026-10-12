@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { parseRecoverablePercent, recoverablePortion } from '../invoices/invoice-math';
 
 /**
  * Invoice side of VAT reporting and reconciliation (V1: sales invoices, output VAT; V2: purchase invoices, input VAT). Documents keep their own, untouched paths in
@@ -28,24 +29,51 @@ export interface InvoiceVatGroup {
   recoverable_vat_amount?: string;
 }
 
-/** Groups invoice lines by (treatment, rate); sums are exact. The result is deterministic (treatment, then rate). */
-export function groupInvoiceLines(lines: ReadonlyArray<{ vat_treatment: InvoiceVatTreatment; vat_rate: string; net_amount: string; vat_amount: string }>): InvoiceVatGroup[] {
-  const map = new Map<string, { vat_treatment: InvoiceVatTreatment; vat_rate: string; n: number; net: bigint; vat: bigint }>();
+export type PurchaseRecoverability = 'fully_recoverable' | 'non_recoverable' | 'partially_recoverable';
+export interface RecoverabilityLine { vat_treatment: InvoiceVatTreatment; vat_amount: string; vat_recoverability: string | null; vat_recoverable_percent: string | null }
+
+/**
+ * Recoverable input VAT (halalas) of one purchase line, from its EXPLICIT stated recovery only. Returns null when the statement is
+ * missing or incoherent (so callers reject instead of defaulting). Non-standard lines carry no VAT, hence no recovery.
+ */
+export function purchaseLineRecoverable(line: RecoverabilityLine): bigint | null {
+  if (line.vat_treatment !== 'standard') return line.vat_recoverability === null && line.vat_recoverable_percent === null ? 0n : null;
+  const vat = toHalalas(line.vat_amount);
+  switch (line.vat_recoverability) {
+    case 'fully_recoverable': return line.vat_recoverable_percent === null ? vat : null;
+    case 'non_recoverable': return line.vat_recoverable_percent === null ? 0n : null;
+    case 'partially_recoverable': {
+      if (line.vat_recoverable_percent === null) return null;
+      try { return recoverablePortion(vat, parseRecoverablePercent(line.vat_recoverable_percent)); } catch { return null; }
+    }
+    default: return null;
+  }
+}
+
+/** Groups invoice lines by (treatment, rate); sums are exact. The result is deterministic (treatment, then rate). When lines carry a recoverable amount (purchases) the group carries the exact sum. */
+export function groupInvoiceLines(lines: ReadonlyArray<{ vat_treatment: InvoiceVatTreatment; vat_rate: string; net_amount: string; vat_amount: string; recoverable_vat_halalas?: bigint }>): InvoiceVatGroup[] {
+  const map = new Map<string, { vat_treatment: InvoiceVatTreatment; vat_rate: string; n: number; net: bigint; vat: bigint; rec: bigint | null }>();
   for (const line of lines) {
     const rate = Number(line.vat_rate).toFixed(2);
     const key = `${line.vat_treatment}|${rate}`;
-    const group = map.get(key) ?? { vat_treatment: line.vat_treatment, vat_rate: rate, n: 0, net: 0n, vat: 0n };
+    const group = map.get(key) ?? { vat_treatment: line.vat_treatment, vat_rate: rate, n: 0, net: 0n, vat: 0n, rec: null };
     group.n += 1; group.net += toHalalas(line.net_amount); group.vat += toHalalas(line.vat_amount);
+    if (line.recoverable_vat_halalas !== undefined) group.rec = (group.rec ?? 0n) + line.recoverable_vat_halalas;
     map.set(key, group);
   }
   return [...map.values()]
     .sort((a, b) => (a.vat_treatment === b.vat_treatment ? Number(a.vat_rate) - Number(b.vat_rate) : a.vat_treatment < b.vat_treatment ? -1 : 1))
-    .map((g) => ({ vat_treatment: g.vat_treatment, vat_rate: g.vat_rate, line_count: g.n, taxable_amount: fromHalalas(g.net), vat_amount: fromHalalas(g.vat) }));
+    .map((g) => ({ vat_treatment: g.vat_treatment, vat_rate: g.vat_rate, line_count: g.n, taxable_amount: fromHalalas(g.net), vat_amount: fromHalalas(g.vat),
+      ...(g.rec === null ? {} : { recoverable_vat_amount: fromHalalas(g.rec) }) }));
 }
 
-/** VAT amounts (halalas) that must appear as one VAT line each (VAT_OUTPUT for sales, VAT_INPUT for purchases): standard groups with VAT above zero. */
+/**
+ * VAT amounts (halalas) that must appear as one VAT line each (VAT_OUTPUT for sales, VAT_INPUT for purchases): standard groups with a
+ * positive amount. Purchases recognize only the RECOVERABLE part (a fully non-recoverable group has no VAT_INPUT line at all).
+ */
 export function expectedVatLines(groups: ReadonlyArray<InvoiceVatGroup>): bigint[] {
-  return groups.filter((g) => g.vat_treatment === 'standard' && toHalalas(g.vat_amount) > 0n).map((g) => toHalalas(g.vat_amount)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return groups.filter((g) => g.vat_treatment === 'standard').map((g) => toHalalas(g.recoverable_vat_amount ?? g.vat_amount)).filter((v) => v > 0n)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /**
@@ -69,7 +97,7 @@ export interface VatReportInvoiceGroup extends InvoiceVatGroup {}
 export interface VatInvoiceReconciliationRow {
   invoice_id: string; internal_number: string | null; counterparty_name: string; issue_date: string; tax_date: string;
   total_amount: string; taxable_amount: string; reviewed_vat_amount: string; expected_memo: 'VAT_OUTPUT' | 'VAT_INPUT';
-  /** Present only on purchase invoices (V2), so sales rows keep their V1 shape. Recoverable input VAT (V2: equals reviewed VAT). */
+  /** Present only on purchase invoices (V2), so sales rows keep their V1 shape. Recoverable input VAT (V2.1: from the explicit per-line recovery, at most the reviewed VAT). */
   direction?: 'purchase'; recoverable_vat_amount?: string;
   obligation_id: string | null; journal_entry_id: string | null; journal_status: 'draft' | 'posted' | null;
   ledger_vat_amount: string | null; reconciliation_status: InvoiceReconciliationStatus; groups: VatReportInvoiceGroup[];
@@ -126,7 +154,7 @@ export async function loadInvoiceVatReconciliation(db: QueryRunner, companyId: s
     const ledger = outputs.length ? fromHalalas(outputs.reduce((sum, l) => sum + side.amount(l), 0n)) : null;
     const wrong = lines.some((l) => l.memo === side.other) || outputs.some((l) => !(l.account_type === side.accountType && side.amount(l) > 0n && side.offside(l) === 0n));
     if (wrong) return { ...base, ledger_vat_amount: ledger, reconciliation_status: 'wrong_vat_direction' as const };
-    // Purchases: only recoverable input VAT is recognized (V2: all of it, enforced by the snapshot constraints).
+    // Purchases: only recoverable input VAT is recognized (V2.1: the explicit recoverable part, enforced by the snapshot constraints).
     const expected = expectedVatLines(own);
     const actual = outputs.map((l) => side.amount(l)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     let status: InvoiceReconciliationStatus;
@@ -145,8 +173,9 @@ export async function invoiceVatRecognitionIsExact(client: QueryRunner, companyI
   if (!review) return false;
   const side = VAT_SIDE[review.direction];
   const groups = (await client.query<InvoiceVatGroup>(
-    `SELECT vat_treatment, vat_rate::text vat_rate, line_count, taxable_amount::text taxable_amount, vat_amount::text vat_amount
-     FROM invoice_vat_review_groups WHERE review_id=$1 AND company_id=$2`, [review.id, companyId])).rows;
+    `SELECT vat_treatment, vat_rate::text vat_rate, line_count, taxable_amount::text taxable_amount, vat_amount::text vat_amount, recoverable_vat_amount::text recoverable_vat_amount
+     FROM invoice_vat_review_groups WHERE review_id=$1 AND company_id=$2`, [review.id, companyId])).rows
+    .map(({ recoverable_vat_amount, ...g }) => (recoverable_vat_amount == null ? g : { ...g, recoverable_vat_amount }));
   const lines = (await client.query<{ memo: string; debit: string; credit: string; account_type: string }>(
     `SELECT l.memo, l.debit::text debit, l.credit::text credit, a.account_type
      FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
