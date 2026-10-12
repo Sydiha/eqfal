@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
 /**
- * Invoice side of VAT reporting and reconciliation (V1: sales invoices). Documents keep their own, untouched paths in
+ * Invoice side of VAT reporting and reconciliation (V1: sales invoices, output VAT; V2: purchase invoices, input VAT). Documents keep their own, untouched paths in
  * vat-report.ts / vat-reconciliation.ts; this module only ADDS invoice rows. All money is compared as exact integers of
  * halalas, never as floating point, and there is no tolerance: any difference is reported as a mismatch.
  */
@@ -24,6 +24,8 @@ export function fromHalalas(value: bigint): string {
 
 export interface InvoiceVatGroup {
   vat_treatment: InvoiceVatTreatment; vat_rate: string; line_count: number; taxable_amount: string; vat_amount: string;
+  /** Purchases only (V2); absent on sales groups so they keep their V1 shape. */
+  recoverable_vat_amount?: string;
 }
 
 /** Groups invoice lines by (treatment, rate); sums are exact. The result is deterministic (treatment, then rate). */
@@ -41,7 +43,7 @@ export function groupInvoiceLines(lines: ReadonlyArray<{ vat_treatment: InvoiceV
     .map((g) => ({ vat_treatment: g.vat_treatment, vat_rate: g.vat_rate, line_count: g.n, taxable_amount: fromHalalas(g.net), vat_amount: fromHalalas(g.vat) }));
 }
 
-/** VAT amounts (halalas) that must appear as one VAT_OUTPUT journal line each: standard groups with VAT above zero. */
+/** VAT amounts (halalas) that must appear as one VAT line each (VAT_OUTPUT for sales, VAT_INPUT for purchases): standard groups with VAT above zero. */
 export function expectedVatLines(groups: ReadonlyArray<InvoiceVatGroup>): bigint[] {
   return groups.filter((g) => g.vat_treatment === 'standard' && toHalalas(g.vat_amount) > 0n).map((g) => toHalalas(g.vat_amount)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -56,24 +58,33 @@ export const DOCUMENT_CARRIED_BY_APPROVED_INVOICE = `(
   AND NOT EXISTS (SELECT 1 FROM document_vat_reviews xr WHERE xr.document_id=d.id AND xr.company_id=d.company_id AND xr.review_status='reviewed')
   AND NOT EXISTS (SELECT 1 FROM obligations xo WHERE xo.document_id=d.id AND xo.company_id=d.company_id AND xo.source_type='document' AND NOT xo.is_cancelled))`;
 
+export type InvoiceVatDirection = 'sales' | 'purchase';
+/** Expected VAT line per direction: sales = output VAT, liability credit; purchases = recoverable input VAT, asset debit. */
+const VAT_SIDE = {
+  sales: { memo: 'VAT_OUTPUT', other: 'VAT_INPUT', accountType: 'liability', amount: (l: { debit: string; credit: string }) => toHalalas(l.credit), offside: (l: { debit: string; credit: string }) => toHalalas(l.debit) },
+  purchase: { memo: 'VAT_INPUT', other: 'VAT_OUTPUT', accountType: 'asset', amount: (l: { debit: string; credit: string }) => toHalalas(l.debit), offside: (l: { debit: string; credit: string }) => toHalalas(l.credit) },
+} as const;
+
 export interface VatReportInvoiceGroup extends InvoiceVatGroup {}
 export interface VatInvoiceReconciliationRow {
   invoice_id: string; internal_number: string | null; counterparty_name: string; issue_date: string; tax_date: string;
-  total_amount: string; taxable_amount: string; reviewed_vat_amount: string; expected_memo: 'VAT_OUTPUT';
+  total_amount: string; taxable_amount: string; reviewed_vat_amount: string; expected_memo: 'VAT_OUTPUT' | 'VAT_INPUT';
+  /** Present only on purchase invoices (V2), so sales rows keep their V1 shape. Recoverable input VAT (V2: equals reviewed VAT). */
+  direction?: 'purchase'; recoverable_vat_amount?: string;
   obligation_id: string | null; journal_entry_id: string | null; journal_status: 'draft' | 'posted' | null;
   ledger_vat_amount: string | null; reconciliation_status: InvoiceReconciliationStatus; groups: VatReportInvoiceGroup[];
 }
 
 type Basis = 'tax_date' | 'issue_date';
 
-/** Reviewed sales invoices in [start,end] (by tax date or issue date) with their exact reconciliation against the posted journal. */
+/** Reviewed invoices (sales and purchases) in [start,end] (by tax date or issue date) with their exact reconciliation against the posted journal. */
 export async function loadInvoiceVatReconciliation(db: QueryRunner, companyId: string, start: string, end: string, basis: Basis = 'tax_date'): Promise<VatInvoiceReconciliationRow[]> {
   const column = basis === 'tax_date' ? 'r.tax_date' : 'i.issue_date';
   const reviews = (await db.query<{
     review_id: string; invoice_id: string; internal_number: string | null; counterparty_name: string; issue_date: string; tax_date: string;
-    total_amount: string; taxable_amount: string; vat_amount: string; obligation_id: string | null;
+    total_amount: string; taxable_amount: string; vat_amount: string; obligation_id: string | null; direction: InvoiceVatDirection; recoverable_vat_amount: string | null;
   }>(
-    `SELECT r.id review_id, i.id invoice_id, i.internal_number::text internal_number, c.name counterparty_name, i.issue_date::text issue_date, r.tax_date::text tax_date,
+    `SELECT r.id review_id, r.direction, r.recoverable_vat_amount::text recoverable_vat_amount, i.id invoice_id, i.internal_number::text internal_number, c.name counterparty_name, i.issue_date::text issue_date, r.tax_date::text tax_date,
             i.total_amount::text total_amount, r.taxable_amount::text taxable_amount, r.vat_amount::text vat_amount,
             (SELECT o.id FROM obligations o WHERE o.company_id=i.company_id AND o.invoice_id=i.id AND o.source_type='invoice'
                AND NOT o.is_cancelled AND o.verification_status='confirmed' LIMIT 1) obligation_id
@@ -85,8 +96,10 @@ export async function loadInvoiceVatReconciliation(db: QueryRunner, companyId: s
   if (!reviews.length) return [];
 
   const groups = (await db.query<InvoiceVatGroup & { review_id: string }>(
-    `SELECT review_id, vat_treatment, vat_rate::text vat_rate, line_count, taxable_amount::text taxable_amount, vat_amount::text vat_amount
-     FROM invoice_vat_review_groups WHERE company_id=$1 AND review_id = ANY($2::uuid[]) ORDER BY vat_treatment, vat_rate`, [companyId, reviews.map((r) => r.review_id)])).rows;
+    `SELECT review_id, vat_treatment, vat_rate::text vat_rate, line_count, taxable_amount::text taxable_amount, vat_amount::text vat_amount,
+            recoverable_vat_amount::text recoverable_vat_amount
+     FROM invoice_vat_review_groups WHERE company_id=$1 AND review_id = ANY($2::uuid[]) ORDER BY vat_treatment, vat_rate`, [companyId, reviews.map((r) => r.review_id)])).rows
+    .map(({ recoverable_vat_amount, ...g }) => (recoverable_vat_amount == null ? g : { ...g, recoverable_vat_amount }));
   const obligationIds = reviews.map((r) => r.obligation_id).filter((x): x is string => !!x);
   const journals = obligationIds.length ? (await db.query<{ id: string; source_id: string; status: 'draft' | 'posted' }>(
     `SELECT id, source_id, status FROM journal_entries WHERE company_id=$1 AND source_type='obligation' AND source_id = ANY($2::uuid[])
@@ -97,22 +110,25 @@ export async function loadInvoiceVatReconciliation(db: QueryRunner, companyId: s
      WHERE l.company_id=$1 AND l.journal_entry_id = ANY($2::uuid[]) AND l.memo IN ('VAT_INPUT','VAT_OUTPUT')`, [companyId, journals.map((j) => j.id)])).rows : [];
 
   return reviews.map((review) => {
+    const side = VAT_SIDE[review.direction];
     const own = groups.filter((g) => g.review_id === review.review_id).map(({ review_id: _ignored, ...g }) => g);
     const journal = review.obligation_id ? journals.find((j) => j.source_id === review.obligation_id) ?? null : null;
     const base = {
       invoice_id: review.invoice_id, internal_number: review.internal_number, counterparty_name: review.counterparty_name,
       issue_date: review.issue_date, tax_date: review.tax_date, total_amount: review.total_amount, taxable_amount: review.taxable_amount,
-      reviewed_vat_amount: review.vat_amount, expected_memo: 'VAT_OUTPUT' as const, obligation_id: review.obligation_id,
+      reviewed_vat_amount: review.vat_amount, expected_memo: side.memo, obligation_id: review.obligation_id,
       journal_entry_id: journal?.id ?? null, journal_status: journal?.status ?? null, groups: own,
+      ...(review.direction === 'purchase' ? { direction: 'purchase' as const, recoverable_vat_amount: review.recoverable_vat_amount ?? '0.00' } : {}),
     };
     if (!journal || journal.status !== 'posted') return { ...base, ledger_vat_amount: null, reconciliation_status: 'missing_posted_journal' as const };
     const lines = memoLines.filter((l) => l.journal_entry_id === journal.id);
-    const outputs = lines.filter((l) => l.memo === 'VAT_OUTPUT');
-    const ledger = outputs.length ? fromHalalas(outputs.reduce((sum, l) => sum + toHalalas(l.credit), 0n)) : null;
-    const wrong = lines.some((l) => l.memo === 'VAT_INPUT') || outputs.some((l) => !(l.account_type === 'liability' && toHalalas(l.credit) > 0n && toHalalas(l.debit) === 0n));
+    const outputs = lines.filter((l) => l.memo === side.memo);
+    const ledger = outputs.length ? fromHalalas(outputs.reduce((sum, l) => sum + side.amount(l), 0n)) : null;
+    const wrong = lines.some((l) => l.memo === side.other) || outputs.some((l) => !(l.account_type === side.accountType && side.amount(l) > 0n && side.offside(l) === 0n));
     if (wrong) return { ...base, ledger_vat_amount: ledger, reconciliation_status: 'wrong_vat_direction' as const };
+    // Purchases: only recoverable input VAT is recognized (V2: all of it, enforced by the snapshot constraints).
     const expected = expectedVatLines(own);
-    const actual = outputs.map((l) => toHalalas(l.credit)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const actual = outputs.map((l) => side.amount(l)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     let status: InvoiceReconciliationStatus;
     if (!expected.length) status = actual.length === 0 ? 'reconciled' : 'vat_amount_mismatch';
     else if (!actual.length) status = 'missing_vat_line';
@@ -125,8 +141,9 @@ export async function loadInvoiceVatReconciliation(db: QueryRunner, companyId: s
 
 /** Posting-time verification (called inside the posting transaction). Throws nothing itself: returns false when not exact. */
 export async function invoiceVatRecognitionIsExact(client: QueryRunner, companyId: string, journalId: string, invoiceId: string): Promise<boolean> {
-  const review = (await client.query<{ id: string }>('SELECT id FROM invoice_vat_reviews WHERE invoice_id=$1 AND company_id=$2', [invoiceId, companyId])).rows[0];
+  const review = (await client.query<{ id: string; direction: InvoiceVatDirection }>('SELECT id, direction FROM invoice_vat_reviews WHERE invoice_id=$1 AND company_id=$2', [invoiceId, companyId])).rows[0];
   if (!review) return false;
+  const side = VAT_SIDE[review.direction];
   const groups = (await client.query<InvoiceVatGroup>(
     `SELECT vat_treatment, vat_rate::text vat_rate, line_count, taxable_amount::text taxable_amount, vat_amount::text vat_amount
      FROM invoice_vat_review_groups WHERE review_id=$1 AND company_id=$2`, [review.id, companyId])).rows;
@@ -134,8 +151,8 @@ export async function invoiceVatRecognitionIsExact(client: QueryRunner, companyI
     `SELECT l.memo, l.debit::text debit, l.credit::text credit, a.account_type
      FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
      WHERE l.company_id=$1 AND l.journal_entry_id=$2 AND l.memo IN ('VAT_INPUT','VAT_OUTPUT')`, [companyId, journalId])).rows;
-  if (lines.some((l) => l.memo !== 'VAT_OUTPUT' || l.account_type !== 'liability' || toHalalas(l.debit) !== 0n || toHalalas(l.credit) <= 0n)) return false;
+  if (lines.some((l) => l.memo !== side.memo || l.account_type !== side.accountType || side.offside(l) !== 0n || side.amount(l) <= 0n)) return false;
   const expected = expectedVatLines(groups);
-  const actual = lines.map((l) => toHalalas(l.credit)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const actual = lines.map((l) => side.amount(l)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return expected.length === actual.length && expected.every((v, i) => v === actual[i]);
 }
