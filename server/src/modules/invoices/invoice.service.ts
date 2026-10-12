@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { resolveStandardRate, sameRate } from './vat-standard-rate';
 import { computeLine, computeTotals, formatMoney, InvoiceMathError, LineAmounts, parseRecoverablePercent } from './invoice-math';
 
 /**
@@ -12,7 +13,8 @@ export type InvoiceErrorCode =
   | 'INVOICE_VALIDATION' | 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED' | 'INVOICE_EMPTY' | 'INVOICE_VERSION_CONFLICT'
   | 'INVOICE_ALREADY_APPROVED' | 'INVOICE_FORBIDDEN' | 'INVOICE_MAPPING_MISSING' | 'INVOICE_VAT_PREREQUISITE' | 'INVOICE_SELF_APPROVAL' | 'INVOICE_FISCAL_YEAR_UNRESOLVED' | 'INVOICE_FISCAL_YEAR_CLOSED' | 'INVOICE_PERIOD_CLOSED'
   | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
-  | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID';
+  | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID'
+  | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED';
 
 export class InvoiceError extends Error {
   constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string) { super(message); }
@@ -66,6 +68,21 @@ export type DraftInput = {
 const DRAFT_FIELDS = ['counterparty_id', 'issue_date', 'due_date', 'supply_date', 'external_reference', 'notes', 'source_document_id', 'lines', 'tax_point_date'];
 
 /** Sales VAT is output VAT and has no recoverability; only purchase lines may carry one. */
+/**
+ * Sales only (ordinary standard-rated supplies). Every standard line must carry the effective standard rate for the
+ * tax point date. No configured rate fails closed; a stored rate is never rewritten. Other treatments are untouched.
+ */
+async function assertStandardRates(client: PoolClient, direction: Direction, taxPointDate: string | null, lines: ReadonlyArray<{ vat_treatment: string | null; vat_rate: string }>) {
+  if (direction !== 'sales' || !taxPointDate) return;
+  const standard = lines.filter((l) => l.vat_treatment === 'standard');
+  if (standard.length === 0) return;
+  const resolved = await resolveStandardRate(client, taxPointDate);
+  if (!resolved) throw new InvoiceError(409, 'VAT_RATE_NOT_CONFIGURED', `No standard VAT rate is configured for ${taxPointDate}; standard-rated lines cannot be saved or submitted`);
+  if (standard.some((l) => !sameRate(l.vat_rate, resolved.rate))) {
+    throw new InvoiceError(409, 'INVOICE_VAT_RATE_MISMATCH', `Standard-rated lines must use the VAT rate ${resolved.rate}% effective on ${taxPointDate}`);
+  }
+}
+
 function assertRecoverabilityDirection(direction: Direction, input: DraftInput) {
   if (direction === 'sales' && input.lines.some((l) => l.vat_recoverability !== null || l.vat_recoverable_percent !== null)) {
     throw new InvoiceError(400, 'INVOICE_VALIDATION', 'vat_recoverability and vat_recoverable_percent apply only to purchase invoice lines');
@@ -230,6 +247,7 @@ export class InvoiceDraftService {
   async create(companyId: string, actorUserId: string, direction: Direction, input: DraftInput) {
     return this.tx(async (client) => {
       assertRecoverabilityDirection(direction, input);
+      await assertStandardRates(client, direction, input.tax_point_date, input.lines);
       await this.checkReferences(client, companyId, direction, input, null);
       const id = (await client.query<{ id: string }>(
         `INSERT INTO invoices (company_id, direction, status, counterparty_id, external_reference, issue_date, due_date, supply_date,
@@ -254,6 +272,7 @@ export class InvoiceDraftService {
       if (current.status !== 'draft') throw new InvoiceError(409, 'INVOICE_NOT_DRAFT', 'Only draft invoices can be edited');
       if (current.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
       assertRecoverabilityDirection(current.direction, input);
+      await assertStandardRates(client, current.direction, input.tax_point_date, input.lines);
       await this.checkReferences(client, companyId, current.direction, input, invoiceId);
       const before = await this.read(client, companyId, invoiceId);
       await client.query('DELETE FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId]);
@@ -287,6 +306,7 @@ export class InvoiceDraftService {
       // V1 sales: the creator must state the tax point and a VAT treatment for every line before review. Nothing is inferred.
       // V2 purchases follow the same rule, and every standard-rated purchase line also needs an explicit input VAT recoverability.
       if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${current.direction} invoice needs a tax point date before it can be submitted`);
+      await assertStandardRates(client, current.direction, before.tax_point_date, before.lines);
       if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted');
       if (current.direction === 'purchase' && before.lines.some((l: { vat_treatment: string | null; vat_recoverability: string | null }) => l.vat_treatment === 'standard' && !l.vat_recoverability)) {
         throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit VAT recoverability before the invoice can be submitted');

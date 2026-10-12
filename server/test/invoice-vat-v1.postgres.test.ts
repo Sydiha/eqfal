@@ -86,24 +86,25 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
   });
   afterAll(async () => { await pool?.end(); });
 
-  it('multi-rate invoice: groups by treatment and rate, exact per-line rounding, VAT_OUTPUT per standard group, posts and reconciles', async () => {
+  it('single-rate invoice: groups by treatment and rate, exact per-line rounding, VAT_OUTPUT per standard group, posts and reconciles', async () => {
+    // Sales invoices now require the standard rate in force on the tax point date (migration 069), so a single sales invoice carries one standard rate;
+  // multi-rate grouping and equal-amount groups stay covered by the purchase suite (invoice-vat-v2), which is not rate-validated.
     const co = await company('multi');
     // 15% on 0.10 x3: per-line VAT is 0.02 each (0.015 rounds half up) = 0.06, not 0.05 as a rate on the 0.30 sum would give.
     const inv = await submitted(co, [
-      line('standard', '15', '100.00'), line('standard', '5', '200.00'), line('standard', '15', '0.10'), line('standard', '15', '0.10'), line('standard', '15', '0.10'),
+      line('standard', '15', '100.00'), line('standard', '15', '0.10'), line('standard', '15', '0.10'), line('standard', '15', '0.10'),
       line('zero_rated', '0', '50.00'), line('exempt', '0', '30.00'), line('out_of_scope', '0', '20.00')]);
     const out = await approve(co, inv);
     const review = (await q('SELECT *, taxable_amount::text t, vat_amount::text v, tax_date::text d FROM invoice_vat_reviews WHERE invoice_id=$1', [inv.id]))[0];
-    expect(review).toMatchObject({ company_id: co.id, t: '400.30', v: '25.06', d: '2026-03-10', reviewed_by_user_id: approver });
+    expect(review).toMatchObject({ company_id: co.id, t: '200.30', v: '15.06', d: '2026-03-10', reviewed_by_user_id: approver });
     const groups = await q(`SELECT vat_treatment, vat_rate::text r, line_count, taxable_amount::text t, vat_amount::text v FROM invoice_vat_review_groups WHERE review_id=$1 ORDER BY vat_treatment, vat_rate`, [review.id]);
     expect(groups).toEqual([
       { vat_treatment: 'exempt', r: '0.00', line_count: 1, t: '30.00', v: '0.00' },
       { vat_treatment: 'out_of_scope', r: '0.00', line_count: 1, t: '20.00', v: '0.00' },
-      { vat_treatment: 'standard', r: '5.00', line_count: 1, t: '200.00', v: '10.00' },
       { vat_treatment: 'standard', r: '15.00', line_count: 4, t: '100.30', v: '15.06' },
       { vat_treatment: 'zero_rated', r: '0.00', line_count: 1, t: '50.00', v: '0.00' }]);
     const lines = await q(`SELECT debit::text d, credit::text c, memo FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence`, [out.journal_id]);
-    expect(lines).toEqual([{ d: '425.36', c: '0.00', memo: null }, { d: '0.00', c: '400.30', memo: null }, { d: '0.00', c: '10.00', memo: 'VAT_OUTPUT' }, { d: '0.00', c: '15.06', memo: 'VAT_OUTPUT' }]);
+    expect(lines).toEqual([{ d: '215.36', c: '0.00', memo: null }, { d: '0.00', c: '200.30', memo: null }, { d: '0.00', c: '15.06', memo: 'VAT_OUTPUT' }]);
     expect(await n(`SELECT count(*) n FROM audit_log WHERE company_id=$1 AND action='invoice.vat_review.create'`, [co.id])).toBe(1);
     // not reconciled while only a draft exists, exact after posting
     await vatPeriod(co, '2026-03-01', '2026-03-31');
@@ -111,35 +112,34 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     expect(rec.invoices![0]!.reconciliation_status).toBe('missing_posted_journal');
     await post(co, out.journal_id);
     rec = await loadVatReconciliation(pool, co.id, '2026-03-01', '2026-03-31');
-    expect(rec.invoices![0]).toMatchObject({ reconciliation_status: 'reconciled', ledger_vat_amount: '25.06', reviewed_vat_amount: '25.06' });
-    expect(rec.totals).toMatchObject({ reviewed_output_vat: 25.06, ledger_output_vat: 25.06, output_difference: 0 });
+    expect(rec.invoices![0]).toMatchObject({ reconciliation_status: 'reconciled', ledger_vat_amount: '15.06', reviewed_vat_amount: '15.06' });
+    expect(rec.totals).toMatchObject({ reviewed_output_vat: 15.06, ledger_output_vat: 15.06, output_difference: 0 });
     expect(rec.counts).toEqual({ total_in_scope: 1, reconciled: 1, unreconciled: 0 });
   });
 
-  it('equal-amount VAT groups stay separate lines; a tampered memo blocks posting', async () => {
+  it('a tampered VAT memo blocks posting', async () => {
     const co = await company('equal');
-    // 15% on 100.00 and 5% on 300.00 both carry exactly 15.00 of VAT.
-    const inv = await submitted(co, [line('standard', '15', '100.00'), line('standard', '5', '300.00')]);
+    const inv = await submitted(co, [line('standard', '15', '100.00')]);
     const out = await approve(co, inv);
     const vatLines = await q(`SELECT id, credit::text c FROM journal_lines WHERE journal_entry_id=$1 AND memo='VAT_OUTPUT' ORDER BY sequence`, [out.journal_id]);
-    expect(vatLines.map((l) => l.c)).toEqual(['15.00', '15.00']);
-    await q(`UPDATE journal_lines SET memo=NULL WHERE id=$1`, [vatLines[1].id]);
+    expect(vatLines.map((l) => l.c)).toEqual(['15.00']);
+    await q(`UPDATE journal_lines SET memo=NULL WHERE id=$1`, [vatLines[0].id]);
     await expect(post(co, out.journal_id)).rejects.toThrow(/does not match the reviewed VAT snapshot|Invalid accounting relationship/);
     expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('draft');
-    await q(`UPDATE journal_lines SET memo='VAT_OUTPUT' WHERE id=$1`, [vatLines[1].id]);
+    await q(`UPDATE journal_lines SET memo='VAT_OUTPUT' WHERE id=$1`, [vatLines[0].id]);
     await post(co, out.journal_id);
     expect((await loadVatReconciliation(pool, co.id, '2026-03-01', '2026-03-31')).invoices![0]!.reconciliation_status).toBe('reconciled');
     // a posted journal can no longer be altered at all
-    expect(await code(q(`UPDATE journal_lines SET memo=NULL WHERE id=$1`, [vatLines[1].id]))).toBeDefined();
+    expect(await code(q(`UPDATE journal_lines SET memo=NULL WHERE id=$1`, [vatLines[0].id]))).toBeDefined();
     expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('posted');
     // if a journal were forced to posted behind the service's back with one VAT line unstamped, reconciliation reports it (no netting)
     const c2 = await company('equal2');
-    const inv2 = await submitted(c2, [line('standard', '15', '100.00'), line('standard', '5', '300.00')]);
+    const inv2 = await submitted(c2, [line('standard', '15', '100.00')]);
     const out2 = await approve(c2, inv2);
     const one = (await q(`SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND memo='VAT_OUTPUT' ORDER BY sequence LIMIT 1`, [out2.journal_id]))[0].id;
     await q(`UPDATE journal_lines SET memo=NULL WHERE id=$1`, [one]);
     await q(`UPDATE journal_entries SET status='posted', posted_by=$2, posted_at=NOW() WHERE id=$1`, [out2.journal_id, approver]);
-    expect((await loadVatReconciliation(pool, c2.id, '2026-03-01', '2026-03-31')).invoices![0]!.reconciliation_status).toBe('vat_amount_mismatch');
+    expect((await loadVatReconciliation(pool, c2.id, '2026-03-01', '2026-03-31')).invoices![0]!.reconciliation_status).toBe('missing_vat_line');
   });
 
   it('zero-VAT sales invoice (zero-rated, exempt, out of scope) still produces a review, no VAT line, and requires a posted journal', async () => {
@@ -384,14 +384,14 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
   it('working paper (XLSX) lists the invoice rows by treatment and rate', async () => {
     const co = await company('xlsx');
     const period = await vatPeriod(co, '2026-03-01', '2026-03-31');
-    const inv = await submitted(co, [line('standard', '15'), line('standard', '5'), line('exempt', '0')]);
+    const inv = await submitted(co, [line('standard', '15'), line('exempt', '0')]);
     const out = await approve(co, inv); await post(co, out.journal_id);
     await vat.close(co.id, approver, period);
     const { buildVatWorkingPaperXlsx } = await import('../src/modules/vat/vat-report');
     const file = buildVatWorkingPaperXlsx(await loadVatClosingReport(pool, co.id, period));
     const text = file.toString('latin1');
     expect(text).toContain('Invoice 1');
-    expect(text).toContain('Standard 15.00%'); expect(text).toContain('Standard 5.00%'); expect(text).toContain('Exempt 0.00%');
+    expect(text).toContain('Standard 15.00%'); expect(text).toContain('Exempt 0.00%');
     expect(text).toContain('reconciled');
   });
   it('snapshot is closed to late INSERT: groups and reviews can only be written by the approving transaction', async () => {
