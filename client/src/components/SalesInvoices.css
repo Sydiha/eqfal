@@ -1,0 +1,16 @@
+.sales-invoices{margin-block-end:var(--space-5,1.5rem);padding:var(--space-4,1rem);background:var(--surface,#fff);border:1px solid var(--border,#e6ecee);border-radius:var(--radius,12px)}
+.sales-invoices__head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4,1rem);flex-wrap:wrap}
+.sales-invoices__head h2{margin:0;font-size:1.1rem}.sales-invoices__head p{margin:.25rem 0 0;color:var(--muted,#667483);font-size:.85rem}
+.sales-invoices__scroll{overflow-x:auto;margin-block:var(--space-3,.75rem)}
+.sales-invoices tbody tr[tabindex]{cursor:pointer}.sales-invoices tbody tr[tabindex]:hover{background:#f8fafc}
+.sales-invoices__amount{font-variant-numeric:tabular-nums;white-space:nowrap}
+.sales-invoices__status{display:inline-block;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:700;background:#e8edf4;color:#4b596c}
+.sales-invoices__status--submitted{background:#fff1cf;color:var(--warning,#9a6500)}.sales-invoices__status--approved{background:#e2f4ec;color:var(--success,#16724a)}.sales-invoices__status--cancelled{background:#fde5e5;color:var(--danger,#ad2e2e)}
+.sales-invoices__empty{color:var(--muted,#667483)}.sales-invoices__error{color:var(--danger,#ad2e2e)}.sales-invoices__hint{color:var(--muted,#667483);font-size:.8rem;margin:0}
+.sales-invoices__facts,.sales-invoices__totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-3,.75rem);margin:var(--space-3,.75rem) 0}
+.sales-invoices__facts dt,.sales-invoices__totals dt{font-size:.75rem;color:var(--muted,#667483)}.sales-invoices__facts dd,.sales-invoices__totals dd{margin:.15rem 0 0}
+.sales-invoices__form{display:grid;gap:var(--space-3,.75rem)}.sales-invoices__form label{display:grid;gap:.25rem}
+.sales-invoices__row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3,.75rem)}
+.sales-invoices__form fieldset{display:grid;gap:var(--space-3,.75rem);margin:0;padding:var(--space-3,.75rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px)}
+.sales-invoices__line{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2,.5rem);padding-block-end:var(--space-3,.75rem);border-bottom:1px dashed var(--border,#e6ecee)}.sales-invoices__line>label:first-child{grid-column:1/-1}
+.modal:has(.sales-invoices__form),.modal:has(.sales-invoices__totals){width:min(100%,760px)}

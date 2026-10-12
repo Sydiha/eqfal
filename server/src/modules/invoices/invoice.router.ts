@@ -45,6 +45,18 @@ invoiceRouter.get('/invoices', ...read, requireCapability('invoice.view'), route
   res.json(await svc.list(companyAndActor(req).companyId, filters));
 })));
 
+// Customer picker for the sales invoice form. Any invoice capability suffices, so obligation.view is never needed.
+// Must be registered before '/invoices/:id'.
+const requireAnyInvoiceCapability: RequestHandler = (req, res, next) => {
+  const context = getAuthenticatedContext(req);
+  if (!context) { res.status(401).json({ error: 'Unauthenticated' }); return; }
+  if (!context.activeCompanyId || !['invoice.view', 'invoice.create', 'invoice.edit'].some((c) => context.capabilities.includes(c))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  next();
+};
+invoiceRouter.get('/invoices/customers', ...read, requireAnyInvoiceCapability, route((req, res) => handle(res, async (svc) => {
+  res.json(await svc.listCustomers(companyAndActor(req).companyId));
+})));
+
 invoiceRouter.get('/invoices/:id', ...read, requireCapability('invoice.view'), route((req, res) => handle(res, async (svc) => {
   if (!UUID.test(req.params.id!)) { invalidId(res); return; }
   res.json({ invoice: await svc.get(companyAndActor(req).companyId, req.params.id!) });
