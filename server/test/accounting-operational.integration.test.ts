@@ -48,6 +48,7 @@ class AccountingPool{
   if(sql.includes("UPDATE journal_entries SET status='posted'")){if(this.journal?.status!=='draft')return{rows:[],rowCount:0};this.journal={...this.journal,status:'posted',posted_at:new Date('2026-08-02T00:00:00Z')};return{rows:[this.journal],rowCount:1}}
   if(sql.includes('INSERT INTO audit_log'))return{rows:[{id:'audit'}],rowCount:1};
   if(sql.includes('LEFT JOIN (journal_lines')&&sql.includes("j.status='posted'"))return{rows:this.journal?.status==='posted'?[{account_id:debitAccount,code:'1000',name:'Cash',account_type:'asset',debit_movement:'50.00',credit_movement:'0.00',debit_balance:'50.00',credit_balance:'0.00'}]:[],rowCount:this.journal?.status==='posted'?1:0};
+  if(sql.includes('FROM invoice_adjustments'))return{rows:[],rowCount:0};
   throw new Error(`Unexpected SQL: ${sql}`);
  };
  asPool(){return this as unknown as Pool}

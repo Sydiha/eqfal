@@ -77,12 +77,14 @@ export function expectedVatLines(groups: ReadonlyArray<InvoiceVatGroup>): bigint
 }
 
 /**
- * SQL predicate (alias `d` = documents). True when the document is linked to an APPROVED invoice and has no recognition of its
+ * SQL predicate (alias `d` = documents). True when the document is linked to an APPROVED invoice (or an approved credit/debit note, F4) and has no recognition of its
  * own. Legacy documents are never matched: they have no approved invoice, and an already-recognized document is never excluded.
  */
 export const DOCUMENT_CARRIED_BY_APPROVED_INVOICE = `(
-  EXISTS (SELECT 1 FROM invoice_source_links il JOIN invoices ii ON ii.id=il.invoice_id AND ii.company_id=il.company_id AND ii.status='approved'
+  (EXISTS (SELECT 1 FROM invoice_source_links il JOIN invoices ii ON ii.id=il.invoice_id AND ii.company_id=il.company_id AND ii.status='approved'
           WHERE il.document_id=d.id AND il.company_id=d.company_id)
+   OR EXISTS (SELECT 1 FROM invoice_adjustment_source_links nl JOIN invoice_adjustments na ON na.id=nl.adjustment_id AND na.company_id=nl.company_id AND na.status='approved'
+          WHERE nl.document_id=d.id AND nl.company_id=d.company_id))
   AND NOT EXISTS (SELECT 1 FROM document_vat_reviews xr WHERE xr.document_id=d.id AND xr.company_id=d.company_id AND xr.review_status='reviewed')
   AND NOT EXISTS (SELECT 1 FROM obligations xo WHERE xo.document_id=d.id AND xo.company_id=d.company_id AND xo.source_type='document' AND NOT xo.is_cancelled))`;
 

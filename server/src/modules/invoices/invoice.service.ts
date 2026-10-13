@@ -15,7 +15,9 @@ export type InvoiceErrorCode =
   | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID'
   | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED'
-  | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED';
+  | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED'
+  | 'INVOICE_ADJUSTMENT_NOT_FOUND' | 'INVOICE_ADJUSTMENT_NOT_DRAFT' | 'INVOICE_ADJUSTMENT_ORIGINAL_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_GROUP_UNSUPPORTED'
+  | 'INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL' | 'INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING' | 'INVOICE_ADJUSTMENT_VAT_PERIOD_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_DUPLICATE';
 
 export class InvoiceError extends Error {
   constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string) { super(message); }
@@ -187,14 +189,16 @@ const LINKED_JOINS = `
   LEFT JOIN LATERAL (SELECT COALESCE(SUM(s.amount), 0) AS paid FROM obligation_settlements s WHERE s.obligation_id = ob.id AND s.company_id = i.company_id) st ON TRUE`;
 const LINKED_COLUMNS = `ob.id AS obligation_id, ob.is_cancelled AS obligation_cancelled, ob.original_amount::text AS obligation_amount,
   jr.id AS journal_id, jr.status AS journal_status, vr.id AS vat_review_id, vr.tax_date AS vat_review_tax_date,
-  st.paid::numeric(18,2)::text AS paid_raw, (ob.original_amount - st.paid)::numeric(18,2)::text AS outstanding_raw`;
+  st.paid::numeric(18,2)::text AS paid_raw, (ob.original_amount + obligation_adjustment_net(ob.id, ob.company_id) - st.paid)::numeric(18,2)::text AS outstanding_raw,
+  obligation_adjustment_net(ob.id, ob.company_id)::numeric(18,2)::text AS adjustments_net_raw,
+  (ob.original_amount + obligation_adjustment_net(ob.id, ob.company_id))::numeric(18,2)::text AS adjusted_raw`;
 
 export type InvoiceActionableStatus = 'draft' | 'awaiting_approval' | 'awaiting_posting' | 'awaiting_settlement' | 'partially_settled' | 'settled' | 'cancelled';
 
 /** Derives the extra read-model fields from the joined records. Never inferred from the status alone once the records exist. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function withLinked(row: any) {
-  const { cancelled_by_user_id, cancelled_at, cancellation_reason, obligation_id, obligation_cancelled, obligation_amount, journal_id, journal_status, vat_review_id, vat_review_tax_date, paid_raw, outstanding_raw, ...rest } = row as Record<string, unknown>;
+  const { cancelled_by_user_id, cancelled_at, cancellation_reason, obligation_id, obligation_cancelled, obligation_amount, journal_id, journal_status, vat_review_id, vat_review_tax_date, paid_raw, outstanding_raw, adjustments_net_raw, adjusted_raw, ...rest } = row as Record<string, unknown>;
   const status = rest.status as string;
   const hasObligation = obligation_id != null;
   const paid = hasObligation ? (paid_raw as string) : null;
@@ -214,6 +218,8 @@ function withLinked(row: any) {
     vat: { status: vat_review_id != null ? 'reviewed' : status === 'approved' ? 'missing' : 'pending', review_id: vat_review_id ?? null, tax_date: vat_review_tax_date ?? null },
     cancellation: status === 'cancelled' ? { cancelled_by_user_id, cancelled_at, reason: cancellation_reason } : null,
     paid_amount: paid, outstanding_amount: outstanding, actionable_status: actionable,
+    // Approved credit/debit notes adjust the SAME obligation (never a second receivable/payable): adjusted = original +debit -credit.
+    adjustments_net_amount: hasObligation ? (adjustments_net_raw as string) : null, adjusted_amount: hasObligation ? (adjusted_raw as string) : null,
   } as Record<string, any> & {
     obligation: { id: string; is_cancelled: boolean; original_amount: string } | null; journal: { id: string; status: string } | null;
     vat: { status: 'pending' | 'reviewed' | 'missing'; review_id: string | null; tax_date: string | null };
@@ -451,10 +457,12 @@ export class InvoiceDraftService {
       `SELECT s.id, s.bank_transaction_id, s.amount::text, s.note, t.transaction_date::text, t.description
        FROM obligation_settlements s JOIN bank_transactions t ON t.id = s.bank_transaction_id AND t.company_id = s.company_id
        WHERE s.obligation_id = $1 AND s.company_id = $2 ORDER BY t.transaction_date, s.created_at, s.id`, [header.obligation_id, companyId])).rows;
-    // Linked credit/debit notes (read-only correction history). Notes cannot be created yet (blocked, see docs/INVOICE_CORRECTIONS_F4.md).
+    // Linked credit/debit notes (read-only correction history). Registered through InvoiceAdjustmentService (external notes only).
     const adjustments = (await client.query(
-      `SELECT id, adjustment_type, status, adjustment_date::text, total_amount::text, reason FROM invoice_adjustments
-       WHERE original_invoice_id = $1 AND company_id = $2 ORDER BY created_at, id`, [invoiceId, companyId])).rows;
+      `SELECT a.id, a.adjustment_type, a.status, a.adjustment_date::text, a.external_number, a.subtotal_amount::text, a.vat_amount::text, a.total_amount::text, a.reason,
+              j.id AS journal_id, j.status AS journal_status
+       FROM invoice_adjustments a LEFT JOIN journal_entries j ON j.company_id = a.company_id AND j.source_type = 'invoice_adjustment' AND j.source_id = a.id
+       WHERE a.original_invoice_id = $1 AND a.company_id = $2 ORDER BY a.created_at, a.id`, [invoiceId, companyId])).rows;
     return { ...(withLinked(header) as any), lines, settlements, adjustments } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 

@@ -484,7 +484,7 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     const { join } = await import('path');
     const router = readFileSync(join(__dirname, '../src/modules/invoices/invoice.router.ts'), 'utf8');
     expect(router).not.toMatch(/invoiceRouter\.(delete|patch)\(/);
-    expect(router.match(/invoiceRouter\.\w+\('[^']*cancel[^']*'/g)).toEqual(["invoiceRouter.post('/invoices/:id/cancel'"]); // the single, capability-guarded F4 route
+    expect(router.match(/invoiceRouter\.\w+\('[^']*cancel[^']*'/g)).toEqual(["invoiceRouter.post('/invoices/:id/cancel'", "invoiceRouter.post('/invoice-adjustments/:id/cancel'"]); // invoice cancel (draft/submitted only) + cancel of a DRAFT external note, both capability-guarded
     const services = ['invoice.service.ts', 'invoice-approval.service.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
     // F4: the only cancellation write is restricted to draft/submitted rows; approved invoices are refused before it.
     const writes = services.match(/SET status\s*=\s*'cancelled'[\s\S]*?\[invoiceId/gi) ?? [];

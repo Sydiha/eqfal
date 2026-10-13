@@ -4,6 +4,7 @@ import { assertAccountingDateWritable } from '../monthly-close/accounting-period
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
+import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
 import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError } from './journal-posting-errors';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
@@ -121,6 +122,11 @@ export async function postJournalInTransaction(
       } else if (Number(operationalSource.context?.invoice_vat_amount ?? 0) > 0) {
         throw new JournalPostingConflictError('Purchase invoice VAT has no reviewed VAT snapshot; this journal cannot be posted');
       }
+    }
+
+    // Externally issued credit/debit note (F4): its VAT lines must match the approved note exactly (same rule as invoice VAT, mirrored for credit notes).
+    if (journal.source_type === 'invoice_adjustment' && !(await invoiceAdjustmentJournalIsExact(client, companyId, id, journal.source_id))) {
+      throw new JournalPostingConflictError('Credit/debit note VAT recognition does not match the approved note; this journal cannot be posted');
     }
 
     if (journal.source_type === 'asset_depreciation') {

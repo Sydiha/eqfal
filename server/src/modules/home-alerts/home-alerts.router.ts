@@ -41,7 +41,7 @@ export class HomeAlertsService {
     if (capabilities.includes('obligation.view')) {
       const { rows } = await this.db.query<{ overdue: string; upcoming: string; unconfirmed: string }>(`WITH remaining AS (
         SELECT o.id,o.due_on,o.verification_status,o.is_cancelled,
-          o.original_amount-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0) remaining
+          o.original_amount+obligation_adjustment_net(o.id,o.company_id)-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0) remaining
         FROM obligations o
         LEFT JOIN (SELECT company_id,obligation_id,SUM(amount) settled FROM obligation_settlements GROUP BY company_id,obligation_id) os
           ON os.company_id=o.company_id AND os.obligation_id=o.id
