@@ -27,3 +27,23 @@ describe('Phase 4C obligation controls',()=>{
  it('shows confirmation with manage and confirm and requires a reason to unconfirm',async()=>{const confirmed={...obligation,verification_status:'confirmed'};mock(response([confirmed]));render(<Obligations canView canCreateObligation canEditObligation canCancelObligation canCreateCounterparty canEditCounterparty canDisableCounterparty canConfirm onUnauthorized={vi.fn()}/>);fireEvent.click(await screen.findByRole('cell',{name:/^Acme/}));expect(screen.getByRole('button',{name:'Return to unconfirmed'})).toBeInTheDocument();const prompt=vi.spyOn(window,'prompt').mockReturnValue(null);fireEvent.click(screen.getByRole('button',{name:'Return to unconfirmed'}));expect(prompt).toHaveBeenCalledWith('Reason for returning to unconfirmed');expect(fetch).toHaveBeenCalledTimes(2)});
  it('selects eligible bank transactions instead of accepting a UUID and filters by direction',async()=>{const f=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(response()),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(parties),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify({transactions:[{id:'positive',transaction_date:'2026-02-01',description:'Receipt',bank_reference:null,amount:'75.00',reconciliation_status:'unmatched'},{id:'b1',transaction_date:'2026-01-02',description:'Already used',bank_reference:null,amount:'25.00',reconciliation_status:'unmatched'},{id:'negative',transaction_date:'2026-02-02',description:'Payment',bank_reference:null,amount:'-75.00',reconciliation_status:'unmatched'}]}),{status:200}));vi.stubGlobal('fetch',f);render(<Obligations canView canCreateSettlement canRemoveSettlement canConfirm={false} onUnauthorized={vi.fn()}/>);fireEvent.click(await screen.findByRole('cell',{name:/^Acme/}));fireEvent.click(screen.getByRole('button',{name:'Add settlement'}));const select=await screen.findByLabelText('Bank transaction');expect(select.tagName).toBe('SELECT');expect(within(select).getByRole('option',{name:/Receipt.*75.00/})).toBeInTheDocument();expect(within(select).queryByRole('option',{name:/Payment/})).not.toBeInTheDocument();expect(within(select).queryByRole('option',{name:/Already used/})).not.toBeInTheDocument();expect(screen.queryByRole('textbox',{name:'Bank transaction'})).not.toBeInTheDocument()});
 });
+
+describe('Direct record link from an invoice',()=>{
+ const UID='33333333-3333-4333-8333-333333333333';
+ it('opens exactly the obligation named by obligationId',async()=>{
+  window.history.replaceState(null,'',`/?page=obligations&obligationId=${UID}`);
+  const other={...obligation,id:'44444444-4444-4444-8444-444444444444',counterparty_name:'Beta'};
+  mock(response([other,{...obligation,id:UID}]));render(<Obligations canView onUnauthorized={vi.fn()}/>);
+  const pane=await screen.findByRole('complementary');
+  expect(within(pane).getByText(/Acme/)).toBeInTheDocument();
+  expect(within(pane).queryByText(/Beta/)).not.toBeInTheDocument();
+ });
+ it('opens nothing for an unknown or malformed id',async()=>{
+  window.history.replaceState(null,'','/?page=obligations&obligationId=55555555-5555-4555-8555-555555555555');
+  mock(response([{...obligation,id:UID}]));const{unmount}=render(<Obligations canView onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:/^Acme/});expect(screen.queryByRole('complementary')).not.toBeInTheDocument();unmount();
+  window.history.replaceState(null,'','/?page=obligations&obligationId=not-a-uuid');
+  mock(response([{...obligation,id:UID}]));render(<Obligations canView onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('cell',{name:/^Acme/});expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+ });
+});

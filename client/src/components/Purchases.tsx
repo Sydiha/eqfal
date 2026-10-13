@@ -5,6 +5,7 @@ import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../n
 import {DataWorkspace,DetailPane,MetricStrip,PageHeader,SectionCard,StatusBadge,WorkspacePage,WorkspaceState,WorkspaceToolbar} from './SharedUI';
 import {Dialog} from './Dialog';
 import {SalesInvoices,SalesInvoiceCapabilities} from './SalesInvoices';
+import {InvoiceSectionTabs,InvoiceSection,readInvoiceSection,writeInvoiceSection} from './InvoiceSectionTabs';
 import {useDateContext} from '../context/DateContext';
 import './PurchasesApproved.css';
 
@@ -115,7 +116,11 @@ type PurchasesProps=Parameters<typeof PurchaseDocuments>[0];
 export function Purchases({invoices,onNavigate,...props}:Omit<PurchasesProps,'extra'>&{invoices?:SalesInvoiceCapabilities;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
  const{t}=useTranslation();
  const invoiceAccess=!!invoices&&(invoices.canView||invoices.canCreate);
- const panel=invoiceAccess?<SalesInvoices {...invoices!} direction="purchase" onNavigate={onNavigate} onUnauthorized={props.onUnauthorized}/>:undefined;
- if(props.canView||!invoiceAccess)return <PurchaseDocuments {...props} extra={panel}/>;
- return <WorkspacePage size="operational" labelledBy="purchases-title" className="purchases-workspace purchases-v22 purchases-approved"><PageHeader className="purchases-approved__header" titleId="purchases-title" title={t('purchases.title')} description={t('purchaseInvoice.intro')}/>{panel}</WorkspacePage>;
+ const[section,setSection]=useState<InvoiceSection>(()=>readInvoiceSection('purchaseTab'));
+ const change=(next:InvoiceSection)=>{setSection(next);writeInvoiceSection('purchaseTab',next)};
+ const bothAccess=invoiceAccess&&props.canView;
+ const tabs=bothAccess?<InvoiceSectionTabs active={section} onChange={change}/>:null;
+ if(!invoiceAccess||(bothAccess&&section==='legacy'))return <PurchaseDocuments {...props} extra={tabs}/>;
+ const panel=<SalesInvoices {...invoices!} direction="purchase" onNavigate={onNavigate} onUnauthorized={props.onUnauthorized}/>;
+ return <WorkspacePage size="operational" labelledBy="purchases-title" className="purchases-workspace purchases-v22 purchases-approved"><PageHeader className="purchases-approved__header" titleId="purchases-title" title={t('purchases.title')} description={t('purchaseInvoice.intro')}/>{tabs}<div id="invoice-section-panel" role={bothAccess?'tabpanel':undefined}>{panel}</div></WorkspacePage>;
 }

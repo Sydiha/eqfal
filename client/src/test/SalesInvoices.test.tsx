@@ -26,7 +26,7 @@ function mockApi(invoice:typeof draft|Record<string,unknown>=draft,overrides:Rec
 const bodyOf=(fetchMock:ReturnType<typeof vi.fn>,key:string)=>{const call=fetchMock.mock.calls.find(c=>`${(c[1] as RequestInit|undefined)?.method??'GET'} ${String(c[0]).split('?')[0]}`===key);return call?JSON.parse((call[1] as RequestInit).body as string):undefined};
 
 describe('Sales invoices',()=>{
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ beforeEach(async()=>{window.history.replaceState(null,'','/?page=sales');vi.restoreAllMocks();await i18n.changeLanguage('en')});
 
  it('lists sales invoices from /api/invoices and shows server totals in the detail',async()=>{
   const fetchMock=mockApi();
@@ -132,23 +132,26 @@ describe('Sales invoices',()=>{
 });
 
 describe('Sales page with invoice workflow',()=>{
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ beforeEach(async()=>{window.history.replaceState(null,'','/?page=sales');vi.restoreAllMocks();await i18n.changeLanguage('en')});
 
  it('keeps document upload as a separate, relabelled action and opens the invoice form from the new action',async()=>{
   mockApi();
   vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:100,offset:0}):json({customers:[]}))));
   const onCreateDocument=vi.fn();
   render(<Sales canView canManage canCreate onCreateDocument={onCreateDocument} invoices={caps} onUnauthorized={vi.fn()}/>);
-  const upload=await screen.findAllByRole('button',{name:'Upload sale document'});
-  fireEvent.click(upload[0]!);
-  expect(onCreateDocument).toHaveBeenCalledTimes(1);
+  // The invoice workspace and the legacy documents are separate tabs: the invoice tab shows only the invoice action.
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(onCreateDocument).not.toHaveBeenCalled();
+  fireEvent.keyDown(document,{key:'Escape'});
+  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
+  fireEvent.click((await screen.findAllByRole('button',{name:'Upload sale document'}))[0]!);
   expect(onCreateDocument).toHaveBeenCalledTimes(1);
  });
 });
 
 describe('Sales permission separation',()=>{
+ beforeEach(()=>{window.history.replaceState(null,'','/?page=sales')});
  beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
  const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({customers:[]})));vi.stubGlobal('fetch',f);return f};
 
@@ -180,7 +183,10 @@ describe('Sales permission separation',()=>{
   stub();
   render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} invoices={caps} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByText('REF-1')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Upload sale document'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
   expect((await screen.findAllByRole('button',{name:'Upload sale document'})).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('heading',{name:'Sales invoices'})).not.toBeInTheDocument();
  });
 });
 

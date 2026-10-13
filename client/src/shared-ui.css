@@ -30,7 +30,9 @@ input[type="date"],input[type="number"],input[type="email"]{direction:ltr}
 
 /* Shared dialog layout: the backdrop never exceeds the viewport, the dialog scrolls internally and the action row stays reachable. */
 .modal-backdrop{overflow:hidden;overscroll-behavior:contain;box-sizing:border-box}
-.modal{box-sizing:border-box;max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain;position:relative}
-.modal>h3{position:sticky;inset-block-start:0;z-index:2;background:var(--surface);margin-block-start:0}
-.modal .modal-actions{position:sticky;inset-block-end:0;z-index:2;background:var(--surface);padding-block:.75rem 0;margin-block-start:.75rem;border-top:1px solid var(--border)}
+.modal{box-sizing:border-box;max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain;position:relative;padding-block:0 !important}
+.modal>h3{position:sticky;inset-block-start:0;z-index:2;background:var(--surface);margin-block-start:0;padding-block-start:1.25rem}
+.modal .modal-actions{position:sticky;inset-block-end:0;z-index:2;background:var(--surface);padding-block:.75rem 1rem;margin-block-start:.75rem;border-top:1px solid var(--border)}
 .modal--wide{width:min(100%,760px)}
+/* The app header (Mantine AppShell.Header) sits at z-index 100; dialogs must be above it, never under or beside it. */
+body>.modal-backdrop{z-index:1000}

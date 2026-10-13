@@ -103,6 +103,62 @@ describe('Purchase direction',()=>{
  });
 });
 
+describe('Purchase VAT recovery treatments',()=>{
+ async function fill(dialog:HTMLElement){
+  await waitFor(()=>expect(within(dialog).getByRole('option',{name:'Gulf Supplies'})).toBeInTheDocument());
+  fireEvent.change(within(dialog).getByLabelText('Supplier'),{target:{value:PARTY}});
+  fireEvent.change(within(dialog).getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(within(dialog).getByLabelText('Tax point date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(within(dialog).getByLabelText('Description'),{target:{value:'Item'}});
+  fireEvent.change(within(dialog).getByLabelText('Unit price'),{target:{value:'100.00'}});
+  fireEvent.change(within(dialog).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  fireEvent.change(within(dialog).getByLabelText('VAT rate %'),{target:{value:'15.00'}});
+ }
+ const post=async(choose:(dialog:HTMLElement)=>void)=>{
+  const fetchMock=mockApi(base,(key)=>key==='POST /api/invoices'?json({invoice:base},201):undefined);
+  render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Add purchase invoice +'}));
+  const dialog=await screen.findByRole('dialog');
+  await fill(dialog);choose(dialog);
+  fireEvent.click(within(dialog).getByRole('button',{name:'Save draft'}));
+  await waitFor(()=>expect(calls(fetchMock,'POST /api/invoices').length).toBe(1));
+  return JSON.parse((calls(fetchMock,'POST /api/invoices')[0]![1] as RequestInit).body as string).lines[0];
+ };
+ const pick=(dialog:HTMLElement,value:string)=>fireEvent.change(within(dialog).getByLabelText(/^Input VAT recovery/),{target:{value}});
+ it('offers all three supported treatments',async()=>{
+  mockApi();
+  render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Add purchase invoice +'}));
+  const dialog=await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  const options=within(within(dialog).getByLabelText(/^Input VAT recovery/)).getAllByRole('option').map(o=>(o as HTMLOptionElement).value);
+  expect(options).toEqual(['','fully_recoverable','partially_recoverable','non_recoverable']);
+ });
+ it('sends non_recoverable without a percent',async()=>{
+  const line=await post(d=>pick(d,'non_recoverable'));
+  expect(line.vat_recoverability).toBe('non_recoverable');expect(line.vat_recoverable_percent).toBeUndefined();
+ });
+ it('requires and sends the explicit percent for partially_recoverable, and drops it when the choice changes',async()=>{
+  const line=await post(d=>{pick(d,'partially_recoverable');fireEvent.change(within(d).getByLabelText(/^Recoverable share/),{target:{value:'60'}})});
+  expect(line.vat_recoverability).toBe('partially_recoverable');expect(line.vat_recoverable_percent).toBe('60');
+ });
+ it('does not send a stale percent after switching away from partial',async()=>{
+  const line=await post(d=>{pick(d,'partially_recoverable');fireEvent.change(within(d).getByLabelText(/^Recoverable share/),{target:{value:'60'}});pick(d,'fully_recoverable')});
+  expect(line.vat_recoverability).toBe('fully_recoverable');expect(line.vat_recoverable_percent).toBeUndefined();
+ });
+ it('keeps a saved partial treatment and percent when editing',async()=>{
+  const saved={...base,lines:[{...base.lines[0]!,vat_recoverability:'partially_recoverable',vat_recoverable_percent:'40.00'}]};
+  const fetchMock=mockApi(saved,(key)=>key===`PUT /api/invoices/${ID}`?json({invoice:saved}):undefined);
+  render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('REF-9'));
+  fireEvent.click(await screen.findByRole('button',{name:'Edit'}));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button',{name:'Save draft'}));
+  await waitFor(()=>expect(calls(fetchMock,'PUT ').length).toBe(1));
+  const line=JSON.parse((calls(fetchMock,'PUT ')[0]![1] as RequestInit).body as string).lines[0];
+  expect([line.vat_recoverability,line.vat_recoverable_percent]).toEqual(['partially_recoverable','40.00']);
+ });
+});
+
 describe('Functional filters',()=>{
  it('combines status, counterparty and date range, mirrors them in the URL and resets everything',async()=>{
   const fetchMock=mockApi();
@@ -297,8 +353,8 @@ describe('Contextual navigation',()=>{
   fireEvent.click(await screen.findByText('PINV-0001'));
   fireEvent.click(await screen.findByRole('button',{name:'Open obligation'}));
   fireEvent.click(screen.getByRole('button',{name:'Open journal'}));
-  fireEvent.click(screen.getByRole('button',{name:'Open VAT'}));
-  expect(onNavigate.mock.calls).toEqual([['obligations',{search:OBLIGATION}],['accounting',{accountingTab:'journals',journalSearch:JOURNAL}],['vat',{}]]);
+  fireEvent.click(screen.getByRole('button',{name:'Open VAT page'}));
+  expect(onNavigate.mock.calls).toEqual([['obligations',{obligationId:OBLIGATION}],['accounting',{accountingTab:'journals',journalId:JOURNAL}],['vat',{}]]);
  });
 
  it('hides links to pages the user cannot open and links nothing that does not exist',async()=>{
@@ -306,7 +362,7 @@ describe('Contextual navigation',()=>{
   render(<InvoiceWorkspace {...full} onNavigate={vi.fn()} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByText('PINV-0001'));
   await screen.findByRole('region',{name:'Financial status'});
-  for(const name of ['Open obligation','Open journal','Open VAT'])expect(screen.queryByRole('button',{name})).not.toBeInTheDocument();
+  for(const name of ['Open obligation','Open journal','Open VAT page'])expect(screen.queryByRole('button',{name})).not.toBeInTheDocument();
  });
 
  it('links the evidence document file only with document.view',async()=>{
@@ -331,6 +387,27 @@ describe('Purchases page',()=>{
   await screen.findByText('REF-9');
   expect(lastList(fetchMock).get('direction')).toBe('purchase');
   expect(calls(fetchMock,'/api/purchases')).toEqual([]);
+ });
+});
+
+describe('Invoice and legacy sections',()=>{
+ it('Purchases separates the invoice workspace from legacy documents with tabs, persisted in the URL',async()=>{
+  vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/purchases')?json({purchases:[]}):url.startsWith('/api/invoices/customers')?json({suppliers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:25,offset:0}):json({}))));
+  render(<Purchases canView canManage invoices={caps} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
+  expect(screen.getByRole('tab',{name:'Invoices'})).toHaveAttribute('aria-selected','true');
+  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
+  await waitFor(()=>expect(screen.queryByRole('heading',{name:'Purchase invoices'})).not.toBeInTheDocument());
+  expect(new URL(window.location.href).searchParams.get('purchaseTab')).toBe('legacy');
+  fireEvent.click(screen.getByRole('tab',{name:'Invoices'}));
+  expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
+  expect(new URL(window.location.href).searchParams.get('purchaseTab')).toBeNull();
+ });
+ it('shows no tabs when the user has only one kind of access',async()=>{
+  mockApi();
+  render(<Purchases canView={false} canManage={false} invoices={caps} onUnauthorized={vi.fn()}/>);
+  await screen.findByText('REF-9');
+  expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
  });
 });
 
