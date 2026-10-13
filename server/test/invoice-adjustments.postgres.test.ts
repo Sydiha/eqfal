@@ -121,7 +121,13 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
     const aging = await new ObligationAgingService(pool).report(co.id, '2026-03-31');
     expect(JSON.stringify(aging)).toContain('"outstanding_amount":"690.00"');
     // the note journal posts through the normal posting flow (its VAT line is verified against the approved note)
+    // recognition timing: an approved note counts on the obligation/aging at approval (like an approved invoice), but its ledger side and the
+    // VAT / month-close controls wait for the POSTED note journal: unposted => VAT readiness blocked
+    const vatSvc = new (await import('../src/modules/vat/vat.router')).VatService(pool);
+    expect((await vatSvc.readiness(co.id, '2026-03-01', '2026-03-31')).blockers.vat_ledger_mismatches).toBeGreaterThanOrEqual(1);
+    expect((await loadVatReconciliation(pool, co.id, '2026-03-01', '2026-03-31')).invoice_adjustments![0]).toMatchObject({ reconciliation_status: 'missing_posted_journal', ledger_vat_amount: null });
     await accounting.post(co.id, approver, out.journal_id);
+    expect((await vatSvc.readiness(co.id, '2026-03-01', '2026-03-31')).blockers.vat_ledger_mismatches).toBe(0);
     const rec = await loadVatReconciliation(pool, co.id, '2026-03-01', '2026-03-31');
     expect(rec.invoice_adjustments![0]).toMatchObject({ adjustment_type: 'credit', reconciliation_status: 'reconciled', vat_amount: '60.00', ledger_vat_amount: '60.00' });
     expect(rec.totals).toMatchObject({ reviewed_output_vat: 90, ledger_output_vat: 90, output_difference: 0 });
