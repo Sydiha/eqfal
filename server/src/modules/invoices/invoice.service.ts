@@ -171,7 +171,49 @@ export function parseListQuery(query: Record<string, unknown>): ListFilters {
 const HEADER_COLUMNS = `i.id, i.company_id, i.direction, i.status, i.counterparty_id, c.name AS counterparty_name, i.fiscal_year_id,
   i.internal_number, i.external_reference, i.issue_date::text, i.due_date::text, i.supply_date::text, i.tax_point_date::text, i.currency,
   i.subtotal_amount::text, i.vat_amount::text, i.total_amount::text, i.notes, i.origin, i.created_by_user_id,
-  i.version, i.created_at, i.updated_at`;
+  i.approved_by_user_id, i.approved_at, i.version, i.created_at, i.updated_at`;
+
+/** Authoritative approval-side records, joined read-only. Absent (null) until the invoice is approved. */
+const LINKED_JOINS = `
+  LEFT JOIN obligations ob ON ob.invoice_id = i.id AND ob.company_id = i.company_id AND ob.source_type = 'invoice'
+  LEFT JOIN LATERAL (SELECT je.id, je.status FROM journal_entries je WHERE je.company_id = i.company_id AND je.source_type = 'obligation'
+                     AND je.source_id = ob.id ORDER BY je.created_at, je.id LIMIT 1) jr ON TRUE
+  LEFT JOIN LATERAL (SELECT v.id, v.tax_date::text AS tax_date FROM invoice_vat_reviews v WHERE v.invoice_id = i.id AND v.company_id = i.company_id LIMIT 1) vr ON TRUE
+  LEFT JOIN LATERAL (SELECT COALESCE(SUM(s.amount), 0) AS paid FROM obligation_settlements s WHERE s.obligation_id = ob.id AND s.company_id = i.company_id) st ON TRUE`;
+const LINKED_COLUMNS = `ob.id AS obligation_id, ob.is_cancelled AS obligation_cancelled, ob.original_amount::text AS obligation_amount,
+  jr.id AS journal_id, jr.status AS journal_status, vr.id AS vat_review_id, vr.tax_date AS vat_review_tax_date,
+  st.paid::numeric(18,2)::text AS paid_raw, (ob.original_amount - st.paid)::numeric(18,2)::text AS outstanding_raw`;
+
+export type InvoiceActionableStatus = 'draft' | 'awaiting_approval' | 'awaiting_posting' | 'awaiting_settlement' | 'partially_settled' | 'settled' | 'cancelled';
+
+/** Derives the extra read-model fields from the joined records. Never inferred from the status alone once the records exist. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function withLinked(row: any) {
+  const { obligation_id, obligation_cancelled, obligation_amount, journal_id, journal_status, vat_review_id, vat_review_tax_date, paid_raw, outstanding_raw, ...rest } = row as Record<string, unknown>;
+  const status = rest.status as string;
+  const hasObligation = obligation_id != null;
+  const paid = hasObligation ? (paid_raw as string) : null;
+  const outstanding = hasObligation ? (outstanding_raw as string) : null;
+  let actionable: InvoiceActionableStatus;
+  if (status === 'cancelled' || obligation_cancelled === true) actionable = 'cancelled';
+  else if (status === 'draft') actionable = 'draft';
+  else if (status === 'submitted') actionable = 'awaiting_approval';
+  else if (journal_status !== 'posted') actionable = 'awaiting_posting';
+  else if (outstanding !== null && Number(outstanding) <= 0) actionable = 'settled';
+  else if (paid !== null && Number(paid) > 0) actionable = 'partially_settled';
+  else actionable = 'awaiting_settlement';
+  return {
+    ...rest,
+    obligation: hasObligation ? { id: obligation_id, is_cancelled: obligation_cancelled, original_amount: obligation_amount } : null,
+    journal: journal_id != null ? { id: journal_id, status: journal_status } : null,
+    vat: { status: vat_review_id != null ? 'reviewed' : status === 'approved' ? 'missing' : 'pending', review_id: vat_review_id ?? null, tax_date: vat_review_tax_date ?? null },
+    paid_amount: paid, outstanding_amount: outstanding, actionable_status: actionable,
+  } as Record<string, any> & {
+    obligation: { id: string; is_cancelled: boolean; original_amount: string } | null; journal: { id: string; status: string } | null;
+    vat: { status: 'pending' | 'reviewed' | 'missing'; review_id: string | null; tax_date: string | null };
+    paid_amount: string | null; outstanding_amount: string | null; actionable_status: InvoiceActionableStatus;
+  };
+}
 
 export class InvoiceDraftService {
   private readonly audit = new AuditLogRepository();
@@ -357,17 +399,17 @@ export class InvoiceDraftService {
 
   private async read(client: PoolClient, companyId: string, invoiceId: string) {
     const header = (await client.query(
-      `SELECT ${HEADER_COLUMNS}, l.document_id AS source_document_id
+      `SELECT ${HEADER_COLUMNS}, l.document_id AS source_document_id, ${LINKED_COLUMNS}
        FROM invoices i
        JOIN counterparties c ON c.id = i.counterparty_id AND c.company_id = i.company_id
-       LEFT JOIN invoice_source_links l ON l.invoice_id = i.id AND l.company_id = i.company_id
+       LEFT JOIN invoice_source_links l ON l.invoice_id = i.id AND l.company_id = i.company_id${LINKED_JOINS}
        WHERE i.id = $1 AND i.company_id = $2`, [invoiceId, companyId])).rows[0];
     if (!header) return null;
     const lines = (await client.query(
       `SELECT line_number, description, quantity::text, unit_price::text, discount_amount::text, vat_rate::text,
               net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note, vat_recoverability, vat_recoverable_percent::text
        FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number`, [invoiceId, companyId])).rows;
-    return { ...header, lines };
+    return { ...(withLinked(header) as any), lines } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 
   /** Customer picker for sales invoices: active, non-supplier counterparties of the company, id/name/type only (same rule as checkReferences). */
@@ -389,11 +431,11 @@ export class InvoiceDraftService {
     const condition = where.join(' AND ');
     const total = Number((await this.db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM invoices i WHERE ${condition}`, params)).rows[0]!.n);
     const rows = (await this.db.query(
-      `SELECT ${HEADER_COLUMNS}
-       FROM invoices i JOIN counterparties c ON c.id = i.counterparty_id AND c.company_id = i.company_id
+      `SELECT ${HEADER_COLUMNS}, ${LINKED_COLUMNS}
+       FROM invoices i JOIN counterparties c ON c.id = i.counterparty_id AND c.company_id = i.company_id${LINKED_JOINS}
        WHERE ${condition}
        ORDER BY i.issue_date DESC, i.created_at DESC, i.id
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, f.limit, f.offset])).rows;
-    return { invoices: rows, total, limit: f.limit, offset: f.offset };
+    return { invoices: rows.map(withLinked), total, limit: f.limit, offset: f.offset };
   }
 }

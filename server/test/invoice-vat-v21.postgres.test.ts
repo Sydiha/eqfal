@@ -248,12 +248,15 @@ describeDatabase('invoice VAT V2.1 purchase recoverability (PostgreSQL)', () => 
     expect(await journal(out.journal_id)).toEqual([
       { t: 'asset', d: '1150.00', c: '0.00', memo: null }, { t: 'revenue', d: '0.00', c: '1000.00', memo: null }, { t: 'liability', d: '0.00', c: '150.00', memo: 'VAT_OUTPUT' }]);
     expect((await q('SELECT recoverable_vat_amount r FROM invoice_vat_reviews WHERE invoice_id=$1', [out.invoice.id]))[0].r).toBeNull();
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve'`)).toBe(0);
+    // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
+    expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
     const { readFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
     const src = join(__dirname, '../src');
     const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
     const callers = walk(src).filter((f) => f.endsWith('.ts') && !f.endsWith('invoice-approval.service.ts') && /InvoiceApprovalService/.test(readFileSync(f, 'utf8')));
-    expect(callers).toEqual([]);
+    // F1: the approval service is reached only through the invoice router's guarded approve route.
+    expect(callers.map((f) => f.split('/').pop())).toEqual(['invoice.router.ts']);
   });
 });

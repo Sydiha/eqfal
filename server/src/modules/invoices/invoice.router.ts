@@ -4,6 +4,7 @@ import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapa
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { resolveStandardRate } from './vat-standard-rate';
 import { InvoiceDraftService, InvoiceError, parseDraft, parseListQuery } from './invoice.service';
+import { InvoiceApprovalService } from './invoice-approval.service';
 
 /**
  * Invoice draft API (PR-2B). invoice.view / invoice.create / invoice.edit are explicit-grant-only
@@ -102,7 +103,7 @@ function parseVersion(req: Request): number {
   return version as number;
 }
 
-// PR-3A: submit / return. invoice.submit is explicit-grant-only (migration 064). Final approval is NOT exposed.
+// PR-3A: submit / return. invoice.submit is explicit-grant-only (migration 064). Final approval is a separate route below.
 invoiceRouter.post('/invoices/:id/submit', ...write, requireCapability('invoice.submit'), route((req, res) => handle(res, async (svc) => {
   if (!UUID.test(req.params.id!)) { invalidId(res); return; }
   const version = parseVersion(req);
@@ -116,3 +117,20 @@ invoiceRouter.post('/invoices/:id/return', ...write, requireCapability('invoice.
   const { companyId, actorUserId } = companyAndActor(req);
   res.json({ invoice: await svc.returnToDraft(companyId, actorUserId, req.params.id!, version) });
 })));
+
+// F1: final approval (submitted -> approved). invoice.approve is explicit-grant-only (migration 070); the service also requires
+// obligation.confirm + accounting.journal.create, forbids self-approval and checks the version. The journal stays DRAFT (never posted here).
+invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice.approve'), route(async (req, res) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
+  try {
+    const version = parseVersion(req);
+    const ctx = getAuthenticatedContext(req)!;
+    const result = await new InvoiceApprovalService(pool).approve(ctx.activeCompanyId!, ctx.user.id, ctx.capabilities, req.params.id!, version);
+    const invoice = await new InvoiceDraftService(pool).get(ctx.activeCompanyId!, req.params.id!);
+    res.json({ invoice, obligation_id: result.obligation_id, journal_id: result.journal_id, vat_review_id: result.vat_review_id });
+  } catch (error) {
+    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code }); return; }
+    throw error;
+  }
+}));

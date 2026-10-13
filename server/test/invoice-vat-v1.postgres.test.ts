@@ -212,7 +212,9 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     const supp = (await q(`INSERT INTO counterparties (company_id, name, type, created_by_user_id) VALUES ($1,'S','supplier',$2) RETURNING id`, [co.id, creator]))[0].id;
     const p = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: supp, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
     await expect(drafts.submit(co.id, creator, p.id, p.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve'`)).toBe(0);
+    // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
+    expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
     expect(await n(`SELECT count(*) n FROM obligations WHERE company_id=$1`, [co.id])).toBe(0);
   });
 

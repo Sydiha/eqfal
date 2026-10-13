@@ -10,7 +10,7 @@ import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, p
 /**
  * submitted -> approved, atomically with its confirmed obligation (A2) and balanced DRAFT journal (A1).
  *
- * NOT ACTIVATED: no route calls this and the invoice.approve capability is not registered (owner decision).
+ * Exposed by POST /invoices/:id/approve (F1) behind the explicit-grant-only invoice.approve capability (migration 070); no grants exist.
  * The journal is never posted here. V1 (sales): approval also writes the immutable reviewed VAT snapshot (header + one group per
  * treatment and rate) and stamps one VAT_OUTPUT line per standard-rate group. V2 (purchases): the same snapshot, with one VAT_INPUT
  * debit line per standard-rate group for the RECOVERABLE part only (V2.1: the creator's explicit per-line recovery; the non-recoverable
