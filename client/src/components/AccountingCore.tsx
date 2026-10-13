@@ -213,6 +213,7 @@ export function Accounting({
   const [years, setYears] = useState<Year[]>([]);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [selected, setSelected] = useState<Journal | null>(null);
+  const journalFocusRef = useRef<string | null>(readQueryParameter("journalId", { pattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i }));
   const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
   const [trial, setTrial] = useState<TrialRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
@@ -316,7 +317,13 @@ export function Accounting({
       ]);
       setAccounts(((await a.json()) as { accounts: Account[] }).accounts);
       setYears(((await y.json()) as { fiscalYears: Year[] }).fiscalYears);
-      setJournals(((await j.json()) as { journals: Journal[] }).journals);
+      const loadedJournals = ((await j.json()) as { journals: Journal[] }).journals;
+      setJournals(loadedJournals);
+      // Contextual link from an invoice: open exactly this journal once (matched against the loaded list only).
+      const focusId = journalFocusRef.current;
+      journalFocusRef.current = null;
+      const focused = focusId ? loadedJournals.find((x) => x.id === focusId) : undefined;
+      if (focused) void openJournal(focused);
       setSources(
         ((await o.json()) as { sources: OperationalSource[] }).sources,
       );

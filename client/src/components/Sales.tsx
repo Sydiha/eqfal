@@ -5,6 +5,7 @@ import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../n
 import {DataWorkspace,DetailPane,MetricStrip,PageHeader,SectionCard,StatusBadge,WorkspacePage,WorkspaceState,WorkspaceToolbar} from './SharedUI';
 import {useDateContext} from '../context/DateContext';
 import {SalesInvoices,SalesInvoiceCapabilities} from './SalesInvoices';
+import {InvoiceSectionTabs,InvoiceSection,readInvoiceSection,writeInvoiceSection} from './InvoiceSectionTabs';
 import './SalesApproved.css';
 
 type Settlement={id:string;amount:string;transaction_date:string;description:string|null;bank_reference:string|null};
@@ -16,7 +17,7 @@ const filterParameters=['salesSearch','salesCustomer','salesFinancial','salesRev
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 const readFilters=():DiscoveryFilters=>({search:readQueryParameter('salesSearch')??'',customer:readQueryParameter('salesCustomer')??'',financial:readQueryParameter('salesFinancial',{allowedValues:financialValues})??'',review:readQueryParameter('salesReview',{allowedValues:reviewValues})??'',from:validDate(readQueryParameter('salesFrom')),to:validDate(readQueryParameter('salesTo')),receivable:readQueryParameter('salesReceivable',{allowedValues:receivableValues})??'',verification:readQueryParameter('salesVerification',{allowedValues:verificationValues})??''});
 
-function SalesDocuments({canView,canManage,canCreate=false,canEdit=false,onCreateDocument,onEditDocument,invoices,extra,onUnauthorized}:{extra?:ReactNode;invoices?:SalesInvoiceCapabilities;canView:boolean;canManage:boolean;canCreate?:boolean;canEdit?:boolean;onCreateDocument?:()=>void;onEditDocument?:(documentId:string)=>void;onUnauthorized:()=>void}){
+function SalesDocuments({canView,canManage,canCreate=false,canEdit=false,onCreateDocument,onEditDocument,invoices,extra,onUnauthorized}:{extra?:ReactNode;onNavigate?:(page:string,parameters:Record<string,string>)=>void;invoices?:SalesInvoiceCapabilities;canView:boolean;canManage:boolean;canCreate?:boolean;canEdit?:boolean;onCreateDocument?:()=>void;onEditDocument?:(documentId:string)=>void;onUnauthorized:()=>void}){
  const{t,i18n}=useTranslation();
  const { selectedPeriodId, periodMode, availablePeriodsForSelectedYear, selectedFiscalYearId, availableFiscalYears } = useDateContext();
  const[data,setData]=useState<Sale[]|null>(null),[selectedId,setSelectedId]=useState<string|null>(null),[filters,setFilters]=useState<DiscoveryFilters>(readFilters),[error,setError]=useState(false),[page,setPage]=useState(1),[loadedAt,setLoadedAt]=useState<Date|null>(null);
@@ -103,7 +104,12 @@ type SalesProps=Parameters<typeof SalesDocuments>[0];
 export function Sales({invoices,...props}:Omit<SalesProps,'extra'>){
  const{t}=useTranslation();
  const invoiceAccess=!!invoices&&(invoices.canView||invoices.canCreate);
- const panel=invoiceAccess?<SalesInvoices {...invoices!} onUnauthorized={props.onUnauthorized}/>:undefined;
- if(props.canView||!invoiceAccess)return <SalesDocuments {...props} invoices={invoices} extra={panel}/>;
- return <WorkspacePage size="operational" labelledBy="sales-title" className="sales-workspace sales-v22 sales-approved"><PageHeader className="sales-approved__header" titleId="sales-title" title={t('sales.title')} description={t('salesInvoice.intro')}/>{panel}</WorkspacePage>;
+ const[section,setSection]=useState<InvoiceSection>(()=>readInvoiceSection('salesTab'));
+ const change=(next:InvoiceSection)=>{setSection(next);writeInvoiceSection('salesTab',next)};
+ const bothAccess=invoiceAccess&&props.canView;
+ const tabs=bothAccess?<InvoiceSectionTabs active={section} onChange={change}/>:null;
+ // Legacy documents only (no invoice access, or the legacy tab): the original page, unchanged.
+ if(!invoiceAccess||(bothAccess&&section==='legacy'))return <SalesDocuments {...props} invoices={invoices} extra={tabs}/>;
+ const panel=<SalesInvoices {...invoices!} direction="sales" onNavigate={props.onNavigate} onUnauthorized={props.onUnauthorized}/>;
+ return <WorkspacePage size="operational" labelledBy="sales-title" className="sales-workspace sales-v22 sales-approved"><PageHeader className="sales-approved__header" titleId="sales-title" title={t('sales.title')} description={t('salesInvoice.intro')}/>{tabs}<div id="invoice-section-panel" role={bothAccess?'tabpanel':undefined}>{panel}</div></WorkspacePage>;
 }

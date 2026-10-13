@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,waitFor} from './test-utils';
+import {fireEvent,render,screen,waitFor,within} from './test-utils';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Sales} from '../components/Sales';
 import {SalesInvoices} from '../components/SalesInvoices';
@@ -26,7 +26,7 @@ function mockApi(invoice:typeof draft|Record<string,unknown>=draft,overrides:Rec
 const bodyOf=(fetchMock:ReturnType<typeof vi.fn>,key:string)=>{const call=fetchMock.mock.calls.find(c=>`${(c[1] as RequestInit|undefined)?.method??'GET'} ${String(c[0]).split('?')[0]}`===key);return call?JSON.parse((call[1] as RequestInit).body as string):undefined};
 
 describe('Sales invoices',()=>{
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ beforeEach(async()=>{window.history.replaceState(null,'','/?page=sales');vi.restoreAllMocks();await i18n.changeLanguage('en')});
 
  it('lists sales invoices from /api/invoices and shows server totals in the detail',async()=>{
   const fetchMock=mockApi();
@@ -43,10 +43,10 @@ describe('Sales invoices',()=>{
   render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   await screen.findByRole('dialog');
-  await waitFor(()=>expect(screen.getByRole('option',{name:'Acme'})).toBeInTheDocument());
+  await waitFor(()=>expect(within(screen.getByRole('dialog')).getByRole('option',{name:'Acme'})).toBeInTheDocument());
   expect(fetchMock.mock.calls.some(c=>c[0]==='/api/counterparties')).toBe(false);
   expect(fetchMock.mock.calls.some(c=>c[0]==='/api/invoices/customers')).toBe(true);
-  fireEvent.change(screen.getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
+  fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
   fireEvent.change(screen.getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
   fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'100.00'}});
@@ -106,7 +106,9 @@ describe('Sales invoices',()=>{
   fireEvent.click(await screen.findByText('REF-1'));
   await screen.findByRole('dialog');
   expect(screen.queryByRole('button',{name:'Edit'})).not.toBeInTheDocument();
-  expect(screen.queryByRole('button',{name:'Submit'})).not.toBeInTheDocument();
+  // The next step stays visible but disabled, with the reason stated, instead of silently disappearing.
+  expect(screen.getByRole('button',{name:'Submit'})).toBeDisabled();
+  expect(screen.getByTestId('next-action-note')).toHaveTextContent('You do not have permission to submit invoices.');
  });
 
  it('shows a mapped message for a server error code instead of raw text',async()=>{
@@ -130,23 +132,26 @@ describe('Sales invoices',()=>{
 });
 
 describe('Sales page with invoice workflow',()=>{
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ beforeEach(async()=>{window.history.replaceState(null,'','/?page=sales');vi.restoreAllMocks();await i18n.changeLanguage('en')});
 
  it('keeps document upload as a separate, relabelled action and opens the invoice form from the new action',async()=>{
   mockApi();
   vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:100,offset:0}):json({customers:[]}))));
   const onCreateDocument=vi.fn();
   render(<Sales canView canManage canCreate onCreateDocument={onCreateDocument} invoices={caps} onUnauthorized={vi.fn()}/>);
-  const upload=await screen.findAllByRole('button',{name:'Upload sale document'});
-  fireEvent.click(upload[0]!);
-  expect(onCreateDocument).toHaveBeenCalledTimes(1);
+  // The invoice workspace and the legacy documents are separate tabs: the invoice tab shows only the invoice action.
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(onCreateDocument).not.toHaveBeenCalled();
+  fireEvent.keyDown(document,{key:'Escape'});
+  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
+  fireEvent.click((await screen.findAllByRole('button',{name:'Upload sale document'}))[0]!);
   expect(onCreateDocument).toHaveBeenCalledTimes(1);
  });
 });
 
 describe('Sales permission separation',()=>{
+ beforeEach(()=>{window.history.replaceState(null,'','/?page=sales')});
  beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
  const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({customers:[]})));vi.stubGlobal('fetch',f);return f};
 
@@ -178,7 +183,10 @@ describe('Sales permission separation',()=>{
   stub();
   render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} invoices={caps} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByText('REF-1')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Upload sale document'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
   expect((await screen.findAllByRole('button',{name:'Upload sale document'})).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('heading',{name:'Sales invoices'})).not.toBeInTheDocument();
  });
 });
 
@@ -188,7 +196,9 @@ describe('Sales navigation visibility',()=>{
   expect(canShowNavigationPage('sales',['invoice.create'])).toBe(true);
   expect(canShowNavigationPage('sales',['document.view','obligation.view'])).toBe(true);
   expect(canShowNavigationPage('sales',['document.view'])).toBe(false);
-  expect(canShowNavigationPage('purchases',['invoice.view'])).toBe(false);
+  expect(canShowNavigationPage('purchases',['invoice.view'])).toBe(true);
+  expect(canShowNavigationPage('purchases',['invoice.create'])).toBe(true);
+  expect(canShowNavigationPage('purchases',['document.view'])).toBe(false);
  });
 
  describe('standard VAT rate resolution',()=>{
