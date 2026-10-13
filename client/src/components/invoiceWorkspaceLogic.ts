@@ -5,6 +5,8 @@ export type InvoiceCaps = {
   canApprove?: boolean; canConfirmObligation?: boolean; canCreateJournal?: boolean;
   /** accounting.journal.post */
   canPostJournal?: boolean;
+  /** obligation.settlement.create (the existing settlement authorization; no invoice-specific capability). */
+  canCreateSettlement?: boolean;
   canViewAccounting?: boolean; canViewObligations?: boolean; canViewVat?: boolean; canViewDocuments?: boolean;
   currentUserId?: string;
 };
@@ -38,6 +40,22 @@ export function nextAction(invoice: WorkflowInvoice, caps: InvoiceCaps): NextAct
   if (invoice.journal.status === 'posted') return { kind: 'none', enabled: false, reason: 'posted' };
   if (!caps.canPostJournal) return { kind: 'post', enabled: false, reason: 'noPost' };
   return { kind: 'post', enabled: true, reason: null };
+}
+
+export type SettlementAction = { enabled: boolean; reason: string | null };
+
+/**
+ * Whether the contextual "Record collection/payment" action is offered. Settlement stays a separate controlled step after
+ * approval and posting; the server re-checks everything. The outstanding amount comes from the server read model.
+ */
+export function settlementAction(invoice: WorkflowInvoice & { outstanding_amount?: string | null }, caps: InvoiceCaps): SettlementAction {
+  if (invoice.status === 'cancelled' || invoice.obligation?.is_cancelled === true) return { enabled: false, reason: 'cancelled' };
+  if (invoice.status !== 'approved' || !invoice.obligation) return { enabled: false, reason: 'settleNotApproved' };
+  if (!invoice.journal || invoice.journal.status !== 'posted') return { enabled: false, reason: 'settleNotPosted' };
+  if (invoice.outstanding_amount != null && Number(invoice.outstanding_amount) <= 0) return { enabled: false, reason: 'settleFullySettled' };
+  if (!caps.canCreateSettlement) return { enabled: false, reason: 'noSettle' };
+  if (!caps.canViewObligations) return { enabled: false, reason: 'noViewObligations' };
+  return { enabled: true, reason: null };
 }
 
 /** Sums decimal strings exactly (integer cents), so a page subtotal never drifts the way floating point does. */

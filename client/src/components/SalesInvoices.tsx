@@ -3,7 +3,8 @@ import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
-import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,nextAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
+import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,nextAction,settlementAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
+import {UUID_PATTERN} from './obligationSettlementLogic';
 import './SalesInvoices.css';
 
 /**
@@ -14,7 +15,7 @@ export type SalesInvoiceCapabilities=InvoiceCaps;
 export type InvoiceDirection='sales'|'purchase';
 type Line={line_number?:number;description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;net_amount?:string;vat_amount?:string;total_amount?:string;vat_treatment:string|null;vat_recoverability?:string|null;vat_recoverable_percent?:string|null};
 type Invoice={id:string;status:'draft'|'submitted'|'approved'|'cancelled';counterparty_id:string;counterparty_name:string;internal_number:string|null;external_reference:string|null;issue_date:string;due_date:string|null;supply_date:string|null;tax_point_date:string|null;currency:string;subtotal_amount:string;vat_amount:string;total_amount:string;notes:string|null;version:number;created_by_user_id?:string|null;source_document_id?:string|null;lines?:Line[];
- obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string};
+ obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string;settlements?:Array<{id:string;amount:string;transaction_date:string;description:string|null;note:string|null}>};
 type Counterparty={id:string;name:string;type:string};
 type EvidenceDocument={id:string;original_filename:string;reference_number:string|null;document_type:string|null;status:string;document_date:string|null};
 type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string;vat_recoverability:string;vat_recoverable_percent:string;rate_source:'auto'|'saved'};
@@ -114,11 +115,14 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   return sameRate(line.vat_rate,rate.value??'')?'ok':'mismatch';
  };
  const refresh=async()=>{if(canView)await load().catch(()=>setLoadError(true))};
+ // Returning from the settlement workflow: reopen exactly this invoice once (a UUID; the server still decides whether it exists in this company).
+ const returnInvoiceRef=useRef<string|null>(readQueryParameter('invoiceId',{pattern:UUID_PATTERN}));
  const loadParties=useCallback(async()=>{try{const response=await fetch(isPurchase?'/api/invoices/customers?direction=purchase':'/api/invoices/customers');if(response.status===401){unauthorized();return;}if(response.ok){const payload=await response.json() as {customers?:Counterparty[];suppliers?:Counterparty[]};setParties((isPurchase?payload.suppliers:payload.customers)??[])}}catch{/* the picker stays empty; the server still validates the choice */}},[isPurchase,unauthorized]);
  useEffect(()=>{if(canView||canCreate)void loadParties()},[canView,canCreate,loadParties]);
  const loadDocuments=async()=>{if(!canViewDocuments)return;try{const response=await fetch('/api/documents');if(response.status===401){unauthorized();return;}if(response.ok)setDocuments(((await response.json()) as {documents?:EvidenceDocument[]}).documents??[])}catch{/* evidence linking is optional */}};
 
  const open=async(id:string)=>{setError(null);setConfirmPost(false);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
+ useEffect(()=>{const id=returnInvoiceRef.current;if(!id||!canView)return;returnInvoiceRef.current=null;writeQueryParameters({invoiceId:null},'replace');void open(id)},[canView]);
  const startNew=()=>{setError(null);setDetail(null);setForm({id:null,version:null,values:emptyForm()});void loadParties();void loadDocuments()};
  const startEdit=(invoice:Invoice)=>{setError(null);setDetail(null);setForm({id:invoice.id,version:invoice.version,values:fromInvoice(invoice)});void loadParties();void loadDocuments()};
  const save=async(event:FormEvent)=>{
@@ -163,16 +167,26 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const eligibleDocuments=documents.filter(x=>x.status!=='rejected'&&(isPurchase?(x.document_type==='purchase'||x.document_type==='expense'):x.document_type==='sale'));
  const linkTo=(label:string,page:string,parameters:Record<string,string>)=><button type="button" className="sales-invoices__link" onClick={()=>onNavigate?.(page,parameters)}>{label}</button>;
 
+ // Settlement stays the obligation workflow: open the exact linked obligation with the settlement dialog and a way back to this invoice.
+ const openSettlement=(invoice:Invoice)=>{
+  if(!invoice.obligation||!onNavigate)return;
+  const keep=new URLSearchParams();for(const[k,v]of new URLSearchParams(window.location.search))if(k.startsWith(prefix))keep.set(k,v);
+  onNavigate('obligations',{obligationId:invoice.obligation.id,settle:'1',returnPage:isPurchase?'purchases':'sales',returnInvoice:invoice.id,...(keep.size?{returnQuery:keep.toString()}:{})});
+ };
  const renderActions=(invoice:Invoice)=>{
   const action=nextAction({status:invoice.status,created_by_user_id:invoice.created_by_user_id,obligation:invoice.obligation,journal:invoice.journal},caps);
+  const settle=invoice.status==='approved'?settlementAction({status:invoice.status,obligation:invoice.obligation,journal:invoice.journal,outstanding_amount:invoice.outstanding_amount},caps):null;
   const reason=action.reason?t(`invoiceWorkspace.reasons.${action.reason}`):null;
+  const settleReason=settle?.reason?t(`invoiceWorkspace.reasons.${settle.reason}`):null;
   const primaryLabel=action.kind==='submit'?t('salesInvoice.submit'):action.kind==='approve'?t('invoiceWorkspace.approve'):action.kind==='post'?t('invoiceWorkspace.postJournal'):null;
   const onPrimary=()=>{if(action.kind==='submit')void transition(invoice,'submit');else if(action.kind==='approve')void transition(invoice,'approve');else if(action.kind==='post')setConfirmPost(true)};
   return <>
+   {settleReason&&settle&&!settle.enabled&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="settle-note">{settleReason}</p>}
    {reason&&<p className={`sales-invoices__hint sales-invoices__next${action.kind==='none'?'':' sales-invoices__next--blocked'}`} data-testid="next-action-note">{reason}</p>}
    <div className="modal-actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
     {invoice.status==='draft'&&canEdit&&<button type="button" onClick={()=>startEdit(invoice)} disabled={busy}>{t('salesInvoice.edit')}</button>}
     {invoice.status==='submitted'&&canSubmit&&<button type="button" onClick={()=>void transition(invoice,'return')} disabled={busy}>{t('salesInvoice.return')}</button>}
+    {settle&&settle.reason!=='cancelled'&&<button type="button" className={primaryLabel?undefined:'primary'} onClick={()=>openSettlement(invoice)} disabled={busy||!settle.enabled}>{t(isPurchase?'invoiceWorkspace.recordPayment':'invoiceWorkspace.recordCollection')}</button>}
     {primaryLabel&&<button type="button" className="primary" onClick={onPrimary} disabled={busy||!action.enabled}>{primaryLabel}</button>}</div>
   </>;
  };
@@ -203,7 +217,9 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
      <div><dt>{t('invoiceWorkspace.vat')}</dt><dd>{t(`invoiceWorkspace.vatStatuses.${detail.vat?.status??'pending'}`)}{detail.vat?.status==='reviewed'&&caps.canViewVat&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openVat'),'vat',{})}</>}</dd></div>
      <div><dt>{t('invoiceWorkspace.paid')}</dt><dd>{detail.paid_amount!=null?`${money(detail.paid_amount)} ${detail.currency}`:'—'}</dd></div>
      <div><dt>{t('invoiceWorkspace.outstanding')}</dt><dd>{detail.outstanding_amount!=null?`${money(detail.outstanding_amount)} ${detail.currency}`:'—'}</dd></div>
-    </dl></section>}
+    </dl>
+    {(detail.settlements?.length??0)>0&&<><h5>{t('invoiceWorkspace.settlementHistory')}</h5><ul className="sales-invoices__settlements" data-testid="invoice-settlements">{detail.settlements!.map(x=><li key={x.id}><span>{formatDisplayDate(x.transaction_date,'en')}</span><span>{x.description??x.note??'—'}</span><strong>{money(x.amount)} {detail.currency}</strong></li>)}</ul></>}
+   </section>}
    {detail.source_document_id&&canViewDocuments&&<p className="sales-invoices__hint">{t('invoiceWorkspace.evidence')}: <a href={`/api/documents/${detail.source_document_id}/file`} target="_blank" rel="noreferrer">{t('invoiceWorkspace.openDocument')}</a></p>}
    <div className="sales-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate','net','vat','lineTotal'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map(l=><tr key={l.line_number}><td>{l.description}</td><td>{l.quantity}</td><td>{money(l.unit_price)}</td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td>{l.vat_rate}%</td><td>{money(l.net_amount??'0')}</td><td>{money(l.vat_amount??'0')}</td><td>{money(l.total_amount??'0')}</td></tr>)}</tbody></table></div>
    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>

@@ -413,7 +413,12 @@ export class InvoiceDraftService {
       `SELECT line_number, description, quantity::text, unit_price::text, discount_amount::text, vat_rate::text,
               net_amount::text, vat_amount::text, total_amount::text, vat_treatment, treatment_note, vat_recoverability, vat_recoverable_percent::text
        FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number`, [invoiceId, companyId])).rows;
-    return { ...(withLinked(header) as any), lines } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Read-only settlement history of the linked obligation (the one settlement mechanism). Absent obligation => no history.
+    const settlements = header.obligation_id == null ? [] : (await client.query(
+      `SELECT s.id, s.bank_transaction_id, s.amount::text, s.note, t.transaction_date::text, t.description
+       FROM obligation_settlements s JOIN bank_transactions t ON t.id = s.bank_transaction_id AND t.company_id = s.company_id
+       WHERE s.obligation_id = $1 AND s.company_id = $2 ORDER BY t.transaction_date, s.created_at, s.id`, [header.obligation_id, companyId])).rows;
+    return { ...(withLinked(header) as any), lines, settlements } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 
   /** Customer picker for sales invoices: active, non-supplier counterparties of the company, id/name/type only (same rule as checkReferences). */

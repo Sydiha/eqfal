@@ -339,7 +339,7 @@ describe('Approval, accounting and next action',()=>{
   mockApi({...approved,journal:{id:JOURNAL,status:'posted'},actionable_status:'partially_settled'});
   render(<InvoiceWorkspace {...full} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByText('PINV-0001'));
-  expect(await screen.findByTestId('next-action-note')).toHaveTextContent('Settlement is recorded from the obligation; it is never done automatically.');
+  expect(await screen.findByTestId('next-action-note')).toHaveTextContent('The journal is posted. Record the collection or payment from here; it is never done automatically.');
   expect(screen.queryByRole('button',{name:'Post journal'})).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Approve invoice'})).not.toBeInTheDocument();
  });
