@@ -29,7 +29,8 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
       // Invoice access is independent of the legacy document/obligation access.
       return (has(capabilities, 'document.view') && has(capabilities, 'obligation.view')) || has(capabilities, 'invoice.view') || has(capabilities, 'invoice.create');
     case 'purchases':
-      return has(capabilities, 'document.view') && has(capabilities, 'obligation.view');
+      // Invoice access is independent of the legacy document/obligation access.
+      return (has(capabilities, 'document.view') && has(capabilities, 'obligation.view')) || has(capabilities, 'invoice.view') || has(capabilities, 'invoice.create');
     case 'documents':
       return has(capabilities, 'document.view');
     case 'banks':

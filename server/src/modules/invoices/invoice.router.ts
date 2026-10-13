@@ -47,7 +47,7 @@ invoiceRouter.get('/invoices', ...read, requireCapability('invoice.view'), route
   res.json(await svc.list(companyAndActor(req).companyId, filters));
 })));
 
-// Customer picker for the sales invoice form. Any invoice capability suffices, so obligation.view is never needed.
+// Customer picker for the sales invoice form (?direction=purchase returns the supplier picker instead). Any invoice capability suffices, so obligation.view is never needed.
 // Must be registered before '/invoices/:id'.
 const requireAnyInvoiceCapability: RequestHandler = (req, res, next) => {
   const context = getAuthenticatedContext(req);
@@ -56,7 +56,10 @@ const requireAnyInvoiceCapability: RequestHandler = (req, res, next) => {
   next();
 };
 invoiceRouter.get('/invoices/customers', ...read, requireAnyInvoiceCapability, route((req, res) => handle(res, async (svc) => {
-  res.json(await svc.listCustomers(companyAndActor(req).companyId));
+  const direction = req.query.direction;
+  if (direction !== undefined && direction !== 'sales' && direction !== 'purchase') throw new InvoiceError(400, 'INVOICE_VALIDATION', 'direction must be sales or purchase');
+  const { companyId } = companyAndActor(req);
+  res.json(direction === 'purchase' ? await svc.listSuppliers(companyId) : await svc.listCustomers(companyId));
 })));
 
 // Read-only effective standard VAT rate for a tax point date. Any invoice capability suffices (vat.view is not needed).

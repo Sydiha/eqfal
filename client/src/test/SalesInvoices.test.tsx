@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,waitFor} from './test-utils';
+import {fireEvent,render,screen,waitFor,within} from './test-utils';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Sales} from '../components/Sales';
 import {SalesInvoices} from '../components/SalesInvoices';
@@ -43,10 +43,10 @@ describe('Sales invoices',()=>{
   render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
   await screen.findByRole('dialog');
-  await waitFor(()=>expect(screen.getByRole('option',{name:'Acme'})).toBeInTheDocument());
+  await waitFor(()=>expect(within(screen.getByRole('dialog')).getByRole('option',{name:'Acme'})).toBeInTheDocument());
   expect(fetchMock.mock.calls.some(c=>c[0]==='/api/counterparties')).toBe(false);
   expect(fetchMock.mock.calls.some(c=>c[0]==='/api/invoices/customers')).toBe(true);
-  fireEvent.change(screen.getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
+  fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
   fireEvent.change(screen.getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
   fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'100.00'}});
@@ -106,7 +106,9 @@ describe('Sales invoices',()=>{
   fireEvent.click(await screen.findByText('REF-1'));
   await screen.findByRole('dialog');
   expect(screen.queryByRole('button',{name:'Edit'})).not.toBeInTheDocument();
-  expect(screen.queryByRole('button',{name:'Submit'})).not.toBeInTheDocument();
+  // The next step stays visible but disabled, with the reason stated, instead of silently disappearing.
+  expect(screen.getByRole('button',{name:'Submit'})).toBeDisabled();
+  expect(screen.getByTestId('next-action-note')).toHaveTextContent('You do not have permission to submit invoices.');
  });
 
  it('shows a mapped message for a server error code instead of raw text',async()=>{
@@ -188,7 +190,9 @@ describe('Sales navigation visibility',()=>{
   expect(canShowNavigationPage('sales',['invoice.create'])).toBe(true);
   expect(canShowNavigationPage('sales',['document.view','obligation.view'])).toBe(true);
   expect(canShowNavigationPage('sales',['document.view'])).toBe(false);
-  expect(canShowNavigationPage('purchases',['invoice.view'])).toBe(false);
+  expect(canShowNavigationPage('purchases',['invoice.view'])).toBe(true);
+  expect(canShowNavigationPage('purchases',['invoice.create'])).toBe(true);
+  expect(canShowNavigationPage('purchases',['document.view'])).toBe(false);
  });
 
  describe('standard VAT rate resolution',()=>{

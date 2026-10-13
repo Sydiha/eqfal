@@ -13,7 +13,6 @@
 .sales-invoices__row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3,.75rem)}
 .sales-invoices__form fieldset{display:grid;gap:var(--space-3,.75rem);margin:0;padding:var(--space-3,.75rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px)}
 .sales-invoices__line{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2,.5rem);padding-block-end:var(--space-3,.75rem);border-bottom:1px dashed var(--border,#e6ecee)}.sales-invoices__line>label:first-child{grid-column:1/-1}
-.modal:has(.sales-invoices__form),.modal:has(.sales-invoices__totals){width:min(100%,760px)}
 
 /* Typography, spacing, table density and RTL refinements (SalesInvoices only; logical properties keep RTL/LTR symmetric) */
 .sales-invoices{font-size:.9rem;line-height:1.5}
@@ -30,3 +29,16 @@
 .sales-invoices__rate{display:inline-block;min-block-size:2.1rem;padding-block:.4rem;padding-inline:.6rem;border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px);background:#f8fafc;font-variant-numeric:tabular-nums;font-weight:600;text-align:start}
 .sales-invoices__rate-note{margin:0;font-size:.78rem;font-weight:400}
 @media (max-width:640px){.sales-invoices__row,.sales-invoices__line{grid-template-columns:minmax(0,1fr)}}
+
+/* Workspace additions: filters, pagination, financial status and the confirmation step */
+.sales-invoices__filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-3,.75rem);align-items:end;margin-block:var(--space-3,.75rem)}
+.sales-invoices__filters label{display:grid;gap:.25rem;font-size:.8rem;font-weight:600;color:var(--muted,#667483);min-width:0}
+.sales-invoices__filters input,.sales-invoices__filters select{font:inherit;font-weight:400;min-width:0}
+.sales-invoices__summary{margin:0;font-size:.8rem;color:var(--muted,#667483)}
+.sales-invoices__pager{display:flex;align-items:center;justify-content:center;gap:var(--space-3,.75rem);margin-block-start:var(--space-3,.75rem)}
+.sales-invoices__finance{margin-block:var(--space-3,.75rem);padding:var(--space-3,.75rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px);background:#f8fafc}
+.sales-invoices__finance h4{margin:0 0 .25rem;font-size:.9rem}
+.sales-invoices__link{padding:0;border:0;background:none;color:var(--primary,#0e8f7a);text-decoration:underline;cursor:pointer;font:inherit;font-size:.8rem}
+.sales-invoices__next{margin-block:var(--space-2,.5rem)}.sales-invoices__next--blocked{color:var(--warning,#9a6500)}
+.sales-invoices__confirm{margin-block-start:var(--space-3,.75rem);padding:var(--space-3,.75rem);border:1px solid var(--warning,#9a6500);border-radius:var(--radius-sm,8px);background:#fffaf0}
+.sales-invoices__confirm p{margin:0 0 .5rem}

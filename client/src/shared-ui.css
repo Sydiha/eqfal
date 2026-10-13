@@ -27,3 +27,10 @@ input[type="date"],input[type="number"],input[type="email"]{direction:ltr}
 
 /* Wave 3: an empty table (single colspan row) must fit its wrapper so the empty message is not scrolled out of view on narrow screens */
 @media(max-width:48em){table:has(>tbody>tr>td[colspan]:only-child){min-width:0!important;width:100%!important}}
+
+/* Shared dialog layout: the backdrop never exceeds the viewport, the dialog scrolls internally and the action row stays reachable. */
+.modal-backdrop{overflow:hidden;overscroll-behavior:contain;box-sizing:border-box}
+.modal{box-sizing:border-box;max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain;position:relative}
+.modal>h3{position:sticky;inset-block-start:0;z-index:2;background:var(--surface);margin-block-start:0}
+.modal .modal-actions{position:sticky;inset-block-end:0;z-index:2;background:var(--surface);padding-block:.75rem 0;margin-block-start:.75rem;border-top:1px solid var(--border)}
+.modal--wide{width:min(100%,760px)}

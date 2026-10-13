@@ -145,11 +145,11 @@ export function parseDraft(body: unknown, extraKeys: string[] = []): DraftInput 
 
 export type ListFilters = {
   direction: Direction | null; status: string | null; counterparty_id: string | null;
-  from: string | null; to: string | null; limit: number; offset: number;
+  from: string | null; to: string | null; q: string | null; limit: number; offset: number;
 };
 
 export function parseListQuery(query: Record<string, unknown>): ListFilters {
-  onlyKeys(query, ['direction', 'status', 'counterparty_id', 'from', 'to', 'limit', 'offset'], 'Query');
+  onlyKeys(query, ['direction', 'status', 'counterparty_id', 'from', 'to', 'q', 'limit', 'offset'], 'Query');
   const one = (x: unknown) => (Array.isArray(x) ? (() => { throw invalid('Repeated query parameters are not allowed'); })() : x);
   const direction = one(query.direction), status = one(query.status);
   if (direction != null && !DIRECTIONS.includes(direction as Direction)) throw invalid('direction must be sales or purchase');
@@ -161,9 +161,13 @@ export function parseListQuery(query: Record<string, unknown>): ListFilters {
   };
   const from = optionalDate(one(query.from), 'from'), to = optionalDate(one(query.to), 'to');
   if (from && to && to < from) throw invalid('to must not be before from');
+  const rawQ = one(query.q);
+  if (rawQ != null && typeof rawQ !== 'string') throw invalid('q must be text');
+  const q = rawQ == null ? null : rawQ.trim() || null;
+  if (q && q.length > 100) throw invalid('q must be at most 100 characters');
   return {
     direction: (direction as Direction) ?? null, status: (status as string) ?? null,
-    counterparty_id: optionalUuid(one(query.counterparty_id), 'counterparty_id'), from, to,
+    counterparty_id: optionalUuid(one(query.counterparty_id), 'counterparty_id'), from, to, q,
     limit: int(one(query.limit), 'limit', 50, 1, 100), offset: int(one(query.offset), 'offset', 0, 0, 100000),
   };
 }
@@ -419,6 +423,13 @@ export class InvoiceDraftService {
     return { customers: rows };
   }
 
+  /** Supplier picker for purchase invoices: active, non-customer counterparties (the mirror of checkReferences for purchases). */
+  async listSuppliers(companyId: string) {
+    const rows = (await this.db.query<{ id: string; name: string; type: string }>(
+      `SELECT id, name, type FROM counterparties WHERE company_id = $1 AND is_active = TRUE AND type <> 'customer' ORDER BY name, id`, [companyId])).rows;
+    return { suppliers: rows };
+  }
+
   async list(companyId: string, f: ListFilters) {
     const where = ['i.company_id = $1'];
     const params: unknown[] = [companyId];
@@ -428,8 +439,14 @@ export class InvoiceDraftService {
     if (f.counterparty_id) add('i.counterparty_id = ?', f.counterparty_id);
     if (f.from) add('i.issue_date >= ?', f.from);
     if (f.to) add('i.issue_date <= ?', f.to);
+    // Free-text search over the visible identifiers only (number, external reference, counterparty name, total); LIKE wildcards in the input are escaped.
+    if (f.q) {
+      params.push(`%${f.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+      const p = `$${params.length}`;
+      where.push(`(i.internal_number::text ILIKE ${p} OR i.external_reference ILIKE ${p} OR c.name ILIKE ${p} OR i.total_amount::text ILIKE ${p})`);
+    }
     const condition = where.join(' AND ');
-    const total = Number((await this.db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM invoices i WHERE ${condition}`, params)).rows[0]!.n);
+    const total = Number((await this.db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM invoices i JOIN counterparties c ON c.id = i.counterparty_id AND c.company_id = i.company_id WHERE ${condition}`, params)).rows[0]!.n);
     const rows = (await this.db.query(
       `SELECT ${HEADER_COLUMNS}, ${LINKED_COLUMNS}
        FROM invoices i JOIN counterparties c ON c.id = i.counterparty_id AND c.company_id = i.company_id${LINKED_JOINS}
