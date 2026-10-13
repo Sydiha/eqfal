@@ -47,3 +47,6 @@
 .invoice-tabs{display:flex;gap:var(--space-2,.5rem);margin-block:var(--space-3,.75rem);border-bottom:1px solid var(--border,#e6ecee)}
 .invoice-tabs__tab{padding:.55rem 1rem;border:0;border-bottom:3px solid transparent;border-radius:0;background:none;font:inherit;font-weight:600;color:var(--muted,#667483);cursor:pointer}
 .invoice-tabs__tab--active{color:var(--text,#0b1d3a);border-bottom-color:var(--primary,#0e8f7a)}
+.sales-invoices__settlements{list-style:none;margin:.25rem 0 0;padding:0;display:grid;gap:.35rem}
+.sales-invoices__settlements li{display:grid;grid-template-columns:auto 1fr auto;gap:.75rem;align-items:baseline;font-size:.875rem}
+@media (max-width:600px){.sales-invoices__settlements li{grid-template-columns:1fr auto}.sales-invoices__settlements li span:nth-child(2){grid-column:1/-1;order:3;color:var(--muted,#667483)}}

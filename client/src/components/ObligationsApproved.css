@@ -72,3 +72,6 @@
 /* Task 31: advanced date filters match their 30px sibling controls; the page header sits on the page surface like other modules. */
 .ob-approved .ob-approved__date input{min-height:0}
 .ob-approved .ob-approved__header{background:transparent}
+.ob-approved__return{margin:0 0 .75rem}
+.ob-approved__ineligible{margin:.5rem 0;font-size:.8125rem}.ob-approved__ineligible ul{list-style:none;margin:.35rem 0 0;padding:0;display:grid;gap:.4rem}.ob-approved__ineligible li{display:grid;gap:.1rem;overflow-wrap:anywhere}.ob-approved__ineligible small{color:var(--ob-muted)}
+.ob-approved__rejected{color:var(--danger,#b42318);font-size:.8125rem}
