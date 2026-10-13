@@ -347,6 +347,17 @@ describeDatabase('recurring invoices (PostgreSQL)', () => {
     expect(await count("SELECT COUNT(*)::text n FROM invoices WHERE id=$1 AND origin='manual'", [manual.id])).toBe(1);
   });
 
+  it('closed periods: a backdated occurrence still becomes a harmless draft; the closed-period rules apply at approval, and the schedule is not stuck', async () => {
+    const fy = (await pool.query<{ id: string }>("INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,'FY42','2042-01-01','2042-12-31') RETURNING id", [ids.coA])).rows[0]!.id;
+    await pool.query("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,'2042-01-01','2042-01-31','closed')", [ids.coA, fy]);
+    const t = await make(salesBody({ start_date: '2042-01-15' }));
+    expect((await svc.generateForTemplate(t.id, '2042-02-20')).generated).toHaveLength(2);
+    const rows = await invoicesOf(t.id);
+    expect(rows.map((r) => r.status)).toEqual(['draft', 'draft']);
+    expect(await count('SELECT COUNT(*)::text n FROM obligations WHERE invoice_id = ANY($1)', [rows.map((r) => r.id)])).toBe(0);
+    expect(await count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='obligation' AND source_id IN (SELECT id FROM obligations WHERE invoice_id = ANY($2))", [ids.coA, rows.map((r) => r.id)])).toBe(0);
+  });
+
   it('a generated draft stays inside the normal workflow: it cannot be approved by the template creator (separation of duties still applies)', async () => {
     const t = await make(salesBody({ start_date: '2041-01-01' }));
     await svc.generateForTemplate(t.id, '2041-01-01');
