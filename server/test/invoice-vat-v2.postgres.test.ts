@@ -361,6 +361,8 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     const { join } = await import('path');
     const services = ['invoice.service.ts', 'invoice-approval.service.ts', 'invoice.router.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
     expect(services).not.toMatch(/SET status\s*=\s*'cancelled'/i);
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve'`)).toBe(0);
+    // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
+    expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
   });
 });
