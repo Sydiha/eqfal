@@ -15,7 +15,7 @@ export type SalesInvoiceCapabilities=InvoiceCaps;
 export type InvoiceDirection='sales'|'purchase';
 type Line={line_number?:number;description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;net_amount?:string;vat_amount?:string;total_amount?:string;vat_treatment:string|null;vat_recoverability?:string|null;vat_recoverable_percent?:string|null};
 type Invoice={id:string;status:'draft'|'submitted'|'approved'|'cancelled';counterparty_id:string;counterparty_name:string;internal_number:string|null;external_reference:string|null;issue_date:string;due_date:string|null;supply_date:string|null;tax_point_date:string|null;currency:string;subtotal_amount:string;vat_amount:string;total_amount:string;notes:string|null;version:number;created_by_user_id?:string|null;source_document_id?:string|null;lines?:Line[];
- obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string;settlements?:Array<{id:string;amount:string;transaction_date:string;description:string|null;note:string|null}>};
+ obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;cancellation?:{cancelled_by_user_id:string;cancelled_at:string;reason:string}|null;adjustments?:{id:string;adjustment_type:'credit'|'debit';status:string;adjustment_date:string;total_amount:string;reason:string}[];journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string;settlements?:Array<{id:string;amount:string;transaction_date:string;description:string|null;note:string|null}>};
 type Counterparty={id:string;name:string;type:string};
 type EvidenceDocument={id:string;original_filename:string;reference_number:string|null;document_type:string|null;status:string;document_date:string|null};
 type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string;vat_recoverability:string;vat_recoverable_percent:string;rate_source:'auto'|'saved'};
@@ -32,14 +32,14 @@ const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.c
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
- const{canView,canCreate,canEdit,canSubmit,canViewDocuments=false}=caps;
+ const{canView,canCreate,canEdit,canSubmit,canCancel=false,canViewDocuments=false}=caps;
  const{t}=useTranslation();
  const ns=direction==='purchase'?'purchaseInvoice':'salesInvoice';
  const d=(key:string,options?:Record<string,unknown>)=>t(`${ns}.${key}`,options);
  const prefix=direction==='purchase'?'purchaseInv':'salesInv';
  const unauthorizedRef=useRef(onUnauthorized);unauthorizedRef.current=onUnauthorized;
  const unauthorized=useCallback(()=>unauthorizedRef.current(),[]);
- const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[confirmPost,setConfirmPost]=useState(false);
+ const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null);
  const[rate,setRate]=useState<RateState|null>(null);
  const readFilters=():Filters=>({q:readQueryParameter(`${prefix}Q`)??'',status:readQueryParameter(`${prefix}Status`,{allowedValues:INVOICE_STATUSES})??'',party:readQueryParameter(`${prefix}Party`,{pattern:/^[0-9a-f-]{36}$/i})??'',from:validDate(readQueryParameter(`${prefix}From`)),to:validDate(readQueryParameter(`${prefix}To`))});
  const[filters,setFilters]=useState<Filters>(readFilters);
@@ -121,7 +121,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  useEffect(()=>{if(canView||canCreate)void loadParties()},[canView,canCreate,loadParties]);
  const loadDocuments=async()=>{if(!canViewDocuments)return;try{const response=await fetch('/api/documents');if(response.status===401){unauthorized();return;}if(response.ok)setDocuments(((await response.json()) as {documents?:EvidenceDocument[]}).documents??[])}catch{/* evidence linking is optional */}};
 
- const open=async(id:string)=>{setError(null);setConfirmPost(false);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
+ const open=async(id:string)=>{setError(null);setConfirmPost(false);setCancelReason(null);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
  useEffect(()=>{const id=returnInvoiceRef.current;if(!id||!canView)return;returnInvoiceRef.current=null;writeQueryParameters({invoiceId:null},'replace');void open(id)},[canView]);
  const startNew=()=>{setError(null);setDetail(null);setForm({id:null,version:null,values:emptyForm()});void loadParties();void loadDocuments()};
  const startEdit=(invoice:Invoice)=>{setError(null);setDetail(null);setForm({id:invoice.id,version:invoice.version,values:fromInvoice(invoice)});void loadParties();void loadDocuments()};
@@ -133,6 +133,11 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const transition=async(invoice:Invoice,action:'submit'|'return'|'approve')=>{
   const next=await request(`/api/invoices/${invoice.id}/${action}`,'POST',{version:invoice.version});
   if(next){await refresh();await open(next.id)}
+ };
+ // Cancellation needs a reason and the current version; the server rejects approved invoices (they are corrected by credit/debit notes).
+ const cancelInvoice=async(invoice:Invoice)=>{
+  const next=await request(`/api/invoices/${invoice.id}/cancel`,'POST',{version:invoice.version,reason:(cancelReason??'').trim()});
+  if(next){setCancelReason(null);await refresh();await open(next.id)}
  };
  // Posting is an explicit, separate accounting act through the authorized journal API. The invoice is re-read afterwards so every figure comes from the server.
  const postJournal=async(invoice:Invoice)=>{
@@ -186,6 +191,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <div className="modal-actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
     {invoice.status==='draft'&&canEdit&&<button type="button" onClick={()=>startEdit(invoice)} disabled={busy}>{t('salesInvoice.edit')}</button>}
     {invoice.status==='submitted'&&canSubmit&&<button type="button" onClick={()=>void transition(invoice,'return')} disabled={busy}>{t('salesInvoice.return')}</button>}
+    {(invoice.status==='draft'||invoice.status==='submitted')&&canCancel&&<button type="button" onClick={()=>setCancelReason('')} disabled={busy}>{t('salesInvoice.cancelInvoice')}</button>}
     {settle&&settle.reason!=='cancelled'&&<button type="button" className={primaryLabel?undefined:'primary'} onClick={()=>openSettlement(invoice)} disabled={busy||!settle.enabled}>{t(isPurchase?'invoiceWorkspace.recordPayment':'invoiceWorkspace.recordCollection')}</button>}
     {primaryLabel&&<button type="button" className="primary" onClick={onPrimary} disabled={busy||!action.enabled}>{primaryLabel}</button>}</div>
   </>;
@@ -224,7 +230,15 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <div className="sales-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate','net','vat','lineTotal'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map(l=><tr key={l.line_number}><td>{l.description}</td><td>{l.quantity}</td><td>{money(l.unit_price)}</td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td>{l.vat_rate}%</td><td>{money(l.net_amount??'0')}</td><td>{money(l.vat_amount??'0')}</td><td>{money(l.total_amount??'0')}</td></tr>)}</tbody></table></div>
    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
    {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
-   {confirmPost?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmPostTitle')}><p><strong>{t('invoiceWorkspace.confirmPostTitle')}</strong></p><p>{t('invoiceWorkspace.confirmPostBody')}</p>
+   {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
+   {(detail.cancellation||(detail.adjustments?.length??0)>0)&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>
+    {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
+    {(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}
+   </section>}
+   {cancelReason!==null?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmCancelTitle')}><p><strong>{t('invoiceWorkspace.confirmCancelTitle')}</strong></p><p>{t('invoiceWorkspace.confirmCancelBody')}</p>
+     <label>{t('invoiceWorkspace.cancellationReason')}<textarea value={cancelReason} maxLength={500} onChange={e=>setCancelReason(e.target.value)} required/></label>
+     <div className="modal-actions"><button type="button" onClick={()=>setCancelReason(null)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void cancelInvoice(detail)} disabled={busy||cancelReason.trim()===''}>{t('invoiceWorkspace.confirmCancel')}</button></div></div>
+    :confirmPost?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmPostTitle')}><p><strong>{t('invoiceWorkspace.confirmPostTitle')}</strong></p><p>{t('invoiceWorkspace.confirmPostBody')}</p>
      <div className="modal-actions"><button type="button" onClick={()=>setConfirmPost(false)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void postJournal(detail)} disabled={busy}>{t('invoiceWorkspace.confirmPost')}</button></div></div>
     :renderActions(detail)}
   </Dialog>}

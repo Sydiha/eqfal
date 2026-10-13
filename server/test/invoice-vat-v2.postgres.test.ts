@@ -356,11 +356,11 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     expect(await n('SELECT count(*) n FROM invoice_vat_reviews WHERE invoice_id=$1', [once.id])).toBe(1);
   });
 
-  it('cancellation stays out of scope (V3): no cancel route or status write', async () => {
+  it('cancellation is limited (F4): only draft/submitted rows can be set to cancelled', async () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const services = ['invoice.service.ts', 'invoice-approval.service.ts', 'invoice.router.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
-    expect(services).not.toMatch(/SET status\s*=\s*'cancelled'/i);
+    expect((services.match(/SET status\s*=\s*'cancelled'[\s\S]*?\[invoiceId/gi) ?? []).every((w) => /status IN \('draft','submitted'\)/.test(w))).toBe(true);
     // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
     expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
     expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
