@@ -5,6 +5,7 @@ import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
 import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,nextAction,settlementAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
 import {InvoiceNotes} from './InvoiceNotes';
+import {RecurringInvoices} from './RecurringInvoices';
 import {UUID_PATTERN} from './obligationSettlementLogic';
 import './SalesInvoices.css';
 
@@ -33,7 +34,7 @@ const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.c
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
- const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canViewDocuments=false}=caps;
+ const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canRecurring=false,canViewDocuments=false}=caps;
  const{t}=useTranslation();
  const ns=direction==='purchase'?'purchaseInvoice':'salesInvoice';
  const d=(key:string,options?:Record<string,unknown>)=>t(`${ns}.${key}`,options);
@@ -214,6 +215,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <p className="sales-invoices__summary" aria-live="polite">{t('invoiceWorkspace.summary',{count:total,subtotal:money(sumDecimalStrings(rows.map(i=>i.total_amount)))})}</p>
    <div className="sales-invoices__scroll"><table><thead><tr><th>{t('salesInvoice.number')}</th><th>{d('counterparty')}</th><th>{t('salesInvoice.issueDate')}</th><th>{t('salesInvoice.dueDate')}</th><th>{t('salesInvoice.total')}</th><th>{t('invoiceWorkspace.outstanding')}</th><th>{t('salesInvoice.status')}</th></tr></thead><tbody>{rows.map(i=><tr key={i.id} tabIndex={0} onClick={()=>void open(i.id)} onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();void open(i.id)}}}><td>{numberOf(i)}</td><td>{i.counterparty_name}</td><td>{formatDisplayDate(i.issue_date,'en')}</td><td>{formatDisplayDate(i.due_date,'en')}</td><td className="sales-invoices__amount">{money(i.total_amount)}</td><td className="sales-invoices__amount">{i.outstanding_amount!=null?money(i.outstanding_amount):'—'}</td><td><span className={`sales-invoices__status sales-invoices__status--${i.status}`}>{stageLabel(i)}</span></td></tr>)}</tbody></table></div>
    {pages>1&&<nav className="sales-invoices__pager" aria-label={t('invoiceWorkspace.pagination.label')}><button type="button" disabled={page<=1} onClick={()=>goToPage(page-1)}>{t('invoiceWorkspace.pagination.previous')}</button><span>{t('invoiceWorkspace.pagination.page',{page,pages})}</span><button type="button" disabled={page>=pages} onClick={()=>goToPage(page+1)}>{t('invoiceWorkspace.pagination.next')}</button></nav>}</>)}
+  {canView&&<RecurringInvoices direction={direction} canManage={canRecurring} canGenerate={canRecurring&&canCreate} onChanged={()=>void load()} onUnauthorized={unauthorized}/>}
   {detail&&<Dialog size="wide" title={`${t('salesInvoice.detail')} | ${numberOf(detail)}`} busy={busy} onClose={()=>setDetail(null)}>
    <dl className="sales-invoices__facts"><div><dt>{d('counterparty')}</dt><dd>{detail.counterparty_name}</dd></div><div><dt>{t('salesInvoice.status')}</dt><dd>{stageLabel(detail)}</dd></div><div><dt>{t('salesInvoice.issueDate')}</dt><dd>{formatDisplayDate(detail.issue_date,'en')}</dd></div><div><dt>{t('salesInvoice.dueDate')}</dt><dd>{formatDisplayDate(detail.due_date,'en')}</dd></div><div><dt>{t('salesInvoice.taxPointDate')}</dt><dd>{formatDisplayDate(detail.tax_point_date,'en')}</dd></div>{detail.external_reference&&<div><dt>{t('salesInvoice.reference')}</dt><dd>{detail.external_reference}</dd></div>}</dl>
    {(detail.status==='approved'||detail.status==='cancelled')&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.financeTitle')}><h4>{t('invoiceWorkspace.financeTitle')}</h4>

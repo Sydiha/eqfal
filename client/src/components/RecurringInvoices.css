@@ -1,0 +1,19 @@
+.recurring-invoices{margin-block-start:var(--space-6,1.5rem);padding-block-start:var(--space-4,1rem);border-block-start:1px solid var(--border,#e6ecee)}
+.recurring-invoices__head{display:flex;flex-wrap:wrap;gap:var(--space-3,.75rem);align-items:flex-start;justify-content:space-between}
+.recurring-invoices__head h3{margin:0 0 .25rem}
+.recurring-invoices__scroll{overflow-x:auto;margin-block:var(--space-3,.75rem)}
+.recurring-invoices__hint{color:var(--muted,#667483);font-size:.8rem;margin:0}
+.recurring-invoices__error{color:var(--danger,#ad2e2e)}.recurring-invoices__notice{color:var(--success,#16724a)}
+.recurring-invoices__link{background:none;border:0;padding:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+.recurring-invoices__status{display:inline-block;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:700;background:#e2f4ec;color:var(--success,#16724a)}
+.recurring-invoices__status--paused{background:#fff1cf;color:var(--warning,#9a6500)}.recurring-invoices__status--ended{background:#e8edf4;color:#4b596c}
+.recurring-invoices__facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-3,.75rem);margin:var(--space-3,.75rem) 0}
+.recurring-invoices__facts dt{font-size:.75rem;color:var(--muted,#667483)}.recurring-invoices__facts dd{margin:.15rem 0 0}
+.recurring-invoices__generated{list-style:none;margin:0;padding:0;display:grid;gap:.4rem}.recurring-invoices__generated li{display:flex;gap:var(--space-3,.75rem);justify-content:space-between}
+.recurring-invoices__form{display:grid;gap:var(--space-3,.75rem)}.recurring-invoices__form label{display:grid;gap:.25rem;font-size:.8rem;font-weight:600;color:var(--muted,#667483)}
+.recurring-invoices__form input,.recurring-invoices__form select,.recurring-invoices__form textarea{font:inherit;font-size:.9rem;font-weight:400;color:var(--text,inherit);padding-block:.4rem;padding-inline:.6rem}
+.recurring-invoices__form fieldset{display:grid;gap:var(--space-3,.75rem);margin:0;padding:var(--space-3,.75rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px)}
+.recurring-invoices__row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3,.75rem)}
+.recurring-invoices__line{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:var(--space-3,.75rem);align-items:end}
+.recurring-invoices__confirm{padding:var(--space-3,.75rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px)}
+@media (max-width:640px){.recurring-invoices__row{grid-template-columns:minmax(0,1fr)}}
