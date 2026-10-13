@@ -121,6 +121,18 @@ invoiceRouter.post('/invoices/:id/return', ...write, requireCapability('invoice.
   res.json({ invoice: await svc.returnToDraft(companyId, actorUserId, req.params.id!, version) });
 })));
 
+// F4: cancellation of a draft or submitted invoice, with a mandatory reason. invoice.cancel is explicit-grant-only (migration 071).
+// Approved invoices are refused by the service (INVOICE_CANCEL_NOT_ALLOWED): they are corrected by credit/debit notes, not cancelled.
+invoiceRouter.post('/invoices/:id/cancel', ...write, requireCapability('invoice.cancel'), route((req, res) => handle(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  const version = parseVersion(req);
+  const raw = (req.body as Record<string, unknown>).reason;
+  const reason = typeof raw === 'string' ? raw.trim() : '';
+  if (reason.length < 1 || reason.length > 500) throw new InvoiceError(400, 'INVOICE_VALIDATION', 'reason is required (1 to 500 characters)');
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.json({ invoice: await svc.cancel(companyId, actorUserId, req.params.id!, version, reason) });
+})));
+
 // F1: final approval (submitted -> approved). invoice.approve is explicit-grant-only (migration 070); the service also requires
 // obligation.confirm + accounting.journal.create, forbids self-approval and checks the version. The journal stays DRAFT (never posted here).
 invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice.approve'), route(async (req, res) => {

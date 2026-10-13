@@ -1,4 +1,5 @@
 import {act,fireEvent,render,screen,waitFor,within} from './test-utils';
+import {cleanup} from '@testing-library/react';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {InvoiceWorkspace} from '../components/SalesInvoices';
 import {Dialog} from '../components/Dialog';
@@ -480,3 +481,67 @@ describe('Workflow decision logic',()=>{
 
 import {useState} from 'react';
 function useOpen():[boolean,(value:boolean)=>void]{return useState(false)}
+
+describe('F4 cancellation and correction history',()=>{
+ const submittedInvoice={...base,status:'submitted',actionable_status:'awaiting_approval'};
+ const cancelled={...base,status:'cancelled',actionable_status:'cancelled',cancellation:{cancelled_by_user_id:'u',cancelled_at:'2026-10-13T08:00:00Z',reason:'Issued by mistake'},adjustments:[]};
+ const open=async(invoice:Record<string,unknown>,capabilities:Record<string,unknown>,extra:Handler=()=>undefined,label:string='REF-9')=>{
+  const fetchMock=mockApi(invoice,extra);
+  render(<InvoiceWorkspace {...capabilities as typeof caps} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText(label));
+  await screen.findByRole('dialog');
+  return fetchMock;
+ };
+
+ it('hides the cancel button without invoice.cancel and offers it for draft and submitted invoices with it',async()=>{
+  await open(base,caps);
+  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  cleanup();
+  await open(submittedInvoice,{...caps,canCancel:true});
+  expect(screen.getByRole('button',{name:'Cancel invoice'})).toBeInTheDocument();
+  cleanup();
+  await open(base,{...caps,canCancel:true});
+  expect(screen.getByRole('button',{name:'Cancel invoice'})).toBeInTheDocument();
+ });
+
+ it('requires a reason, then sends the version and the reason once and reloads the invoice',async()=>{
+  const fetchMock=await open(submittedInvoice,{...caps,canCancel:true},(key)=>key===`POST /api/invoices/${ID}/cancel`?json({invoice:cancelled}):undefined);
+  fireEvent.click(screen.getByRole('button',{name:'Cancel invoice'}));
+  const group=await screen.findByRole('group',{name:'Cancel this invoice?'});
+  const confirm=within(group).getByRole('button',{name:'Cancel invoice'});
+  expect(confirm).toBeDisabled();
+  fireEvent.change(within(group).getByLabelText('Cancellation reason'),{target:{value:'Issued by mistake'}});
+  fireEvent.click(confirm);
+  await waitFor(()=>expect(calls(fetchMock,`POST /api/invoices/${ID}/cancel`).length).toBe(1));
+  const body=JSON.parse((calls(fetchMock,'/cancel')[0]![1] as RequestInit).body as string);
+  expect(body).toEqual({version:base.version,reason:'Issued by mistake'});
+ });
+
+ it('shows the cancellation reason in the correction history and offers no further action',async()=>{
+  await open(cancelled,{...caps,canCancel:true});
+  const history=await screen.findByTestId('correction-history');
+  expect(within(history).getByText('Issued by mistake')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  expect(screen.getByTestId('next-action-note')).toHaveTextContent('cancelled');
+ });
+
+ it('never offers cancelling an approved invoice, explains the credit/debit note route and lists existing notes',async()=>{
+  const withNote={...approved,adjustments:[{id:'a1',adjustment_type:'credit',status:'draft',adjustment_date:'2026-10-05',total_amount:'115.00',reason:'Returned goods'}]};
+  await open(withNote,{...full,canCancel:true},()=>undefined,'PINV-0001');
+  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  expect(screen.getByTestId('correction-hint')).toHaveTextContent('credit or debit note');
+  const list=await screen.findByTestId('invoice-adjustments');
+  expect(within(list).getByText(/Credit note/)).toBeInTheDocument();
+  expect(within(list).getByText(/Returned goods/)).toBeInTheDocument();
+ });
+
+ it('shows the server rejection in Arabic and keeps the invoice open',async()=>{
+  await i18n.changeLanguage('ar');
+  await open(submittedInvoice,{...caps,canCancel:true},(key)=>key===`POST /api/invoices/${ID}/cancel`?json({error:'x',code:'INVOICE_CANCEL_NOT_ALLOWED'},409):undefined);
+  fireEvent.click(screen.getByRole('button',{name:'إلغاء الفاتورة'}));
+  const group=await screen.findByRole('group',{name:'إلغاء هذه الفاتورة؟'});
+  fireEvent.change(within(group).getByLabelText('سبب الإلغاء'),{target:{value:'خطأ'}});
+  fireEvent.click(within(group).getByRole('button',{name:'إلغاء الفاتورة'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('لا يمكن إلغاء فاتورة معتمدة');
+ });
+});

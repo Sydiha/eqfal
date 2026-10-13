@@ -1,6 +1,8 @@
 /** Pure decision logic for the invoice workspace. The server remains the only authority; this only decides what to offer and why something is unavailable. */
 export type InvoiceCaps = {
   canView: boolean; canCreate: boolean; canEdit: boolean; canSubmit: boolean;
+  /** invoice.cancel (draft and submitted invoices only; approved invoices are corrected by credit/debit notes). */
+  canCancel?: boolean;
   /** invoice.approve. The server also requires obligation.confirm and accounting.journal.create, and forbids self-approval. */
   canApprove?: boolean; canConfirmObligation?: boolean; canCreateJournal?: boolean;
   /** accounting.journal.post */

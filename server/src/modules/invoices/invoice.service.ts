@@ -14,7 +14,8 @@ export type InvoiceErrorCode =
   | 'INVOICE_ALREADY_APPROVED' | 'INVOICE_FORBIDDEN' | 'INVOICE_MAPPING_MISSING' | 'INVOICE_VAT_PREREQUISITE' | 'INVOICE_SELF_APPROVAL' | 'INVOICE_FISCAL_YEAR_UNRESOLVED' | 'INVOICE_FISCAL_YEAR_CLOSED' | 'INVOICE_PERIOD_CLOSED'
   | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID'
-  | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED';
+  | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED'
+  | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED';
 
 export class InvoiceError extends Error {
   constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string) { super(message); }
@@ -175,7 +176,7 @@ export function parseListQuery(query: Record<string, unknown>): ListFilters {
 const HEADER_COLUMNS = `i.id, i.company_id, i.direction, i.status, i.counterparty_id, c.name AS counterparty_name, i.fiscal_year_id,
   i.internal_number, i.external_reference, i.issue_date::text, i.due_date::text, i.supply_date::text, i.tax_point_date::text, i.currency,
   i.subtotal_amount::text, i.vat_amount::text, i.total_amount::text, i.notes, i.origin, i.created_by_user_id,
-  i.approved_by_user_id, i.approved_at, i.version, i.created_at, i.updated_at`;
+  i.approved_by_user_id, i.approved_at, i.cancelled_by_user_id, i.cancelled_at, i.cancellation_reason, i.version, i.created_at, i.updated_at`;
 
 /** Authoritative approval-side records, joined read-only. Absent (null) until the invoice is approved. */
 const LINKED_JOINS = `
@@ -193,7 +194,7 @@ export type InvoiceActionableStatus = 'draft' | 'awaiting_approval' | 'awaiting_
 /** Derives the extra read-model fields from the joined records. Never inferred from the status alone once the records exist. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function withLinked(row: any) {
-  const { obligation_id, obligation_cancelled, obligation_amount, journal_id, journal_status, vat_review_id, vat_review_tax_date, paid_raw, outstanding_raw, ...rest } = row as Record<string, unknown>;
+  const { cancelled_by_user_id, cancelled_at, cancellation_reason, obligation_id, obligation_cancelled, obligation_amount, journal_id, journal_status, vat_review_id, vat_review_tax_date, paid_raw, outstanding_raw, ...rest } = row as Record<string, unknown>;
   const status = rest.status as string;
   const hasObligation = obligation_id != null;
   const paid = hasObligation ? (paid_raw as string) : null;
@@ -211,11 +212,13 @@ function withLinked(row: any) {
     obligation: hasObligation ? { id: obligation_id, is_cancelled: obligation_cancelled, original_amount: obligation_amount } : null,
     journal: journal_id != null ? { id: journal_id, status: journal_status } : null,
     vat: { status: vat_review_id != null ? 'reviewed' : status === 'approved' ? 'missing' : 'pending', review_id: vat_review_id ?? null, tax_date: vat_review_tax_date ?? null },
+    cancellation: status === 'cancelled' ? { cancelled_by_user_id, cancelled_at, reason: cancellation_reason } : null,
     paid_amount: paid, outstanding_amount: outstanding, actionable_status: actionable,
   } as Record<string, any> & {
     obligation: { id: string; is_cancelled: boolean; original_amount: string } | null; journal: { id: string; status: string } | null;
     vat: { status: 'pending' | 'reviewed' | 'missing'; review_id: string | null; tax_date: string | null };
     paid_amount: string | null; outstanding_amount: string | null; actionable_status: InvoiceActionableStatus;
+    cancellation: { cancelled_by_user_id: string; cancelled_at: string; reason: string } | null;
   };
 }
 
@@ -380,6 +383,36 @@ export class InvoiceDraftService {
     });
   }
 
+  /**
+   * F4: draft | submitted -> cancelled, with a mandatory reason. Only invoices WITHOUT any accounting footprint can be cancelled:
+   * numbering, the obligation, the draft journal and the VAT snapshot are all created at approval, so a draft or submitted invoice has none.
+   * Approved (and therefore posted) invoices are never cancelled here; their correction is a linked credit/debit note, which is blocked
+   * pending owner policy decisions (see docs/INVOICE_CORRECTIONS_F4.md). Nothing is deleted: the row, its lines and the audit trail remain.
+   */
+  async cancel(companyId: string, actorUserId: string, invoiceId: string, expectedVersion: number, reason: string) {
+    return this.tx(async (client) => {
+      const current = (await client.query<{ status: string; version: number }>(
+        'SELECT status, version FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [invoiceId, companyId])).rows[0];
+      if (!current) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
+      if (current.status === 'cancelled') throw new InvoiceError(409, 'INVOICE_ALREADY_CANCELLED', 'Invoice is already cancelled');
+      if (current.status === 'approved') throw new InvoiceError(409, 'INVOICE_CANCEL_NOT_ALLOWED', 'An approved invoice cannot be cancelled; correct it with a linked credit or debit note');
+      if (current.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
+      // Defence in depth: any accounting record already tied to the invoice blocks cancellation, whatever the status says.
+      const footprint = await client.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM obligations WHERE invoice_id = $1 AND company_id = $2)
+                     OR EXISTS (SELECT 1 FROM invoice_vat_reviews WHERE invoice_id = $1 AND company_id = $2)`, [invoiceId, companyId]);
+      if (footprint.rowCount) throw new InvoiceError(409, 'INVOICE_CANCEL_NOT_ALLOWED', 'The invoice already has accounting records and cannot be cancelled');
+      const before = await this.read(client, companyId, invoiceId);
+      await client.query(
+        `UPDATE invoices SET status = 'cancelled', cancelled_by_user_id = $3, cancelled_at = NOW(), cancellation_reason = $4,
+                version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status IN ('draft','submitted')`,
+        [invoiceId, companyId, actorUserId, reason]);
+      const after = await this.read(client, companyId, invoiceId);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.cancel', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
+      return after!;
+    });
+  }
+
   private async lockForTransition(client: PoolClient, companyId: string, invoiceId: string, from: string,
     wrongState: 'INVOICE_NOT_DRAFT' | 'INVOICE_NOT_SUBMITTED', wrongStateMessage: string, expectedVersion: number) {
     const current = (await client.query<{ status: string; version: number; direction: Direction }>(
@@ -418,7 +451,11 @@ export class InvoiceDraftService {
       `SELECT s.id, s.bank_transaction_id, s.amount::text, s.note, t.transaction_date::text, t.description
        FROM obligation_settlements s JOIN bank_transactions t ON t.id = s.bank_transaction_id AND t.company_id = s.company_id
        WHERE s.obligation_id = $1 AND s.company_id = $2 ORDER BY t.transaction_date, s.created_at, s.id`, [header.obligation_id, companyId])).rows;
-    return { ...(withLinked(header) as any), lines, settlements } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Linked credit/debit notes (read-only correction history). Notes cannot be created yet (blocked, see docs/INVOICE_CORRECTIONS_F4.md).
+    const adjustments = (await client.query(
+      `SELECT id, adjustment_type, status, adjustment_date::text, total_amount::text, reason FROM invoice_adjustments
+       WHERE original_invoice_id = $1 AND company_id = $2 ORDER BY created_at, id`, [invoiceId, companyId])).rows;
+    return { ...(withLinked(header) as any), lines, settlements, adjustments } as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 
   /** Customer picker for sales invoices: active, non-supplier counterparties of the company, id/name/type only (same rule as checkReferences). */
