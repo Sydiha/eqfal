@@ -5,6 +5,8 @@ export type InvoiceCaps = {
   canCancel?: boolean;
   /** invoice.adjust: register / edit / cancel a draft external credit or debit note. invoice.adjust_approve (plus obligation.confirm and accounting.journal.create) approves it. */
   canAdjust?: boolean; canAdjustApprove?: boolean;
+  /** invoice.recurring: create / edit / pause / resume / end recurring schedules and run due ones. Generated invoices are drafts only. */
+  canRecurring?: boolean;
   /** invoice.approve. The server also requires obligation.confirm and accounting.journal.create, and forbids self-approval. */
   canApprove?: boolean; canConfirmObligation?: boolean; canCreateJournal?: boolean;
   /** accounting.journal.post */

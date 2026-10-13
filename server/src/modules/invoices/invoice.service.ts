@@ -17,7 +17,8 @@ export type InvoiceErrorCode =
   | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED'
   | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED'
   | 'INVOICE_ADJUSTMENT_NOT_FOUND' | 'INVOICE_ADJUSTMENT_NOT_DRAFT' | 'INVOICE_ADJUSTMENT_ORIGINAL_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_GROUP_UNSUPPORTED'
-  | 'INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL' | 'INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING' | 'INVOICE_ADJUSTMENT_VAT_PERIOD_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_DUPLICATE';
+  | 'INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL' | 'INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING' | 'INVOICE_ADJUSTMENT_VAT_PERIOD_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_DUPLICATE'
+  | 'RECURRING_NOT_FOUND' | 'RECURRING_VERSION_CONFLICT' | 'RECURRING_INVALID_STATE' | 'RECURRING_SCHEDULE_LOCKED';
 
 export class InvoiceError extends Error {
   constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string) { super(message); }
@@ -300,22 +301,31 @@ export class InvoiceDraftService {
   }
 
   async create(companyId: string, actorUserId: string, direction: Direction, input: DraftInput) {
-    return this.tx(async (client) => {
+    return this.tx((client) => this.createWithin(client, companyId, actorUserId, direction, input, null));
+  }
+
+  /**
+   * Draft creation inside the caller's transaction (used by recurring generation so the draft and its schedule advance commit together).
+   * `recurrence` stamps origin 'recurring'; the unique index invoices_recurrence_occurrence_uidx (062) makes a second draft for the same occurrence impossible.
+   */
+  async createWithin(client: PoolClient, companyId: string, actorUserId: string, direction: Direction, input: DraftInput, recurrence: { templateId: string; occurrenceDate: string } | null) {
+    {
       assertRecoverabilityDirection(direction, input);
       await assertStandardRates(client, direction, input.tax_point_date, input.lines);
       await this.checkReferences(client, companyId, direction, input, null);
       const id = (await client.query<{ id: string }>(
         `INSERT INTO invoices (company_id, direction, status, counterparty_id, external_reference, issue_date, due_date, supply_date,
-           subtotal_amount, vat_amount, total_amount, notes, created_by_user_id, tax_point_date)
-         VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+           subtotal_amount, vat_amount, total_amount, notes, created_by_user_id, tax_point_date, origin, recurring_template_id, recurrence_occurrence_date)
+         VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
         [companyId, direction, input.counterparty_id, input.external_reference, input.issue_date, input.due_date, input.supply_date,
-          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes, actorUserId, input.tax_point_date],
+          input.totals.subtotal_amount, input.totals.vat_amount, input.totals.total_amount, input.notes, actorUserId, input.tax_point_date,
+          recurrence ? 'recurring' : 'manual', recurrence?.templateId ?? null, recurrence?.occurrenceDate ?? null],
       )).rows[0]!.id;
       await this.writeChildren(client, companyId, id, actorUserId, input);
       const after = await this.read(client, companyId, id);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.draft.create', entity_type: 'invoice', entity_id: id, before_data: null, after_data: after as never }, client);
       return after!;
-    });
+    }
   }
 
   /** Full replacement of a draft's editable fields and lines, guarded by optimistic version. Direction is immutable. */

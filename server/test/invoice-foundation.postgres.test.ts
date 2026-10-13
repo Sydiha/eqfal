@@ -130,7 +130,10 @@ describeDatabase('invoice foundation (migration 062) with PostgreSQL', () => {
   });
 
   it('recurring-ready columns: coupling and duplicate-generation prevention', async () => {
-    const tpl = randomUUID();
+    // Since migration 073 a recurring invoice must reference a real template of the same company.
+    const tpl = (await pool.query<{ id: string }>(
+      "INSERT INTO recurring_invoice_templates(company_id,direction,name,counterparty_id,frequency,start_date,anchor_day,next_run_date,created_by_user_id) VALUES($1,'sales','foundation',$2,'monthly','2026-10-01',1,'2026-10-01',$3) RETURNING id",
+      [coA, cpA, user])).rows[0]!.id;
     const rec = (date: string | null, origin = 'recurring', template: string | null = tpl) =>
       pool.query(
         "INSERT INTO invoices(company_id,direction,counterparty_id,issue_date,subtotal_amount,vat_amount,total_amount,created_by_user_id,origin,recurring_template_id,recurrence_occurrence_date) VALUES($1,'sales',$2,'2026-10-01',1,0,1,$3,$4,$5,$6)",
