@@ -193,8 +193,8 @@ describeDatabase('invoice cancel API (PostgreSQL)', () => {
     await pool.query("UPDATE journal_entries SET status='posted', posted_at=NOW(), posted_by=$3 WHERE source_id=$1 AND company_id=$2", [ok.obligation_id, ids.coA, ids.approver]);
     expect((await cancel('canceller', inv)).json.code).toBe('INVOICE_CANCEL_NOT_ALLOWED');
     await pool.query(
-      `INSERT INTO invoice_adjustments (company_id, original_invoice_id, direction, adjustment_type, adjustment_date, subtotal_amount, vat_amount, total_amount, reason, created_by_user_id)
-       VALUES ($1,$2,'sales','credit','2026-10-02',100,15,115,'Returned goods',$3)`, [ids.coA, inv.id, ids.creator]);
+      `INSERT INTO invoice_adjustments (company_id, original_invoice_id, direction, adjustment_type, adjustment_date, subtotal_amount, vat_amount, total_amount, reason, created_by_user_id, counterparty_id, external_number)
+       VALUES ($1,$2,'sales','credit','2026-10-02',100,15,115,'Returned goods',$3,$4,'CN-1')`, [ids.coA, inv.id, ids.creator, ids.customerA]);
     expect((await cancel('canceller', inv)).json.code).toBe('INVOICE_CANCEL_NOT_ALLOWED');
     const read = (await clients.canceller!.req('GET', `/invoices/${inv.id}`)).json.invoice;
     expect(read.adjustments).toHaveLength(1);

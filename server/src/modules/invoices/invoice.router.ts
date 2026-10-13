@@ -5,6 +5,7 @@ import { requireSameOrigin } from '../auth/origin.middleware';
 import { resolveStandardRate } from './vat-standard-rate';
 import { InvoiceDraftService, InvoiceError, parseDraft, parseListQuery } from './invoice.service';
 import { InvoiceApprovalService } from './invoice-approval.service';
+import { InvoiceAdjustmentService, parseAdjustment } from './invoice-adjustment.service';
 
 /**
  * Invoice draft API (PR-2B). invoice.view / invoice.create / invoice.edit are explicit-grant-only
@@ -149,3 +150,60 @@ invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice
     throw error;
   }
 }));
+
+// F4 completion: externally issued credit / debit notes (registration only: no issuing, numbering, e-invoicing or refunds).
+// invoice.adjust (register / edit / cancel a draft note) and invoice.adjust_approve (approve; also needs obligation.confirm + accounting.journal.create,
+// and never the registrant) are explicit-grant-only (migration 072); no grants exist.
+async function adjustmentWork(res: Response, work: (svc: InvoiceAdjustmentService) => Promise<void>) {
+  if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
+  try {
+    await work(new InvoiceAdjustmentService(pool));
+  } catch (error) {
+    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code }); return; }
+    throw error;
+  }
+}
+const noteNotFound = (res: Response) => res.status(404).json({ error: 'Credit/debit note not found', code: 'INVOICE_ADJUSTMENT_NOT_FOUND' });
+
+invoiceRouter.get('/invoices/:id/adjustments', ...read, requireCapability('invoice.view'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  res.json(await svc.listForInvoice(companyAndActor(req).companyId, req.params.id!));
+})));
+
+invoiceRouter.post('/invoices/:id/adjustments', ...write, requireCapability('invoice.adjust'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  const input = parseAdjustment(req.body, 'create');
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.status(201).json({ adjustment: await svc.create(companyId, actorUserId, req.params.id!, input) });
+})));
+
+invoiceRouter.get('/invoice-adjustments/:id', ...read, requireCapability('invoice.view'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
+  res.json({ adjustment: await svc.get(companyAndActor(req).companyId, req.params.id!) });
+})));
+
+invoiceRouter.put('/invoice-adjustments/:id', ...write, requireCapability('invoice.adjust'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
+  const version = parseVersion(req);
+  const input = parseAdjustment(req.body, 'update');
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.json({ adjustment: await svc.update(companyId, actorUserId, req.params.id!, version, input) });
+})));
+
+invoiceRouter.post('/invoice-adjustments/:id/cancel', ...write, requireCapability('invoice.adjust'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
+  const version = parseVersion(req);
+  const raw = (req.body as Record<string, unknown>).reason;
+  const reason = typeof raw === 'string' ? raw.trim() : '';
+  if (reason.length < 1 || reason.length > 500) throw new InvoiceError(400, 'INVOICE_VALIDATION', 'reason is required (1 to 500 characters)');
+  const { companyId, actorUserId } = companyAndActor(req);
+  res.json({ adjustment: await svc.cancel(companyId, actorUserId, req.params.id!, version, reason) });
+})));
+
+invoiceRouter.post('/invoice-adjustments/:id/approve', ...write, requireCapability('invoice.adjust_approve'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
+  const version = parseVersion(req);
+  const ctx = getAuthenticatedContext(req)!;
+  const result = await svc.approve(ctx.activeCompanyId!, ctx.user.id, ctx.capabilities, req.params.id!, version);
+  res.json({ adjustment: result.adjustment, journal_id: result.journal_id });
+})));

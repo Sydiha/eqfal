@@ -4,6 +4,7 @@ import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
 import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,nextAction,settlementAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
+import {InvoiceNotes} from './InvoiceNotes';
 import {UUID_PATTERN} from './obligationSettlementLogic';
 import './SalesInvoices.css';
 
@@ -15,7 +16,7 @@ export type SalesInvoiceCapabilities=InvoiceCaps;
 export type InvoiceDirection='sales'|'purchase';
 type Line={line_number?:number;description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;net_amount?:string;vat_amount?:string;total_amount?:string;vat_treatment:string|null;vat_recoverability?:string|null;vat_recoverable_percent?:string|null};
 type Invoice={id:string;status:'draft'|'submitted'|'approved'|'cancelled';counterparty_id:string;counterparty_name:string;internal_number:string|null;external_reference:string|null;issue_date:string;due_date:string|null;supply_date:string|null;tax_point_date:string|null;currency:string;subtotal_amount:string;vat_amount:string;total_amount:string;notes:string|null;version:number;created_by_user_id?:string|null;source_document_id?:string|null;lines?:Line[];
- obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;cancellation?:{cancelled_by_user_id:string;cancelled_at:string;reason:string}|null;adjustments?:{id:string;adjustment_type:'credit'|'debit';status:string;adjustment_date:string;total_amount:string;reason:string}[];journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string;settlements?:Array<{id:string;amount:string;transaction_date:string;description:string|null;note:string|null}>};
+ obligation?:{id:string;is_cancelled:boolean;original_amount:string}|null;cancellation?:{cancelled_by_user_id:string;cancelled_at:string;reason:string}|null;adjusted_amount?:string;adjustments?:{id:string;adjustment_type:'credit'|'debit';status:string;adjustment_date:string;total_amount:string;reason:string}[];journal?:{id:string;status:string}|null;vat?:{status:'pending'|'reviewed'|'missing';review_id:string|null;tax_date:string|null};paid_amount?:string|null;outstanding_amount?:string|null;actionable_status?:string;settlements?:Array<{id:string;amount:string;transaction_date:string;description:string|null;note:string|null}>};
 type Counterparty={id:string;name:string;type:string};
 type EvidenceDocument={id:string;original_filename:string;reference_number:string|null;document_type:string|null;status:string;document_date:string|null};
 type FormLine={description:string;quantity:string;unit_price:string;discount_amount:string;vat_rate:string;vat_treatment:string;vat_recoverability:string;vat_recoverable_percent:string;rate_source:'auto'|'saved'};
@@ -32,7 +33,7 @@ const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.c
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
- const{canView,canCreate,canEdit,canSubmit,canCancel=false,canViewDocuments=false}=caps;
+ const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canViewDocuments=false}=caps;
  const{t}=useTranslation();
  const ns=direction==='purchase'?'purchaseInvoice':'salesInvoice';
  const d=(key:string,options?:Record<string,unknown>)=>t(`${ns}.${key}`,options);
@@ -222,6 +223,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
      <div><dt>{t('invoiceWorkspace.journal')}</dt><dd>{detail.journal?(<>{t(`invoiceWorkspace.journalStatuses.${detail.journal.status}`)}{caps.canViewAccounting&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openJournal'),'accounting',{accountingTab:'journals',journalId:detail.journal.id})}</>}</>):t('invoiceWorkspace.journalStatuses.none')}</dd></div>
      <div><dt>{t('invoiceWorkspace.vat')}</dt><dd>{t(`invoiceWorkspace.vatStatuses.${detail.vat?.status??'pending'}`)}{detail.vat?.status==='reviewed'&&caps.canViewVat&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openVat'),'vat',{})}</>}</dd></div>
      <div><dt>{t('invoiceWorkspace.paid')}</dt><dd>{detail.paid_amount!=null?`${money(detail.paid_amount)} ${detail.currency}`:'—'}</dd></div>
+     {detail.adjusted_amount!=null&&detail.adjusted_amount!==detail.total_amount&&<div><dt>{t('invoiceNotes.adjustedAmount')}</dt><dd>{money(detail.adjusted_amount)} {detail.currency}</dd></div>}
      <div><dt>{t('invoiceWorkspace.outstanding')}</dt><dd>{detail.outstanding_amount!=null?`${money(detail.outstanding_amount)} ${detail.currency}`:'—'}</dd></div>
     </dl>
     {(detail.settlements?.length??0)>0&&<><h5>{t('invoiceWorkspace.settlementHistory')}</h5><ul className="sales-invoices__settlements" data-testid="invoice-settlements">{detail.settlements!.map(x=><li key={x.id}><span>{formatDisplayDate(x.transaction_date,'en')}</span><span>{x.description??x.note??'—'}</span><strong>{money(x.amount)} {detail.currency}</strong></li>)}</ul></>}
@@ -231,6 +233,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
    {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
    {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
+   {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
    {(detail.cancellation||(detail.adjustments?.length??0)>0)&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>
     {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
     {(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}

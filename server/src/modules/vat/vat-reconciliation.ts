@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { loadInvoiceVatReconciliation, toHalalas, VatInvoiceReconciliationRow } from './vat-invoice';
+import { adjustmentSign, loadInvoiceAdjustmentVat, VatInvoiceAdjustmentRow } from './vat-invoice-adjustment';
 
 type QueryRunner = Pick<Pool, 'query'>;
 export type RecoverabilityStatus = 'not_applicable'|'fully_recoverable'|'non_recoverable'|'partially_recoverable'|'needs_review';
@@ -17,6 +18,8 @@ export interface VatReconciliation {
   counts:{total_in_scope:number;reconciled:number;unreconciled:number}; documents:VatReconciliationDocument[];
   /** Reviewed invoices (V1 sales, V2 purchases). Present only when the period has reviewed invoices, so document-only results are unchanged. */
   invoices?:VatInvoiceReconciliationRow[];
+  /** Approved externally issued credit/debit notes dated in the period (F4): credit notes reduce, debit notes increase the figures above. Present only when there are any. */
+  invoice_adjustments?:VatInvoiceAdjustmentRow[];
 }
 
 /** Unresolved recoverability is deliberately excluded: readiness reports that control separately. */
@@ -82,20 +85,27 @@ async function loadDocumentVatReconciliation(db:QueryRunner,companyId:string,per
 export async function loadVatReconciliation(db:QueryRunner,companyId:string,periodStart:string,periodEnd:string):Promise<VatReconciliation>{
  const base=await loadDocumentVatReconciliation(db,companyId,periodStart,periodEnd);
  const invoices=await loadInvoiceVatReconciliation(db,companyId,periodStart,periodEnd,'tax_date');
- if(!invoices.length)return base;
+ const notes=await loadInvoiceAdjustmentVat(db,companyId,periodStart,periodEnd);
+ if(!invoices.length&&!notes.length)return base;
  let reviewed=0n,ledger=0n,grossIn=0n,recoverableIn=0n,ledgerIn=0n,reconciled=0,purchases=0;
  for(const invoice of invoices){
   const purchase=invoice.direction==='purchase';if(purchase)purchases++;
   if(purchase){grossIn+=toHalalas(invoice.reviewed_vat_amount);recoverableIn+=toHalalas(invoice.recoverable_vat_amount);}else reviewed+=toHalalas(invoice.reviewed_vat_amount);
   if(invoice.reconciliation_status==='reconciled'){reconciled++;if(purchase)ledgerIn+=toHalalas(invoice.ledger_vat_amount);else ledger+=toHalalas(invoice.ledger_vat_amount);}
  }
+ // Notes: signed (credit -, debit +) on the same figures as the invoices they correct; their ledger side is their own posted journal.
+ for(const note of notes){
+  const purchase=note.direction==='purchase',sign=adjustmentSign(note.adjustment_type);if(purchase)purchases++;
+  if(purchase){grossIn+=sign*toHalalas(note.vat_amount);recoverableIn+=sign*toHalalas(note.recoverable_vat_amount);}else reviewed+=sign*toHalalas(note.vat_amount);
+  if(note.reconciliation_status==='reconciled'){reconciled++;if(purchase)ledgerIn+=sign*toHalalas(note.ledger_vat_amount);else ledger+=sign*toHalalas(note.ledger_vat_amount);}
+ }
  const output=base.totals.reviewed_output_vat+Number(reviewed)/100,ledgerOutput=base.totals.ledger_output_vat+Number(ledger)/100;
- // Sales-only periods keep exactly the V1 totals object; input figures change only when a purchase invoice is present.
+ // Sales-only periods keep exactly the V1 totals object; input figures change only when a purchase invoice or note is present.
  const input=purchases?{reviewed_input_vat:base.totals.reviewed_input_vat+Number(grossIn)/100,gross_reviewed_input_vat:base.totals.gross_reviewed_input_vat+Number(grossIn)/100,
   recoverable_input_vat:base.totals.recoverable_input_vat+Number(recoverableIn)/100,non_recoverable_input_vat:base.totals.non_recoverable_input_vat+Number(grossIn-recoverableIn)/100,
   ledger_input_vat:base.totals.ledger_input_vat+Number(ledgerIn)/100,input_difference:base.totals.recoverable_input_vat+Number(recoverableIn)/100-(base.totals.ledger_input_vat+Number(ledgerIn)/100)}:{};
  return{...base,
   totals:{...base.totals,reviewed_output_vat:output,ledger_output_vat:ledgerOutput,output_difference:output-ledgerOutput,...input},
-  counts:{total_in_scope:base.counts.total_in_scope+invoices.length,reconciled:base.counts.reconciled+reconciled,unreconciled:base.counts.unreconciled+invoices.length-reconciled},
-  invoices};
+  counts:{total_in_scope:base.counts.total_in_scope+invoices.length+notes.length,reconciled:base.counts.reconciled+reconciled,unreconciled:base.counts.unreconciled+invoices.length+notes.length-reconciled},
+  ...(invoices.length?{invoices}:{}),...(notes.length?{invoice_adjustments:notes}:{})};
 }

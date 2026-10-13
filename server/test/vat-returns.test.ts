@@ -42,6 +42,7 @@ describe('Phase 6B4 VAT returns',()=>{
       if(sql.includes('FROM vat_periods vp JOIN companies'))return{rows:[{id:PERIOD,period_start:'2026-01-01',period_end:'2026-03-31',status:'closed',company_name:'EQFAL'}]};
       if(sql.includes('FROM documents d JOIN document_vat_reviews'))return{rows:[]};
       if(sql.includes('FROM vat_adjustments a JOIN'))return{rows:[{}]};
+      if(sql.includes('FROM invoice_adjustments a'))return{rows:[]};
       if(sql.includes('FROM obligations o'))return{rows:[]};
       if(sql.startsWith("UPDATE vat_returns SET status='approved'")){snapshot=params[2];return{rows:[{...base,status:'approved',snapshot_json:snapshot,version:2}]};}
       if(sql.includes('INSERT INTO audit_log')){actions.push(String(params[2]));return{rows:[{}]};}

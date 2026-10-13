@@ -86,7 +86,7 @@ export class ManagerFinancialSnapshotService {
 
     if (capabilities.includes('obligation.view')) {
       const { rows } = await this.db.query<{ direction: 'receivable' | 'payable'; amount: string }>(`WITH remaining AS (
-          SELECT o.direction,GREATEST(o.original_amount-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0),0) amount
+          SELECT o.direction,GREATEST(o.original_amount+obligation_adjustment_net(o.id,o.company_id)-COALESCE(CASE WHEN o.source_type='document' THEN ds.settled ELSE os.settled END,0),0) amount
           FROM obligations o
           LEFT JOIN (SELECT company_id,obligation_id,SUM(amount) settled FROM obligation_settlements GROUP BY company_id,obligation_id) os
             ON os.company_id=o.company_id AND os.obligation_id=o.id

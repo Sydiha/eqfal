@@ -47,7 +47,7 @@ describe('ManagerFinancialSnapshotService', () => {
     expect(sql).toContain("o.source_type='document'");
     expect(sql).toContain('document_settlements');
     expect(sql).toContain('obligation_settlements');
-    expect(sql).toMatch(/GREATEST\(o\.original_amount-COALESCE/);
+    expect(sql).toMatch(/GREATEST\(o\.original_amount\+obligation_adjustment_net\(o\.id,o\.company_id\)-COALESCE/);
     expect(sql).toContain('NOT o.is_cancelled');
     expect(sql).toContain("o.verification_status='confirmed'");
     expect(result.metrics.amounts_to_collect).toEqual({ state: 'available', amount: '0.01' });

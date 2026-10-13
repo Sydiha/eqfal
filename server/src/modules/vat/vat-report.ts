@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { loadVatReconciliation, VatReconciliation } from './vat-reconciliation';
 import { toHalalas, VatInvoiceReconciliationRow } from './vat-invoice';
+import { adjustmentSign, VatInvoiceAdjustmentRow } from './vat-invoice-adjustment';
 
 type QueryRunner = Pick<Pool, 'query'>;
 export type VatDocumentType = 'purchase' | 'expense' | 'sale';
@@ -40,6 +41,8 @@ export interface VatClosingReport {
   adjustments?: VatReportAdjustment[];
   /** Reviewed invoices by tax date (V1 sales, V2 purchases). Absent when there are none, so historical reports and approved snapshots keep their shape. */
   invoices?: VatReportInvoice[];
+  /** Approved externally issued credit/debit notes dated in the period (F4). Already folded into totals/treatments with their sign (credit -, debit +). Absent when there are none. */
+  invoice_adjustments?: VatInvoiceAdjustmentRow[];
 }
 export type VatReportInvoice = VatInvoiceReconciliationRow;
 export interface VatReportAdjustment { id:string; document_vat_review_id:string; document_type:VatDocumentType; original_vat_period_id:string; adjustment_vat_period_id:string; adjustment_type:string; reason:string; taxable_amount_delta:string; vat_amount_delta:string; recoverable_vat_amount_delta:string; status:'draft'|'reviewed'|'applied'; created_by_user_id:string; reviewed_by_user_id:string|null; reviewed_at:string|null; }
@@ -108,6 +111,20 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     input += Number(inputH) / 100; recoverableInput += Number(recoverableH) / 100; nonRecoverableInput += Number(inputH - recoverableH) / 100; purchaseExpenseTotal += Number(purchaseH) / 100;
   }
 
+  // Externally issued credit/debit notes (F4): the same figures as the invoices they correct, signed (credit -, debit +). Document counts are not touched.
+  const notes = reconciliation.invoice_adjustments ?? [];
+  if (notes.length) {
+    let outputH = 0n, salesH = 0n, inputH = 0n, recoverableH = 0n, purchaseH = 0n;
+    for (const note of notes) {
+      const sign = adjustmentSign(note.adjustment_type);
+      if (note.direction === 'purchase') { inputH += sign * toHalalas(note.vat_amount); recoverableH += sign * toHalalas(note.recoverable_vat_amount); purchaseH += sign * toHalalas(note.total_amount); }
+      else { outputH += sign * toHalalas(note.vat_amount); salesH += sign * toHalalas(note.total_amount); }
+      for (const group of note.groups) { treatmentTotals[group.vat_treatment].taxable_amount += Number(sign * toHalalas(group.taxable_amount)) / 100; treatmentTotals[group.vat_treatment].vat_amount += Number(sign * toHalalas(group.vat_amount)) / 100; }
+    }
+    output += Number(outputH) / 100; salesTotal += Number(salesH) / 100;
+    input += Number(inputH) / 100; recoverableInput += Number(recoverableH) / 100; nonRecoverableInput += Number(inputH - recoverableH) / 100; purchaseExpenseTotal += Number(purchaseH) / 100;
+  }
+
   const result: VatClosingReport = {
     period: { id: period.id, period_start: period.period_start, period_end: period.period_end, status: 'closed' },
     company: { id: companyId, name: period.company_name },
@@ -117,6 +134,7 @@ export async function loadVatClosingReport(db: QueryRunner, companyId: string, p
     reconciliation,
   };
   if (invoices.length) result.invoices = invoices;
+  if (notes.length) result.invoice_adjustments = notes;
   if (adjustments.length) {
     const applied=adjustments.filter(a=>a.status==='applied');
     const outputAdjustment=applied.filter(a=>a.document_type==='sale').reduce((sum,a)=>sum+Number(a.vat_amount_delta),0);
@@ -179,6 +197,8 @@ export function buildVatWorkingPaperXlsx(report: VatClosingReport): Buffer {
     ['الحالة / Status','مقفلة / Closed'],['تاريخ الإنشاء / Generated At',new Date().toISOString()],
     ['ضريبة المخرجات / Output VAT',report.totals.output_vat],['ضريبة المدخلات / Input VAT',report.totals.input_vat],['صافي الضريبة / Net VAT (Output − Recoverable Input)',netVatOf(report.totals)],['Gross Reviewed Input VAT',report.totals.gross_reviewed_input_vat],['Recoverable Input VAT',report.totals.recoverable_input_vat],['Non-Recoverable Input VAT',report.totals.non_recoverable_input_vat],['Fully Recoverable Documents',report.totals.fully_recoverable_documents],['Partially Recoverable Documents',report.totals.partially_recoverable_documents],['Non-Recoverable Documents',report.totals.non_recoverable_documents],['Recoverability Review Pending',report.totals.recoverability_needs_review],[],
     ['VAT Reconciliation Summary'],['Reviewed Output VAT',reconciliation.totals.reviewed_output_vat],['Ledger Output VAT',reconciliation.totals.ledger_output_vat],['Output Difference',reconciliation.totals.output_difference],['Reviewed Input VAT',reconciliation.totals.reviewed_input_vat],['Ledger Input VAT',reconciliation.totals.ledger_input_vat],['Input Difference',reconciliation.totals.input_difference],['Total in-scope documents',reconciliation.counts.total_in_scope],['Reconciled documents',reconciliation.counts.reconciled],['Unreconciled documents',reconciliation.counts.unreconciled],[],headers,
+    // Credit/debit notes: amounts are signed (credit -, debit +) so the sheet sums to the report totals.
+    ...(report.invoice_adjustments??[]).flatMap(n=>n.groups.map((g,gi)=>{const sg=adjustmentSign(n.adjustment_type);const sv=(v:string)=>Number(sg*toHalalas(v))/100;const purchase=n.direction==='purchase';return [`${n.adjustment_type==='credit'?'Credit note':'Debit note'} ${n.external_number} (invoice ${n.original_internal_number??n.original_invoice_id})`,n.counterparty_name,purchase?typeLabel.purchase:typeLabel.sale,n.adjustment_date,n.tax_date,gi===0?sv(n.total_amount):'',`${treatmentLabel[g.vat_treatment]} ${g.vat_rate}%`,sv(g.taxable_amount),sv(g.vat_amount),purchase?(g.vat_treatment==='standard'?recoverabilityOf(g.vat_amount,g.recoverable_vat_amount):'not_applicable'):'not_applicable',purchase?sv(g.recoverable_vat_amount??'0'):'',purchase?Number(sg*(toHalalas(g.vat_amount)-toHalalas(g.recoverable_vat_amount??'0')))/100:'','','','','',n.journal_entry_id??'',purchase?'VAT_INPUT':'VAT_OUTPUT',n.ledger_vat_amount===null||gi!==0?'':Number(n.ledger_vat_amount),n.reconciliation_status]})),
     ...(report.invoices??[]).flatMap(inv=>inv.groups.map((g,gi)=>[`Invoice ${inv.internal_number??inv.invoice_id}`,inv.counterparty_name,inv.direction==='purchase'?typeLabel.purchase:typeLabel.sale,inv.issue_date,inv.tax_date,gi===0?Number(inv.total_amount):'',`${treatmentLabel[g.vat_treatment]} ${g.vat_rate}%`,Number(g.taxable_amount),Number(g.vat_amount),inv.direction==='purchase'?(g.vat_treatment==='standard'?recoverabilityOf(g.vat_amount,g.recoverable_vat_amount):'not_applicable'):'not_applicable',inv.direction==='purchase'?Number(g.recoverable_vat_amount??0):'',inv.direction==='purchase'?Number(toHalalas(g.vat_amount)-toHalalas(g.recoverable_vat_amount??'0'))/100:'','','','',inv.obligation_id??'',inv.journal_entry_id??'',inv.expected_memo,inv.ledger_vat_amount===null||gi!==0?'':Number(inv.ledger_vat_amount),inv.reconciliation_status])),
     ...report.documents.map(d=>[d.original_filename,d.counterparty_name??'',typeLabel[d.document_type],d.document_date??'',d.tax_date,Number(d.total_amount??0),treatmentLabel[d.treatment],Number(d.taxable_amount),Number(d.vat_amount),d.document_type==='sale'?'not_applicable':d.recoverability_status,d.document_type==='sale'?'':Number(d.recoverable_vat_amount??0),d.document_type==='sale'?'':Number(d.non_recoverable_vat_amount??0),d.document_type==='sale'?'':d.recoverability_reason??'',d.document_type==='sale'?'':d.recoverability_reviewed_by_user_id??'',d.document_type==='sale'?'':d.recoverability_reviewed_at??'',d.obligation_id??'',d.journal_entry_id??'',d.expected_memo??'',d.ledger_vat_amount===undefined?'':Number(d.ledger_vat_amount),d.reconciliation_status??'']),
   ];

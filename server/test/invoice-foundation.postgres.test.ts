@@ -106,8 +106,8 @@ describeDatabase('invoice foundation (migration 062) with PostgreSQL', () => {
     const sales = await invoice({ status: 'approved', number: 900 });
     const adj = (orig: string, dir: string, total = 10) =>
       pool.query(
-        "INSERT INTO invoice_adjustments(company_id,original_invoice_id,direction,adjustment_type,adjustment_date,subtotal_amount,vat_amount,total_amount,reason,created_by_user_id) VALUES($1,$2,$3,'credit','2026-10-02',$4,0,$4,'r',$5)",
-        [coA, orig, dir, total, user],
+        "INSERT INTO invoice_adjustments(company_id,original_invoice_id,direction,adjustment_type,adjustment_date,subtotal_amount,vat_amount,total_amount,reason,created_by_user_id,counterparty_id,external_number) VALUES($1,$2,$3,'credit','2026-10-02',$4,0,$4,'r',$5,$6,$7)",
+        [coA, orig, dir, total, user, cpA, randomUUID().slice(0, 8)],
       );
     await adj(sales, 'sales');
     await rejects(adj(sales, 'purchase')); // direction differs from original
@@ -166,12 +166,13 @@ describeDatabase('invoice foundation (migration 062) with PostgreSQL', () => {
     await pool.query('DELETE FROM invoices WHERE id=$1', [d2]); // drafts are deletable
     // adjustments
     const orig = await invoice({ status: 'approved', number: 800 });
+    // Approved notes (journal required, separation of duties, immutability) are covered by invoice-adjustments.postgres.test.ts; a draft note is registered here.
     const adjId = (await pool.query<{ id: string }>(
-      "INSERT INTO invoice_adjustments(company_id,original_invoice_id,direction,adjustment_type,status,adjustment_date,subtotal_amount,vat_amount,total_amount,reason,created_by_user_id,approved_by_user_id,approved_at) VALUES($1,$2,'sales','credit','approved','2026-10-02',10,0,10,'r',$3,$3,NOW()) RETURNING id",
-      [coA, orig, user],
+      "INSERT INTO invoice_adjustments(company_id,original_invoice_id,direction,adjustment_type,adjustment_date,subtotal_amount,vat_amount,total_amount,reason,created_by_user_id,counterparty_id,external_number) VALUES($1,$2,'sales','credit','2026-10-02',10,0,10,'r',$3,$4,'CN-F') RETURNING id",
+      [coA, orig, user, cpA],
     )).rows[0]!.id;
-    await rejects(pool.query("UPDATE invoice_adjustments SET reason='tamper' WHERE id=$1", [adjId]));
-    await rejects(pool.query('DELETE FROM invoice_adjustments WHERE id=$1', [adjId]));
+    await pool.query("UPDATE invoice_adjustments SET reason='edited draft' WHERE id=$1", [adjId]);
+    await rejects(pool.query("UPDATE invoice_adjustments SET status='approved' WHERE id=$1", [adjId])); // approval needs lines, journal and a different approver
     await rejects(pool.query('DELETE FROM invoices WHERE id=$1', [orig]));
   });
 
