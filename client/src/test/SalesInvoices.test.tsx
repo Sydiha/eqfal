@@ -133,60 +133,37 @@ describe('Sales invoices',()=>{
 
 describe('Sales page with invoice workflow',()=>{
  beforeEach(async()=>{window.history.replaceState(null,'','/?page=sales');vi.restoreAllMocks();await i18n.changeLanguage('en')});
+ const none={canView:false,canCreate:false,canEdit:false,canSubmit:false};
+ const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({})));vi.stubGlobal('fetch',f);return f};
 
- it('keeps document upload as a separate, relabelled action and opens the invoice form from the new action',async()=>{
-  mockApi();
-  vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:100,offset:0}):json({customers:[]}))));
-  const onCreateDocument=vi.fn();
-  render(<Sales canView canManage canCreate onCreateDocument={onCreateDocument} invoices={caps} onUnauthorized={vi.fn()}/>);
-  // The invoice workspace and the legacy documents are separate tabs: the invoice tab shows only the invoice action.
-  fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
-  expect(await screen.findByRole('dialog')).toBeInTheDocument();
-  expect(onCreateDocument).not.toHaveBeenCalled();
-  fireEvent.keyDown(document,{key:'Escape'});
-  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
-  fireEvent.click((await screen.findAllByRole('button',{name:'Upload sale document'}))[0]!);
-  expect(onCreateDocument).toHaveBeenCalledTimes(1);
- });
-});
-
-describe('Sales permission separation',()=>{
- beforeEach(()=>{window.history.replaceState(null,'','/?page=sales')});
- beforeEach(async()=>{vi.restoreAllMocks();await i18n.changeLanguage('en')});
- const stub=()=>{const f=vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/sales')?json({sales:[]}):url.startsWith('/api/invoices/customers')?json({customers:[]}):url.startsWith('/api/invoices')?json({invoices:[draft],total:1,limit:100,offset:0}):json({customers:[]})));vi.stubGlobal('fetch',f);return f};
-
- it('invoice-only user reaches the invoice section and never loads legacy sales data',async()=>{
-  const f=stub();
-  render(<Sales canView={false} canManage={false} invoices={caps} onUnauthorized={vi.fn()}/>);
+ it('opens the invoice form from the invoice action and shows no legacy tabs or upload',async()=>{
+  stub();
+  render(<Sales invoices={caps} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByText('REF-1')).toBeInTheDocument();
-  expect(screen.getByRole('button',{name:'Add sales invoice +'})).toBeInTheDocument();
-  expect(screen.queryByText(/need document and obligation access/i)).not.toBeInTheDocument();
-  expect(f.mock.calls.some(c=>String(c[0]).startsWith('/api/sales'))).toBe(false);
+  expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Upload sale document'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Add sales invoice +'}));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
  });
 
- it('legacy-only user keeps the document section and sees no invoice section',async()=>{
+ it('user without invoice access sees a restricted state and no legacy fallback, loading nothing',async()=>{
   const f=stub();
-  render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} onUnauthorized={vi.fn()} invoices={{canView:false,canCreate:false,canEdit:false,canSubmit:false}}/>);
-  expect((await screen.findAllByRole('button',{name:'Add sales invoice +'})).length).toBeGreaterThan(0);
-  expect(screen.queryByRole('heading',{name:'Sales invoices'})).not.toBeInTheDocument();
-  expect(f.mock.calls.some(c=>String(c[0]).startsWith('/api/invoices'))).toBe(false);
- });
-
- it('user with neither permission still gets the no-access screen',async()=>{
-  const f=stub();
-  render(<Sales canView={false} canManage={false} invoices={{canView:false,canCreate:false,canEdit:false,canSubmit:false}} onUnauthorized={vi.fn()}/>);
-  expect(await screen.findByText(/need document and obligation access/i)).toBeInTheDocument();
+  render(<Sales invoices={none} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText(/do not have access to invoices/i)).toBeInTheDocument();
+  expect(screen.queryByRole('tab',{name:'Legacy documents'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Add sales invoice +'})).not.toBeInTheDocument();
   expect(f).not.toHaveBeenCalled();
  });
 
- it('user with both permissions sees both sections',async()=>{
+ it('switching between a company with invoice access and one without never shows a legacy screen',async()=>{
   stub();
-  render(<Sales canView canManage canCreate onCreateDocument={vi.fn()} invoices={caps} onUnauthorized={vi.fn()}/>);
+  const view=render(<Sales invoices={caps} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByText('REF-1')).toBeInTheDocument();
-  expect(screen.queryByRole('button',{name:'Upload sale document'})).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
-  expect((await screen.findAllByRole('button',{name:'Upload sale document'})).length).toBeGreaterThan(0);
-  expect(screen.queryByRole('heading',{name:'Sales invoices'})).not.toBeInTheDocument();
+  view.rerender(<Sales invoices={none} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText(/do not have access to invoices/i)).toBeInTheDocument();
+  expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  view.rerender(<Sales invoices={caps} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText('REF-1')).toBeInTheDocument();
  });
 });
 

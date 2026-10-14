@@ -382,7 +382,7 @@ describe('Contextual navigation',()=>{
 describe('Purchases page',()=>{
  it('shows the purchase invoice workspace for invoice permissions alone, without the legacy document section',async()=>{
   const fetchMock=mockApi();
-  render(<Purchases canView={false} canManage={false} invoices={caps} onUnauthorized={vi.fn()}/>);
+  render(<Purchases invoices={caps} onUnauthorized={vi.fn()}/>);
   expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
   await screen.findByText('REF-9');
   expect(lastList(fetchMock).get('direction')).toBe('purchase');
@@ -390,24 +390,25 @@ describe('Purchases page',()=>{
  });
 });
 
-describe('Invoice and legacy sections',()=>{
- it('Purchases separates the invoice workspace from legacy documents with tabs, persisted in the URL',async()=>{
-  vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(url.startsWith('/api/purchases')?json({purchases:[]}):url.startsWith('/api/invoices/customers')?json({suppliers:[]}):url.startsWith('/api/invoices')?json({invoices:[],total:0,limit:25,offset:0}):json({}))));
-  render(<Purchases canView canManage invoices={caps} onUnauthorized={vi.fn()}/>);
-  expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
-  expect(screen.getByRole('tab',{name:'Invoices'})).toHaveAttribute('aria-selected','true');
-  fireEvent.click(screen.getByRole('tab',{name:'Legacy documents'}));
-  await waitFor(()=>expect(screen.queryByRole('heading',{name:'Purchase invoices'})).not.toBeInTheDocument());
-  expect(new URL(window.location.href).searchParams.get('purchaseTab')).toBe('legacy');
-  fireEvent.click(screen.getByRole('tab',{name:'Invoices'}));
-  expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
-  expect(new URL(window.location.href).searchParams.get('purchaseTab')).toBeNull();
+describe('Purchases restricted and company switching',()=>{
+ it('shows a restricted state, never legacy documents, without invoice access',async()=>{
+  const fetchMock=mockApi();
+  render(<Purchases invoices={{...caps,canView:false,canCreate:false}} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByText(/do not have access to invoices/i)).toBeInTheDocument();
+  expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  expect(screen.queryByRole('tab',{name:'Legacy documents'})).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(c=>String(c[0]).startsWith('/api/purchases')||String(c[0]).startsWith('/api/invoices'))).toBe(false);
  });
- it('shows no tabs when the user has only one kind of access',async()=>{
+ it('uses the same invoice workspace for every company with invoice access, with no legacy tabs',async()=>{
   mockApi();
-  render(<Purchases canView={false} canManage={false} invoices={caps} onUnauthorized={vi.fn()}/>);
+  const view=render(<Purchases invoices={caps} onUnauthorized={vi.fn()}/>);
   await screen.findByText('REF-9');
   expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  view.unmount();
+  mockApi();
+  render(<Purchases invoices={{...caps,canView:false,canCreate:true}} onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByRole('heading',{name:'Purchase invoices'})).toBeInTheDocument();
+  expect(screen.queryByText(/do not have access to invoices/i)).not.toBeInTheDocument();
  });
 });
 
