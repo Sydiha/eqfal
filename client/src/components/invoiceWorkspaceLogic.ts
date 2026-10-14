@@ -7,7 +7,7 @@ export type InvoiceCaps = {
   canAdjust?: boolean; canAdjustApprove?: boolean;
   /** invoice.recurring: create / edit / pause / resume / end recurring schedules and run due ones. Generated invoices are drafts only. */
   canRecurring?: boolean;
-  /** invoice.approve. The server also requires obligation.confirm and accounting.journal.create, and forbids self-approval. */
+  /** invoice.approve. The server also requires obligation.confirm and accounting.journal.create, and allows the creator to approve. */
   canApprove?: boolean; canConfirmObligation?: boolean; canCreateJournal?: boolean;
   /** accounting.journal.post */
   canPostJournal?: boolean;
@@ -38,7 +38,6 @@ export function nextAction(invoice: WorkflowInvoice, caps: InvoiceCaps): NextAct
   if (invoice.status === 'submitted') {
     if (!caps.canApprove) return { kind: 'approve', enabled: false, reason: 'noApprove' };
     if (!caps.canConfirmObligation || !caps.canCreateJournal) return { kind: 'approve', enabled: false, reason: 'approveCapabilities' };
-    if (caps.currentUserId && invoice.created_by_user_id && invoice.created_by_user_id === caps.currentUserId) return { kind: 'approve', enabled: false, reason: 'selfApproval' };
     return { kind: 'approve', enabled: true, reason: null };
   }
   // approved

@@ -382,7 +382,7 @@ export class InvoiceAdjustmentService {
   }
 
   /**
-   * draft -> approved, atomically with the note's own balanced DRAFT journal (never posted here). Separation of duties: the registrant never approves.
+   * draft -> approved, atomically with the note's own balanced DRAFT journal (never posted here). Holding the capabilities is enough; the registrant may approve.
    * Lock order (shared with invoice approval/posting): note -> original invoice -> fiscal year -> document -> VAT month -> accounting month -> obligation.
    */
   async approve(companyId: string, actorUserId: string, caps: readonly string[], id: string, expectedVersion: number) {
@@ -390,7 +390,6 @@ export class InvoiceAdjustmentService {
       const note = await this.lockDraft(client, companyId, id, expectedVersion);
       const missingCaps = ADJUSTMENT_APPROVAL_CAPABILITIES.filter((c) => !caps.includes(c));
       if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approving a note also requires: ${missingCaps.join(', ')}`);
-      if (note.created_by_user_id === actorUserId) throw conflict('INVOICE_SELF_APPROVAL', 'The registrant of a note cannot approve it');
       const invoice = (await client.query<{ direction: Direction }>('SELECT direction FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [note.original_invoice_id, companyId])).rows[0];
       if (!invoice) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
       const lines = (await client.query<NoteLine>(

@@ -197,10 +197,13 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     await expect(approve(A, approver, s, ok.invoice.version)).rejects.toMatchObject({ code: 'INVOICE_ALREADY_APPROVED' });
   });
 
-  it('strictly prohibits self-approval (no override exists)', async () => {
+  it('lets the creator approve with the required capabilities, and refuses the creator without them', async () => {
+    const denied = await submitted(A);
+    await expect(approve(A, creator, denied, await version(denied), ['invoice.approve'])).rejects.toMatchObject({ code: 'INVOICE_FORBIDDEN' });
+    expect((await q('SELECT status FROM invoices WHERE id=$1', [denied]))[0].status).toBe('submitted');
     const id = await submitted(A);
-    await expect(approve(A, creator, id, await version(id))).rejects.toMatchObject({ code: 'INVOICE_SELF_APPROVAL' });
-    expect((await q('SELECT status FROM invoices WHERE id=$1', [id]))[0].status).toBe('submitted');
+    const ok = await approve(A, creator, id, await version(id));
+    expect(ok.invoice).toMatchObject({ status: 'approved', approved_by_user_id: creator });
     expect(approval.approve.length).toBe(5);
   });
 

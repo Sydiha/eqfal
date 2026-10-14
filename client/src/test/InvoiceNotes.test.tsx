@@ -64,11 +64,11 @@ describe('InvoiceNotes',()=>{
   expect(screen.getByRole('button',{name:'Save draft'})).toBeInTheDocument();
   expect(props.onChanged).not.toHaveBeenCalled();
  });
- it('approves a draft with its version and surfaces the self-approval refusal',async()=>{
-  const f=mock([note({version:4})],()=>json({code:'INVOICE_SELF_APPROVAL'},403));
+ it('approves a draft with its version and surfaces a permission refusal',async()=>{
+  const f=mock([note({version:4})],()=>json({code:'INVOICE_FORBIDDEN'},403));
   render(<InvoiceNotes {...props}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Approve note'}));
-  expect(await screen.findByRole('alert')).toHaveTextContent('someone else must approve');
+  expect(await screen.findByRole('alert')).toHaveTextContent('You do not have permission for this action.');
   const call=f.mock.calls.find(c=>(c[1] as RequestInit|undefined)?.method==='POST')!;
   expect(call[0]).toBe(`/api/invoice-adjustments/${N1}/approve`);expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({version:4});
  });

@@ -202,9 +202,10 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
       finally { await client.query('ROLLBACK').catch(() => undefined); client.release(); }
     }
     expect(await n(`SELECT count(*) n FROM invoice_vat_reviews WHERE company_id=$1`, [c2.id])).toBe(0);
-    // self-approval is refused
+    // the creator holding the approval capabilities may approve its own purchase
     const own = await submitted(c2, [line('standard', '15')]);
-    await expect(approve(c2, own, creator)).rejects.toMatchObject({ code: 'INVOICE_SELF_APPROVAL' });
+    await approve(c2, own, creator);
+    expect(await n(`SELECT count(*) n FROM invoice_vat_reviews WHERE company_id=$1 AND reviewed_by_user_id=$2`, [c2.id, creator])).toBe(1);
   });
 
   it('posting: a tampered or wrong-direction VAT line is refused; equal-amount groups stay separate', async () => {

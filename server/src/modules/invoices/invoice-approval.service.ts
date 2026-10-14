@@ -16,7 +16,7 @@ import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, p
  * debit line per standard-rate group for the RECOVERABLE part only (V2.1: the creator's explicit per-line recovery; the non-recoverable
  * part is capitalized into the single expense debit; asset purchases are unsupported; nothing is inferred or defaulted).
  *
- * One transaction, all or nothing: lock invoice -> status/version -> permissions -> no self-approval -> exactly one
+ * One transaction, all or nothing: lock invoice -> status/version -> permissions (holding them is enough, the creator included) -> exactly one
  * open fiscal year by issue_date -> period guard -> fiscal-year guard -> mappings -> number -> invoice update ->
  * obligation -> draft journal + lines -> audit. Any failure rolls back, so no number, obligation or journal remains.
  */
@@ -61,8 +61,6 @@ export class InvoiceApprovalService {
     if (before.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
     const missingCaps = APPROVAL_REQUIRED_CAPABILITIES.filter((c) => !caps.includes(c));
     if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approval also requires: ${missingCaps.join(', ')}`);
-    // Strict separation of duties (owner decision): no override.
-    if (before.created_by_user_id === actorUserId) throw new InvoiceError(409, 'INVOICE_SELF_APPROVAL', 'The creator of an invoice cannot approve it');
     if (!(Number(before.total_amount) > 0)) throw new InvoiceError(409, 'INVOICE_EMPTY', 'An invoice with a zero total cannot be approved');
     const hasVat = Number(before.vat_amount) > 0;
 
