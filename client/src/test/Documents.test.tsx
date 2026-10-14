@@ -293,4 +293,32 @@ describe('Documents', () => {
       expect((await screen.findAllByText(i18n.t('errors.NETWORK_ERROR'))).length).toBeGreaterThan(0);
     });
   });
+
+  describe('capitalisation entry point', () => {
+    const doc = (over: object) => ({ id: 'doc-9', original_filename: 'asset.pdf', mime_type: 'application/pdf', size_bytes: 10, status: 'approved', review_note: null, reviewed_at: null, created_at: '2026-08-15T00:00:00Z', document_type: 'purchase', counterparty_id: null, counterparty_name: null, document_date: '2026-08-01', reference_number: 'P-9', total_amount: '3600.00', intake_note: null, ...over });
+    const show = (over: object, props: object) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ documents: [doc(over)], counterparties: [] }), { status: 200 })));
+      return render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} {...props} />);
+    };
+    it('offers Capitalise for an approved purchase document and delegates its id', async () => {
+      const onCapitalise = vi.fn();
+      show({}, { canCapitalise: true, onCapitalise });
+      fireEvent.click(await screen.findByRole('button', { name: 'Capitalise as Fixed Asset' }));
+      expect(onCapitalise).toHaveBeenCalledWith('doc-9');
+    });
+    it('hides Capitalise without asset.create, for non-purchase, or unapproved documents', async () => {
+      const onCapitalise = vi.fn();
+      show({}, { canCapitalise: false, onCapitalise });
+      await screen.findAllByText('asset.pdf');
+      expect(screen.queryByRole('button', { name: 'Capitalise as Fixed Asset' })).not.toBeInTheDocument();
+      cleanup();
+      show({ document_type: 'sale' }, { canCapitalise: true, onCapitalise });
+      await screen.findAllByText('asset.pdf');
+      expect(screen.queryByRole('button', { name: 'Capitalise as Fixed Asset' })).not.toBeInTheDocument();
+      cleanup();
+      show({ status: 'needs_review' }, { canCapitalise: true, onCapitalise });
+      await screen.findAllByText('asset.pdf');
+      expect(screen.queryByRole('button', { name: 'Capitalise as Fixed Asset' })).not.toBeInTheDocument();
+    });
+  });
 });
