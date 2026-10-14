@@ -9,8 +9,11 @@ describe('Wave A completion frontend capability cleanup', () => {
   it('uses granular A2 capabilities in cross-workspace frontend entry points', () => {
     const app = read('client/src/App.tsx');
     expect(app).toContain("canManageCounterparties={Boolean(documentEntry)&&c.includes('counterparty.create')}");
-    expect(app).toContain("<Sales canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.create')}");
-    expect(app).toContain("<Purchases canView={c.includes('document.view')&&c.includes('obligation.view')} canManage={c.includes('obligation.create')}");
+    // Sales and Purchases are invoice-only workspaces: no legacy document/obligation props remain.
+    expect(app).toContain("<Sales invoices={{canView:c.includes('invoice.view')");
+    expect(app).toContain("<Purchases invoices={{canView:c.includes('invoice.view')");
+    expect(app).not.toContain("<Sales canView=");
+    expect(app).not.toContain("<Purchases canView=");
     expect(app).not.toContain("canManageCounterparties={Boolean(documentEntry)&&c.includes('obligation.manage')}");
     expect(app).not.toContain("canManage={c.includes('obligation.manage')}");
   });
