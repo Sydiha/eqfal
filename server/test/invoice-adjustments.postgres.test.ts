@@ -197,11 +197,11 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
     expect(() => parseAdjustment({ ...noteBody('credit', [nl('1.00')]), vat_amount: '1.00' }, 'create')).toThrow(/unknown fields/);
   });
 
-  it('separation of duties, capabilities and versions: the registrant never approves; approval needs the accounting capabilities', async () => {
+  it('capabilities and versions: approval needs the accounting capabilities; the registrant holding them may approve', async () => {
     const co = await company('sep');
     const inv = await posted(co, 'sales', [std()]);
     const d = await create(co, inv.id, noteBody('credit', [nl('100.00')]));
-    expect(await code(approveNote(co, d.id, d.version, registrant))).toBe('INVOICE_SELF_APPROVAL');
+    expect(await code(approveNote(co, d.id, d.version, registrant, ['obligation.confirm']))).toBe('INVOICE_FORBIDDEN');
     expect(await code(approveNote(co, d.id, d.version, approver, ['obligation.confirm']))).toBe('INVOICE_FORBIDDEN');
     expect(await code(approveNote(co, d.id, d.version + 4))).toBe('INVOICE_VERSION_CONFLICT');
     expect(await n(`SELECT count(*) n FROM journal_entries WHERE source_type='invoice_adjustment' AND source_id=$1`, [d.id])).toBe(0);

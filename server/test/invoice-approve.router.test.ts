@@ -57,10 +57,10 @@ describe('POST /api/invoices/:id/approve authorization and input', () => {
 
   it('passes the caller, company, capabilities and version to the service and maps its errors', async () => {
     login(['invoice.approve', 'obligation.confirm']);
-    const spy = vi.spyOn(InvoiceApprovalService.prototype, 'approve').mockRejectedValue(new InvoiceError(409, 'INVOICE_SELF_APPROVAL', 'The creator of an invoice cannot approve it'));
+    const spy = vi.spyOn(InvoiceApprovalService.prototype, 'approve').mockRejectedValue(new InvoiceError(409, 'INVOICE_PERIOD_CLOSED', 'The accounting period is closed'));
     const res = await post({ version: 2 });
     expect(res.status).toBe(409);
-    expect(res.body.code).toBe('INVOICE_SELF_APPROVAL');
+    expect(res.body.code).toBe('INVOICE_PERIOD_CLOSED');
     expect(spy).toHaveBeenCalledWith('company-a', 'user', expect.arrayContaining(['invoice.approve', 'obligation.confirm']), ID, 2);
   });
 });

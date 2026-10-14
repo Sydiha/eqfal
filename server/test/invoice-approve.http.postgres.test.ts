@@ -154,13 +154,12 @@ describeDatabase('invoice approve API (PostgreSQL)', () => {
     expect(listed).toMatchObject({ outstanding_amount: '1150.00', actionable_status: 'awaiting_settlement' });
   });
 
-  it('prevents self-approval even for a user holding every approval capability', async () => {
+  it('lets the creator approve when holding every approval capability', async () => {
     const inv = await submitted('dual');
     const res = await approve('dual', inv);
-    expect(res.status).toBe(409);
-    expect(res.json.code).toBe('INVOICE_SELF_APPROVAL');
-    expect(await count('SELECT COUNT(*)::text n FROM obligations WHERE invoice_id=$1', [inv.id])).toBe(0);
-    expect((await pool.query('SELECT internal_number FROM invoices WHERE id=$1', [inv.id])).rows[0].internal_number).toBeNull();
+    expect(res.status).toBe(200);
+    expect(await count('SELECT COUNT(*)::text n FROM obligations WHERE invoice_id=$1', [inv.id])).toBe(1);
+    expect((await pool.query('SELECT approved_by_user_id FROM invoices WHERE id=$1', [inv.id])).rows[0].approved_by_user_id).toBe(ids.dual);
   });
 
   it('duplicate and concurrent requests create exactly one number, obligation and journal', async () => {

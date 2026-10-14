@@ -265,7 +265,6 @@ describe('Approval, accounting and next action',()=>{
  });
 
  it.each([
-  ['the creator (self-approval)',{...full,currentUserId:'creator'},'You created this invoice, so someone else must approve it.'],
   ['a user without invoice.approve',{...full,canApprove:false},'You do not have permission to approve invoices.'],
   ['a user missing obligation.confirm',{...full,canConfirmObligation:false},'Approval also needs permission to confirm obligations and create journals.'],
   ['a user missing accounting.journal.create',{...full,canCreateJournal:false},'Approval also needs permission to confirm obligations and create journals.'],
@@ -466,6 +465,9 @@ describe('Workflow decision logic',()=>{
  it('picks exactly one next action per stage',()=>{
   expect(nextAction(inv({status:'draft'}),{...caps})).toEqual({kind:'submit',enabled:true,reason:null});
   expect(nextAction(inv({}),{...full})).toEqual({kind:'approve',enabled:true,reason:null});
+  // the creator holding every approval capability may approve; without invoice.approve the action stays disabled
+  expect(nextAction(inv({created_by_user_id:'creator'}),{...full,currentUserId:'creator'})).toEqual({kind:'approve',enabled:true,reason:null});
+  expect(nextAction(inv({created_by_user_id:'creator'}),{...full,currentUserId:'creator',canApprove:false})).toEqual({kind:'approve',enabled:false,reason:'noApprove'});
   expect(nextAction(inv({status:'approved',journal:{id:'j',status:'draft'}}),{...full})).toEqual({kind:'post',enabled:true,reason:null});
   expect(nextAction(inv({status:'approved',journal:{id:'j',status:'posted'}}),{...full})).toEqual({kind:'none',enabled:false,reason:'posted'});
   expect(nextAction(inv({status:'approved',journal:null}),{...full})).toEqual({kind:'post',enabled:false,reason:'noJournal'});

@@ -200,11 +200,12 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
       } finally { await client.query('ROLLBACK').catch(() => undefined); client.release(); }
     }
     expect(await n(`SELECT count(*) n FROM invoice_vat_reviews WHERE company_id=$1`, [c2.id])).toBe(0);
-    // the reviewer must be the independent approver, never the creator
+    // the creator holding the approval capabilities may approve; the VAT review is made by that approver
     const c3 = await company('indep');
     const s3 = await drafts.create(c3.id, creator, 'sales', parseDraft({ counterparty_id: c3.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
     await drafts.submit(c3.id, creator, s3.id, s3.version);
-    await expect(approve(c3, { id: s3.id, version: s3.version + 1 }, creator)).rejects.toMatchObject({ code: 'INVOICE_SELF_APPROVAL' });
+    await approve(c3, { id: s3.id, version: s3.version + 1 }, creator);
+    expect(await n(`SELECT count(*) n FROM invoice_vat_reviews WHERE company_id=$1 AND reviewed_by_user_id=$2`, [c3.id, creator])).toBe(1);
   });
 
   it('purchases with VAT need an explicit recoverability (V2 is covered in invoice-vat-v2); the invoice approval API stays disabled', async () => {
