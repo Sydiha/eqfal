@@ -32,8 +32,6 @@ const ar = {
     label: 'الشركة النشطة',
     none: 'لا توجد شركات متاحة',
     switchAriaLabel: 'تبديل الشركة النشطة',
-    search: 'بحث في الشركات',
-    noMatch: 'لا توجد شركات مطابقة للبحث.',
     switching: 'جارٍ تبديل الشركة…',
   },
   common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة' },

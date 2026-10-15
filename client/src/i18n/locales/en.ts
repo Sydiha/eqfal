@@ -32,8 +32,6 @@ const en = {
     label: 'Active Company',
     none: 'No companies available',
     switchAriaLabel: 'Switch active company',
-    search: 'Search companies',
-    noMatch: 'No companies match your search.',
     switching: 'Switching company…',
   },
   common: { cancel: 'Cancel', close: 'Close', save: 'Save', confirm: 'Confirm', retry: 'Try again' },
