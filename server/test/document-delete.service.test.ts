@@ -8,6 +8,8 @@ const calls: string[] = [];
 let documentRow: Record<string, unknown> | null;
 let fks: { tbl: string; pairs: { col: string; ref: string }[] }[];
 let referenced: Set<string>;
+let queued: { id: string; company_id: string; storage_key: string; attempts: number }[];
+let queueUpdates: string[];
 
 const client = {
   release: vi.fn(),
@@ -24,6 +26,10 @@ const client = {
       return { rows: [], rowCount: referenced.has(table) ? 1 : 0 };
     }
     if (text.startsWith('DELETE FROM documents')) return { rows: [], rowCount: 1 };
+    if (text.startsWith('INSERT INTO storage_deletion_queue')) return { rows: [{ id: 'q1' }], rowCount: 1 };
+    if (text.includes('FROM storage_deletion_queue')) return { rows: queued, rowCount: queued.length };
+    if (text.startsWith('SELECT 1 FROM documents WHERE storage_key')) return { rows: [], rowCount: 0 };
+    if (text.startsWith('UPDATE storage_deletion_queue')) { queueUpdates.push(text); return { rows: [], rowCount: 1 }; }
     if (text.startsWith('INSERT INTO audit_log')) return { rows: [{ id: 'a1' }], rowCount: 1 };
     return { rows: [], rowCount: 0 };
   }),
@@ -44,6 +50,8 @@ beforeEach(() => {
     { tbl: 'brand_new_table', pairs: [{ col: 'doc', ref: 'id' }, { col: 'company_id', ref: 'company_id' }] },
   ];
   referenced = new Set();
+  queued = [{ id: 'q1', company_id: 'co-a', storage_key: 'co-a/key-1', attempts: 0 }];
+  queueUpdates = [];
   vi.mocked(client.query).mockClear();
   vi.mocked(client.release).mockClear();
   vi.mocked(storage.delete).mockReset().mockResolvedValue();
@@ -91,12 +99,14 @@ describe('DocumentService.deleteDocument', () => {
     expect(deleted()).toBe(false);
   });
 
-  it('keeps the database consistent when file removal fails: row gone, failure audited for manual cleanup', async () => {
+  it('keeps the database consistent when file removal fails: row gone, file stays queued for automatic retry', async () => {
     vi.mocked(storage.delete).mockRejectedValue(new Error('object store down'));
     const result = await service().deleteDocument(input);
     expect(result).toEqual({ deleted: true, storage_cleanup: 'pending' });
     expect(deleted()).toBe(true);
-    expect(auditActions()).toEqual(['document.delete', 'document.delete_file_pending']);
+    expect(calls).toContain('INSERT INTO storage_deletion_queue');
+    expect(queueUpdates.some((u) => u.includes('next_attempt_at'))).toBe(true);
+    expect(queueUpdates.some((u) => u.includes("status = 'done'"))).toBe(false);
   });
 
   it('does not delete the file when the transaction fails', async () => {

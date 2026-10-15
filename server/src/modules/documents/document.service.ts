@@ -3,6 +3,7 @@ import { Pool, PoolClient } from 'pg';
 import logger from '../../shared/logger';
 import { StorageAdapter } from '../../storage/storage.adapter';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { DocumentFileCleanup } from './document-file-cleanup';
 import { DocumentRepository } from './document.repository';
 import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
@@ -52,6 +53,7 @@ export class DocumentReviewConflictError extends Error {
 export class DocumentService {
   private readonly documents: DocumentRepository;
   private readonly audit: AuditLogRepository;
+  private readonly cleanup: DocumentFileCleanup;
 
   constructor(
     private readonly pool: Pool,
@@ -59,6 +61,7 @@ export class DocumentService {
   ) {
     this.documents = new DocumentRepository(pool);
     this.audit = new AuditLogRepository();
+    this.cleanup = new DocumentFileCleanup(pool, storage);
   }
 
   private async withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -257,8 +260,8 @@ export class DocumentService {
    * Refused, with the dependency named, when ANY table references the document: the foreign keys are read from the catalog at run time, so
    * invoices (draft or approved, which would otherwise be cascaded), notes, obligations, settlements, bank matches, VAT reviews, custody,
    * fixed assets, partner ownership, opening balances and periodic adjustments are all covered, including ones added later. Nothing is cascaded.
-   * Row delete + audit commit together; the file is removed after commit. If file removal fails the database is already consistent (no row
-   * points at the file); the leftover storage_key is logged and written to the audit trail ('document.delete_file_pending') for manual removal.
+   * Row delete + audit + queue entry commit together; the file is removed right after commit. If file removal fails the database is already consistent (no row
+   * points at the file) and the file stays in storage_deletion_queue, retried automatically by the cleanup scheduler.
    */
   async deleteDocument(input: DocumentTransitionInput): Promise<DeleteDocumentResult> {
     const deleted = await this.withTransaction(async (client) => {
@@ -292,21 +295,15 @@ export class DocumentService {
         },
         after_data: null,
       }, client);
-      return current;
+      // Same transaction: the file to remove is durably recorded together with the row delete (migration 078).
+      const queueId = await this.cleanup.enqueue(client, input.companyId, current.id, current.storage_key);
+      return { current, queueId };
     });
     try {
-      await this.storage.delete(deleted.storage_key);
-      return { deleted: true, storage_cleanup: 'done' };
+      const outcome = await this.cleanup.process([deleted.queueId]);
+      return { deleted: true, storage_cleanup: outcome.done ? 'done' : 'pending' };
     } catch (err) {
-      logger.error({ err, storageKey: deleted.storage_key, documentId: deleted.id }, 'Document deleted but its stored file could not be removed; remove it manually');
-      try {
-        await this.withTransaction((client) => this.audit.logEvent({
-          company_id: input.companyId, actor_user_id: input.actorUserId, action: 'document.delete_file_pending',
-          entity_type: 'document', entity_id: deleted.id, before_data: null, after_data: { storage_key: deleted.storage_key },
-        }, client));
-      } catch (auditErr) {
-        logger.error({ auditErr, storageKey: deleted.storage_key }, 'Failed to record pending file cleanup');
-      }
+      logger.error({ err, documentId: deleted.current.id }, 'Document deleted; file cleanup stays queued for retry');
       return { deleted: true, storage_cleanup: 'pending' };
     }
   }
