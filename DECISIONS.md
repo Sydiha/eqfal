@@ -540,3 +540,9 @@ Replit يبقى runtime/practical validation target only وممنوع من Produ
 - كلمة مؤقتة عشوائية (16 حرفًا) تُعرض مرة واحدة للمسؤول فقط وتُخزَّن كـ bcrypt؛ `users.must_change_password` يحجب كل API (403 `PASSWORD_CHANGE_REQUIRED`) عدا قراءة الجلسة وتغيير كلمة المرور وتسجيل الخروج.
 - التدقيق `access.user.password.reset` / `auth.password.change` دون أي كلمة أو hash. Rate limiting داخل الذاكرة (بلا خدمة مدفوعة). لا بريد إلكتروني ولا دعوات.
 - قرار المالك (2026-10-15): كل مستخدم جديد ينشئه مسؤول عبر `POST /access/users` يُنشأ بـ `must_change_password = TRUE` ويغيّر كلمته عند أول دخول. المستخدمون الحاليون لا يتأثرون (migration 082 لا تعدّل صفوف `users`).
+
+## 2026-10-15 — إدارة المستخدمين والأدوار (Phase B5)
+
+- **تفاصيل العضو** `GET /api/access/memberships/:id/details` (تتطلب `access.view`): معرّف العضوية يجب أن يتبع الشركة النشطة وإلا 404 مطابق للمجهول. تظهر شركات أخرى للحساب نفسه فقط إن كان للمسؤول `access.view` فيها (أو كان System Admin نشطًا)؛ لا عدّاد ولا تلميح لما سواها. تفصل الاستجابة صلاحيات الدور الصريحة `role_capabilities` عن الفعلية `effective_capabilities` ومصدرها (`role` / `full_access_wildcard` / `system_admin_global` / `none`).
+- **نسخ دور** `POST /api/access/roles/:id/clone` و**إعادة تسمية** `PATCH /api/access/roles/:id`: كلاهما بصلاحية `access.role.create` القائمة (لا capability جديدة ولا migration). النسخ لا يُسنَد لأحد، ولا يُنسخ دور Full Access (403 `ACCESS_FULL_ACCESS_IMMUTABLE`)، ولا تُنسخ الصلاحيات الإدارية (`access.*` عدا `access.view`) بل تُذكر في `omitted_capabilities` وفي التدقيق، ومنحها لاحقًا يمر بسقف المانح. إعادة التسمية لا تغيّر الصلاحيات ولا العضويات، وتُرفض لـ Full Access، ولدور يحمل صلاحيات إدارية دون `access.full_access.grant`.
+- التدقيق: `access.role.clone` و`access.role.rename` في `audit_log` ضمن المعاملة نفسها.

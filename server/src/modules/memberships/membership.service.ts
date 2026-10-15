@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { MembershipRepository } from './membership.repository';
-import { Membership, MembershipListItem, CreateMembershipInput, CreateRoleInput, Role, RoleListItem } from './membership.types';
+import { Membership, MembershipDetails, MembershipListItem, RoleCloneResult, UserCompanyAccess, CreateMembershipInput, CreateRoleInput, Role, RoleListItem } from './membership.types';
 import logger from '../../shared/logger';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import bcrypt from 'bcrypt';
@@ -216,6 +216,72 @@ export class MembershipService {
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.create', entity_type: 'role', entity_id: role.id, before_data: null, after_data: this.roleSnapshot(role) }, client);
       return role;
     });
+  }
+
+  /**
+   * Clone a role of this company into a NEW role with the same functional capabilities. Nothing is assigned to anyone.
+   * A Full Access role is a wildcard and is never cloned; administrative (access.*) capabilities are never copied
+   * silently: they are reported as omitted and must be granted afterwards through the ceiling-checked grant flow.
+   */
+  async cloneRole(sourceRoleId: string, name: string, companyId: string, actorUserId: string): Promise<RoleCloneResult> {
+    return this.transaction(async (client) => {
+      const source = await this.repo.findRoleById(sourceRoleId, client);
+      if (!source || source.company_id !== companyId) throw new Error('Role not found');
+      if (source.is_full_access) throw new AccessPolicyError('Full Access role cannot be cloned', 'ACCESS_FULL_ACCESS_IMMUTABLE');
+      const sourceCaps = [...(await this.repo.getRoleCapabilities(sourceRoleId, client))].sort();
+      const copied = sourceCaps.filter((id) => !isAdministrativeCapability(id));
+      const omitted = sourceCaps.filter(isAdministrativeCapability);
+      const role = await this.repo.createRole({ name, company_id: companyId }, client);
+      for (const id of copied) await this.repo.addCapabilityToRole(role.id, id, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.clone', entity_type: 'role', entity_id: role.id,
+        before_data: { source_role_id: source.id, source_name: source.name, source_capabilities: sourceCaps },
+        after_data: { ...this.roleSnapshot(role), capabilities: copied, omitted_administrative_capabilities: omitted } }, client);
+      return { role, copied_capabilities: copied, omitted_capabilities: omitted };
+    });
+  }
+
+  /** Rename an ordinary role. Permissions and memberships are untouched; Full Access is protected; admin-bearing roles need grant authority. */
+  async renameRole(roleId: string, name: string, companyId: string, actorUserId: string): Promise<Role> {
+    return this.transaction(async (client) => {
+      const role = await this.repo.findRoleById(roleId, client);
+      if (!role || role.company_id !== companyId) throw new Error('Role not found');
+      if (role.is_full_access) throw new AccessPolicyError('Full Access role cannot be renamed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
+      await this.assertCanEditRole(roleId, companyId, actorUserId, client);
+      if (role.name === name) return role;
+      const renamed = await this.repo.renameRole(roleId, companyId, name, client);
+      if (!renamed) throw new Error('Role not found');
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.rename', entity_type: 'role', entity_id: roleId, before_data: this.roleSnapshot(role), after_data: this.roleSnapshot(renamed) }, client);
+      return renamed;
+    });
+  }
+
+  /**
+   * Consolidated view of one member. The membership id must belong to the ACTIVE company (otherwise "not found"). Other
+   * companies of the same account appear only where the actor may view access administration (access.view there, or an
+   * active System Admin); everything else is omitted without any count or hint.
+   */
+  async getMembershipDetails(membershipId: string, companyId: string, actorUserId: string): Promise<MembershipDetails> {
+    const membership = await this.repo.findMembershipById(membershipId);
+    if (!membership || membership.company_id !== companyId) throw new Error('Membership not found');
+    const [user, rows] = await Promise.all([this.repo.findUserSummary(membership.user_id), this.repo.listMembershipsOfUser(membership.user_id)]);
+    if (!user) throw new Error('Membership not found');
+    const companies: UserCompanyAccess[] = [];
+    for (const row of rows) {
+      const current = row.company_id === companyId;
+      if (!current && !(await this.repo.getActiveCapabilities(actorUserId, row.company_id)).includes('access.view')) continue;
+      const effective = (await this.repo.getActiveCapabilities(membership.user_id, row.company_id)).sort();
+      const live = row.is_active && row.company_is_active;
+      const source = user.is_system_admin && row.company_is_active ? 'system_admin_global'
+        : live && row.role_is_full_access ? 'full_access_wildcard' : live && row.role_id ? 'role' : 'none';
+      companies.push({
+        membership_id: row.membership_id, company_id: row.company_id, company_name: row.company_name, company_name_ar: row.company_name_ar,
+        company_is_active: row.company_is_active, is_active: row.is_active, is_current_company: current,
+        role: row.role_id && row.role_name !== null ? { id: row.role_id, name: row.role_name, is_full_access: row.role_is_full_access } : null,
+        role_capabilities: row.role_id && !row.role_is_full_access ? [...(await this.repo.getRoleCapabilities(row.role_id))].sort() : [],
+        effective_capabilities: effective, effective_source: source,
+      });
+    }
+    return { user, companies };
   }
 
   async assignRoleForCompany(membershipId: string, roleId: string, companyId: string, actorUserId: string): Promise<Membership> {

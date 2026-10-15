@@ -59,3 +59,35 @@ export interface RoleListItem extends Role {
   assignable?: boolean;
   editable?: boolean;
 }
+
+/** How a membership's effective capabilities arise (distinct from the role's own capability rows). */
+export type EffectiveSource = 'role' | 'full_access_wildcard' | 'system_admin_global' | 'none';
+
+/** One company entry of the consolidated user view. Only companies the actor is authorized to see are ever included. */
+export interface UserCompanyAccess {
+  membership_id: string;
+  company_id: string;
+  company_name: string;
+  company_name_ar: string | null;
+  company_is_active: boolean;
+  is_active: boolean;
+  is_current_company: boolean;
+  role: { id: string; name: string; is_full_access: boolean } | null;
+  /** Explicit role_capabilities rows (empty for the Full Access wildcard role). */
+  role_capabilities: string[];
+  /** What the user can actually do in this company right now (membership, company and global authority applied). */
+  effective_capabilities: string[];
+  effective_source: EffectiveSource;
+}
+
+export interface MembershipDetails {
+  user: { id: string; email: string; is_active: boolean; is_system_admin: boolean };
+  companies: UserCompanyAccess[];
+}
+
+export interface RoleCloneResult {
+  role: Role;
+  copied_capabilities: string[];
+  /** Administrative capabilities of the source that were NOT copied; granting them stays an explicit, ceiling-checked step. */
+  omitted_capabilities: string[];
+}

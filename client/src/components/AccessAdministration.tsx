@@ -7,6 +7,7 @@ import { capabilityGroupKey, capabilityGroupLabel, capabilityLabel, langOf } fro
 import { GrantImpact, SensitivityMap, grantImpact, newlyGranted, roleChangeImpact } from './accessRisk';
 import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
 import { SystemAdministration } from './SystemAdministration';
+import { UserAccessDetails } from './UserAccessDetails';
 import './AccessAdministration.css';
 
 export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean; can_manage?: boolean }
@@ -22,7 +23,7 @@ interface Props {
 }
 type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflict';
 type Tab = 'members' | 'roles' | 'global';
-type Dialogs = 'addMember' | 'createUser' | 'createRole' | 'resetPassword' | null;
+type Dialogs = 'addMember' | 'createUser' | 'createRole' | 'resetPassword' | 'cloneRole' | 'renameRole' | null;
 
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
   let response: Response;
@@ -75,6 +76,8 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
   const [resetTarget, setResetTarget] = useState<AccessMembership | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [detailsTarget, setDetailsTarget] = useState<AccessMembership | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set()); // all groups start collapsed
 
@@ -154,6 +157,23 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
     const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
     void mutate(() => request('/api/access/roles', json('POST', { name }), onUnauthorized), () => setDialog(null));
   };
+  const cloneRole = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRole) return;
+    const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
+    void mutate(async () => {
+      const response = await request(`/api/access/roles/${selectedRole.id}/clone`, json('POST', { name }), onUnauthorized);
+      const result = (await response.json()) as { role: { id: string }; omitted_capabilities: string[] };
+      setSelectedRoleId(result.role.id);
+      setNotice(result.omitted_capabilities.length > 0 ? t('access.cloneDone', { count: result.omitted_capabilities.length }) : null);
+    }, () => setDialog(null));
+  };
+  const renameRole = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRole) return;
+    const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
+    void mutate(() => request(`/api/access/roles/${selectedRole.id}`, json('PATCH', { name }), onUnauthorized), () => setDialog(null));
+  };
   const setActive = (member: AccessMembership, isActive: boolean) =>
     mutate(() => request(`/api/access/memberships/${member.id}/active`, json('PATCH', { is_active: isActive }), onUnauthorized));
   const closeReset = () => { setDialog(null); setResetTarget(null); setTemporaryPassword(null); setCopied(false); };
@@ -225,10 +245,11 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
               </select>
             : (member.role_name ?? t('access.noRole'))}</td>
           <td><StatusBadge status={member.is_active ? 'open' : 'closed'}>{t(member.is_active ? 'access.active' : 'access.inactive')}</StatusBadge></td>
-          <td>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || member.can_manage === false || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}
+          <td><button className="acc-ghost" aria-label={`${t('access.details.open')} ${member.user_email}`} onClick={() => setDetailsTarget(member)}>{t('access.details.open')}</button>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || member.can_manage === false || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}
             {can('access.user.password.reset') && member.user_id !== currentUserId && <button className="acc-ghost" disabled={busy || member.can_manage === false} onClick={() => { setErrorKey(null); setFailure(null); setResetTarget(member); setDialog('resetPassword'); }}>{t('access.resetPassword')}</button>}</td>
         </tr>)}</tbody></table></div>
     </div>}
+    {notice && tab === 'roles' && <p className="acc-hint" role="status">{notice}</p>}
     {loaded && tab === 'roles' && <div className="acc-roles">
       <ul className="acc-role-list" aria-label={t('access.rolesTab')}>
         {roles.length === 0 ? <li className="acc-empty">{t('access.rolesEmpty')}</li> : roles.map((role) => <li key={role.id}>
@@ -241,6 +262,11 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
       <div className="acc-card acc-capabilities">
         {!selectedRole ? <p className="acc-hint">{t('access.selectRole')}</p> : <>
           <h3>{t('access.capabilities')} — {selectedRole.name}</h3>
+          {can('access.role.create') && <div className="acc-bulk" role="group" aria-label={`${t('access.rolesTab')}: ${selectedRole.name}`}>
+            {!selectedRole.is_full_access && <button type="button" className="acc-ghost" disabled={busy} onClick={() => { setErrorKey(null); setDialog('cloneRole'); }}>{t('access.cloneRole')}</button>}
+            {!selectedRole.is_full_access && <button type="button" className="acc-ghost" disabled={busy || selectedRole.editable === false} onClick={() => { setErrorKey(null); setDialog('renameRole'); }}>{t('access.renameRole')}</button>}
+          </div>}
+          {selectedRole.is_full_access && can('access.role.create') && <p className="acc-hint">{t('access.fullAccessProtected')}</p>}
           {selectedRole.is_full_access ? <>
             <p className="acc-hint">{t('access.fullAccessNote')}</p>
           </> : <>
@@ -299,6 +325,13 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
             <code dir="ltr" data-testid="temporary-password" style={{ fontSize: '1.25rem', letterSpacing: '0.05em', userSelect: 'all' }}>{temporaryPassword}</code>
             <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => void copyPassword()}>{copied ? t('access.copied') : t('access.copy')}</button><button type="button" className="acc-primary" onClick={closeReset}>{t('access.close')}</button></div></div>}
     </Dialog>}
+    {detailsTarget && <UserAccessDetails membershipId={detailsTarget.id} email={detailsTarget.user_email} onClose={() => setDetailsTarget(null)} onUnauthorized={onUnauthorized} />}
+    {dialog === 'cloneRole' && selectedRole && <Dialog title={t('access.cloneRoleTitle', { name: selectedRole.name })} busy={busy} onClose={() => setDialog(null)}>{dialogError}
+      <form onSubmit={cloneRole} className="acc-form"><p>{t('access.cloneNote')}</p><label>{t('access.cloneName')}<input name="name" required maxLength={100} /></label>
+        <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
+    {dialog === 'renameRole' && selectedRole && <Dialog title={t('access.renameRoleTitle', { name: selectedRole.name })} busy={busy} onClose={() => setDialog(null)}>{dialogError}
+      <form onSubmit={renameRole} className="acc-form"><p>{t('access.renameNote')}</p><label>{t('access.roleName')}<input name="name" required maxLength={100} defaultValue={selectedRole.name} /></label>
+        <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('common.save')}</button></div></form></Dialog>}
     {dialog === 'createRole' && <Dialog title={t('access.createRoleTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
       <form onSubmit={createRole} className="acc-form"><label>{t('access.roleName')}<input name="name" required maxLength={100} /></label>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
