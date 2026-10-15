@@ -5,6 +5,7 @@ import { requireSameOrigin } from '../auth/origin.middleware';
 import { AccessPolicyError } from './access-policy-error';
 import { MembershipService } from './membership.service';
 import { sensitivityMap } from './capability-sensitivity';
+import { LoginRateLimiter } from '../auth/login-rate-limit';
 
 export const accessAdministrationRouter = Router();
 
@@ -117,6 +118,26 @@ accessAdministrationRouter.patch('/access/memberships/:id/active', ...writeGuard
   }
   const ctx = context(req);
   try { res.json(await value.setMembershipActive(req.params.id, ctx.activeCompanyId, req.body.is_active, ctx.user.id)); }
+  catch (error) { if (!handleKnownError(error, res)) throw error; }
+}));
+
+/** Per actor, per actor+target and per target: bounds temp-password generation (bcrypt cost) and repeated lockouts of one user. */
+export const passwordResetRateLimiter = new LoginRateLimiter({ maxPerIp: 30, maxPerEmailIp: 5, maxPerEmail: 10 });
+
+accessAdministrationRouter.post('/access/memberships/:id/reset-password', ...writeGuards('access.user.password.reset'), asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const value = service(res);
+  if (!value) return;
+  if (!UUID.test(req.params.id) || !exactObject(req.body ?? {}, [])) {
+    res.status(400).json({ error: 'Invalid access administration request' }); return;
+  }
+  const ctx = context(req);
+  const attempt = passwordResetRateLimiter.reserve(ctx.user.id, req.params.id); // charges are never refunded
+  if (!attempt.allowed) {
+    res.setHeader('Retry-After', String(attempt.retryAfterSeconds));
+    res.status(429).json({ error: 'Too many attempts', code: 'PASSWORD_RESET_RATE_LIMITED' }); return;
+  }
+  try { res.json({ temporaryPassword: (await value.resetPassword(req.params.id, ctx.activeCompanyId, ctx.user.id)).temporaryPassword, mustChangePassword: true }); }
   catch (error) { if (!handleKnownError(error, res)) throw error; }
 }));
 

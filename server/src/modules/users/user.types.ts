@@ -10,6 +10,8 @@ export interface User {
   is_active: boolean;
   /** Global System Admin marker (migration 075). Optional so older fixtures without the column stay valid. */
   is_system_admin?: boolean;
+  /** Migration 082. Optional so older fixtures without the column stay valid. */
+  must_change_password?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -24,4 +26,6 @@ export interface CreateUserInput {
   email: string;
   /** Plaintext password — will be hashed before storage. */
   password: string;
+  /** Administratively chosen initial password: the user must replace it at first login (migration 082). */
+  mustChangePassword?: boolean;
 }

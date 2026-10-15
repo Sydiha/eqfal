@@ -46,6 +46,21 @@ export const PHASE2_ERROR_CODES = [
   'ACCESS_COMPANY_INACTIVE',
 ] as const;
 
+/** Stable codes added in Phase B4 (password management; each needs AR + EN). */
+export const PASSWORD_ERROR_CODES = [
+  'ACCESS_SELF_PASSWORD_RESET',
+  'ACCESS_PASSWORD_RESET_CROSS_COMPANY',
+  'INVALID_CURRENT_PASSWORD',
+  'INVALID_PASSWORD_REQUEST',
+  'PASSWORD_TOO_SHORT',
+  'PASSWORD_TOO_LONG',
+  'PASSWORD_SAME_AS_CURRENT',
+  'PASSWORD_CONTAINS_EMAIL',
+  'PASSWORD_RATE_LIMITED',
+  'PASSWORD_RESET_RATE_LIMITED',
+  'PASSWORD_CHANGE_REQUIRED',
+] as const;
+
 export const FISCAL_YEAR_BLOCKER_CODES = [
   'monthly_period_missing', 'monthly_period_open', 'draft_journals', 'unposted_operational_sources',
   'trial_balance_unbalanced', 'unresolved_documents', 'unconfirmed_obligations',

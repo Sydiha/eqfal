@@ -6,6 +6,8 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import bcrypt from 'bcrypt';
 import { UserRepository } from '../users/user.repository';
 import { AccessPolicyError } from './access-policy-error';
+import { SessionRepository } from '../auth/session.repository';
+import { generateTemporaryPassword } from '../users/password-policy';
 
 /** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
@@ -144,7 +146,8 @@ export class MembershipService {
   /**
    * Create a brand-new user account and attach it to the active company in one
    * transaction (user + membership + optional role + audit). The password is
-   * hashed with bcrypt here; the plaintext is never stored or logged.
+   * hashed with bcrypt here; the plaintext is never stored or logged. The new user must replace the
+   * administrator-chosen password at first login (must_change_password); existing users are untouched.
    * Throws pg 23505 when the email already has an account.
    */
   async createUserForCompany(email: string, password: string, roleId: string | null, companyId: string, actorUserId: string): Promise<Membership> {
@@ -152,7 +155,7 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = roleId ? await this.repo.findRoleById(roleId, client) : null;
       if (roleId && (!role || role.company_id !== companyId)) throw new Error('Role not found');
-      const user = await new UserRepository(this.pool).create({ email, password: hash }, client);
+      const user = await new UserRepository(this.pool).create({ email, password: hash, mustChangePassword: true }, client);
       let membership = await this.repo.createMembership({ user_id: user.id, company_id: companyId }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.create', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { email: user.email, company_id: companyId } }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
@@ -164,6 +167,33 @@ export class MembershipService {
       }
       return membership;
     });
+  }
+
+  /**
+   * Administrative password reset. The target is resolved from the membership id INSIDE the active company (unknown or
+   * foreign ids are indistinguishable: "Membership not found"). Authority: the same target rule as every other membership
+   * change (Full Access, equal-authority managers and System Admins are out of reach without the matching authority), no
+   * self-reset, and an account that also belongs to another company can only be reset by an active System Admin, because a
+   * password is global to the account and would otherwise let one company lock out another's staff. A temporary password is
+   * generated here, stored only as a bcrypt hash and returned once; every session of the target ends and the target must
+   * choose a new password at next login. The audit record never contains the password or hash.
+   */
+  async resetPassword(membershipId: string, companyId: string, actorUserId: string): Promise<{ temporaryPassword: string }> {
+    const temporaryPassword = generateTemporaryPassword();
+    const hash = await bcrypt.hash(temporaryPassword, 12);
+    await this.transaction(async (client) => {
+      const target = await this.repo.findMembershipById(membershipId, client);
+      if (!target || target.company_id !== companyId) throw new Error('Membership not found');
+      if (target.user_id === actorUserId) throw new AccessPolicyError('Use Change password for your own account', 'ACCESS_SELF_PASSWORD_RESET');
+      await this.assertCanManageTarget(target, actorUserId, client);
+      if (!(await this.repo.isActiveSystemAdmin(actorUserId, client)) && (await this.repo.hasMembershipOutsideCompany(target.user_id, companyId, client))) {
+        throw new AccessPolicyError('The account belongs to another company', 'ACCESS_PASSWORD_RESET_CROSS_COMPANY');
+      }
+      await new UserRepository(this.pool).setPassword(target.user_id, hash, true, client);
+      await new SessionRepository(this.pool).deleteAllForUser(target.user_id, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.password.reset', entity_type: 'user', entity_id: target.user_id, before_data: null, after_data: { membership_id: target.id, must_change_password: true, sessions_revoked: true } }, client);
+    });
+    return { temporaryPassword };
   }
 
   async setMembershipActive(id: string, companyId: string, active: boolean, actorUserId: string): Promise<Membership> {

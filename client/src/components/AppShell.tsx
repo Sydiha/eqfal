@@ -15,7 +15,7 @@ import '../shell-corrective.css';
 export type Page = NavigationPage;
 
 type IconComponent = React.FC<{ size?: number; stroke?: number; className?: string }>;
-type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile' | 'access' | 'companies' | 'auditLog';
+type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile' | 'access' | 'companies' | 'auditLog' | 'account';
 
 const iconMap: Record<IconName, IconComponent> = {
   home: IconHome,
@@ -37,6 +37,7 @@ const iconMap: Record<IconName, IconComponent> = {
   access: IconPartners,
   companies: IconCompanyProfile,
   auditLog: IconDocuments,
+  account: IconPartners,
 };
 
 function ShellIcon({ name }: { name: IconName }) {
@@ -44,7 +45,7 @@ function ShellIcon({ name }: { name: IconName }) {
   return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', auditLog: 'auditLog' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', auditLog: 'auditLog', account: 'account' };
 
 type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
@@ -199,13 +200,15 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
             <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={isAr ? 'المهام بانتظارك' : 'Tasks waiting for you'} onClick={() => setPage('home')}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
             </button>
-            <Group gap={8} wrap="nowrap" className="user-summary">
-              <span className="user-avatar" aria-hidden="true">{userInitial}</span>
-              <Stack gap={0} className="user-copy">
-                <Text size="sm" fw={650}>{email}</Text>
-                <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
-              </Stack>
-            </Group>
+            <UnstyledButton className="user-summary-link" aria-label={t('nav.account')} aria-current={page === 'account' ? 'page' : undefined} onClick={() => setPage('account')}>
+              <Group gap={8} wrap="nowrap" className="user-summary">
+                <span className="user-avatar" aria-hidden="true">{userInitial}</span>
+                <Stack gap={0} className="user-copy">
+                  <Text size="sm" fw={650}>{email}</Text>
+                  <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
+                </Stack>
+              </Group>
+            </UnstyledButton>
             <Button
               className="header-action language-action"
               aria-label={t('app.switchLanguage')}

@@ -265,6 +265,16 @@ export class MembershipRepository {
   }
 
   /** Whether the user is an active global System Admin (users.is_system_admin, migration 075). */
+  /** True when the user has a membership (active or not) in any company other than `companyId`. */
+  async hasMembershipOutsideCompany(userId: string, companyId: string, client?: PoolClient): Promise<boolean> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query(
+      'SELECT 1 FROM memberships WHERE user_id = $1 AND company_id <> $2 LIMIT 1',
+      [userId, companyId],
+    );
+    return rows.length > 0;
+  }
+
   async isActiveSystemAdmin(userId: string, client?: PoolClient): Promise<boolean> {
     const runner: QueryRunner = client ?? this.pool;
     const { rows } = await runner.query<{ ok: boolean }>(

@@ -13,6 +13,7 @@ const CRITICAL = new Set([
   'access.full_access.grant',
   'access.manage',
   'access.membership.role.assign',
+  'access.user.password.reset',
   'access.role.capability.grant',
   'accounting.journal.post',
   'accounting.journal.reverse',

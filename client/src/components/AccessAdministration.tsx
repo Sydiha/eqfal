@@ -22,7 +22,7 @@ interface Props {
 }
 type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflict';
 type Tab = 'members' | 'roles' | 'global';
-type Dialogs = 'addMember' | 'createUser' | 'createRole' | null;
+type Dialogs = 'addMember' | 'createUser' | 'createRole' | 'resetPassword' | null;
 
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
   let response: Response;
@@ -72,6 +72,9 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
+  const [resetTarget, setResetTarget] = useState<AccessMembership | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set()); // all groups start collapsed
 
@@ -153,6 +156,19 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
   };
   const setActive = (member: AccessMembership, isActive: boolean) =>
     mutate(() => request(`/api/access/memberships/${member.id}/active`, json('PATCH', { is_active: isActive }), onUnauthorized));
+  const closeReset = () => { setDialog(null); setResetTarget(null); setTemporaryPassword(null); setCopied(false); };
+  const resetPassword = async () => {
+    if (!resetTarget) return;
+    setBusy(true); setErrorKey(null); setFailure(null);
+    try {
+      const response = await request(`/api/access/memberships/${resetTarget.id}/reset-password`, json('POST', {}), onUnauthorized);
+      setTemporaryPassword(((await response.json()) as { temporaryPassword: string }).temporaryPassword);
+    } catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); } }
+    finally { setBusy(false); }
+  };
+  const copyPassword = async () => {
+    try { await navigator.clipboard.writeText(temporaryPassword ?? ''); setCopied(true); } catch { setCopied(false); }
+  };
   const assignRole = (member: AccessMembership, roleId: string) => {
     const next = roleById(roleId);
     const run = () => void mutate(() => request(`/api/access/memberships/${member.id}/role`, json('PUT', { role_id: roleId }), onUnauthorized));
@@ -209,7 +225,8 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
               </select>
             : (member.role_name ?? t('access.noRole'))}</td>
           <td><StatusBadge status={member.is_active ? 'open' : 'closed'}>{t(member.is_active ? 'access.active' : 'access.inactive')}</StatusBadge></td>
-          <td>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || member.can_manage === false || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}</td>
+          <td>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || member.can_manage === false || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}
+            {can('access.user.password.reset') && member.user_id !== currentUserId && <button className="acc-ghost" disabled={busy || member.can_manage === false} onClick={() => { setErrorKey(null); setFailure(null); setResetTarget(member); setDialog('resetPassword'); }}>{t('access.resetPassword')}</button>}</td>
         </tr>)}</tbody></table></div>
     </div>}
     {loaded && tab === 'roles' && <div className="acc-roles">
@@ -274,6 +291,14 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
         <label>{t('access.password')}<input name="password" type="password" required minLength={8} maxLength={256} dir="ltr" autoComplete="new-password" /></label><small>{t('access.passwordHint')}</small>
         {can('access.membership.role.assign') && <label>{t('access.role')}<select name="role_id" defaultValue=""><option value="">{t('access.noRole')}</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>}
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
+    {dialog === 'resetPassword' && resetTarget && <Dialog title={temporaryPassword ? t('access.resetPasswordDoneTitle') : t('access.resetPasswordTitle', { email: resetTarget.user_email })} busy={busy} onClose={closeReset}>{dialogError}
+      {temporaryPassword === null
+        ? <div className="acc-form"><p>{t('access.resetPasswordWarn')}</p>
+            <div className="modal-actions"><button type="button" className="acc-ghost" onClick={closeReset}>{t('common.cancel')}</button><button type="button" className="acc-primary" disabled={busy} onClick={() => void resetPassword()}>{busy ? t('access.saving') : t('access.resetPasswordConfirm')}</button></div></div>
+        : <div className="acc-form"><p>{t('access.resetPasswordDone', { email: resetTarget.user_email })}</p>
+            <code dir="ltr" data-testid="temporary-password" style={{ fontSize: '1.25rem', letterSpacing: '0.05em', userSelect: 'all' }}>{temporaryPassword}</code>
+            <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => void copyPassword()}>{copied ? t('access.copied') : t('access.copy')}</button><button type="button" className="acc-primary" onClick={closeReset}>{t('access.close')}</button></div></div>}
+    </Dialog>}
     {dialog === 'createRole' && <Dialog title={t('access.createRoleTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
       <form onSubmit={createRole} className="acc-form"><label>{t('access.roleName')}<input name="name" required maxLength={100} /></label>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
