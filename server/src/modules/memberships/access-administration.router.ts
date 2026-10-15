@@ -54,12 +54,12 @@ export function handleKnownError(error: unknown, res: Response): boolean {
 
 accessAdministrationRouter.get('/access/memberships', ...readGuards, asyncRoute(async (req, res) => {
   const value = service(res);
-  if (value) res.json({ memberships: await value.listMemberships(context(req).activeCompanyId) });
+  if (value) res.json({ memberships: await value.listMemberships(context(req).activeCompanyId, context(req).user.id) });
 }));
 
 accessAdministrationRouter.get('/access/roles', ...readGuards, asyncRoute(async (req, res) => {
   const value = service(res);
-  if (value) res.json({ roles: await value.listRoles(context(req).activeCompanyId) });
+  if (value) res.json({ roles: await value.listRoles(context(req).activeCompanyId, context(req).user.id) });
 }));
 
 accessAdministrationRouter.get('/access/capabilities', ...readGuards, asyncRoute(async (_req, res) => {

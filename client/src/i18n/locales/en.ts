@@ -196,7 +196,7 @@ const en = {
     COMPANY_LAST_ACTIVE_CONFLICT: 'This company cannot be disabled because it is your last active company.',
     ACCESS_ROLE_CEILING: 'You cannot grant a role or permissions beyond your own access level in this company.',
     ACCESS_FULL_ACCESS_IMMUTABLE: 'The Full Access role has fixed permissions and cannot be modified.',
-    ACCESS_TARGET_PRIVILEGE: 'This member holds permissions beyond yours, so you cannot change their access.',
+    ACCESS_TARGET_PRIVILEGE: 'This member is a manager or Full Access user outside your authority, so you cannot change their access.',
     ACCESS_LAST_FULL_ACCESS: 'The last active Full Access member of a company cannot be disabled or demoted.',
     ACCESS_LAST_SYSTEM_ADMIN: 'The last active System Admin cannot be removed or disabled.',
     ACCESS_SELF_LOCKOUT: 'You cannot disable your own account.',

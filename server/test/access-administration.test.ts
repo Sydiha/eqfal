@@ -59,7 +59,7 @@ describe('access administration authorization boundary', () => {
     vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities').mockResolvedValue(['access.view']);
     const response = await request(app).get('/api/access/memberships?company_id=attacker-company').set('Cookie', 'eqfal_session=token');
     expect(response.status).toBe(200);
-    expect(mocks.listMemberships).toHaveBeenCalledWith('company-a');
+    expect(mocks.listMemberships).toHaveBeenCalledWith('company-a', expect.any(String));
   });
 });
 
