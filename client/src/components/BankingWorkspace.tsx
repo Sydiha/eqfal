@@ -12,6 +12,7 @@ import { readQueryParameter, writeQueryParameters } from '../navigation/querySta
 type Props = {
   canView: boolean;
   canImport: boolean;
+  canDeleteImport?: boolean;
   canManage: boolean;
   canMatch: boolean;
   canReconcile: boolean;
@@ -118,6 +119,7 @@ export function BankingWorkspace(props: Props) {
       <Banking
         canView={props.canView}
         canImport={props.canImport}
+        canDeleteImport={props.canDeleteImport}
         canManage={props.canManage}
         canMatch={props.canMatch}
         canReconcile={props.canReconcile}

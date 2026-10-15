@@ -1,4 +1,5 @@
 import {FormEvent,useEffect,useMemo,useRef,useState} from 'react';
+import { DeleteRecordAction } from './DeleteRecordAction';
 import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter} from '../navigation/queryState';
@@ -17,7 +18,7 @@ type Adjustment={id:string;adjustment_type:AdjustmentType;total_amount:string;re
 type Account={id:string;code:string;name:string;name_ar?:string|null;name_en?:string|null;account_type:'asset'|'liability'|'equity'|'revenue'|'expense';is_active:boolean};
 type Document={id:string;original_filename:string;status:string};
 type Obligation={id:string;direction:string;counterparty_name?:string;document_id:string|null;original_amount:string};
-type Props={canView:boolean;canCreate:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApprove:boolean;canPost:boolean;onUnauthorized:()=>void};
+type Props={canView:boolean;canCreate:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApprove:boolean;canPost:boolean;canDelete?:boolean;onUnauthorized:()=>void};
 
 type FormState={type:AdjustmentType;amount:string;start:string;end:string;description:string;reference:string;notes:string;balanceAccountId:string;pnlAccountId:string;documentId:string;obligationId:string};
 const initialForm:FormState={type:'accrued_expense',amount:'',start:'',end:'',description:'',reference:'',notes:'',balanceAccountId:'',pnlAccountId:'',documentId:'',obligationId:''};
@@ -27,7 +28,7 @@ const validDate=(value:string|null)=>value&&datePattern.test(value)&&new Date(`$
 const readClosePeriod=()=>{const from=validDate(readQueryParameter('adjustmentFrom')),to=validDate(readQueryParameter('adjustmentTo'));return from&&to&&from<=to?{from,to}:null};
 const json=(method:string,body:unknown):RequestInit=>({method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 
-export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canReview,canApprove,canPost,onUnauthorized}:Props){
+export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canReview,canApprove,canPost,canDelete=false,onUnauthorized}:Props){
  const {i18n}=useTranslation();const ar=i18n.language==='ar';
  const {selectedPeriodId,periodMode,selectedFiscalYearId,availableFiscalYears,availablePeriodsForSelectedYear}=useDateContext();
  const l=ar?{
@@ -133,7 +134,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
     <td data-label={l.recognitionPeriod}><span className="pa-dates"><span>{formatDisplayDate(a.recognition_start,i18n.language)}</span><span>{formatDisplayDate(a.recognition_end,i18n.language)}</span></span></td>
     <td data-label={l.progress}>{a.schedule.length?<span className="pa-progress"><span>{l.progressOf(done,a.schedule.length)}</span><i><b style={{width:`${Math.round(done/a.schedule.length*100)}%`}}/></i></span>:'—'}</td>
     <td data-label={l.status}><StatusBadge status={a.workflow_status}>{l[a.workflow_status]}</StatusBadge></td>
-    <td data-label={l.actions}><div className="pa-actions"><button type="button" className="pa-ghost" aria-pressed={isSel} onClick={()=>setSelectedId(a.id)}>{l.viewSchedule}</button>{canEdit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>edit(a)}>{l.update}</button>}{canSubmit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/submit-review`)}>{l.submit}</button>}{canApprove&&a.workflow_status==='in_review'&&<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/approve`)}>{l.approve}</button>}</div>{canReview&&a.workflow_status==='in_review'&&<div className="pa-return"><textarea aria-label={l.returnReason} placeholder={l.returnReason} value={returnReasons[a.id]??''} onChange={e=>setReturnReasons({...returnReasons,[a.id]:e.target.value})}/><button type="button" className="pa-ghost" disabled={busy||!(returnReasons[a.id]??'').trim()} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/return-to-draft`,{reason:(returnReasons[a.id]??'').trim()})}>{l.returnDraft}</button></div>}</td>
+    <td data-label={l.actions}><div className="pa-actions"><button type="button" className="pa-ghost" aria-pressed={isSel} onClick={()=>setSelectedId(a.id)}>{l.viewSchedule}</button>{canEdit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>edit(a)}>{l.update}</button>}{canSubmit&&a.workflow_status==='draft'&&<button type="button" className="pa-ghost" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/submit-review`)}>{l.submit}</button>}{canDelete&&a.workflow_status==='draft'&&<DeleteRecordAction kind="periodicAdjustment" className="pa-ghost" url={`/api/periodic-adjustments/${a.id}`} name={a.description} onUnauthorized={onUnauthorized} onDeleted={load}/>}{canApprove&&a.workflow_status==='in_review'&&<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/approve`)}>{l.approve}</button>}</div>{canReview&&a.workflow_status==='in_review'&&<div className="pa-return"><textarea aria-label={l.returnReason} placeholder={l.returnReason} value={returnReasons[a.id]??''} onChange={e=>setReturnReasons({...returnReasons,[a.id]:e.target.value})}/><button type="button" className="pa-ghost" disabled={busy||!(returnReasons[a.id]??'').trim()} onClick={()=>void mutate(`/api/periodic-adjustments/${a.id}/return-to-draft`,{reason:(returnReasons[a.id]??'').trim()})}>{l.returnDraft}</button></div>}</td>
    </tr>})}</tbody></table></div>
    <div className="pa-foot"><span>{l.showingOf(visibleItems.length,scopedItems.length)}</span><span>{selected?l.scheduleLinked:l.selectPrompt}</span></div></>}
   </section>
