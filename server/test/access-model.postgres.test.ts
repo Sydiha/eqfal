@@ -344,7 +344,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const sa = clients.sa!;
     const created = await sa.req('POST', '/admin/companies', { slug: 'access-c', name: 'Access C' });
     expect(created.status).toBe(201);
-    expect(await n('SELECT count(*) n FROM roles WHERE company_id=$1', [created.json.id])).toBe(5);
+    expect(await n('SELECT count(*) n FROM roles WHERE company_id=$1', [created.json.id])).toBe(6);
     // Existing, documented behavior: the creator (here the System Admin) becomes the company's first Full Access member.
     expect(await n("SELECT count(*) n FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.company_id=$1 AND m.user_id=$2 AND m.is_active AND r.is_full_access", [created.json.id, ids.sa])).toBe(1);
     expect((await sa.req('PATCH', `/admin/companies/${ids.coB}/active`, { is_active: false })).status).toBe(200);
