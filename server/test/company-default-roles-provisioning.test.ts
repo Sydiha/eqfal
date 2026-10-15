@@ -6,6 +6,7 @@ import {
   FINANCE_MANAGER_CAPABILITIES,
   LEGACY_UNASSIGNED_CAPABILITIES,
   COMPANY_MANAGER_CAPABILITIES,
+  OPERATIONS_CAPABILITIES,
   VIEWER_CAPABILITIES,
 } from '../src/modules/memberships/default-role-capabilities';
 
@@ -82,7 +83,7 @@ async function provisionCapabilitiesByRole(): Promise<Record<string, string[]>> 
 }
 
 describe('company default roles provisioning', () => {
-  it('creates a new company with exactly 5 default roles (Company Manager added by migration 075)', async () => {
+  it('creates a new company with exactly 6 default roles (Company Manager 075, Operations 081)', async () => {
     const { pool, sqls } = fakePool((sql) => {
       if (sql.includes('INSERT INTO companies')) {
         return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
@@ -95,7 +96,7 @@ describe('company default roles provisioning', () => {
 
     // Count role creation queries
     const roleInsertions = sqls.filter((s) => s.includes('INSERT INTO roles') && s.includes('RETURNING id'));
-    expect(roleInsertions).toHaveLength(5);
+    expect(roleInsertions).toHaveLength(6);
   });
 
   it('creates roles with correct names and is_full_access flags', async () => {
@@ -144,6 +145,7 @@ describe('company default roles provisioning', () => {
     expect(roleNames).toContain('Viewer');
     expect(roleNames).toContain('Accountant');
     expect(roleNames).toContain('Finance Manager');
+    expect(roleNames).toContain('Operations');
     expect(roleNames).toContain('Full Access');
 
     // Check is_full_access flags
@@ -262,6 +264,20 @@ describe('company default roles provisioning', () => {
     }
     expect(byRole['Company Manager']).toContain('access.membership.role.assign');
     expect(byRole['Company Manager']).toContain('invoice.create');
+  });
+
+  it('provisions Operations with exactly OPERATIONS_CAPABILITIES and none of the accounting, closing, VAT, access or sensitive invoice capabilities', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(new Set(byRole['Operations'])).toEqual(new Set(OPERATIONS_CAPABILITIES));
+    expect(byRole['Operations']).toHaveLength(12);
+    for (const forbidden of ['accounting.journal.create', 'accounting.journal.edit', 'accounting.journal.post', 'accounting.journal.reverse',
+      'fiscal_year.close', 'fiscal_year.create', 'monthly_close.close', 'monthly_close.reopen', 'vat.close', 'vat.reopen',
+      'invoice.cancel', 'invoice.delete', 'invoice.adjust', 'invoice.adjust_approve', 'invoice.recurring', 'document.approve', 'access.full_access.grant']) {
+      expect(byRole['Operations'], forbidden).not.toContain(forbidden);
+    }
+    expect(byRole['Operations'].filter((c) => c.startsWith('access.'))).toEqual([]);
+    for (const required of ['invoice.view', 'invoice.create', 'invoice.edit', 'invoice.submit', 'invoice.approve', 'document.upload', 'document.edit',
+      'counterparty.create', 'counterparty.edit', 'obligation.view']) expect(byRole['Operations']).toContain(required);
   });
 
   it('provisions roles scoped to the newly created company', async () => {

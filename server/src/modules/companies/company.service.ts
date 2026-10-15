@@ -4,6 +4,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import {
   ACCOUNTANT_CAPABILITIES,
   COMPANY_MANAGER_CAPABILITIES,
+  OPERATIONS_CAPABILITIES,
   FINANCE_MANAGER_CAPABILITIES,
   VIEWER_CAPABILITIES,
 } from '../memberships/default-role-capabilities';
@@ -41,6 +42,7 @@ const DEFAULT_ROLES: DefaultRoleDefinition[] = [
   { name: 'Accountant', is_full_access: false, capabilities: [...ACCOUNTANT_CAPABILITIES] },
   { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_CAPABILITIES] },
   { name: 'Company Manager', is_full_access: false, capabilities: [...COMPANY_MANAGER_CAPABILITIES] },
+  { name: 'Operations', is_full_access: false, capabilities: [...OPERATIONS_CAPABILITIES] },
   { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, capabilities: [] },
 ];
 

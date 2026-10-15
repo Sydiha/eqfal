@@ -49,7 +49,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       [result.userId, result.companyId])).rows;
     expect(role).toEqual([{ name: 'Full Access', is_full_access: true }]);
     const names = (await pool.query('SELECT name FROM roles ORDER BY name')).rows.map((r) => r.name);
-    expect(names).toEqual(['Accountant', 'Company Manager', 'Finance Manager', 'Full Access', 'Viewer']);
+    expect(names).toEqual(['Accountant', 'Company Manager', 'Finance Manager', 'Full Access', 'Operations', 'Viewer']);
     const actions = (await pool.query('SELECT action FROM audit_log ORDER BY action')).rows.map((r) => r.action);
     expect(actions).toEqual(['bootstrap.initialize', 'company.create']);
     const audit = JSON.stringify((await pool.query('SELECT * FROM audit_log')).rows);

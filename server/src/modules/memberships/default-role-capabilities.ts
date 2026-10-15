@@ -154,6 +154,29 @@ export const COMPANY_MANAGER_CAPABILITIES: readonly string[] = [
   'invoice.view',
 ];
 
+/**
+ * Operations (migration 081; owner decision Phase B3): day-to-day business staff who are not accountants. Sales/purchase invoices
+ * (view, create, edit, submit, approve - approval alone authorizes it, creators may approve their own), supporting documents
+ * (view, upload, edit), customer/supplier records (create, edit) and read access to obligations (payment/collection status).
+ * It deliberately does NOT hold manual journal create/edit/post/reverse, fiscal-year or monthly close, VAT close/reopen,
+ * any access.* capability, invoice.cancel/delete/adjust/adjust_approve/recurring, or document.approve/delete.
+ * Migration 081 must stay equal to this list (contract test).
+ */
+export const OPERATIONS_CAPABILITIES: readonly string[] = [
+  'company.view',
+  'counterparty.create',
+  'counterparty.edit',
+  'document.edit',
+  'document.upload',
+  'document.view',
+  'invoice.approve',
+  'invoice.create',
+  'invoice.edit',
+  'invoice.submit',
+  'invoice.view',
+  'obligation.view',
+];
+
 /** Registered capabilities that are deliberately NOT granted to any default role. */
 export const LEGACY_UNASSIGNED_CAPABILITIES: readonly string[] = [
   'accounting.chart.manage',

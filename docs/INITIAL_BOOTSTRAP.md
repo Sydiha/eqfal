@@ -4,7 +4,7 @@ One-time, manually run CLI that creates the first company and its Full Access ad
 
 ## Safety properties
 - Refuses (exit code 2, nothing written) if **any** user or company already exists. No recovery/overwrite mode exists.
-- Single transaction: user, company, 5 default roles (Viewer, Accountant, Finance Manager, Company Manager, Full Access), Full Access membership, `company.create` and `bootstrap.initialize` audit entries commit together or not at all.
+- Single transaction: user, company, 6 default roles (Viewer, Accountant, Finance Manager, Company Manager, Operations, Full Access), Full Access membership, `company.create` and `bootstrap.initialize` audit entries commit together or not at all.
 - Concurrent runs are serialised (advisory lock + table lock); exactly one can succeed.
 - Reuses `CompanyManagementService` (same roles/permissions/audit as normal company creation). Never modifies or deletes existing rows. No schema change.
 - The password is never accepted as an argument or env var, never logged, never stored in audit data (only a bcrypt hash is stored). Minimum 12 characters, maximum 72 bytes.
