@@ -6,6 +6,7 @@ import { runMigrations } from './db/migrate';
 import { frontendBuildAvailable } from './shared/frontend-static';
 import { assertStorageConfig, verifyStorageReady } from './storage/storage.factory';
 import { startRecurringInvoiceScheduler } from './modules/invoices/recurring-invoice.scheduler';
+import { startDocumentFileCleanupScheduler } from './modules/documents/document-file-cleanup.scheduler';
 import { assertProductionConfig, productionConfigWarnings } from './config/production-config';
 
 async function start(): Promise<void> {
@@ -37,6 +38,7 @@ async function start(): Promise<void> {
     logger.info({ port: config.port, env: config.env }, 'Server started');
   });
   if (pool && startRecurringInvoiceScheduler(pool)) logger.info('Recurring invoice scheduler started (drafts only)');
+  if (pool && startDocumentFileCleanupScheduler(pool)) logger.info('Document file cleanup scheduler started');
 }
 
 start().catch((err) => {
