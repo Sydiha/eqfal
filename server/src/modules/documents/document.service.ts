@@ -30,6 +30,21 @@ export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { int
 
 export class DocumentNotFoundError extends Error {}
 export type DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT' | 'DOCUMENT_COUNTERPARTY_INVALID' | 'DOCUMENT_APPROVAL_DATA_INCOMPLETE';
+export type DocumentDeleteBlockReason =
+  | 'approved' | 'invoice' | 'invoice_adjustment' | 'obligation' | 'vat_review' | 'settlement' | 'bank_match' | 'custody'
+  | 'fixed_asset' | 'partner_ownership' | 'opening_balance' | 'periodic_adjustment' | 'other';
+/** Deletion refused: names the reason and the table that holds the dependency so the UI can show it. Nothing is changed. */
+export class DocumentDeleteBlockedError extends Error {
+  constructor(readonly reason: DocumentDeleteBlockReason, readonly dependency: string | null = null) { super(`Document cannot be deleted: ${reason}`); }
+}
+const DEPENDENCY_REASONS: Record<string, DocumentDeleteBlockReason> = {
+  invoice_source_links: 'invoice', invoice_adjustment_source_links: 'invoice_adjustment', obligations: 'obligation',
+  document_vat_reviews: 'vat_review', document_settlements: 'settlement', bank_transaction_matches: 'bank_match',
+  custody_document_allocations: 'custody', fixed_assets: 'fixed_asset', fixed_asset_disposals: 'fixed_asset',
+  partner_ownership_periods: 'partner_ownership', opening_balance_items: 'opening_balance', periodic_adjustments: 'periodic_adjustment',
+};
+export interface DeleteDocumentResult { deleted: true; storage_cleanup: 'done' | 'pending'; }
+
 export class DocumentReviewConflictError extends Error {
   constructor(message: string, readonly code: DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT') { super(message); }
 }
@@ -235,5 +250,64 @@ export class DocumentService {
       }, client);
       return document;
     });
+  }
+
+  /**
+   * Permanent deletion of an unprocessed document (any status except approved) and its stored file.
+   * Refused, with the dependency named, when ANY table references the document: the foreign keys are read from the catalog at run time, so
+   * invoices (draft or approved, which would otherwise be cascaded), notes, obligations, settlements, bank matches, VAT reviews, custody,
+   * fixed assets, partner ownership, opening balances and periodic adjustments are all covered, including ones added later. Nothing is cascaded.
+   * Row delete + audit commit together; the file is removed after commit. If file removal fails the database is already consistent (no row
+   * points at the file); the leftover storage_key is logged and written to the audit trail ('document.delete_file_pending') for manual removal.
+   */
+  async deleteDocument(input: DocumentTransitionInput): Promise<DeleteDocumentResult> {
+    const deleted = await this.withTransaction(async (client) => {
+      const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+      if (!current) throw new DocumentNotFoundError('Document not found');
+      if (current.status === 'approved') throw new DocumentDeleteBlockedError('approved');
+      if (current.document_date) await assertAccountingDateWritable(input.companyId, current.document_date, client);
+      const fks = await client.query<{ tbl: string; pairs: { col: string; ref: string }[] }>(
+        `SELECT c.conrelid::regclass::text AS tbl,
+                json_agg(json_build_object('col', a.attname, 'ref', fa.attname) ORDER BY k.ord) AS pairs
+           FROM pg_constraint c
+           CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(att, fatt, ord)
+           JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.att
+           JOIN pg_attribute fa ON fa.attrelid = c.confrelid AND fa.attnum = k.fatt
+          WHERE c.contype = 'f' AND c.confrelid = 'documents'::regclass
+          GROUP BY c.oid, c.conrelid`);
+      for (const fk of fks.rows) {
+        const values = [input.documentId, input.companyId];
+        const where = fk.pairs.map((pair) => `"${pair.col}" = $${pair.ref === 'company_id' ? 2 : 1}`).join(' AND ');
+        const hit = await client.query(`SELECT 1 FROM ${fk.tbl} WHERE ${where} LIMIT 1`, values);
+        if (hit.rowCount) throw new DocumentDeleteBlockedError(DEPENDENCY_REASONS[fk.tbl.replace(/^"?public"?\./, '').replace(/"/g, '')] ?? 'other', fk.tbl);
+      }
+      await client.query('DELETE FROM documents WHERE id = $1 AND company_id = $2', [input.documentId, input.companyId]);
+      await this.audit.logEvent({
+        company_id: input.companyId, actor_user_id: input.actorUserId,
+        action: 'document.delete', entity_type: 'document', entity_id: current.id,
+        before_data: {
+          original_filename: current.original_filename, mime_type: current.mime_type, size_bytes: current.size_bytes, status: current.status,
+          storage_key: current.storage_key, sha256: current.sha256, document_type: current.document_type, document_date: current.document_date,
+          reference_number: current.reference_number, total_amount: current.total_amount, uploaded_by_user_id: current.uploaded_by_user_id,
+        },
+        after_data: null,
+      }, client);
+      return current;
+    });
+    try {
+      await this.storage.delete(deleted.storage_key);
+      return { deleted: true, storage_cleanup: 'done' };
+    } catch (err) {
+      logger.error({ err, storageKey: deleted.storage_key, documentId: deleted.id }, 'Document deleted but its stored file could not be removed; remove it manually');
+      try {
+        await this.withTransaction((client) => this.audit.logEvent({
+          company_id: input.companyId, actor_user_id: input.actorUserId, action: 'document.delete_file_pending',
+          entity_type: 'document', entity_id: deleted.id, before_data: null, after_data: { storage_key: deleted.storage_key },
+        }, client));
+      } catch (auditErr) {
+        logger.error({ auditErr, storageKey: deleted.storage_key }, 'Failed to record pending file cleanup');
+      }
+      return { deleted: true, storage_cleanup: 'pending' };
+    }
   }
 }

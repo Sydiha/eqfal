@@ -13,7 +13,7 @@ import {
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { AuthSessionContext } from '../auth/session.service';
 import { DocumentRepository } from './document.repository';
-import { DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
+import { DocumentDeleteBlockedError, DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
 import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 
@@ -25,6 +25,7 @@ const EDIT_CAPABILITY = 'document.edit';
 const SUBMIT_CAPABILITY = 'document.submit';
 const REVIEW_CAPABILITY = 'document.review';
 const APPROVE_CAPABILITY = 'document.approve';
+const DELETE_CAPABILITY = 'document.delete';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const MIME_EXTENSIONS: Record<string, Set<string>> = {
@@ -348,3 +349,28 @@ documentRouter.get(
   }),
 );
 
+
+// Phase 2 delete: permanent removal of an unprocessed document and its file. document.delete is its own capability (Full Access holds it through the wildcard; no role gets it by default).
+documentRouter.delete(
+  '/documents/:id',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(DELETE_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) { res.status(400).json({ error: 'Invalid document id' }); return; }
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const result = await service.deleteDocument({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id });
+      res.status(200).json({ ...result, id: req.params.id });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof DocumentDeleteBlockedError) { res.status(409).json({ error: 'Document cannot be deleted', code: 'DOCUMENT_DELETE_BLOCKED', reason: err.reason, dependency: err.dependency }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+      throw err;
+    }
+  }),
+);
