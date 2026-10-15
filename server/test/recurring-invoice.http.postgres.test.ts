@@ -92,13 +92,11 @@ describeDatabase('recurring invoices (PostgreSQL)', () => {
   });
   afterAll(() => { server.close(); });
 
-  it('registers invoice.recurring as explicit-grant-only: Full Access and invoice creators are refused', async () => {
+  it('Full Access holds invoice.recurring and invoice.view through the wildcard (migration 075); roles without it are refused', async () => {
     const row = (await pool.query<{ implicit_full_access: boolean }>("SELECT implicit_full_access FROM capabilities WHERE id='invoice.recurring'")).rows[0];
-    expect(row?.implicit_full_access).toBe(false);
-    expect((await pool.query("SELECT 1 FROM role_capabilities WHERE capability_id='invoice.recurring' AND role_id IN (SELECT id FROM roles WHERE is_full_access)")).rowCount).toBe(0);
-    expect((await clients.ownerA!.req('POST', '/recurring-invoices', salesBody())).status).toBe(403);
+    expect(row?.implicit_full_access).toBe(true);
     expect((await clients.viewer!.req('POST', '/recurring-invoices', salesBody())).status).toBe(403);
-    expect((await clients.ownerA!.req('GET', '/recurring-invoices')).status).toBe(403); // Full Access holds no invoice.view either
+    expect((await clients.ownerA!.req('GET', '/recurring-invoices')).status).toBe(200);
     expect((await clients.manager!.req('POST', '/recurring-invoices', salesBody(), { origin: 'https://evil.example' })).status).toBe(403);
   });
 

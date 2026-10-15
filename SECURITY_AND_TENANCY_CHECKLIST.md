@@ -29,7 +29,16 @@
 - [x] capability changes تنعكس من DB بدل الاعتماد على صلاحيات طويلة العمر داخل Session.
 - [x] `document.view` و`document.upload` منفصلتان.
 - [x] `document.review` و`document.approve` منفصلتان؛ امتلاك review وحدها لا يسمح بالاعتماد.
-- [ ] أي مسارات إدارة مستخدمين مستقبلية تمنع defaults أو grants التي تتجاوز سقف المنشئ.
+- [x] مسارات إدارة المستخدمين (`/api/access/*` و`/api/admin/*`) تمنع أي grant يتجاوز سقف المنشئ، وتمنع تعديل عضو أعلى صلاحية.
+- [x] التفويض يعتمد على capabilities فقط، لا على أسماء الأدوار (Company Manager دور افتراضي قابل للتعديل لا استثناء في الكود).
+- [x] Full Access = wildcard لكل capability حالية ومستقبلية داخل شركته فقط (migration 075، CHECK يمنع الاستثناءات).
+- [x] منح Full Access يتطلب `access.full_access.grant` (يملكه Full Access وSystem Admin تلقائيًا، ومدير الشركة فقط بتفويض صريح)، والمفوَّض لا يمنحه لنفسه.
+- [x] حماية آخر عضو Full Access نشط في كل شركة.
+- [x] System Admin علامة عامة (`users.is_system_admin`) منفصلة عن أدوار الشركات: كل الصلاحيات في كل شركة نشطة دون عضوية، مع بقاء كل قيود السلامة المحاسبية والتدقيق.
+- [x] لا ترقية تلقائية: أول System Admin عبر CLI صريح لمرة واحدة بعد موافقة المالك؛ لا يُنشئ حسابات ولا يقبل كلمة مرور.
+- [x] قاعدة البيانات تمنع إزالة أو تعطيل آخر System Admin نشط؛ ومسارات `/api/admin/*` تعيد فحص الحالة من DB في كل طلب.
+- [x] تغييرات System Admin والحسابات العامة تُسجل في `system_audit_log` (append-only)، وتغييرات الشركات في `audit_log`.
+- [x] تحذيرات منح الصلاحيات الحساسة/الحرجة/Full Access في الواجهة تجربة استخدام فقط؛ الخادم يفرض التفويض دائمًا.
 
 ## حماية HTTP / Session
 - [x] Session Cookie: `HttpOnly` و`SameSite=Lax` و`Secure` في Production.

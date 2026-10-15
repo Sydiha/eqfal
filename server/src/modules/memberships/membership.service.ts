@@ -7,6 +7,9 @@ import bcrypt from 'bcrypt';
 import { UserRepository } from '../users/user.repository';
 import { AccessPolicyError } from './access-policy-error';
 
+/** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
+export const FULL_ACCESS_GRANT = 'access.full_access.grant';
+
 /**
  * MembershipService
  *
@@ -63,11 +66,6 @@ export class MembershipService {
     return this.repo.listCapabilities();
   }
 
-  /** Capabilities Full Access does not hold implicitly (the only ones editable on a Full Access role). */
-  async listExplicitOnlyCapabilities(): Promise<string[]> {
-    return this.repo.listExplicitOnlyCapabilities();
-  }
-
   /** Resolve an existing user by email so they can be added to the active company. */
   async createMembershipByEmail(email: string, companyId: string, actorUserId: string): Promise<Membership> {
     const userId = await this.repo.findUserIdByEmail(email);
@@ -81,6 +79,36 @@ export class MembershipService {
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
       return membership;
     });
+  }
+
+  /**
+   * Add an existing account to a company with an optional role in one transaction (membership + role + audit), with the
+   * same ceiling and Full Access rules as a separate assignment. The company must be active. Used by System Admin
+   * administration, where the company comes from the request path and is verified here, never trusted for authorization.
+   */
+  async addUserToCompany(userId: string, companyId: string, roleId: string | null, actorUserId: string): Promise<Membership> {
+    return this.transaction(async (client) => {
+      const company = (await client.query<{ is_active: boolean }>('SELECT is_active FROM companies WHERE id = $1', [companyId])).rows[0];
+      if (!company) throw new Error('Company not found');
+      if (!company.is_active) throw new AccessPolicyError('Company is disabled; enable it before changing access', 'ACCESS_COMPANY_INACTIVE');
+      if ((await client.query('SELECT 1 FROM users WHERE id = $1', [userId])).rows.length === 0) throw new Error('User not found');
+      const role = roleId ? await this.repo.findRoleById(roleId, client) : null;
+      if (roleId && (!role || role.company_id !== companyId)) throw new Error('Role not found');
+      let membership = await this.repo.createMembership({ user_id: userId, company_id: companyId }, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
+      if (role) {
+        await this.assertCanAssign(membership, role, actorUserId, client);
+        const before = membership;
+        membership = await this.repo.assignRoleToMembership(membership.id, role.id, client);
+        await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.role.assign', entity_type: 'membership', entity_id: membership.id, before_data: this.membershipSnapshot(before), after_data: this.membershipSnapshot(membership) }, client);
+      }
+      return membership;
+    });
+  }
+
+  /** The company a membership belongs to (DB-derived), or null. Lets global administration route by membership id. */
+  async membershipCompanyId(membershipId: string): Promise<string | null> {
+    return (await this.repo.findMembershipById(membershipId))?.company_id ?? null;
   }
 
   /**
@@ -186,23 +214,35 @@ export class MembershipService {
   }
 
   /**
-   * Full Access roles are immutable EXCEPT for explicit-only capabilities (implicit_full_access = FALSE). The actor
-   * must hold an active Full Access role in this company; the usual ceiling (actor already holds the capability) is
-   * replaced by that check because Full Access never holds these implicitly. Any other capability is rejected.
+   * A Full Access role is a wildcard over every registered capability (migration 075), so its capability list has
+   * nothing to edit. Any change request is rejected; the wildcard cannot be narrowed or widened from here.
    */
-  private async assertCanChangeFullAccessCapabilities(ids: string[], companyId: string, actorUserId: string, client: PoolClient): Promise<void> {
-    const explicitOnly = new Set(await this.repo.listExplicitOnlyCapabilities(client));
-    if (ids.length === 0 || ids.some((id) => !explicitOnly.has(id))) {
-      throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
-    }
-    if (!(await this.repo.hasActiveFullAccessRole(actorUserId, companyId, client))) {
-      throw new AccessPolicyError('Full Access violation: only an active Full Access member can change explicit capabilities of a Full Access role', 'ACCESS_ROLE_CEILING');
-    }
+  private async assertCanChangeFullAccessCapabilities(_ids: string[], _companyId: string, _actorUserId: string, _client: PoolClient): Promise<void> {
+    throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
   }
 
-  /** Capabilities of a Full Access role that the (already verified) Full Access actor may pass on without holding them. */
-  private async ceilingExemptions(role: Role, actorIsFullAccess: boolean, client?: PoolClient): Promise<Set<string>> {
-    return role.is_full_access && actorIsFullAccess ? new Set(await this.repo.listExplicitOnlyCapabilities(client)) : new Set();
+  /**
+   * Authority over Full Access in one company: the explicit, delegable capability access.full_access.grant, resolved
+   * in the DB-derived target company. Full Access holders have it through the wildcard and an active System Admin
+   * through global authority; a Company Manager has it only when it was granted on purpose.
+   */
+  private async holdsFullAccessAuthority(actorUserId: string, companyId: string, client?: PoolClient): Promise<boolean> {
+    return (await this.repo.getActiveCapabilities(actorUserId, companyId, client)).includes(FULL_ACCESS_GRANT);
+  }
+
+  /**
+   * Assigning a Full Access role. Requires access.full_access.grant in the target company. A delegated holder who is not
+   * already Full Access (or System Admin) may not give Full Access to themselves: delegation is for granting to others.
+   */
+  private async assertCanGrantFullAccess(membership: Membership, actorUserId: string, client?: PoolClient): Promise<void> {
+    if (!(await this.holdsFullAccessAuthority(actorUserId, membership.company_id, client))) {
+      throw new AccessPolicyError('Full Access violation: granter needs access.full_access.grant in the target company', 'ACCESS_ROLE_CEILING');
+    }
+    if (membership.user_id === actorUserId
+      && !(await this.repo.hasActiveFullAccessRole(actorUserId, membership.company_id, client))
+      && !(await this.repo.isActiveSystemAdmin(actorUserId, client))) {
+      throw new AccessPolicyError('Full Access violation: a delegated granter cannot grant Full Access to themselves', 'ACCESS_ROLE_CEILING');
+    }
   }
 
   private membershipSnapshot(value: Membership): Record<string, unknown> {
@@ -216,15 +256,15 @@ export class MembershipService {
   /**
    * Authority over the target's EXISTING privileges (not just over the role being assigned): the actor may
    * only change a membership whose current role is within the actor's own authority. A Full Access target
-   * requires a Full Access actor; any other target role must be a subset of the actor's capabilities.
+   * requires access.full_access.grant; any other target role must be a subset of the actor's capabilities.
    */
   private async assertCanManageTarget(target: Membership, actorUserId: string, client: PoolClient): Promise<void> {
     if (!target.role_id) return;
     const targetRole = await this.repo.findRoleById(target.role_id, client);
     if (!targetRole || targetRole.company_id !== target.company_id) return;
     if (targetRole.is_full_access) {
-      if (!(await this.repo.hasActiveFullAccessRole(actorUserId, target.company_id, client))) {
-        throw new AccessPolicyError('Target privilege violation: only Full Access can modify a Full Access member', 'ACCESS_TARGET_PRIVILEGE');
+      if (!(await this.holdsFullAccessAuthority(actorUserId, target.company_id, client))) {
+        throw new AccessPolicyError('Target privilege violation: only a holder of access.full_access.grant can modify a Full Access member', 'ACCESS_TARGET_PRIVILEGE');
       }
       return;
     }
@@ -251,16 +291,13 @@ export class MembershipService {
 
   private async assertCanAssign(membership: Membership, role: Role, actorUserId: string, client?: PoolClient): Promise<void> {
     if (role.company_id !== membership.company_id) throw new Error('Cross-company violation');
-    if (role.is_full_access && !(await this.repo.hasActiveFullAccessRole(actorUserId, membership.company_id, client))) {
-      throw new AccessPolicyError('Full Access violation: granter must hold Full Access in the target company', 'ACCESS_ROLE_CEILING');
-    }
+    if (role.is_full_access) { await this.assertCanGrantFullAccess(membership, actorUserId, client); return; }
     const [granterCaps, roleCaps] = await Promise.all([
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
       this.repo.getRoleCapabilities(role.id, client),
     ]);
-    const exempt = await this.ceilingExemptions(role, true, client);
     for (const capability of roleCaps) {
-      if (!granterCaps.includes(capability) && !exempt.has(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
+      if (!granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
     }
   }
 
@@ -333,16 +370,13 @@ export class MembershipService {
     }
 
     // ── Check 2: Full Access assignment authority ─────────────────────────
-    // Holding every explicit capability is not equivalent to Full Access.
-    // Authority is checked in the DB-derived target company context.
-    if (
-      role.is_full_access &&
-      !(await this.repo.hasActiveFullAccessRole(granterUserId, membership.company_id))
-    ) {
-      throw new AccessPolicyError(
-        'Full Access violation: granter must hold Full Access in the target company',
-        'ACCESS_ROLE_CEILING',
-      );
+    // Needs access.full_access.grant in the DB-derived target company
+    // (Full Access, System Admin, or explicit delegation). The wildcard role
+    // has no ceiling list to compare, so the check ends here for it.
+    if (role.is_full_access) {
+      await this.assertCanGrantFullAccess(membership, granterUserId);
+      logger.info({ membershipId, roleId, granterUserId }, 'Role assigned');
+      return this.repo.assignRoleToMembership(membershipId, roleId);
     }
 
     // ── Check 3: capability ceiling ────────────────────────────────────────
@@ -354,9 +388,8 @@ export class MembershipService {
     ]);
 
     const granterCapSet = new Set(granterCaps);
-    const exempt = await this.ceilingExemptions(role, true);
     for (const cap of roleCaps) {
-      if (!granterCapSet.has(cap) && !exempt.has(cap)) {
+      if (!granterCapSet.has(cap)) {
         throw new AccessPolicyError(
           `Ceiling violation: granter lacks capability '${cap}' — ` +
           `cannot grant a role that includes it`,

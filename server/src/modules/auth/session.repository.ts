@@ -12,6 +12,7 @@ export interface SessionRow {
 
 export interface ActiveSessionRow extends SessionRow {
   user_email: string;
+  user_is_system_admin: boolean;
 }
 
 export class SessionRepository {
@@ -34,7 +35,7 @@ export class SessionRepository {
 
   async findActiveByTokenHash(tokenHash: string): Promise<ActiveSessionRow | null> {
     const { rows } = await this.pool.query<ActiveSessionRow>(
-      `SELECT s.*, u.email AS user_email
+      `SELECT s.*, u.email AS user_email, u.is_system_admin AS user_is_system_admin
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1

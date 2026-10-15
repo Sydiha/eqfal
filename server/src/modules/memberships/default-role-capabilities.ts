@@ -1,5 +1,5 @@
 /**
- * Canonical default role capability matrix (Viewer, Accountant, Finance Manager).
+ * Canonical default role capability matrix (Viewer, Accountant, Finance Manager, Company Manager).
  *
  * Single TypeScript source of truth used by company provisioning and by tests.
  * Migration 059 is self-contained SQL and intentionally does NOT import this
@@ -8,7 +8,8 @@
  * Hierarchy: Viewer is a subset of Accountant, which is a subset of Finance Manager.
  * Full Access is not listed here: it resolves every registered capability dynamically
  * (roles.is_full_access) and has no explicit role_capabilities rows.
- * ALL access.* capabilities (including access.view) are Full Access only.
+ * Viewer, Accountant and Finance Manager hold no access.* capability. Company Manager (migration 075) is the
+ * conservative company administrator described below.
  */
 
 export const VIEWER_CAPABILITIES: readonly string[] = [
@@ -124,6 +125,33 @@ export const ACCOUNTANT_CAPABILITIES: readonly string[] = [
 export const FINANCE_MANAGER_CAPABILITIES: readonly string[] = [
   ...ACCOUNTANT_CAPABILITIES,
   ...FINANCE_MANAGER_ADDITIONAL_CAPABILITIES,
+];
+
+/**
+ * Company Manager (migration 075; owner decision 2026-10-15): manages staff, memberships, roles and capability grants of
+ * its own company within the capability ceiling, and prepares operational documents. It does NOT hold manual journal
+ * create/edit/post, fiscal-year or period closing/reopening, tax or VAT final approval, document or invoice approvals, or
+ * access.full_access.grant. Those are granted explicitly when the company wants to. Migration 075 must stay equal to
+ * this list (contract test).
+ */
+export const COMPANY_MANAGER_CAPABILITIES: readonly string[] = [
+  ...VIEWER_CAPABILITIES,
+  'access.membership.create',
+  'access.membership.role.assign',
+  'access.membership.status.edit',
+  'access.role.capability.grant',
+  'access.role.capability.revoke',
+  'access.role.create',
+  'access.view',
+  'counterparty.create',
+  'counterparty.edit',
+  'document.edit',
+  'document.upload',
+  'invoice.create',
+  'invoice.edit',
+  'invoice.recurring',
+  'invoice.submit',
+  'invoice.view',
 ];
 
 /** Registered capabilities that are deliberately NOT granted to any default role. */

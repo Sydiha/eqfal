@@ -15,7 +15,7 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
   const n = async (sql: string, p: unknown[] = []) => Number((await q(sql, p))[0].n);
   let creator: string; let approver: string;
   type Co = { id: string; fy: string; cust: string; supp: string; acct: string; acc: Record<string, string> };
-  const CAPS = ['obligation.confirm', 'accounting.journal.create'];
+  const CAPS = ['invoice.approve'];
   const approve = (co: Co, actor: string, id: string, v: number, caps = CAPS) => approval.approve(co.id, actor, caps, id, v);
   async function mapAll(co: Co) {
     for (const [k, t] of Object.entries({ receivable: 'asset', payable: 'liability', sales_revenue: 'revenue', purchase_expense: 'expense', vat_output: 'liability', vat_input: 'asset' })) {
@@ -135,9 +135,12 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     for (const t of ['invoice_number_counters', 'obligations', 'journal_entries']) expect(await n(`SELECT count(*) n FROM ${t} WHERE company_id=$1`, [E.id])).toBe(0);
   });
 
-  it('requires the existing accounting permissions', async () => {
+  it('requires invoice.approve; manual accounting permissions neither authorize nor are needed', async () => {
     const id = await submitted(A);
-    await expect(approve(A, approver, id, await version(id), ['accounting.journal.create'])).rejects.toMatchObject({ status: 403, code: 'INVOICE_FORBIDDEN' });
+    await expect(approve(A, approver, id, await version(id), ['accounting.journal.create', 'obligation.confirm'])).rejects.toMatchObject({ status: 403, code: 'INVOICE_FORBIDDEN' });
+    const out = await approve(A, approver, id, await version(id), ['invoice.approve']);
+    expect(out.journal_id).toBeTruthy();
+    expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('draft');
   });
 
   it('invoice-backed obligations are frozen and unique per invoice', async () => {
@@ -197,9 +200,9 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     await expect(approve(A, approver, s, ok.invoice.version)).rejects.toMatchObject({ code: 'INVOICE_ALREADY_APPROVED' });
   });
 
-  it('lets the creator approve with the required capabilities, and refuses the creator without them', async () => {
+  it('lets the creator approve with invoice.approve, and refuses the creator without it (manual accounting permissions do not count)', async () => {
     const denied = await submitted(A);
-    await expect(approve(A, creator, denied, await version(denied), ['invoice.approve'])).rejects.toMatchObject({ code: 'INVOICE_FORBIDDEN' });
+    await expect(approve(A, creator, denied, await version(denied), ['obligation.confirm', 'accounting.journal.create'])).rejects.toMatchObject({ code: 'INVOICE_FORBIDDEN' });
     expect((await q('SELECT status FROM invoices WHERE id=$1', [denied]))[0].status).toBe('submitted');
     const id = await submitted(A);
     const ok = await approve(A, creator, id, await version(id));

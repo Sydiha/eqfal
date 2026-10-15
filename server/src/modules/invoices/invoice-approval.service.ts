@@ -20,7 +20,12 @@ import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, p
  * open fiscal year by issue_date -> period guard -> fiscal-year guard -> mappings -> number -> invoice update ->
  * obligation -> draft journal + lines -> audit. Any failure rolls back, so no number, obligation or journal remains.
  */
-export const APPROVAL_REQUIRED_CAPABILITIES = ['obligation.confirm', 'accounting.journal.create'] as const;
+/**
+ * Approval is authorized by invoice.approve alone (owner decision 2026-10-15). The confirmed obligation, the DRAFT journal and
+ * the VAT review are system-generated effects of the approved business operation, so the approver does NOT need
+ * obligation.confirm or accounting.journal.create. Manual journal creation and posting stay separately controlled.
+ */
+export const APPROVAL_REQUIRED_CAPABILITIES = ['invoice.approve'] as const;
 
 type Header = {
   id: string; direction: 'sales' | 'purchase'; status: string; version: number; counterparty_id: string; issue_date: string; due_date: string | null;
@@ -60,7 +65,7 @@ export class InvoiceApprovalService {
     if (before.status !== 'submitted') throw new InvoiceError(409, 'INVOICE_NOT_SUBMITTED', 'Only submitted invoices can be approved');
     if (before.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
     const missingCaps = APPROVAL_REQUIRED_CAPABILITIES.filter((c) => !caps.includes(c));
-    if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approval also requires: ${missingCaps.join(', ')}`);
+    if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approval requires: ${missingCaps.join(', ')}`);
     if (!(Number(before.total_amount) > 0)) throw new InvoiceError(409, 'INVOICE_EMPTY', 'An invoice with a zero total cannot be approved');
     const hasVat = Number(before.vat_amount) > 0;
 

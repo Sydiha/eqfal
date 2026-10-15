@@ -140,6 +140,6 @@ describe('i18n — Task 35D Phase 2 error codes', () => {
       expect(en, `en ${code}`).toBeTruthy();
       expect(ar).not.toBe(en);
     }
-    expect(PHASE2_ERROR_CODES).toHaveLength(12);
+    expect(PHASE2_ERROR_CODES).toHaveLength(19);
   });
 });

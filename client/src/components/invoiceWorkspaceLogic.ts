@@ -3,12 +3,12 @@ export type InvoiceCaps = {
   canView: boolean; canCreate: boolean; canEdit: boolean; canSubmit: boolean;
   /** invoice.cancel (draft and submitted invoices only; approved invoices are corrected by credit/debit notes). */
   canCancel?: boolean;
-  /** invoice.adjust: register / edit / cancel a draft external credit or debit note. invoice.adjust_approve (plus obligation.confirm and accounting.journal.create) approves it. */
+  /** invoice.adjust: register / edit / cancel a draft external credit or debit note. invoice.adjust_approve alone approves it (the generated obligation effect and DRAFT journal need no manual journal permission). */
   canAdjust?: boolean; canAdjustApprove?: boolean;
   /** invoice.recurring: create / edit / pause / resume / end recurring schedules and run due ones. Generated invoices are drafts only. */
   canRecurring?: boolean;
-  /** invoice.approve. The server also requires obligation.confirm and accounting.journal.create, and allows the creator to approve. */
-  canApprove?: boolean; canConfirmObligation?: boolean; canCreateJournal?: boolean;
+  /** invoice.approve alone authorizes approval (the creator included); the obligation and DRAFT journal are system-generated. */
+  canApprove?: boolean;
   /** accounting.journal.post */
   canPostJournal?: boolean;
   /** obligation.settlement.create (the existing settlement authorization; no invoice-specific capability). */
@@ -37,7 +37,6 @@ export function nextAction(invoice: WorkflowInvoice, caps: InvoiceCaps): NextAct
   if (invoice.status === 'draft') return caps.canSubmit ? { kind: 'submit', enabled: true, reason: null } : { kind: 'submit', enabled: false, reason: 'noSubmit' };
   if (invoice.status === 'submitted') {
     if (!caps.canApprove) return { kind: 'approve', enabled: false, reason: 'noApprove' };
-    if (!caps.canConfirmObligation || !caps.canCreateJournal) return { kind: 'approve', enabled: false, reason: 'approveCapabilities' };
     return { kind: 'approve', enabled: true, reason: null };
   }
   // approved

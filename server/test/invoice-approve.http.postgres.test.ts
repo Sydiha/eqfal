@@ -73,7 +73,7 @@ describeDatabase('invoice approve API (PostgreSQL)', () => {
     const member = (user: string, company: string, roleId: string) => pool.query('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)', [user, company, roleId]);
     await member(ids.creator!, ids.coA!, await role(ids.coA!, 'Creator', ['invoice.view', 'invoice.create', 'invoice.edit', 'invoice.submit']));
     await member(ids.approver!, ids.coA!, await role(ids.coA!, 'Approver', APPROVER_CAPS));
-    // Holds invoice.approve but not the accounting capabilities the service also requires.
+    // Holds invoice.approve but none of the manual accounting capabilities (approval must still work).
     await member(ids.weakApprover!, ids.coA!, await role(ids.coA!, 'WeakApprover', ['invoice.view', 'invoice.approve']));
     // Creates AND approves: self-approval must still be refused.
     await member(ids.dual!, ids.coA!, await role(ids.coA!, 'Dual', [...APPROVER_CAPS, 'invoice.create', 'invoice.edit', 'invoice.submit']));
@@ -97,23 +97,32 @@ describeDatabase('invoice approve API (PostgreSQL)', () => {
   };
   const approve = (who: string, inv: { id: string; version: number }, version = inv.version) => clients[who]!.req('POST', `/invoices/${inv.id}/approve`, { version });
 
-  it('registers invoice.approve as explicit-grant-only; Full Access and company owners are refused', async () => {
+  it('Full Access holds invoice.approve through the wildcard (migration 075); the creator without it and a cross-origin request are refused', async () => {
     const row = (await pool.query<{ implicit_full_access: boolean }>("SELECT implicit_full_access FROM capabilities WHERE id='invoice.approve'")).rows[0];
-    expect(row?.implicit_full_access).toBe(false);
-    expect((await pool.query("SELECT 1 FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)")).rowCount).toBe(0);
+    expect(row?.implicit_full_access).toBe(true);
     const inv = await submitted();
-    expect((await approve('ownerA', inv)).status).toBe(403);
     expect((await approve('creator', inv)).status).toBe(403);
     expect((await clients.approver!.req('POST', `/invoices/${inv.id}/approve`, { version: inv.version }, { origin: 'https://evil.example' })).status).toBe(403);
     expect((await pool.query('SELECT status FROM invoices WHERE id=$1', [inv.id])).rows[0].status).toBe('submitted');
+    const res = await approve('ownerA', inv);
+    expect(res.status).toBe(200);
+    expect(res.json.invoice.status).toBe('approved');
   });
 
-  it('approval also requires obligation.confirm and accounting.journal.create', async () => {
+  it('invoice.approve alone is enough: no obligation.confirm or accounting.journal.create needed, effects stay atomic and DRAFT; manual journals stay forbidden', async () => {
     const inv = await submitted();
     const res = await approve('weakApprover', inv);
-    expect(res.status).toBe(403);
-    expect(res.json.code).toBe('INVOICE_FORBIDDEN');
-    expect(await count('SELECT COUNT(*)::text n FROM obligations WHERE invoice_id=$1', [inv.id])).toBe(0);
+    expect(res.status).toBe(200);
+    expect(await count("SELECT COUNT(*)::text n FROM obligations WHERE invoice_id=$1 AND verification_status='confirmed'", [inv.id])).toBe(1);
+    const lines = (await pool.query<{ d: string; c: string; status: string }>(
+      `SELECT SUM(l.debit)::text d, SUM(l.credit)::text c, MAX(j.status) status FROM journal_entries j JOIN journal_lines l ON l.journal_entry_id = j.id
+       WHERE j.source_type='obligation' AND j.source_id=$1`, [res.json.obligation_id])).rows[0]!;
+    expect(lines.status).toBe('draft');
+    expect(Number(lines.d)).toBeGreaterThan(0);
+    expect(lines.d).toBe(lines.c);
+    expect(await count("SELECT COUNT(*)::text n FROM audit_log WHERE entity_id=$1 AND action='invoice.approve' AND actor_user_id=$2", [inv.id, ids.weakApprover])).toBe(1);
+    const manual = await clients.weakApprover!.req('POST', '/journals', { entryDate: '2026-03-10', description: 'manual', lines: [] });
+    expect(manual.status).toBe(403);
   });
 
   it('approves: one number, one confirmed obligation, one DRAFT journal, one VAT snapshot, never posted, audited', async () => {

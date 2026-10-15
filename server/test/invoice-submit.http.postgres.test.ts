@@ -83,9 +83,8 @@ describeDatabase('invoice submit/return API (PostgreSQL)', () => {
 
   const newDraft = async () => (await clients.submitter!.req('POST', '/invoices', draft())).json.invoice;
 
-  it('invoice.submit is explicit-grant-only: Full Access and edit-only roles are refused', async () => {
+  it('invoice.submit: edit-only roles are refused (Full Access holds it through the wildcard since 075)', async () => {
     const inv = await newDraft();
-    expect((await clients.ownerA!.req('POST', `/invoices/${inv.id}/submit`, { version: inv.version })).status).toBe(403);
     expect((await clients.editor!.req('POST', `/invoices/${inv.id}/submit`, { version: inv.version })).status).toBe(403);
     expect((await clients.editor!.req('POST', `/invoices/${inv.id}/return`, { version: inv.version })).status).toBe(403);
     expect((await clients.submitter!.req('POST', `/invoices/${inv.id}/submit`, { version: inv.version }, { origin: 'https://evil.example' })).status).toBe(403);

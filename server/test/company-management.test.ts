@@ -224,7 +224,9 @@ describe('company management service: tenant isolation and audit', () => {
     const service = new (await vi.importActual<typeof import('../src/modules/companies/company.service')>('../src/modules/companies/company.service')).CompanyManagementService(pool);
     const list = await service.listForUser('user');
     expect(list[0]).toMatchObject({ can_edit: true, can_toggle: false });
-    expect(String(query.mock.calls[0][0])).toContain('m.user_id = $1');
+    // First query: global System Admin check (false here), then the membership-scoped company list.
+    expect(String(query.mock.calls[0][0])).toContain('is_system_admin = TRUE');
+    expect(String(query.mock.calls[1][0])).toContain('m.user_id = $1');
   });
 });
 

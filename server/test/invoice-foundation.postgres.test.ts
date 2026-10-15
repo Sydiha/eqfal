@@ -280,12 +280,11 @@ describeDatabase('invoice foundation (migration 062) with PostgreSQL', () => {
     expect((await pool.query('SELECT 1 FROM invoices WHERE id=$1', [draft])).rowCount).toBe(1);
   });
 
-  it('permissions: invoice.* is explicit-grant-only (see invoice-explicit-grant.postgres.test.ts), never implicit for Full Access', async () => {
-    // Migration 063 registers invoice.view/create/edit with implicit_full_access = FALSE and grants them to no role.
-    // (Row-level "no grants" checks live in invoice-explicit-grant.postgres.test.ts, which owns its own fixtures.)
+  it('permissions: since migration 075 every invoice.* capability is part of the Full Access wildcard (no explicit-only exception)', async () => {
+    // Migration 063 originally registered invoice.* as explicit-only and granted them to no role; 075 removed the exception.
     expect(readFileSync(path.join(migrationsDir, '063_explicit_grant_capabilities.sql'), 'utf8')).not.toMatch(/INSERT\s+INTO\s+role_capabilities/i);
-    const registered = await pool.query("SELECT id FROM capabilities WHERE id LIKE 'invoice.%' AND implicit_full_access = TRUE");
-    expect(registered.rowCount).toBe(0);
+    const excluded = await pool.query("SELECT id FROM capabilities WHERE id LIKE 'invoice.%' AND implicit_full_access = FALSE");
+    expect(excluded.rowCount).toBe(0);
   });
 
   it('migration 062 leaves existing accounting data byte-identical', async () => {

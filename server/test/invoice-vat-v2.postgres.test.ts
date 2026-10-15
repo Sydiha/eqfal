@@ -23,7 +23,7 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
   const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catch (e) { return (e as { code?: string }).code ?? String(e); } };
   let creator: string; let approver: string;
   type Co = { id: string; fy: string; cust: string; supp: string; acc: Record<string, string> };
-  const CAPS = ['obligation.confirm', 'accounting.journal.create'];
+  const CAPS = ['invoice.approve'];
   const ALL_VIEW = ['document.view', 'obligation.view', 'bank.view', 'vat.view', 'accounting.view', 'asset.view', 'opening_balance.view', 'periodic_adjustment.view'];
   type L = { vat_rate: string; vat_treatment: string; unit_price?: string; quantity?: string; vat_recoverability?: string };
   // Purchase lines: standard lines state full recovery explicitly (the only supported value in V2).
@@ -362,8 +362,7 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     const { join } = await import('path');
     const services = ['invoice.service.ts', 'invoice-approval.service.ts', 'invoice.router.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
     expect((services.match(/SET status\s*=\s*'cancelled'[\s\S]*?\[invoiceId/gi) ?? []).every((w) => /status IN \('draft','submitted'\)/.test(w))).toBe(true);
-    // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
-    expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
+    // F1: registered (migration 070); since migration 075 Full Access holds it through the wildcard, without explicit grants.
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = TRUE`)).toBe(1);
   });
 });

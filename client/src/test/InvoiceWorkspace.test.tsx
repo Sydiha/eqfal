@@ -13,7 +13,7 @@ const base={id:ID,status:'draft',counterparty_id:PARTY,counterparty_name:'Gulf S
  obligation:null,journal:null,vat:{status:'pending',review_id:null,tax_date:null},paid_amount:null,outstanding_amount:null,actionable_status:'draft'};
 const approved={...base,status:'approved',internal_number:'PINV-0001',obligation:{id:OBLIGATION,is_cancelled:false,original_amount:'115.00'},journal:{id:JOURNAL,status:'draft'},vat:{status:'reviewed',review_id:'r',tax_date:'2026-10-01'},paid_amount:'15.00',outstanding_amount:'100.00',actionable_status:'awaiting_posting'};
 const caps={canView:true,canCreate:true,canEdit:true,canSubmit:true};
-const full={...caps,canApprove:true,canConfirmObligation:true,canCreateJournal:true,canPostJournal:true,canViewAccounting:true,canViewObligations:true,canViewVat:true,canViewDocuments:true,currentUserId:'approver'};
+const full={...caps,canApprove:true,canPostJournal:true,canViewAccounting:true,canViewObligations:true,canViewVat:true,canViewDocuments:true,currentUserId:'approver'};
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status});
 
 type Handler=(url:string,init?:RequestInit)=>Response|undefined;
@@ -264,10 +264,18 @@ describe('Approval, accounting and next action',()=>{
   expect(calls(fetchMock,'POST /api/obligations')).toEqual([]);
  });
 
+ it('lets an approver with invoice.approve alone (no journal or obligation permissions) approve',async()=>{
+  const fetchMock=mockApi(submitted,(key)=>key===`POST /api/invoices/${ID}/approve`?json({invoice:approved,obligation_id:OBLIGATION,journal_id:JOURNAL,vat_review_id:'r'}):undefined);
+  render(<InvoiceWorkspace {...full} canPostJournal={false} canViewAccounting={false} canViewObligations={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('REF-9'));
+  const button=await screen.findByRole('button',{name:'Approve invoice'});
+  expect(button).toBeEnabled();
+  fireEvent.click(button);
+  await waitFor(()=>expect(calls(fetchMock,`POST /api/invoices/${ID}/approve`).length).toBe(1));
+ });
+
  it.each([
   ['a user without invoice.approve',{...full,canApprove:false},'You do not have permission to approve invoices.'],
-  ['a user missing obligation.confirm',{...full,canConfirmObligation:false},'Approval also needs permission to confirm obligations and create journals.'],
-  ['a user missing accounting.journal.create',{...full,canCreateJournal:false},'Approval also needs permission to confirm obligations and create journals.'],
  ])('disables approval for %s and explains why',async(_name,userCaps,message)=>{
   const fetchMock=mockApi(submitted);
   render(<InvoiceWorkspace {...userCaps} onUnauthorized={vi.fn()}/>);

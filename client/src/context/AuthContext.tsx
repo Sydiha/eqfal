@@ -17,6 +17,8 @@ export interface AuthCompany {
 export interface AuthUser {
   id: string;
   email: string;
+  /** Global System Admin (server-verified on every admin request; this flag only shows the administration UI). */
+  isSystemAdmin?: boolean;
 }
 
 export interface AuthSession {

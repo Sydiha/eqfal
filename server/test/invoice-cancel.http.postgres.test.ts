@@ -100,12 +100,12 @@ describeDatabase('invoice cancel API (PostgreSQL)', () => {
     numbers: await count('SELECT COUNT(*)::text n FROM invoice_number_counters WHERE company_id=$1', [ids.coA]),
   });
 
-  it('registers invoice.cancel as explicit-grant-only; Full Access, creators and approvers are refused', async () => {
+  it('Full Access holds invoice.cancel through the wildcard (migration 075); creators and approvers without it are refused', async () => {
     const row = (await pool.query<{ implicit_full_access: boolean }>("SELECT implicit_full_access FROM capabilities WHERE id='invoice.cancel'")).rows[0];
-    expect(row?.implicit_full_access).toBe(false);
-    expect((await pool.query("SELECT 1 FROM role_capabilities WHERE capability_id='invoice.cancel' AND role_id IN (SELECT id FROM roles WHERE is_full_access)")).rowCount).toBe(0);
+    expect(row?.implicit_full_access).toBe(true);
+    const owned = await created();
+    expect((await cancel('ownerA', owned)).status).toBe(200);
     const inv = await created();
-    expect((await cancel('ownerA', inv)).status).toBe(403);
     expect((await cancel('creator', inv)).status).toBe(403);
     expect((await cancel('approver', inv)).status).toBe(403);
     expect((await clients.canceller!.req('POST', `/invoices/${inv.id}/cancel`, { version: inv.version, reason: 'x' }, { origin: 'https://evil.example' })).status).toBe(403);

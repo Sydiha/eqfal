@@ -22,7 +22,7 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
   const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catch (e) { return (e as { code?: string }).code ?? String(e); } };
   let creator: string; let approver: string; let registrant: string;
   type Co = { id: string; fy: string; cust: string; supp: string; vatPeriod: string; acc: Record<string, string> };
-  const CAPS = ['obligation.confirm', 'accounting.journal.create'];
+  const CAPS = ['invoice.approve', 'invoice.adjust_approve'];
   type L = { description: string; quantity: string; unit_price: string; vat_rate: string; vat_treatment: string; vat_recoverability?: string; vat_recoverable_percent?: unknown };
   const std = (recov?: string, percent?: unknown, price = '1000.00'): L => ({ description: 'std', quantity: '1', unit_price: price, vat_rate: '15', vat_treatment: 'standard',
     ...(recov ? { vat_recoverability: recov } : {}), ...(percent !== undefined ? { vat_recoverable_percent: percent } : {}) });
@@ -91,8 +91,8 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
   });
   afterAll(async () => { await pool?.end(); });
 
-  it('registers invoice.adjust and invoice.adjust_approve as explicit-grant-only capabilities with no grants', async () => {
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id IN ('invoice.adjust','invoice.adjust_approve') AND implicit_full_access = FALSE`)).toBe(2);
+  it('registers invoice.adjust and invoice.adjust_approve with no explicit grants; Full Access holds them through the wildcard (075)', async () => {
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id IN ('invoice.adjust','invoice.adjust_approve') AND implicit_full_access = TRUE`)).toBe(2);
     expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id IN ('invoice.adjust','invoice.adjust_approve')`)).toBe(0);
   });
 
@@ -197,7 +197,7 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
     expect(() => parseAdjustment({ ...noteBody('credit', [nl('1.00')]), vat_amount: '1.00' }, 'create')).toThrow(/unknown fields/);
   });
 
-  it('capabilities and versions: approval needs the accounting capabilities; the registrant holding them may approve', async () => {
+  it('capabilities and versions: approval needs invoice.adjust_approve (not the manual accounting capabilities); the registrant holding it may approve', async () => {
     const co = await company('sep');
     const inv = await posted(co, 'sales', [std()]);
     const d = await create(co, inv.id, noteBody('credit', [nl('100.00')]));

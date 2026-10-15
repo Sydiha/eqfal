@@ -29,7 +29,8 @@ function setup() {
   const capsOf = (userId: string) => {
     const m = members[userId];
     if (!m || !m.is_active || !m.role_id) return [];
-    return roles[m.role_id]!.is_full_access ? ['*all*', ...Object.values(roleCaps).flat()] : roleCaps[m.role_id]!;
+    // Full Access is a wildcard over every registered capability (migration 075), access.full_access.grant included.
+    return roles[m.role_id]!.is_full_access ? ['*all*', 'access.full_access.grant', ...Object.values(roleCaps).flat()] : roleCaps[m.role_id]!;
   };
   const client = { query: vi.fn().mockResolvedValue({ rows: [] }), release: vi.fn() } as unknown as PoolClient;
   const pool = { connect: vi.fn().mockResolvedValue(client), query: vi.fn() } as unknown as Pool;
@@ -46,6 +47,7 @@ function setup() {
     const m = members[userId];
     return !!m && m.is_active && !!m.role_id && roles[m.role_id]!.is_full_access;
   });
+  vi.spyOn(repo, 'isActiveSystemAdmin').mockResolvedValue(false);
   vi.spyOn(repo, 'lockActiveFullAccessMembershipIds').mockImplementation(async () =>
     Object.values(members).filter((m) => m.is_active && m.role_id && roles[m.role_id]!.is_full_access).map((m) => m.id));
   const setActive = vi.spyOn(repo, 'setMembershipActive').mockImplementation(async (id, _c, active) => { const m = byId(id)!; m.is_active = active; return m; });
