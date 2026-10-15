@@ -151,6 +151,38 @@ accessAdministrationRouter.post('/access/roles', ...writeGuards('access.role.cre
   catch (error) { if (!handleKnownError(error, res)) throw error; }
 }));
 
+accessAdministrationRouter.get('/access/memberships/:id/details', ...readGuards, asyncRoute(async (req, res) => {
+  const value = service(res);
+  if (!value) return;
+  if (!UUID.test(req.params.id)) { res.status(400).json({ error: 'Invalid access administration request' }); return; }
+  const ctx = context(req);
+  try { res.json(await value.getMembershipDetails(req.params.id, ctx.activeCompanyId, ctx.user.id)); }
+  catch (error) { if (!handleKnownError(error, res)) throw error; }
+}));
+
+const roleName = (body: unknown): string | null =>
+  exactObject(body, ['name']) && typeof body.name === 'string' && body.name.trim() && body.name.trim().length <= 100 ? body.name.trim() : null;
+
+accessAdministrationRouter.post('/access/roles/:id/clone', ...writeGuards('access.role.create'), asyncRoute(async (req, res) => {
+  const value = service(res);
+  if (!value) return;
+  const name = roleName(req.body);
+  if (!UUID.test(req.params.id) || !name) { res.status(400).json({ error: 'Invalid access administration request' }); return; }
+  const ctx = context(req);
+  try { res.status(201).json(await value.cloneRole(req.params.id, name, ctx.activeCompanyId, ctx.user.id)); }
+  catch (error) { if (!handleKnownError(error, res)) throw error; }
+}));
+
+accessAdministrationRouter.patch('/access/roles/:id', ...writeGuards('access.role.create'), asyncRoute(async (req, res) => {
+  const value = service(res);
+  if (!value) return;
+  const name = roleName(req.body);
+  if (!UUID.test(req.params.id) || !name) { res.status(400).json({ error: 'Invalid access administration request' }); return; }
+  const ctx = context(req);
+  try { res.json(await value.renameRole(req.params.id, name, ctx.activeCompanyId, ctx.user.id)); }
+  catch (error) { if (!handleKnownError(error, res)) throw error; }
+}));
+
 accessAdministrationRouter.put('/access/memberships/:id/role', ...writeGuards('access.membership.role.assign'), asyncRoute(async (req, res) => {
   const value = service(res);
   if (!value) return;

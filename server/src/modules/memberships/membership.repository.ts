@@ -11,6 +11,18 @@ export interface ActiveCompanyMembership {
   role_id: string | null;
 }
 
+export interface UserMembershipRow {
+  membership_id: string;
+  company_id: string;
+  company_name: string;
+  company_name_ar: string | null;
+  company_is_active: boolean;
+  is_active: boolean;
+  role_id: string | null;
+  role_name: string | null;
+  role_is_full_access: boolean;
+}
+
 /**
  * MembershipRepository
  *
@@ -126,6 +138,32 @@ export class MembershipRepository {
       'SELECT * FROM roles WHERE id = $1',
       [id],
     );
+    return rows[0] ?? null;
+  }
+
+  async renameRole(id: string, companyId: string, name: string, client: PoolClient): Promise<Role | null> {
+    const { rows } = await client.query<Role>('UPDATE roles SET name = $3 WHERE id = $1 AND company_id = $2 RETURNING *', [id, companyId, name]);
+    return rows[0] ?? null;
+  }
+
+  /** Every membership of one user with company and role display fields. Callers MUST filter to the actor's visible companies. */
+  async listMembershipsOfUser(userId: string): Promise<UserMembershipRow[]> {
+    const { rows } = await this.pool.query<UserMembershipRow>(
+      `SELECT m.id AS membership_id, m.company_id, c.name AS company_name, c.name_ar AS company_name_ar, c.is_active AS company_is_active,
+              m.is_active, m.role_id, r.name AS role_name, COALESCE(r.is_full_access, FALSE) AS role_is_full_access
+       FROM memberships m
+       JOIN companies c ON c.id = m.company_id
+       LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       WHERE m.user_id = $1
+       ORDER BY c.created_at, c.id`,
+      [userId],
+    );
+    return rows;
+  }
+
+  async findUserSummary(userId: string): Promise<{ id: string; email: string; is_active: boolean; is_system_admin: boolean } | null> {
+    const { rows } = await this.pool.query<{ id: string; email: string; is_active: boolean; is_system_admin: boolean }>(
+      'SELECT id, email, is_active, is_system_admin FROM users WHERE id = $1', [userId]);
     return rows[0] ?? null;
   }
 
