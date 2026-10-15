@@ -53,7 +53,7 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain("'opening_balance','draft'");
     expect(source).toContain('year.start_date');
     expect(source).toContain('journal_entry_id');
-    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
+    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id,\s*\{\s*openingBalanceReviewId:\s*review\.id\s*\}\)/);
     expect(posting).toContain('Journal is not balanced');
     expect(posting).toContain('Opening balance date must equal fiscal year start');
   });
@@ -69,7 +69,7 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain("await c.query('BEGIN')");
     expect(source).toContain("await c.query('COMMIT')");
     expect(source).toContain("await c.query('ROLLBACK')");
-    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
+    expect(source).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id,\s*\{\s*openingBalanceReviewId:\s*review\.id\s*\}\)/);
   });
 
   it('keeps suggestions advisory, sequential on one client and avoids inferred partner balances',()=>{
