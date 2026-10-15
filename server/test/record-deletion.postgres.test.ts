@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
+import { DocumentFileCleanup } from '../src/modules/documents/document-file-cleanup';
 import { RecordDeletionService } from '../src/modules/record-deletion/record-deletion.service';
 import type { StorageAdapter } from '../src/storage/storage.adapter';
 
@@ -30,6 +31,7 @@ describeDatabase('record deletion (PostgreSQL)', () => {
   });
   afterAll(async () => {
     const both = [A, B];
+    await q('DELETE FROM storage_deletion_queue WHERE company_id = ANY($1::uuid[])', [[A, B]]);
     await q('DELETE FROM audit_log WHERE company_id = ANY($1::uuid[])', [both]);
     await q('DELETE FROM obligations WHERE company_id = ANY($1::uuid[])', [both]);
     await q('DELETE FROM partner_ownership_periods WHERE company_id = ANY($1::uuid[])', [both]);
@@ -98,16 +100,40 @@ describeDatabase('record deletion (PostgreSQL)', () => {
     expect(await count('SELECT count(*) n FROM periodic_adjustments WHERE id=ANY($1::uuid[])', [[draft, review]])).toBe(1);
   });
 
-  it('bank import batch: deletes an unconfirmed batch and its file; keeps a confirmed one', async () => {
+  async function batchRow(co: string, status: string, account: string) {
+    const key = `${co}/${randomUUID()}`;
+    return { key, id: (await q<{ id: string }>(`INSERT INTO bank_import_batches (company_id,bank_account_id,original_filename,mime_type,source_format,storage_key,file_sha256,status,created_by) VALUES ($1,$2,'f.csv','text/csv','csv',$3,$3,$4,$5) RETURNING id`, [co, account, key, status, user]))[0]!.id };
+  }
+  it('bank import batch: unconfirmed batch is deleted and its file removed through the shared durable queue; confirmed one is kept', async () => {
     const account = (await q<{ id: string }>(`INSERT INTO bank_accounts (company_id,display_name,currency_code,created_by) VALUES ($1,'B','SAR',$2) RETURNING id`, [A, user]))[0]!.id;
-    const batch = async (status: string) => { const key = `${A}/${randomUUID()}`; return { key, id: (await q<{ id: string }>(`INSERT INTO bank_import_batches (company_id,bank_account_id,original_filename,mime_type,source_format,storage_key,file_sha256,status,created_by) VALUES ($1,$2,'f.csv','text/csv','csv',$3,$3,$4,$5) RETURNING id`, [A, account, key, status, user]))[0]!.id }; };
-    const open = await batch('preview_ready'); const done = await batch('confirmed');
+    const open = await batchRow(A, 'preview_ready', account); const done = await batchRow(A, 'confirmed', account);
     await expect(svc.deleteBankImportBatch(A, user, done.id)).rejects.toMatchObject({ reason: 'confirmed' });
     await expect(svc.deleteBankImportBatch(B, user, open.id)).rejects.toThrow();
-    await svc.deleteBankImportBatch(A, user, open.id);
+    expect(await svc.deleteBankImportBatch(A, user, open.id)).toEqual({ storage_cleanup: 'done' });
     expect(removed).toContain(open.key);
     expect(removed).not.toContain(done.key);
     expect(await count('SELECT count(*) n FROM bank_import_batches WHERE id=ANY($1::uuid[])', [[open.id, done.id]])).toBe(1);
+    const queued = (await q<{ store: string; status: string }>('SELECT store, status FROM storage_deletion_queue WHERE storage_key=$1', [open.key]))[0]!;
+    expect(queued).toEqual({ store: 'bank-imports', status: 'done' });
+  });
+  it('bank import file: a failed removal stays queued and is retried by the worker; unowned or re-referenced keys are skipped, never deleted', async () => {
+    const account = (await q<{ id: string }>(`SELECT id FROM bank_accounts WHERE company_id=$1 LIMIT 1`, [A]))[0]!.id;
+    let fail = true; const gone: string[] = [];
+    const flaky: StorageAdapter = { put: async () => undefined, get: async () => Buffer.alloc(0), delete: async (k: string) => { if (fail) throw new Error('storage down'); gone.push(k); } };
+    const flakySvc = new RecordDeletionService(pool, flaky);
+    const b = await batchRow(A, 'mapping_required', account);
+    expect(await flakySvc.deleteBankImportBatch(A, user, b.id)).toEqual({ storage_cleanup: 'pending' });
+    expect((await q<{ status: string; attempts: number }>('SELECT status, attempts FROM storage_deletion_queue WHERE storage_key=$1', [b.key]))[0]).toMatchObject({ status: 'pending', attempts: 1 });
+    fail = false;
+    await q(`UPDATE storage_deletion_queue SET next_attempt_at = NOW() WHERE storage_key=$1`, [b.key]);
+    expect(await new DocumentFileCleanup(pool, flaky, { 'bank-imports': flaky }).process()).toMatchObject({ done: 1 });
+    expect(gone).toEqual([b.key]);
+    // a key that belongs to another company prefix is never removed (the table CHECK forbids queuing it; simulate by a key re-referenced by a batch)
+    const live = await batchRow(A, 'preview_ready', account);
+    const qid = (await q<{ id: string }>(`INSERT INTO storage_deletion_queue (store, company_id, document_id, storage_key) VALUES ('bank-imports',$1,$2,$3) RETURNING id`, [A, randomUUID(), live.key]))[0]!.id;
+    expect(await new DocumentFileCleanup(pool, flaky, { 'bank-imports': flaky }).process([qid])).toMatchObject({ skipped: 1, done: 0 });
+    expect(gone).toEqual([b.key]);
+    await q('DELETE FROM storage_deletion_queue WHERE company_id=ANY($1::uuid[])', [[A, B]]);
   });
 
   it('counterparty: deleted only when unreferenced, with version check and company isolation', async () => {

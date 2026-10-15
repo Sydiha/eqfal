@@ -8,7 +8,7 @@ Rule applied everywhere: DRAFT → delete; SUBMITTED → return to draft / cance
 |---|---|---|---|
 | Accounting | Delete manual draft journal | status `draft`, no operational source, standard entry, open period, nothing references it | `accounting.journal.delete` |
 | Accruals / prepayments | Delete draft | `workflow_status = draft`, open period, no schedule/journal | `periodic_adjustment.delete` |
-| Banking | Delete unconfirmed import batch (+ its file after commit) | `mapping_required` / `preview_ready` (no transactions exist) | `bank.import.delete` |
+| Banking | Delete unconfirmed import batch (file removal via the shared durable `storage_deletion_queue`, retried automatically) | `mapping_required` / `preview_ready` (no transactions exist) | `bank.import.delete` |
 | Receivables/payables | Delete customer/supplier | referenced by no table (FK catalog scan), version check | `counterparty.delete` |
 | Partners | Delete partner | no ownership history / other reference, version check | `partner.delete` |
 

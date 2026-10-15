@@ -23,7 +23,7 @@ function parseVersion(req: Request): number {
   return typeof raw === 'string' && /^[1-9]\d{0,9}$/.test(raw) ? Number(raw) : NaN;
 }
 
-function deletion(code: string, needsVersion: boolean, run: (svc: RecordDeletionService, companyId: string, actor: string, id: string, version: number) => Promise<void>): RequestHandler {
+function deletion(code: string, needsVersion: boolean, run: (svc: RecordDeletionService, companyId: string, actor: string, id: string, version: number) => Promise<void | object>): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     void (async () => {
       const id = req.params.id!;
@@ -33,8 +33,8 @@ function deletion(code: string, needsVersion: boolean, run: (svc: RecordDeletion
       if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
       const ctx = getAuthenticatedContext(req)!;
       try {
-        await run(new RecordDeletionService(pool, bankStorage), ctx.activeCompanyId!, ctx.user.id, id, version);
-        res.json({ deleted: true, id });
+        const extra = await run(new RecordDeletionService(pool, bankStorage), ctx.activeCompanyId!, ctx.user.id, id, version);
+        res.json({ deleted: true, id, ...(extra ?? {}) });
       } catch (error) {
         if (error instanceof RecordNotFoundError) { res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' }); return; }
         if (error instanceof RecordVersionConflictError) { res.status(409).json({ error: 'The record changed. Reload and try again.', code: 'VERSION_CONFLICT' }); return; }

@@ -4,7 +4,7 @@ import { DocumentFileCleanup } from '../src/modules/documents/document-file-clea
 import type { StorageAdapter } from '../src/storage/storage.adapter';
 
 // Retry behaviour of the durable file-removal queue (SQL-level mock; real database coverage is in document-delete.postgres.test.ts).
-let rows: { id: string; company_id: string; storage_key: string; attempts: number }[];
+let rows: { id: string; store: string; company_id: string; storage_key: string; attempts: number }[];
 let referenced: boolean;
 const updates: string[] = [];
 const client = {
@@ -21,7 +21,7 @@ const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
 const storage: StorageAdapter = { put: vi.fn(), get: vi.fn(), delete: vi.fn() };
 
 beforeEach(() => {
-  rows = [{ id: 'q1', company_id: 'co-a', storage_key: 'co-a/key-1', attempts: 0 }];
+  rows = [{ id: 'q1', store: 'documents', company_id: 'co-a', storage_key: 'co-a/key-1', attempts: 0 }];
   referenced = false;
   updates.length = 0;
   vi.mocked(storage.delete).mockReset().mockResolvedValue();

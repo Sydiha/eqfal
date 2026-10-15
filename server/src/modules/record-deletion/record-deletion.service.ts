@@ -4,6 +4,7 @@ import { assertAccountingDateWritable, assertAccountingRangeWritable } from '../
 import { DeleteBlockedError, findReferencingTable } from '../../shared/delete-guard';
 import logger from '../../shared/logger';
 import type { StorageAdapter } from '../../storage/storage.adapter';
+import { DocumentFileCleanup } from '../documents/document-file-cleanup';
 
 export class RecordNotFoundError extends Error {}
 export class RecordVersionConflictError extends Error {}
@@ -17,7 +18,11 @@ type Row = Record<string, unknown>;
  */
 export class RecordDeletionService {
   private readonly audit = new AuditLogRepository();
-  constructor(private readonly db: Pool, private readonly bankFiles?: StorageAdapter) {}
+  private readonly cleanup: DocumentFileCleanup | null;
+  /** bankFiles: the bank-imports store; its file removals use the shared durable storage_deletion_queue (documents, 078). */
+  constructor(private readonly db: Pool, bankFiles?: StorageAdapter) {
+    this.cleanup = bankFiles ? new DocumentFileCleanup(db, bankFiles, { 'bank-imports': bankFiles }) : null;
+  }
 
   private async tx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.db.connect();
@@ -77,19 +82,25 @@ export class RecordDeletionService {
     });
   }
 
-  /** Bank import batch that was never confirmed (no bank transaction exists). The uploaded file is removed after commit, best effort. */
-  async deleteBankImportBatch(companyId: string, actor: string, id: string): Promise<void> {
-    const batch = await this.tx(async (client) => {
+  /** Bank import batch that was never confirmed (no bank transaction exists). The file removal is queued in the same transaction and retried until done. */
+  async deleteBankImportBatch(companyId: string, actor: string, id: string): Promise<{ storage_cleanup: 'done' | 'pending' }> {
+    const { queueId } = await this.tx(async (client) => {
       const current = await this.lock(client, 'bank_import_batches', id, companyId);
       if (current.status === 'confirmed') throw new DeleteBlockedError('confirmed');
       await this.assertUnreferenced(client, 'bank_import_batches', id, companyId);
       await client.query('DELETE FROM bank_import_batches WHERE id = $1 AND company_id = $2', [id, companyId]);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actor, action: 'bank_import.delete', entity_type: 'bank_import_batch', entity_id: id, before_data: this.snapshot(current) as never, after_data: null }, client);
-      return current;
+      // Ownership (company prefix) and "no batch references this key" are re-checked by the queue worker before the physical delete.
+      const queueId = this.cleanup ? await this.cleanup.enqueue(client, companyId, id, String(current.storage_key), 'bank-imports') : null;
+      return { queueId };
     });
-    // The (company_id, file_sha256) key is unique, so no other batch can share this file; an orphan left by a failed removal is unreferenced and harmless.
-    if (this.bankFiles && typeof batch.storage_key === 'string' && batch.storage_key.startsWith(`${companyId}/`)) {
-      await this.bankFiles.delete(batch.storage_key).catch((err) => logger.error({ err, batchId: id }, 'Bank import deleted; stored file removal failed'));
+    if (!this.cleanup || !queueId) return { storage_cleanup: 'pending' };
+    try {
+      const outcome = await this.cleanup.process([queueId]);
+      return { storage_cleanup: outcome.done ? 'done' : 'pending' };
+    } catch (err) {
+      logger.error({ err, batchId: id }, 'Bank import deleted; file cleanup stays queued for retry');
+      return { storage_cleanup: 'pending' };
     }
   }
 

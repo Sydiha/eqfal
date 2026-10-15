@@ -25,3 +25,9 @@ BEGIN
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END $$;
+
+-- Reuse the durable storage_deletion_queue (078) for deleted bank-import files: allow the 'bank-imports' store
+-- (document_id keeps holding the deleted document id for 'documents' and the deleted import batch id for 'bank-imports').
+-- Rollback: only after confirming no 'bank-imports' row exists: DELETE them, restore the single-store CHECK.
+ALTER TABLE storage_deletion_queue DROP CONSTRAINT storage_deletion_queue_store_check;
+ALTER TABLE storage_deletion_queue ADD CONSTRAINT storage_deletion_queue_store_check CHECK (store IN ('documents', 'bank-imports'));

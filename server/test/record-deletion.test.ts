@@ -84,6 +84,8 @@ describe('RecordDeletionService (mocked database)', () => {
   const run = (fn: (s: RecordDeletionService) => Promise<void>, { row = {}, ref = null }: Opts = {}) => {
     client.query.mockReset(); files.delete.mockReset().mockResolvedValue(undefined);
     client.query.mockImplementation(async (sql: string) => {
+      if (/INSERT INTO storage_deletion_queue/.test(sql)) return { rows: [{ id: 'q1' }], rowCount: 1 };
+      if (/FROM storage_deletion_queue/.test(sql)) return { rows: [], rowCount: 0 };
       if (/FOR UPDATE/.test(sql)) return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
       if (/pg_constraint/.test(sql)) return { rows: ref ? [{ tbl: ref, pairs: [{ col: 'x', ref: 'id' }] }] : [], rowCount: ref ? 1 : 0 };
       if (/^SELECT 1 FROM/.test(sql)) return { rows: [{}], rowCount: 1 };
@@ -133,14 +135,16 @@ describe('RecordDeletionService (mocked database)', () => {
     await run((s) => s.deletePeriodicAdjustment('company-a', 'u', ID), { row: { workflow_status: 'draft' } });
     expect(issued().some((s) => /DELETE FROM periodic_adjustments/.test(s))).toBe(true);
   });
-  it('bank import: refuses a confirmed batch; deletes an unconfirmed one and removes the file after commit', async () => {
+  it('bank import: refuses a confirmed batch; an unconfirmed one is deleted and its file removal is queued in the same transaction', async () => {
     await expect(run((s) => s.deleteBankImportBatch('company-a', 'u', ID), { row: { status: 'confirmed', storage_key: 'company-a/k' } })).rejects.toMatchObject({ reason: 'confirmed' });
     noDelete();
-    expect(files.delete).not.toHaveBeenCalled();
+    expect(issued().some((s) => /storage_deletion_queue/.test(s))).toBe(false);
     await run((s) => s.deleteBankImportBatch('company-a', 'u', ID), { row: { status: 'preview_ready', storage_key: 'company-a/k' } });
-    expect(files.delete).toHaveBeenCalledWith('company-a/k');
-    await run((s) => s.deleteBankImportBatch('company-a', 'u', ID), { row: { status: 'mapping_required', storage_key: 'company-b/k' } });
-    expect(files.delete).not.toHaveBeenCalled();
+    const queued = client.query.mock.calls.find(([sql]) => /INSERT INTO storage_deletion_queue/.test(String(sql)));
+    expect(queued![1]).toEqual(['bank-imports', 'company-a', ID, 'company-a/k']);
+    const order = issued();
+    expect(order.findIndex((s) => /DELETE FROM bank_import_batches/.test(s))).toBeLessThan(order.findIndex((s) => /INSERT INTO storage_deletion_queue/.test(s)));
+    expect(order.indexOf('COMMIT')).toBeGreaterThan(order.findIndex((s) => /INSERT INTO storage_deletion_queue/.test(s)));
   });
   it('counterparty and partner: stale version and any reference block the delete', async () => {
     await expect(run((s) => s.deleteCounterparty('company-a', 'u', ID, 3), { row: { version: 4 } })).rejects.toThrow();
