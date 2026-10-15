@@ -60,7 +60,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
   const n = async (sql: string, p: unknown[] = []) => Number((await pool.query<{ n: string }>(sql, p)).rows[0]!.n);
   const roleId = async (company: string, name: string) => (await q<{ id: string }>('SELECT id FROM roles WHERE company_id=$1 AND name=$2', [company, name]))[0]!.id;
   const membershipId = async (user: string, company: string) => (await q<{ id: string }>('SELECT id FROM memberships WHERE user_id=$1 AND company_id=$2', [user, company]))[0]!.id;
-  const allCaps = async () => (await q<{ id: string }>('SELECT id FROM capabilities ORDER BY id')).map((r) => r.id);
+  const allCaps = async () => (await q<{ id: string }>('SELECT id FROM capabilities')).map((r) => r.id).sort();
 
   beforeAll(async () => {
     await adminPool.query(`CREATE DATABASE ${dbName}`);
