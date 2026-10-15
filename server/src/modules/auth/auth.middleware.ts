@@ -36,6 +36,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return;
   }
 
+  // A user holding an administratively issued temporary password may only change it (auth router) or sign out.
+  if (context.user.mustChangePassword) {
+    res.status(403).json({ error: 'Password change required', code: 'PASSWORD_CHANGE_REQUIRED' });
+    return;
+  }
+
   (req as RequestWithAuth)[AUTH_CONTEXT] = context;
   next();
 }

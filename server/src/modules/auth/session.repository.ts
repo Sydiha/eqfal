@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 export interface SessionRow {
   id: string;
@@ -13,6 +13,7 @@ export interface SessionRow {
 export interface ActiveSessionRow extends SessionRow {
   user_email: string;
   user_is_system_admin: boolean;
+  user_must_change_password: boolean;
 }
 
 export class SessionRepository {
@@ -23,8 +24,8 @@ export class SessionRepository {
     tokenHash: string;
     activeCompanyId: string | null;
     expiresAt: Date;
-  }): Promise<SessionRow> {
-    const { rows } = await this.pool.query<SessionRow>(
+  }, client?: PoolClient): Promise<SessionRow> {
+    const { rows } = await (client ?? this.pool).query<SessionRow>(
       `INSERT INTO sessions (user_id, token_hash, active_company_id, expires_at)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
@@ -35,7 +36,8 @@ export class SessionRepository {
 
   async findActiveByTokenHash(tokenHash: string): Promise<ActiveSessionRow | null> {
     const { rows } = await this.pool.query<ActiveSessionRow>(
-      `SELECT s.*, u.email AS user_email, u.is_system_admin AS user_is_system_admin
+      `SELECT s.*, u.email AS user_email, u.is_system_admin AS user_is_system_admin,
+              u.must_change_password AS user_must_change_password
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1
@@ -57,5 +59,10 @@ export class SessionRepository {
 
   async deleteByTokenHash(tokenHash: string): Promise<void> {
     await this.pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
+  }
+
+  /** Ends every session of a user (password change or reset). */
+  async deleteAllForUser(userId: string, client?: PoolClient): Promise<void> {
+    await (client ?? this.pool).query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   }
 }

@@ -17,13 +17,15 @@ export type NavigationPage =
   | 'companyProfile'
   | 'access'
   | 'companies'
-  | 'auditLog';
+  | 'auditLog'
+  | 'account';
 
 const has = (capabilities: readonly string[], capability: string) => capabilities.includes(capability);
 
 export function canShowNavigationPage(page: NavigationPage, capabilities: readonly string[]): boolean {
   switch (page) {
     case 'home':
+    case 'account':
       return true;
     case 'sales':
       // Invoice access is independent of the legacy document/obligation access.

@@ -19,6 +19,8 @@ export interface AuthUser {
   email: string;
   /** Global System Admin (server-verified on every admin request; this flag only shows the administration UI). */
   isSystemAdmin?: boolean;
+  /** Set after an administrative reset: only the change-password screen and sign-out are available until it is cleared. */
+  mustChangePassword?: boolean;
 }
 
 export interface AuthSession {
@@ -33,6 +35,8 @@ interface AuthContextValue {
   session: AuthSession | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  /** Resolves on success (session replaced); rejects with an ApiError carrying a stable `code` otherwise. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   switchCompany: (companyId: string) => Promise<boolean>;
   refreshSession: () => Promise<void>;
   handleUnauthorized: () => void;
@@ -101,6 +105,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
+    let response: Response;
+    try {
+      response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+    } catch (reason) {
+      throw toApiError(reason);
+    }
+    if (response.status === 401) { setSession(null); }
+    if (!response.ok) throw await parseApiError(response);
+    // The server ended every old session and issued a fresh cookie for this browser: adopt the returned context.
+    setSession(await response.json() as AuthSession);
+  }, []);
+
   const switchCompany = useCallback(async (companyId: string): Promise<boolean> => {
     const response = await fetch('/api/auth/switch-company', {
       method: 'POST',
@@ -133,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ loading, session, login, logout, switchCompany, refreshSession, handleUnauthorized }}>
+    <AuthContext.Provider value={{ loading, session, login, logout, changePassword, switchCompany, refreshSession, handleUnauthorized }}>
       {children}
     </AuthContext.Provider>
   );

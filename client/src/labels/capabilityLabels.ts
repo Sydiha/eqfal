@@ -58,6 +58,7 @@ const GROUPS: Record<string, Pair> = {
 const OVERRIDES: Record<string, Pair> = {
   'access.view': ['View users & permissions', 'عرض المستخدمين والصلاحيات'], 'access.manage': ['Manage users & permissions', 'إدارة الصلاحيات'],
   'access.membership.create': ['Add company members', 'إنشاء عضوية مستخدم'], 'access.membership.role.assign': ['Assign roles to members', 'تعيين دور للعضو'],
+  'access.user.password.reset': ['Reset member passwords', 'إعادة تعيين كلمات مرور الأعضاء'],
   'access.membership.status.edit': ['Change membership status', 'تعديل حالة العضوية'], 'access.role.create': ['Create roles', 'إنشاء دور'],
   'access.role.capability.grant': ['Grant permissions to roles', 'منح صلاحيات للدور'], 'access.role.capability.revoke': ['Revoke permissions from roles', 'سحب صلاحيات من الدور'],
   'annual_close.package.finalize': ['Finalize annual closing packages', 'الاعتماد النهائي لحزمة الإقفال السنوي'],

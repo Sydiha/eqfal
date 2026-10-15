@@ -1,8 +1,12 @@
 import crypto from 'crypto';
 import { Pool } from 'pg';
+import bcrypt from 'bcrypt';
 import { AuthService } from '../users/auth.service';
 import { MembershipRepository, ActiveCompanyMembership } from '../memberships/membership.repository';
 import { SessionRepository } from './session.repository';
+import { UserRepository } from '../users/user.repository';
+import { PasswordPolicyViolation, validateNewPassword } from '../users/password-policy';
+import { AuditLogRepository } from '../audit-log/audit-log.repository';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -18,6 +22,8 @@ export interface AuthSessionContext {
     email: string;
     /** Global System Admin (users.is_system_admin). Display/UX hint only; every check is re-derived server-side. */
     isSystemAdmin: boolean;
+    /** Set by an administrative reset: the API allows only change-password, session read and logout until it is cleared. */
+    mustChangePassword: boolean;
   };
   allowedCompanies: AllowedCompany[];
   activeCompanyId: string | null;
@@ -86,7 +92,7 @@ export class SessionService {
 
     return {
       token,
-      user: { id: user.id, email: user.email, isSystemAdmin },
+      user: { id: user.id, email: user.email, isSystemAdmin, mustChangePassword: user.must_change_password === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId,
       capabilities,
@@ -113,7 +119,7 @@ export class SessionService {
       : [];
 
     return {
-      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true },
+      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: session.user_must_change_password === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: reconciledCompanyId,
       capabilities,
@@ -123,6 +129,7 @@ export class SessionService {
   async switchCompany(token: string, requestedCompanyId: string): Promise<AuthSessionContext | 'forbidden' | null> {
     const session = await this.sessions.findActiveByTokenHash(hashToken(token));
     if (!session) return null;
+    if (session.user_must_change_password === true) return 'forbidden';
 
     const memberships = await this.selectableCompanies(session.user_id, session.user_is_system_admin === true);
     const target = memberships.find((m) => m.company_id === requestedCompanyId);
@@ -135,7 +142,7 @@ export class SessionService {
     );
 
     return {
-      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true },
+      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: false },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: requestedCompanyId,
       capabilities,
@@ -144,5 +151,44 @@ export class SessionService {
 
   async logout(token: string): Promise<void> {
     await this.sessions.deleteByTokenHash(hashToken(token));
+  }
+
+  /**
+   * Own password change. Verifies the current password, applies the password policy, then in ONE transaction stores the new
+   * hash, clears must_change_password, ends EVERY session of the user (including other devices) and opens a fresh session
+   * for this browser, so the current user stays signed in while any stolen or stale session dies.
+   */
+  async changePassword(token: string, currentPassword: string, newPassword: string):
+    Promise<{ token: string; context: AuthSessionContext } | 'invalid_current' | PasswordPolicyViolation | null> {
+    const session = await this.sessions.findActiveByTokenHash(hashToken(token));
+    if (!session) return null;
+    const users = new UserRepository(this.pool);
+    const user = await users.findById(session.user_id);
+    if (!user || !user.is_active) return null;
+    if (!(await bcrypt.compare(currentPassword, user.password_hash))) return 'invalid_current';
+    const violation = validateNewPassword(newPassword, { email: user.email, currentPassword });
+    if (violation) return violation;
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    const newToken = crypto.randomBytes(32).toString('base64url');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await users.setPassword(user.id, hash, false, client);
+      await this.sessions.deleteAllForUser(user.id, client);
+      await this.sessions.create({ userId: user.id, tokenHash: hashToken(newToken), activeCompanyId: session.active_company_id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) }, client);
+      if (session.active_company_id) {
+        await new AuditLogRepository().logEvent({ company_id: session.active_company_id, actor_user_id: user.id, action: 'auth.password.change', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { sessions_revoked: true } }, client);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    const context = await this.getContext(newToken);
+    if (!context) return null;
+    return { token: newToken, context };
   }
 }

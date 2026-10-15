@@ -3,8 +3,11 @@ import pool from '../../db/pool';
 import config from '../../config';
 import { SessionService } from './session.service';
 import { requireSameOrigin } from './origin.middleware';
-import { loginRateLimiter } from './login-rate-limit';
+import { LoginRateLimiter, loginRateLimiter } from './login-rate-limit';
 import { SESSION_COOKIE } from './session-cookie';
+
+/** Wrong-current-password guessing from a stolen session: per client+account, per account, per client. Success refunds. */
+export const passwordChangeRateLimiter = new LoginRateLimiter({ maxPerIp: 30, maxPerEmailIp: 5, maxPerEmail: 10 });
 
 const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
@@ -144,6 +147,67 @@ authRouter.post('/auth/switch-company', requireSameOrigin, asyncRoute(async (req
   }
 
   res.status(200).json(context);
+}));
+
+authRouter.post('/auth/change-password', requireSameOrigin, asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const token = readCookie(req, SESSION_COOKIE);
+  if (!token) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  const body = req.body as Record<string, unknown> | undefined;
+  const keysOk = !!body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).every((k) => k === 'currentPassword' || k === 'newPassword');
+  const currentPassword = keysOk && typeof body!.currentPassword === 'string' ? body!.currentPassword : '';
+  const newPassword = keysOk && typeof body!.newPassword === 'string' ? body!.newPassword : '';
+  if (!currentPassword || currentPassword.length > 256 || !newPassword || newPassword.length > 256) {
+    res.status(400).json({ error: 'Invalid password request', code: 'INVALID_PASSWORD_REQUEST' });
+    return;
+  }
+
+  const service = serviceOr503(res);
+  if (!service) return;
+
+  // Throttle by account (session user), never by anything the client controls except the IP.
+  const probe = await service.getContext(token);
+  if (!probe) {
+    clearSessionCookie(res);
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  const attempt = passwordChangeRateLimiter.reserve(req.ip ?? 'unknown', probe.user.id);
+  if (!attempt.allowed) {
+    res.setHeader('Retry-After', String(attempt.retryAfterSeconds));
+    res.status(429).json({ error: 'Too many attempts', code: 'PASSWORD_RATE_LIMITED' });
+    return;
+  }
+
+  let result;
+  try {
+    result = await service.changePassword(token, currentPassword, newPassword);
+  } catch (error) {
+    attempt.release(true);
+    throw error;
+  }
+  if (result === null) {
+    attempt.release(true);
+    clearSessionCookie(res);
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  if (typeof result === 'string') {
+    if (result === 'invalid_current') {
+      res.status(400).json({ error: 'Current password is incorrect', code: 'INVALID_CURRENT_PASSWORD' });
+    } else {
+      attempt.release(true); // a policy rejection after a correct current password is not a guess
+      res.status(400).json({ error: 'Password does not meet requirements', code: result });
+    }
+    return;
+  }
+
+  attempt.release(true);
+  setSessionCookie(res, result.token);
+  res.status(200).json(result.context);
 }));
 
 authRouter.post('/auth/logout', requireSameOrigin, asyncRoute(async (req, res) => {

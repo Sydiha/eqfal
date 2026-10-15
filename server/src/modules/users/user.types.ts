@@ -10,6 +10,8 @@ export interface User {
   is_active: boolean;
   /** Global System Admin marker (migration 075). Optional so older fixtures without the column stay valid. */
   is_system_admin?: boolean;
+  /** Migration 082. Optional so older fixtures without the column stay valid. */
+  must_change_password?: boolean;
   created_at: Date;
   updated_at: Date;
 }

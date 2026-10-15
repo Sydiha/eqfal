@@ -57,4 +57,15 @@ export class UserRepository {
     );
     return rows[0] ?? null;
   }
+
+  /** Stores a new bcrypt hash. `mustChange` is TRUE only for administrative (temporary) passwords. */
+  async setPassword(userId: string, passwordHash: string, mustChange: boolean, client?: PoolClient): Promise<void> {
+    const runner: QueryRunner = client ?? this.pool;
+    await runner.query(
+      `UPDATE users
+       SET password_hash = $2, must_change_password = $3, password_changed_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [userId, passwordHash, mustChange],
+    );
+  }
 }

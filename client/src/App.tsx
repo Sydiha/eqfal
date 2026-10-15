@@ -48,6 +48,7 @@ import { CompanyAccountingProfile } from './components/CompanyAccountingProfile'
 import { AccessAdministration } from './components/AccessAdministration';
 import { CompaniesManagement } from './components/CompaniesManagement';
 import { AuditLog } from './components/AuditLog';
+import { AccountSettings, RequiredPasswordChange } from './components/AccountSettings';
 import { OpeningBalanceReview } from './components/OpeningBalanceReview';
 import { PeriodicAdjustments } from './components/PeriodicAdjustments';
 import { AnnualClosing } from './components/AnnualClosing';
@@ -63,7 +64,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile', 'access', 'companies', 'auditLog'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile', 'access', 'companies', 'auditLog', 'account'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -185,6 +186,7 @@ function AuthenticatedShell() {
 
 function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, returnFromDocumentEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; returnFromDocumentEntry: (entry: DocumentEntryContext) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
   const { t } = useTranslation(); const { companyKey, activeCompanyId, activeCompany } = useCompany(); const { session, handleUnauthorized, refreshSession } = useAuth();
+  if (page === 'account') return <AccountSettings/>;
   if (!activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.none')}</p></section>;
   if (activeCompanyId !== session?.activeCompanyId) return <section className="panel"><p role="status" className="shared-state">{t('company.switching')}</p></section>;
   const c = session.capabilities;
@@ -233,6 +235,7 @@ function AppContent() {
   if (loading) return <main className="login-shell login-loading"><LoginBrand /><LanguageButton className="login-loading-language"/><h1>{t('app.title')}</h1><p role="status">{t('app.loading')}</p></main>;
   if (!session) return <LoginForm/>;
   const companyId = session.activeCompanyId || '';
+  if (session.user.mustChangePassword) return <RequiredPasswordChange/>;
   return <CompanyProvider allowedCompanies={companies} initialCompanyId={session.activeCompanyId}><DateContextProvider companyId={companyId}><AuthenticatedShell/></DateContextProvider></CompanyProvider>;
 }
 
