@@ -12,7 +12,7 @@ import type { ReactNode } from 'react';
 import { MantineProvider } from '@mantine/core';
 import { CompanyProvider, useCompany, type Company } from '../context/CompanyContext';
 import { CompanySwitcher } from '../components/CompanySwitcher';
-import '../i18n'; // ensure i18n is initialised
+import i18n from '../i18n'; // ensure i18n is initialised
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -180,5 +180,22 @@ describe('CompanySwitcher — company switching', () => {
     fireEvent.change(select, { target: { value: 'co-a' } });
 
     expect(capturedKey).toBe(keyBefore);
+  });
+
+  it('hides the search box for a short list but shows it for many companies, sorted and filterable', async () => {
+    await i18n.changeLanguage('en');
+    const many: Company[] = Array.from({ length: 10 }, (_, n) => ({ id: `co-${n}`, name: `Company ${String.fromCharCode(74 - n)}` }));
+    const { unmount } = render(<Wrapper allowedCompanies={ALLOWED}><CompanySwitcher /></Wrapper>);
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    unmount();
+
+    render(<Wrapper allowedCompanies={many}><CompanySwitcher /></Wrapper>);
+    const names = () => screen.getAllByRole('option').map(o => o.textContent);
+    expect(names()).toEqual([...names()].sort());
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'company c' } });
+    expect(screen.getAllByRole('option')).toHaveLength(2); // match + the active company stays selectable
+    expect(screen.getByRole('option', { name: 'Company C' })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } });
+    expect(screen.getByText('No companies match your search.')).toBeInTheDocument();
   });
 });
