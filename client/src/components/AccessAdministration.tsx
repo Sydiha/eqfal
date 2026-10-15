@@ -9,8 +9,8 @@ import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
 import { SystemAdministration } from './SystemAdministration';
 import './AccessAdministration.css';
 
-export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean }
-export interface AccessRole { id: string; name: string; is_full_access: boolean; capabilities: string[] }
+export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean; can_manage?: boolean }
+export interface AccessRole { id: string; name: string; is_full_access: boolean; capabilities: string[]; assignable?: boolean; editable?: boolean }
 interface Props {
   capabilities: readonly string[];
   currentUserId: string;
@@ -175,8 +175,9 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
     withConfirmation(grantImpact(newlyGranted(role.capabilities, grants), sensitivity), role.name, 'role', run);
   };
   const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
-  const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
-  const canRevokeId = () => can('access.role.capability.revoke');
+  const roleEditable = selectedRole?.editable !== false;
+  const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') && can(id);
+  const canRevokeId = () => roleEditable && can('access.role.capability.revoke');
 
   const errorText = errorKey ? (failure && apiErrorMessage(failure, t)) || t(`access.${errorKey}`) : '';
   const dialogError = errorKey && dialog ? <div role="alert" className="acc-alert">{errorText}</div> : null;
@@ -202,13 +203,13 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
         <tbody>{members.length === 0 ? <tr><td colSpan={4} className="acc-empty">{t('access.membersEmpty')}</td></tr> : members.map((member) => <tr key={member.id}>
           <td dir="ltr" className="acc-user">{member.user_email}{member.user_id === currentUserId && isSystemAdmin && <small> · {t('systemAdmin.systemAdmin')}</small>}{!member.user_is_active && <small> · {t('access.userDisabled')}</small>}</td>
           <td>{can('access.membership.role.assign')
-            ? <select aria-label={`${t('access.role')} ${member.user_email}`} value={member.role_id ?? ''} disabled={busy} onChange={(event) => event.target.value && void assignRole(member, event.target.value)}>
+            ? <select aria-label={`${t('access.role')} ${member.user_email}`} value={member.role_id ?? ''} disabled={busy || member.can_manage === false} onChange={(event) => event.target.value && void assignRole(member, event.target.value)}>
                 <option value="" disabled>{t('access.noRole')}</option>
-                {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                {roles.map((role) => <option key={role.id} value={role.id} disabled={role.id !== member.role_id && (member.user_id === currentUserId ? role.is_full_access || !role.capabilities.every(can) : role.assignable === false)}>{role.name}</option>)}
               </select>
             : (member.role_name ?? t('access.noRole'))}</td>
           <td><StatusBadge status={member.is_active ? 'open' : 'closed'}>{t(member.is_active ? 'access.active' : 'access.inactive')}</StatusBadge></td>
-          <td>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}</td>
+          <td>{can('access.membership.status.edit') && <button className="acc-ghost" disabled={busy || member.can_manage === false || (member.is_active && member.user_id === currentUserId)} onClick={() => void setActive(member, !member.is_active)}>{t(member.is_active ? 'access.disable' : 'access.enable')}</button>}</td>
         </tr>)}</tbody></table></div>
     </div>}
     {loaded && tab === 'roles' && <div className="acc-roles">
@@ -255,7 +256,7 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
                 </div>
                 {isOpen && <div id={panelId} className="acc-group-body">{ids.map((id) => {
                   const granted = grantedIds.includes(id);
-                  const canToggle = granted ? can('access.role.capability.revoke') : canGrantId(id);
+                  const canToggle = granted ? canRevokeId() : canGrantId(id);
                   return <label key={id} title={id}><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label>;
                 })}</div>}
               </section>;

@@ -95,9 +95,9 @@ describe('H3 membership privilege escalation and owner lockout', () => {
     await expect(s.service.setMembershipActive('m-owner2', C, false, 'owner')).resolves.toBeDefined();
   });
 
-  it('REGRESSION: the last active Full Access member cannot be disabled (even by themselves or another owner)', async () => {
+  it('REGRESSION: nobody (not even the last Full Access owner) can disable their own membership', async () => {
     await s.service.setMembershipActive('m-owner2', C, false, 'owner');
-    await expect(s.service.setMembershipActive('m-owner', C, false, 'owner')).rejects.toMatchObject({ code: 'ACCESS_LAST_FULL_ACCESS' });
+    await expect(s.service.setMembershipActive('m-owner', C, false, 'owner')).rejects.toMatchObject({ code: 'ACCESS_SELF_LOCKOUT' });
   });
 
   it('REGRESSION: the last active Full Access member cannot be demoted', async () => {

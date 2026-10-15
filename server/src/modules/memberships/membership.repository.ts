@@ -244,6 +244,26 @@ export class MembershipRepository {
     return rows[0]?.has_full_access === true;
   }
 
+  /** An account a company administrator may attach: it exists, is active and is not a System Admin. */
+  async isAttachableUser(userId: string, client?: PoolClient): Promise<boolean> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ ok: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE AND is_system_admin = FALSE) AS ok',
+      [userId],
+    );
+    return rows[0]?.ok === true;
+  }
+
+  /** Which of these users are active System Admins (list flags only). */
+  async listActiveSystemAdminIds(userIds: string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const { rows } = await this.pool.query<{ id: string }>(
+      'SELECT id FROM users WHERE id = ANY($1::uuid[]) AND is_active = TRUE AND is_system_admin = TRUE',
+      [userIds],
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
   /** Whether the user is an active global System Admin (users.is_system_admin, migration 075). */
   async isActiveSystemAdmin(userId: string, client?: PoolClient): Promise<boolean> {
     const runner: QueryRunner = client ?? this.pool;

@@ -48,9 +48,14 @@ export interface MembershipListItem extends Membership {
   user_email: string;
   user_is_active: boolean;
   role_name: string | null;
+  /** Set when listed for an actor: whether that actor may change this member (mirrors the server rule). */
+  can_manage?: boolean;
 }
 
 /** Role row with its explicit capability ids (Full Access roles hold every capability implicitly). */
 export interface RoleListItem extends Role {
   capabilities: string[];
+  /** Set when listed for an actor: may be assigned to others / may have its capabilities edited. */
+  assignable?: boolean;
+  editable?: boolean;
 }

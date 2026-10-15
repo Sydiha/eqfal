@@ -58,6 +58,26 @@ describe('AccessAdministration', () => {
     expect(JSON.parse(patch.body!)).toEqual({ is_active: true });
   });
 
+  it('follows the server delegation flags: protected members and unassignable roles are disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/access/memberships') return new Response(JSON.stringify({ memberships: [
+        { ...members[0], user_id: 'u-9', can_manage: false },
+        { ...members[1], is_active: true, can_manage: true },
+      ] }), { status: 200 });
+      if (url === '/api/access/roles') return new Response(JSON.stringify({ roles: [{ ...roles[0], assignable: false }, { ...roles[1], assignable: true, editable: false }] }), { status: 200 });
+      if (url === '/api/access/capabilities') return new Response(JSON.stringify({ capabilities: allCapabilities, sensitivity: {} }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    }));
+    renderIt(ALL);
+    const protectedRow = (await screen.findByText('owner@example.com')).closest('tr')!;
+    expect(within(protectedRow).getByRole('combobox')).toBeDisabled();
+    expect(within(protectedRow).getByRole('button', { name: 'Disable membership' })).toBeDisabled();
+    const ordinaryRow = screen.getByText('clerk@example.com').closest('tr')!;
+    expect(within(ordinaryRow).getByRole('combobox')).toBeEnabled();
+    expect(within(ordinaryRow).getByRole('option', { name: 'Owner' })).toBeDisabled();
+    expect(within(ordinaryRow).getByRole('button', { name: 'Disable membership' })).toBeEnabled();
+  });
+
   it('does not let a user disable their own active membership', async () => {
     mockApi();
     renderIt(ALL);

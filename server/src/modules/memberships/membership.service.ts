@@ -11,6 +11,13 @@ import { AccessPolicyError } from './access-policy-error';
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
 
 /**
+ * Administrative delegation authority (Phase B2): every access.* capability except the read-only access.view. These are
+ * the ONLY capabilities bound by the granter ceiling for other members; functional (accounting/operational) capabilities
+ * are not, so a Company Manager may staff Accountant/Finance Manager/Operations roles without holding their capabilities.
+ */
+export const isAdministrativeCapability = (id: string): boolean => id.startsWith('access.') && id !== 'access.view';
+
+/**
  * MembershipService
  *
  * Enforces all business rules for memberships, roles, and capabilities:
@@ -54,12 +61,33 @@ export class MembershipService {
     }
   }
 
-  async listMemberships(companyId: string): Promise<MembershipListItem[]> {
-    return this.repo.listMemberships(companyId);
+  /** Members of the company. With an actor, each row carries can_manage: the same rule the server enforces on writes. */
+  async listMemberships(companyId: string, actorUserId?: string): Promise<MembershipListItem[]> {
+    const members = await this.repo.listMemberships(companyId);
+    if (!actorUserId) return members;
+    const [roles, actorIsSystemAdmin, hasGrant, systemAdmins] = await Promise.all([
+      this.repo.listRoles(companyId),
+      this.repo.isActiveSystemAdmin(actorUserId),
+      this.holdsFullAccessAuthority(actorUserId, companyId),
+      this.repo.listActiveSystemAdminIds(members.map((m) => m.user_id)),
+    ]);
+    const byRole = new Map(roles.map((r) => [r.id, r]));
+    return members.map((m) => {
+      const role = m.role_id ? byRole.get(m.role_id) : undefined;
+      return { ...m, can_manage: !this.targetBlocked(m, actorUserId, hasGrant, actorIsSystemAdmin, systemAdmins.has(m.user_id), role, role?.capabilities ?? []) };
+    });
   }
 
-  async listRoles(companyId: string): Promise<RoleListItem[]> {
-    return this.repo.listRoles(companyId);
+  /** Roles of the company. With an actor: assignable (may be given to others) and editable (capabilities may change). */
+  async listRoles(companyId: string, actorUserId?: string): Promise<RoleListItem[]> {
+    const roles = await this.repo.listRoles(companyId);
+    if (!actorUserId) return roles;
+    const [actorCaps, hasGrant] = await Promise.all([this.repo.getActiveCapabilities(actorUserId, companyId), this.holdsFullAccessAuthority(actorUserId, companyId)]);
+    return roles.map((r) => ({
+      ...r,
+      assignable: r.is_full_access ? hasGrant : r.capabilities.filter(isAdministrativeCapability).every((id) => actorCaps.includes(id)),
+      editable: !r.is_full_access && (hasGrant || !r.capabilities.some(isAdministrativeCapability)),
+    }));
   }
 
   async listCapabilities(): Promise<string[]> {
@@ -75,6 +103,8 @@ export class MembershipService {
 
   async createMembershipForCompany(userId: string, companyId: string, actorUserId: string): Promise<Membership> {
     return this.transaction(async (client) => {
+      // A System Admin account or a disabled account is reported exactly like an unknown one (no probing, no attaching).
+      if (!(await this.repo.isAttachableUser(userId, client))) throw new Error('User not found');
       const membership = await this.repo.createMembership({ user_id: userId, company_id: companyId }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
       return membership;
@@ -140,6 +170,7 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const before = await this.repo.findMembershipById(id, client);
       if (!before || before.company_id !== companyId) throw new Error('Membership not found');
+      if (!active && before.user_id === actorUserId) throw new AccessPolicyError('You cannot disable your own membership', 'ACCESS_SELF_LOCKOUT');
       await this.assertCanManageTarget(before, actorUserId, client);
       if (!active) await this.assertNotLastFullAccess(before, null, client);
       const after = await this.repo.setMembershipActive(id, companyId, active, client);
@@ -180,6 +211,7 @@ export class MembershipService {
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
         if (!actorCapabilities.includes(capabilityId)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+        await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
       if (add) await this.repo.addCapabilityToRole(roleId, capabilityId, client);
@@ -204,6 +236,7 @@ export class MembershipService {
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
         for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+        await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
       for (const id of grants) await this.repo.addCapabilityToRole(roleId, id, client);
@@ -254,26 +287,44 @@ export class MembershipService {
   }
 
   /**
-   * Authority over the target's EXISTING privileges (not just over the role being assigned): the actor may
-   * only change a membership whose current role is within the actor's own authority. A Full Access target
-   * requires access.full_access.grant; any other target role must be a subset of the actor's capabilities.
+   * Pure target rule shared by enforcement and the UI flags. Self is never blocked here (self-disable and self-escalation
+   * have their own rules). Otherwise the target is out of reach for an actor without the matching higher authority when it
+   * is a System Admin (System Admin only), a Full Access member (access.full_access.grant), or a member whose role holds
+   * administrative capabilities, i.e. another manager of equal or higher authority (access.full_access.grant).
+   * Functional capabilities of the target (accounting, banking, invoicing, ...) never block a delegated manager.
+   */
+  private targetBlocked(target: Pick<Membership, 'user_id'>, actorUserId: string, hasGrant: boolean, actorIsSystemAdmin: boolean,
+    targetIsSystemAdmin: boolean, role: Pick<Role, 'is_full_access'> | undefined, roleCaps: readonly string[]): boolean {
+    if (target.user_id === actorUserId) return role?.is_full_access === true && !hasGrant;
+    if (targetIsSystemAdmin) return !actorIsSystemAdmin;
+    if (!role) return false;
+    if (role.is_full_access) return !hasGrant;
+    return !hasGrant && roleCaps.some(isAdministrativeCapability);
+  }
+
+  /**
+   * Authority over the target's EXISTING privileges: see targetBlocked. The role is resolved inside the target's own
+   * company, never from a caller-supplied value.
    */
   private async assertCanManageTarget(target: Membership, actorUserId: string, client: PoolClient): Promise<void> {
-    if (!target.role_id) return;
-    const targetRole = await this.repo.findRoleById(target.role_id, client);
-    if (!targetRole || targetRole.company_id !== target.company_id) return;
-    if (targetRole.is_full_access) {
-      if (!(await this.holdsFullAccessAuthority(actorUserId, target.company_id, client))) {
-        throw new AccessPolicyError('Target privilege violation: only a holder of access.full_access.grant can modify a Full Access member', 'ACCESS_TARGET_PRIVILEGE');
-      }
-      return;
-    }
-    const [actorCaps, targetCaps] = await Promise.all([
-      this.repo.getActiveCapabilities(actorUserId, target.company_id, client),
-      this.repo.getRoleCapabilities(targetRole.id, client),
+    const targetRole = target.role_id ? await this.repo.findRoleById(target.role_id, client) : null;
+    const role = targetRole && targetRole.company_id === target.company_id ? targetRole : undefined;
+    const [hasGrant, actorIsSystemAdmin, targetIsSystemAdmin, roleCaps] = await Promise.all([
+      this.holdsFullAccessAuthority(actorUserId, target.company_id, client),
+      this.repo.isActiveSystemAdmin(actorUserId, client),
+      target.user_id === actorUserId ? false : this.repo.isActiveSystemAdmin(target.user_id, client),
+      role && !role.is_full_access ? this.repo.getRoleCapabilities(role.id, client) : Promise.resolve([] as string[]),
     ]);
-    for (const capability of targetCaps) {
-      if (!actorCaps.includes(capability)) throw new AccessPolicyError(`Target privilege violation: member holds capability '${capability}' beyond the actor`, 'ACCESS_TARGET_PRIVILEGE');
+    if (this.targetBlocked(target, actorUserId, hasGrant, actorIsSystemAdmin, targetIsSystemAdmin, role, roleCaps)) {
+      throw new AccessPolicyError('Target privilege violation: this member is outside your administrative authority', 'ACCESS_TARGET_PRIVILEGE');
+    }
+  }
+
+  /** Editing a role that holds administrative capabilities manages its holders (other managers): needs access.full_access.grant. */
+  private async assertCanEditRole(roleId: string, companyId: string, actorUserId: string, client: PoolClient): Promise<void> {
+    const caps = await this.repo.getRoleCapabilities(roleId, client);
+    if (caps.some(isAdministrativeCapability) && !(await this.holdsFullAccessAuthority(actorUserId, companyId, client))) {
+      throw new AccessPolicyError('Target privilege violation: roles with administrative capabilities need access.full_access.grant to edit', 'ACCESS_TARGET_PRIVILEGE');
     }
   }
 
@@ -296,8 +347,11 @@ export class MembershipService {
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
       this.repo.getRoleCapabilities(role.id, client),
     ]);
+    // Ceiling over administrative capabilities for others; over EVERY capability when assigning to oneself, so a manager
+    // can staff Accountant/Operations roles for employees but can never give themselves accounting capabilities.
+    const selfAssign = membership.user_id === actorUserId;
     for (const capability of roleCaps) {
-      if (!granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
+      if ((selfAssign || isAdministrativeCapability(capability)) && !granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
     }
   }
 
