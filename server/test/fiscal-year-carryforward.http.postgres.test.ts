@@ -12,7 +12,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
 
   /** FY2025 (closed by the test when asked) with: capital 10000, sales 5000, expense 2000, supplier payable 700 -> profit 3000, bank 13000-700... */
   /** Each company gets its own Full Access owner (the session's active company is the owner's first membership). */
-  async function setup(label: string, ownerId: string, o: { next?: boolean; close?: boolean } = {}): Promise<Co> {
+  async function setup(label: string, ownerId: string, o: { next?: boolean; close?: boolean; re?: [side: 'debit' | 'credit', amount: string]; revenue?: string } = {}): Promise<Co> {
     let ownerKey = ownerId === u.ownerA!.id ? 'ownerA' : 'ownerB';
     if (!/^cf[AB]$/.test(label)) { u[label] = await h.user(label); ownerKey = label; ownerId = u[label]!.id; }
     const owner = ownerId;
@@ -28,8 +28,9 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     const ap = await h.account(id, 'C-AP', 'liability', 'current_liability');
     const post = (date: string, lines: Array<[string, string, string]>) => h.postedJournal(id, fy25, date, owner, lines);
     await post('2025-01-02', [[bank, '10000.00', '0'], [capital, '0', '10000.00']]);
-    await post('2025-03-01', [[bank, '5000.00', '0'], [rev, '0', '5000.00']]);
+    await post('2025-03-01', [[bank, o.revenue ?? '5000.00', '0'], [rev, '0', o.revenue ?? '5000.00']]);
     await post('2025-04-01', [[exp, '2000.00', '0'], [bank, '0', '1300.00'], [ap, '0', '700.00']]);
+    if (o.re) await post('2025-05-01', o.re[0] === 'credit' ? [[capital, o.re[1], '0'], [re, '0', o.re[1]]] : [[re, o.re[1], '0'], [capital, '0', o.re[1]]]);
     if (o.close !== false) await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [fy25]);
     return { owner: ownerKey, id, fy25, fy26, bank, capital, re, rev, exp, ap };
   }
@@ -137,6 +138,52 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect((await p26()).json.profit_or_loss).toBe('0.00');
     expect((await u.ownerA!.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${A.fy25}`)).json.profit_or_loss).toBe(p25Before);
     expect((await fp(A.fy25)).json.accounting_equation.balanced).toBe(true);
+  });
+
+  let regression = 0;
+  it.each([
+    { name: 'existing credit balance + profit', re: ['credit', '1000.00'], revenue: '5000.00', expected: 'credit:4000.00' },
+    { name: 'existing debit balance + smaller profit', re: ['debit', '5000.00'], revenue: '5000.00', expected: 'debit:2000.00' },
+    { name: 'existing debit balance + profit flips to credit', re: ['debit', '1000.00'], revenue: '5000.00', expected: 'credit:2000.00' },
+    { name: 'existing credit balance + loss', re: ['credit', '1000.00'], revenue: '1000.00', expected: 'credit:0.00' },
+    { name: 'existing debit balance exactly offset by profit', re: ['debit', '3000.00'], revenue: '5000.00', expected: null },
+    { name: 'existing debit balance + loss', re: ['debit', '1000.00'], revenue: '1000.00', expected: 'debit:2000.00' },
+  ] as const)('consolidates the retained-earnings balance and the year result into one net line: $name', async ({ re, revenue, expected, name }) => {
+    // profit = revenue - 2000 (so 3000, 3000, 3000, -1000, 3000, -1000); the loss cases net against the existing balance.
+    const co = await setup(`cfR${++regression}`, u.ownerA!.id, { re: [re[0], re[1]], revenue });
+    const preview = await u[co.owner]!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
+    expect(preview.json.balanced).toBe(true);
+    const res = await prep(co.owner, co);
+    expect(res.status).toBe(201);
+    const items = await h.q<{ account_id: string; balance_side: string; amount: string }>('SELECT account_id,balance_side,amount::text FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
+    expect(new Set(items.map((i) => i.account_id)).size).toBe(items.length); // never two lines for one account
+    const reItems = items.filter((i) => i.account_id === co.re);
+    if (expected === null) expect(reItems).toHaveLength(0);
+    else if (expected === 'credit:0.00') {
+      // existing credit 1000 + loss 1000 = zero -> no line at all
+      expect(reItems).toHaveLength(0);
+    } else expect(reItems.map((i) => `${i.balance_side}:${i.amount}`)).toEqual([expected]);
+    const sum = (side: string) => items.filter((i) => i.balance_side === side).reduce((t, i) => t + Number(i.amount), 0);
+    expect(sum('debit')).toBeCloseTo(sum('credit'), 2);
+    expect(Number(res.json.carryforward.total_debit)).toBeCloseTo(sum('debit'), 2);
+  });
+
+  it('approves and posts the consolidated opening balance: retained earnings = existing balance + result, books balanced, no double count', async () => {
+    const co = await setup('cfRP', u.ownerA!.id, { re: ['credit', '1000.00'] });
+    const o = u[co.owner]!.client;
+    expect((await prep(co.owner, co)).status).toBe(201);
+    expect((await o.req('POST', `/opening-balances/${co.fy26}/submit-review`, {})).status).toBe(200);
+    const approved = await o.req('POST', `/opening-balances/${co.fy26}/approve`, {});
+    expect(approved.status).toBe(200);
+    expect(approved.json.journal.status).toBe('posted');
+    const lines = await h.q<{ account_id: string; debit: string; credit: string }>('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1', [approved.json.journal.id]);
+    expect(lines.filter((l) => l.account_id === co.re)).toEqual([{ account_id: co.re, debit: '0.00', credit: '4000.00' }]);
+    expect(lines.reduce((t, l) => t + Number(l.debit), 0)).toBe(lines.reduce((t, l) => t + Number(l.credit), 0));
+    const tb = (await o.req('GET', `/trial-balance?fiscal_year_id=${co.fy26}`)).json.accounts as any[];
+    expect(tb.find((a) => a.account_id === co.re).credit_balance).toBe('4000.00');
+    const pos = (await o.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy26}`)).json;
+    expect(pos.accounting_equation.balanced).toBe(true);
+    expect(pos.current_period_earnings).toBe('0.00');
   });
 
   it('lets exactly one of many concurrent requests prepare the carry-forward', async () => {

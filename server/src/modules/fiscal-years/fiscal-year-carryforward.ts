@@ -81,22 +81,26 @@ async function compute(client: Pick<PoolClient, 'query'>, companyId: string, fro
     else carried.set(r.account_id, { row: r, net });
   }
   const netResult = -result; // profit > 0, loss < 0
-  const lines: CarryLine[] = [...carried.values()].map(({ row, net }) => ({
+  // ONE net line per account: the retained-earnings account's own closing balance and the year's result are consolidated
+  // (debit-positive arithmetic), so profit/loss, zero balances and a debit<->credit sign change all come out as a single side.
+  if (retainedAccount && netResult !== 0n) {
+    const existing = carried.get(retainedAccount.id);
+    carried.set(retainedAccount.id, {
+      row: existing?.row ?? { account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', is_active: retainedAccount.is_active, net: '0' },
+      net: (existing?.net ?? 0n) - netResult,
+    });
+  }
+  const lines: CarryLine[] = [...carried.values()].filter(({ net }) => net !== 0n).sort((x, y) => x.row.code.localeCompare(y.row.code)).map(({ row, net }) => ({
     account_id: row.account_id, code: row.code, name: row.name, account_type: row.account_type,
     category: CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',
     amount: money(net < 0n ? -net : net), is_active: row.is_active,
   }));
-  if (!lines.length && netResult === 0n) blockers.push({ code: 'NOTHING_TO_CARRY' });
+  if (!lines.length && (netResult === 0n || retainedAccount)) blockers.push({ code: 'NOTHING_TO_CARRY' });
   for (const l of lines) if (!l.is_active) blockers.push({ code: 'CARRY_ACCOUNT_INACTIVE', detail: l.code });
-  if (retainedAccount && !retainedAccount.is_active && netResult !== 0n) blockers.push({ code: 'RETAINED_EARNINGS_ACCOUNT_INACTIVE', detail: retainedAccount.code });
-  const resultLine = netResult === 0n ? null : retainedAccount ? {
-    account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', category: 'equity' as const,
-    side: (netResult > 0n ? 'credit' : 'debit') as 'debit' | 'credit', amount: money(netResult < 0n ? -netResult : netResult), is_active: retainedAccount.is_active,
-  } : null;
-  const all = resultLine ? [...lines, resultLine] : lines;
+  const all = lines;
   const debit = all.filter((l) => l.side === 'debit').reduce((s, l) => s + cents(l.amount), 0n);
   const credit = all.filter((l) => l.side === 'credit').reduce((s, l) => s + cents(l.amount), 0n);
-  return { blockers, lines, resultLine, netResult, debit, credit, balanced: retainedAccount || netResult === 0n ? debit === credit : null };
+  return { blockers, lines, netResult, debit, credit, balanced: retainedAccount || netResult === 0n ? debit === credit : null };
 }
 
 async function retainedEarningsAccount(client: Pick<PoolClient, 'query'>, companyId: string, id: unknown) {
@@ -127,7 +131,7 @@ export class FiscalYearCarryforwardService {
       return {
         from_year: from, to_year: to, existing, ready: !existing && c.blockers.length === 0 && retained !== null,
         blockers: existing ? [{ code: 'CARRYFORWARD_ALREADY_PREPARED' }, ...c.blockers] : c.blockers,
-        net_result: money(c.netResult), lines: c.resultLine ? [...c.lines, c.resultLine] : c.lines,
+        net_result: money(c.netResult), lines: c.lines,
         total_debit: money(c.debit), total_credit: money(c.credit), balanced: c.balanced,
       };
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
@@ -147,18 +151,18 @@ export class FiscalYearCarryforwardService {
       }
       const c = await compute(client, companyId, from, to, retained);
       if (c.blockers.length) throw new CarryforwardBlockedError('CARRYFORWARD_BLOCKED', 'Carry-forward is blocked', c.blockers);
-      const all = c.resultLine ? [...c.lines, c.resultLine] : c.lines;
+      const all = c.lines;
       if (c.debit !== c.credit) throw new CarryforwardBlockedError('CARRYFORWARD_UNBALANCED', 'Carry-forward lines are not balanced');
 
       const review = (await client.query(
         'INSERT INTO opening_balance_reviews(company_id,fiscal_year_id,prepared_by) VALUES($1,$2,$3) RETURNING *', [companyId, to!.id, actor])).rows[0];
       for (const l of all) {
-        const isResult = c.resultLine === l;
+        const isResult = l.account_id === retained.id && c.netResult !== 0n;
         await client.query(
           `INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,source_reference,confidence,note,created_by)
            VALUES($1,$2,$3,$4,$5,$6,'internal_ledger',$7,'high',$8,$9)`,
           [companyId, review.id, l.category, l.account_id, l.amount, l.side, `fiscal_year:${from.id}`,
-            isResult ? `Net result of ${from.name} carried to retained earnings` : `Closing balance of ${from.name}`, actor]);
+            isResult ? `Closing balance of ${from.name} consolidated with its net result (${money(c.netResult)})` : `Closing balance of ${from.name}`, actor]);
       }
       const record = (await client.query(
         `INSERT INTO fiscal_year_carryforwards(company_id,from_fiscal_year_id,to_fiscal_year_id,opening_balance_review_id,retained_earnings_account_id,net_result,total_debit,total_credit,item_count,prepared_by)
