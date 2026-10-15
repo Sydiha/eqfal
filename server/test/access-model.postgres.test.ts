@@ -84,7 +84,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     ids.coA = (await companies.create({ slug: 'access-a', name: 'Access A', name_ar: 'شركة أ' }, ids.ownerA!)).id;
     ids.coB = (await companies.create({ slug: 'access-b', name: 'Access B', name_ar: null }, ids.ownerB!)).id;
     for (const [company, key] of [[ids.coA!, 'A'], [ids.coB!, 'B']] as const) {
-      for (const name of ['Viewer', 'Accountant', 'Finance Manager', 'Company Manager', 'Full Access']) roles[`${name}${key}`] = await roleId(company, name);
+      for (const name of ['Viewer', 'Accountant', 'Finance Manager', 'Company Manager', 'Operations', 'Full Access']) roles[`${name}${key}`] = await roleId(company, name);
     }
     const member = (user: string, company: string, role: string) => q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)', [user, company, role]);
     await member(ids.mgrA!, ids.coA!, roles['Company ManagerA']!);
@@ -93,8 +93,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     await member(ids.staffA!, ids.coA!, roles['ViewerA']!);
     await member(ids.staffB!, ids.coB!, roles['ViewerB']!);
     // Operational (non-accountant) role: invoices end to end, approval included, but NO manual journal or obligation capability.
-    roles.opsA = (await q<{ id: string }>("INSERT INTO roles(company_id,name) VALUES($1,'Operations') RETURNING id", [ids.coA]))[0]!.id;
-    for (const c of ['invoice.view', 'invoice.create', 'invoice.edit', 'invoice.submit', 'invoice.approve']) await q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2)', [roles.opsA, c]);
+    roles.opsA = roles['OperationsA']!; // default Operations role (migration 081 / company provisioning)
     await member(ids.ops!, ids.coA!, roles.opsA);
 
     // Invoice prerequisites in A: an open fiscal year covering the issue date, account mappings and a customer.
@@ -345,7 +344,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const sa = clients.sa!;
     const created = await sa.req('POST', '/admin/companies', { slug: 'access-c', name: 'Access C' });
     expect(created.status).toBe(201);
-    expect(await n('SELECT count(*) n FROM roles WHERE company_id=$1', [created.json.id])).toBe(5);
+    expect(await n('SELECT count(*) n FROM roles WHERE company_id=$1', [created.json.id])).toBe(6);
     // Existing, documented behavior: the creator (here the System Admin) becomes the company's first Full Access member.
     expect(await n("SELECT count(*) n FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.company_id=$1 AND m.user_id=$2 AND m.is_active AND r.is_full_access", [created.json.id, ids.sa])).toBe(1);
     expect((await sa.req('PATCH', `/admin/companies/${ids.coB}/active`, { is_active: false })).status).toBe(200);
