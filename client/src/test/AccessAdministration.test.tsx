@@ -282,4 +282,25 @@ describe('AccessAdministration', () => {
     renderIt(['access.view']);
     expect(await screen.findByText('Could not connect to the server. Check your connection and try again.')).toBeInTheDocument();
   });
+
+  it('separates the global System Admin designation from the company role and describes each tab', async () => {
+    mockApi();
+    const base = global.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => String(url).startsWith('/api/admin/')
+      ? new Response(JSON.stringify({ users: [], companies: [] }), { status: 200 })
+      : (base as typeof fetch)(url, init)));
+    render(<AccessAdministration capabilities={ALL} currentUserId="u-2" isSystemAdmin companyName="Acme" onUnauthorized={vi.fn()} />);
+    expect(await screen.findByText('clerk@example.com')).toBeInTheDocument();
+    expect(screen.getByText(/Manage the members, roles and role permissions of Acme/)).toBeInTheDocument();
+    expect(screen.getByTestId('access-identity-note')).toHaveTextContent('System Admin is a global designation. Your role in Acme is separate: Clerk.');
+    fireEvent.click(screen.getByRole('tab', { name: 'Global administration' }));
+    expect(await screen.findByText(/covers every company, user and System Admin designation/)).toBeInTheDocument();
+  });
+
+  it('shows no System Admin note to an ordinary company user', async () => {
+    mockApi();
+    renderIt(['access.view']);
+    expect(await screen.findByText('clerk@example.com')).toBeInTheDocument();
+    expect(screen.queryByTestId('access-identity-note')).toBeNull();
+  });
 });

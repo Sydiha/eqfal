@@ -183,7 +183,7 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
 
   return <section className="panel acc-view" aria-labelledby="access-title">
     <header className="acc-header">
-      <div><h2 id="access-title">{t('access.title')}</h2><p>{t('access.description')}</p></div>
+      <div><h2 id="access-title">{t('access.title')}</h2><p>{tab === 'global' ? t('access.descriptionGlobal') : t('access.description', { company: companyName })}</p></div>
       {tab === 'members' && can('access.membership.create') && <button className="acc-ghost" onClick={() => { setErrorKey(null); setDialog('createUser'); }}>{t('access.createUser')}</button>}
       {tab === 'members' && can('access.membership.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('addMember'); }}>{t('access.addMember')}</button>}
       {tab === 'roles' && can('access.role.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('createRole'); }}>{t('access.createRole')}</button>}
@@ -193,13 +193,14 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
       {canViewCompany && <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => setTab('roles')}>{t('access.rolesTab')}</button>}
       {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => setTab('global')}>{t('systemAdmin.tab')}</button>}
     </div>
+    {isSystemAdmin && <p className="acc-hint" data-testid="access-identity-note">{t('access.identityNote', { company: companyName, role: members.find((m) => m.user_id === currentUserId)?.role_name ?? t('access.noRole') })}</p>}
     {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized}/>}
     {tab !== 'global' && errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
     {tab === 'global' ? null : loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
       <p className="acc-hint">{t('access.disableHint')}</p>
       <div className="acc-table"><table><thead><tr><th>{t('access.user')}</th><th>{t('access.role')}</th><th>{t('access.status')}</th><th>{t('access.actions')}</th></tr></thead>
         <tbody>{members.length === 0 ? <tr><td colSpan={4} className="acc-empty">{t('access.membersEmpty')}</td></tr> : members.map((member) => <tr key={member.id}>
-          <td dir="ltr" className="acc-user">{member.user_email}{!member.user_is_active && <small> · {t('access.userDisabled')}</small>}</td>
+          <td dir="ltr" className="acc-user">{member.user_email}{member.user_id === currentUserId && isSystemAdmin && <small> · {t('systemAdmin.systemAdmin')}</small>}{!member.user_is_active && <small> · {t('access.userDisabled')}</small>}</td>
           <td>{can('access.membership.role.assign')
             ? <select aria-label={`${t('access.role')} ${member.user_email}`} value={member.role_id ?? ''} disabled={busy} onChange={(event) => event.target.value && void assignRole(member, event.target.value)}>
                 <option value="" disabled>{t('access.noRole')}</option>

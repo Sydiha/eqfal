@@ -121,4 +121,19 @@ describe('H3 membership privilege escalation and owner lockout', () => {
     await expect(s.service.changeRoleCapability('staff', 'sales.view', C, 'owner', false)).resolves.toBeUndefined();
     expect(s.removeCap).toHaveBeenCalled();
   });
+
+  it('self-escalation: a limited admin cannot assign themselves, or anyone, the Full Access role', async () => {
+    await expect(s.service.assignRoleForCompany('m-admin', 'full', C, 'admin')).rejects.toBeDefined();
+    await expect(s.service.assignRoleForCompany('m-staff', 'full', C, 'admin')).rejects.toBeDefined();
+    expect(s.assign).not.toHaveBeenCalled();
+    expect(s.members.admin!.role_id).toBe('admin');
+  });
+
+  it('self-escalation: a limited admin cannot grant their own role a capability they do not hold', async () => {
+    await expect(s.service.changeRoleCapability('admin', 'access.role.create', C, 'admin', true)).rejects.toMatchObject({ code: 'ACCESS_ROLE_CEILING' });
+  });
+
+  it('Full Access delegation: only a holder of access.full_access.grant may assign Full Access', async () => {
+    await expect(s.service.assignRoleForCompany('m-staff', 'full', C, 'owner')).resolves.toMatchObject({ role_id: 'full' });
+  });
 });
