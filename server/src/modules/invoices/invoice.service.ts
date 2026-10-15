@@ -15,7 +15,7 @@ export type InvoiceErrorCode =
   | 'INVOICE_VAT_INCOMPLETE' | 'INVOICE_VAT_PERIOD_CLOSED' | 'INVOICE_DOCUMENT_ALREADY_RECOGNIZED' | 'INVOICE_DIRECTION_UNSUPPORTED'
   | 'INVOICE_DUPLICATE_REFERENCE' | 'INVOICE_SOURCE_ALREADY_LINKED' | 'INVOICE_COUNTERPARTY_INVALID' | 'INVOICE_DOCUMENT_INVALID'
   | 'INVOICE_VAT_RATE_MISMATCH' | 'VAT_RATE_NOT_CONFIGURED'
-  | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED'
+  | 'INVOICE_ALREADY_CANCELLED' | 'INVOICE_CANCEL_NOT_ALLOWED' | 'INVOICE_DELETE_NOT_ALLOWED'
   | 'INVOICE_ADJUSTMENT_NOT_FOUND' | 'INVOICE_ADJUSTMENT_NOT_DRAFT' | 'INVOICE_ADJUSTMENT_ORIGINAL_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_GROUP_UNSUPPORTED'
   | 'INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL' | 'INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING' | 'INVOICE_ADJUSTMENT_VAT_PERIOD_UNSUPPORTED' | 'INVOICE_ADJUSTMENT_DUPLICATE'
   | 'RECURRING_NOT_FOUND' | 'RECURRING_VERSION_CONFLICT' | 'RECURRING_INVALID_STATE' | 'RECURRING_SCHEDULE_LOCKED';
@@ -426,6 +426,31 @@ export class InvoiceDraftService {
       const after = await this.read(client, companyId, invoiceId);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.cancel', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: after as never }, client);
       return after!;
+    });
+  }
+
+  /**
+   * Phase 1 delete: physically removes a DRAFT invoice (header, lines and its evidence link). Only a draft has no accounting footprint:
+   * numbering, obligation, journal and VAT snapshot are created at approval. Submitted, approved and cancelled invoices are refused
+   * (cancelled keeps its row and reason as history). The uploaded evidence document itself is never touched, only its link is released.
+   * The audit row keeps the full pre-delete snapshot. The database guard (migration 062) independently refuses deleting a non-draft.
+   */
+  async deleteDraft(companyId: string, actorUserId: string, invoiceId: string, expectedVersion: number) {
+    return this.tx(async (client) => {
+      const current = (await client.query<{ status: string; version: number }>(
+        'SELECT status, version FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [invoiceId, companyId])).rows[0];
+      if (!current) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
+      if (current.status !== 'draft') throw new InvoiceError(409, 'INVOICE_DELETE_NOT_ALLOWED', 'Only a draft invoice can be deleted; submitted, approved and cancelled invoices are kept on record');
+      if (current.version !== expectedVersion) throw new InvoiceError(409, 'INVOICE_VERSION_CONFLICT', 'The invoice was changed by someone else; reload and try again');
+      // Defence in depth: any financial record tied to the invoice blocks deletion, whatever the status says.
+      const footprint = await client.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM obligations WHERE invoice_id = $1 AND company_id = $2)
+                     OR EXISTS (SELECT 1 FROM invoice_vat_reviews WHERE invoice_id = $1 AND company_id = $2)
+                     OR EXISTS (SELECT 1 FROM invoice_adjustments WHERE original_invoice_id = $1 AND company_id = $2)`, [invoiceId, companyId]);
+      if (footprint.rowCount) throw new InvoiceError(409, 'INVOICE_DELETE_NOT_ALLOWED', 'The invoice already has financial records and cannot be deleted');
+      const before = await this.read(client, companyId, invoiceId);
+      await client.query('DELETE FROM invoices WHERE id = $1 AND company_id = $2 AND status = \'draft\'', [invoiceId, companyId]);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.draft.delete', entity_type: 'invoice', entity_id: invoiceId, before_data: before as never, after_data: null }, client);
     });
   }
 
