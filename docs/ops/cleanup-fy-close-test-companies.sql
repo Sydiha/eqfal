@@ -6,6 +6,7 @@
 --     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/ops/cleanup-fy-close-test-companies.sql
 --   Execute (commits only if every check passes):
 --     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v commit=yes -v expect=<N> [-v delete_audit=yes] \
+--          [-v journal_bypass=yes -v expect_journals=<J>] \
 --          -f docs/ops/cleanup-fy-close-test-companies.sql
 --
 -- Safety properties:
@@ -27,6 +28,14 @@
 \else
   \set delete_audit no
 \endif
+\if :{?journal_bypass}
+\else
+  \set journal_bypass no
+\endif
+\if :{?expect_journals}
+\else
+  \set expect_journals -1
+\endif
 \if :{?expect}
 \else
   \set expect -1
@@ -35,7 +44,7 @@
 BEGIN;
 SET LOCAL lock_timeout = '10s';
 -- psql variables are not expanded inside $$ bodies, so hand them to PL/pgSQL as transaction settings.
-SELECT set_config('fy.commit', :'commit', true), set_config('fy.expect', :'expect', true), set_config('fy.delete_audit', :'delete_audit', true) \gset
+SELECT set_config('fy.commit', :'commit', true), set_config('fy.expect', :'expect', true), set_config('fy.delete_audit', :'delete_audit', true), set_config('fy.journal_bypass', :'journal_bypass', true), set_config('fy.expect_journals', :'expect_journals', true) \gset
 
 CREATE TEMP TABLE _fy_targets ON COMMIT DROP AS
   SELECT id, slug, name, name_ar, is_active, created_at FROM companies WHERE name = 'FY Close';
@@ -53,7 +62,10 @@ CREATE TEMP TABLE _fy_baseline ON COMMIT DROP AS
          (SELECT count(*) FROM users) AS users,
          (SELECT count(*) FROM memberships WHERE company_id NOT IN (SELECT id FROM _fy_targets)) AS other_memberships,
          (SELECT count(*) FROM vat_standard_rates) AS vat_rates,
-         (SELECT count(*) FROM capabilities) AS capabilities;
+         (SELECT count(*) FROM capabilities) AS capabilities,
+         (SELECT count(*) FROM journal_entries WHERE company_id NOT IN (SELECT id FROM _fy_targets)) AS other_journals,
+         (SELECT count(*) FROM journal_lines WHERE company_id NOT IN (SELECT id FROM _fy_targets)) AS other_journal_lines,
+         (SELECT coalesce(sum(debit),0)+coalesce(sum(credit),0) FROM journal_lines WHERE company_id NOT IN (SELECT id FROM _fy_targets)) AS other_journal_amount;
 
 DO $$
 DECLARE n int;
@@ -100,16 +112,27 @@ BEGIN
   END IF;
 END $$;
 
--- Ledger gate. protect_posted_journal() (migration 021) raises for posted entries and, for DRAFT entries, returns NEW on
--- DELETE (which is NULL), so a plain DELETE of a draft journal is silently skipped. Entries therefore cannot be removed
--- without altering or disabling that trigger, which is forbidden here. Stop instead of attempting a partial deletion.
+-- Ledger gate. Journal entries/lines of the targets can only be removed by suspending exactly two triggers
+-- (journal_entries_posted_immutable, journal_lines_posted_immutable) for the rest of THIS transaction:
+--   * posted entries: protect_posted_journal() raises; draft entries: it returns NEW on DELETE (NULL), skipping the delete.
+-- Without -v journal_bypass=yes the script stops here. With it, the exact journal count must equal expect_journals.
+-- The triggers are re-enabled and verified inside the same transaction, before COMMIT; if anything fails, the whole
+-- transaction (including the ALTER TABLE ... DISABLE TRIGGER) rolls back and the triggers are untouched.
 DO $$
 DECLARE posted bigint; draft bigint;
 BEGIN
   SELECT count(*) FILTER (WHERE status='posted'), count(*) FILTER (WHERE status<>'posted') INTO posted, draft
     FROM journal_entries WHERE company_id IN (SELECT id FROM _fy_targets);
   IF posted + draft > 0 THEN
-    RAISE EXCEPTION 'BLOCKER: target companies own % posted and % draft journal entries. The ledger immutability triggers forbid deleting them and this script will not disable them. Nothing was deleted.', posted, draft;
+    IF current_setting('fy.journal_bypass') <> 'yes' THEN
+      RAISE EXCEPTION 'BLOCKER: target companies own % posted and % draft journal entries. Re-run with -v journal_bypass=yes -v expect_journals=% only with Owner approval. Nothing was deleted.', posted, draft, posted + draft;
+    END IF;
+    IF posted + draft <> current_setting('fy.expect_journals')::int THEN
+      RAISE EXCEPTION 'expect_journals=% does not match actual=% (posted %, draft %): aborting', current_setting('fy.expect_journals'), posted + draft, posted, draft;
+    END IF;
+    RAISE NOTICE 'Journal bypass: % posted + % draft entries; suspending the two journal immutability triggers inside this transaction', posted, draft;
+    ALTER TABLE journal_lines DISABLE TRIGGER journal_lines_posted_immutable;
+    ALTER TABLE journal_entries DISABLE TRIGGER journal_entries_posted_immutable;
   END IF;
 END $$;
 
@@ -155,6 +178,20 @@ BEGIN
   RAISE NOTICE 'deleted % rows from companies', deleted;
 END $$;
 
+-- Restore the protections (no-op when no bypass was used) and prove they are back on.
+ALTER TABLE journal_lines ENABLE TRIGGER journal_lines_posted_immutable;
+ALTER TABLE journal_entries ENABLE TRIGGER journal_entries_posted_immutable;
+DO $$
+DECLARE bad bigint;
+BEGIN
+  SELECT count(*) INTO bad FROM pg_trigger
+   WHERE tgrelid IN ('journal_entries'::regclass,'journal_lines'::regclass) AND NOT tgisinternal AND tgenabled <> 'O';
+  IF bad > 0 THEN RAISE EXCEPTION 'a journal trigger is not enabled: aborting'; END IF;
+  IF (SELECT count(*) FROM pg_trigger WHERE tgname IN ('journal_entries_posted_immutable','journal_lines_posted_immutable') AND tgenabled='O') <> 2 THEN
+    RAISE EXCEPTION 'journal immutability triggers missing: aborting';
+  END IF;
+END $$;
+
 -- Post-conditions: targets gone, everything else unchanged.
 DO $$
 DECLARE b _fy_baseline%ROWTYPE; leftover bigint;
@@ -166,6 +203,10 @@ BEGIN
   IF (SELECT count(*) FROM memberships WHERE company_id NOT IN (SELECT id FROM _fy_targets)) <> b.other_memberships THEN RAISE EXCEPTION 'other memberships changed'; END IF;
   IF (SELECT count(*) FROM vat_standard_rates) <> b.vat_rates THEN RAISE EXCEPTION 'vat_standard_rates changed'; END IF;
   IF (SELECT count(*) FROM capabilities) <> b.capabilities THEN RAISE EXCEPTION 'capabilities changed'; END IF;
+  IF (SELECT count(*) FROM journal_entries) <> b.other_journals OR (SELECT count(*) FROM journal_lines) <> b.other_journal_lines
+     OR (SELECT coalesce(sum(debit),0)+coalesce(sum(credit),0) FROM journal_lines) <> b.other_journal_amount THEN
+    RAISE EXCEPTION 'non-target journals changed';
+  END IF;
   SELECT count(*) INTO leftover FROM audit_log WHERE company_id IN (SELECT id FROM _fy_targets);
   IF leftover <> 0 THEN RAISE EXCEPTION 'audit rows remain'; END IF;
 END $$;
