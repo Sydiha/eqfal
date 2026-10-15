@@ -1,5 +1,6 @@
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
 import { DeleteRecordAction } from "./DeleteRecordAction";
+import { ReverseJournalAction } from "./ReverseJournalAction";
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExportButtons } from "./ExportButtons";
@@ -164,6 +165,7 @@ interface Props {
   canEditJournal: boolean;
   canPost: boolean;
   canDeleteJournal?: boolean;
+  canReverseJournal?: boolean;
   onUnauthorized: () => void;
   accountsFooter?: ReactNode;
 }
@@ -204,6 +206,7 @@ export function Accounting({
   canEditJournal,
   canPost,
   canDeleteJournal = false,
+  canReverseJournal = false,
   onUnauthorized,
   accountsFooter,
 }: Props) {
@@ -1457,6 +1460,21 @@ export function Accounting({
                       name={selected.description}
                       onUnauthorized={onUnauthorized}
                       onDeleted={async () => { setSelected(null); mutationSucceeded(); await load(true); }}
+                    />
+                  </div>
+                )}
+                {selected.status === "posted" && (selected.reversal_of_journal_id || selected.reversed_by_journal_id || selected.source_type) && (
+                  <p className="ac-tab__hint" role="note">
+                    {t(selected.reversal_of_journal_id ? "journalReversal.reversalOf" : selected.reversed_by_journal_id ? "journalReversal.reversedBy" : "journalReversal.systemGenerated")}
+                  </p>
+                )}
+                {selected.status === "posted" && canReverseJournal && selected.entry_type === "standard" && !selected.source_type && !selected.reversal_of_journal_id && !selected.reversed_by_journal_id && (
+                  <div className="ac-tab__actions">
+                    <ReverseJournalAction
+                      journalId={selected.id}
+                      journalDate={selected.accounting_date}
+                      onUnauthorized={onUnauthorized}
+                      onReversed={async () => { setSelected(null); mutationSucceeded(); await load(true); }}
                     />
                   </div>
                 )}

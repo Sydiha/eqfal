@@ -13,6 +13,8 @@ import { AuthSessionContext } from '../auth/session.service';
 import { FiscalYearRepository } from './fiscal-year.repository';
 import { FiscalYearService } from './fiscal-year.service';
 import { UpdateFiscalYearInput } from './fiscal-year.types';
+import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
+import { CarryforwardBlockedError, CarryforwardNotFoundError, CarryforwardValidationError, FiscalYearCarryforwardService } from './fiscal-year-carryforward';
 
 export const fiscalYearRouter = Router();
 
@@ -85,6 +87,22 @@ function activeContext(req: Request, res: Response): ActiveAuthContext | null {
 }
 
 function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
+  if (err instanceof CarryforwardBlockedError) {
+    res.status(409).json({ error: err.message, code: err.code, blockers: err.blockers });
+    return;
+  }
+  if (err instanceof CarryforwardValidationError) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  if (err instanceof CarryforwardNotFoundError) {
+    res.status(404).json({ error: 'Fiscal year not found' });
+    return;
+  }
+  if (err instanceof AccountingPeriodClosedError) {
+    res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' });
+    return;
+  }
   if (err instanceof FiscalYearCloseBlockedError) {
     res.status(409).json({ error: 'Fiscal year close blocked', code: 'FISCAL_YEAR_CLOSE_BLOCKED', blockers: err.blockers, warnings: err.warnings });
     return;
@@ -266,5 +284,51 @@ fiscalYearRouter.post(
     } catch (err) {
       mapDomainError(err, res, next);
     }
+  }),
+);
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Year-end carry-forward: preview, and prepare the next year's DRAFT opening balance review from the closed year's final trial balance.
+fiscalYearRouter.get(
+  '/fiscal-years/:id/carryforward',
+  requireAuth,
+  requireActiveCompany,
+  requireCapability('accounting.view'),
+  requireCapability('opening_balance.view'),
+  asyncRoute(async (req, res, next) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    const account = req.query['retained_earnings_account_id'];
+    if (!UUID_RE.test(req.params['id']!) || (account !== undefined && (typeof account !== 'string' || !UUID_RE.test(account)))) {
+      res.status(404).json({ error: 'Fiscal year not found' });
+      return;
+    }
+    if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
+    try {
+      res.json(await new FiscalYearCarryforwardService(pool).preview(context.activeCompanyId, req.params['id']!, account as string | undefined));
+    } catch (err) { mapDomainError(err, res, next); }
+  }),
+);
+
+fiscalYearRouter.post(
+  '/fiscal-years/:id/carryforward',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability('fiscal_year.carryforward.prepare'),
+  asyncRoute(async (req, res, next) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    const body = req.body as unknown;
+    if (!UUID_RE.test(req.params['id']!)) { res.status(404).json({ error: 'Fiscal year not found' }); return; }
+    if (!isPlainObject(body) || !hasOnlyKeys(body, ['retained_earnings_account_id']) || typeof body['retained_earnings_account_id'] !== 'string' || !UUID_RE.test(body['retained_earnings_account_id'])) {
+      res.status(400).json({ error: 'A retained-earnings account is required' });
+      return;
+    }
+    if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
+    try {
+      res.status(201).json(await new FiscalYearCarryforwardService(pool).prepare(context.activeCompanyId, req.params['id']!, context.user.id, body['retained_earnings_account_id']));
+    } catch (err) { mapDomainError(err, res, next); }
   }),
 );
