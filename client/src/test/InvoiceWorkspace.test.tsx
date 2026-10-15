@@ -4,7 +4,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {InvoiceWorkspace} from '../components/SalesInvoices';
 import {Dialog} from '../components/Dialog';
 import {Purchases} from '../components/Purchases';
-import {nextAction,sumDecimalStrings} from '../components/invoiceWorkspaceLogic';
+import {deleteAction,nextAction,sumDecimalStrings} from '../components/invoiceWorkspaceLogic';
 import i18n from '../i18n';
 
 const ID='11111111-1111-4111-8111-111111111111',PARTY='22222222-2222-4222-8222-222222222222',OBLIGATION='33333333-3333-4333-8333-333333333333',JOURNAL='44444444-4444-4444-8444-444444444444',DOC='55555555-5555-4555-8555-555555555555';
@@ -554,5 +554,87 @@ describe('F4 cancellation and correction history',()=>{
   fireEvent.change(within(group).getByLabelText('سبب الإلغاء'),{target:{value:'خطأ'}});
   fireEvent.click(within(group).getByRole('button',{name:'إلغاء الفاتورة'}));
   expect(await screen.findByRole('alert')).toHaveTextContent('لا يمكن إلغاء فاتورة معتمدة');
+ });
+});
+
+describe('Delete & void Phase 1: deleting draft invoices',()=>{
+ const submittedInvoice={...base,status:'submitted',actionable_status:'awaiting_approval'};
+ const cancelledInvoice={...base,status:'cancelled',actionable_status:'cancelled',cancellation:{cancelled_by_user_id:'u',cancelled_at:'2026-10-13T08:00:00Z',reason:'Issued by mistake'},adjustments:[]};
+ const del={...caps,canDelete:true};
+ const open=async(invoice:Record<string,unknown>,capabilities:Record<string,unknown>,extra:Handler=()=>undefined,direction:'sales'|'purchase'='sales',label='REF-9')=>{
+  const fetchMock=mockApi(invoice,extra);
+  render(<InvoiceWorkspace {...capabilities as typeof caps} direction={direction} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText(label));
+  await screen.findByRole('dialog');
+  return fetchMock;
+ };
+ const DELETE=`DELETE /api/invoices/${ID}?version=${base.version}`;
+
+ it('decides availability from status and capability only',()=>{
+  expect(deleteAction({status:'draft'},{...caps})).toEqual({visible:false,enabled:false,reason:'noDelete'});
+  expect(deleteAction({status:'draft'},del)).toEqual({visible:true,enabled:true,reason:null});
+  for(const status of ['submitted','approved','cancelled'] as const){
+   expect(deleteAction({status},del)).toEqual({visible:true,enabled:false,reason:status});
+   expect(deleteAction({status},{...caps}).visible).toBe(false);
+  }
+ });
+
+ it('hides delete without invoice.delete and says why',async()=>{
+  await open(base,caps);
+  expect(screen.queryByRole('button',{name:'Delete draft'})).not.toBeInTheDocument();
+  expect(screen.getByTestId('delete-note')).toHaveTextContent('You do not have permission to delete invoices');
+ });
+
+ it('asks for confirmation, then deletes with the current version once and reloads the list',async()=>{
+  const fetchMock=await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined);
+  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  expect(calls(fetchMock,'DELETE ')).toHaveLength(0); // nothing is sent before the confirmation
+  const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
+  expect(group).toHaveTextContent('cannot be recovered');
+  fireEvent.click(within(group).getByRole('button',{name:'Delete permanently'}));
+  await waitFor(()=>expect(calls(fetchMock,DELETE)).toHaveLength(1));
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(listCalls(fetchMock).length).toBeGreaterThanOrEqual(2);
+ });
+
+ it('cancelling the confirmation sends nothing and keeps the invoice open',async()=>{
+  const fetchMock=await open(base,del);
+  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
+  fireEvent.click(within(group).getByRole('button',{name:'Cancel'}));
+  expect(screen.queryByRole('group',{name:'Permanently delete this draft invoice?'})).not.toBeInTheDocument();
+  expect(calls(fetchMock,'DELETE ')).toHaveLength(0);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+ });
+
+ it.each([[submittedInvoice,'Return it to draft first'],[approved,'never deleted'],[cancelledInvoice,'cannot be deleted']] as const)('keeps delete disabled and explains why for a %#-th non-draft status',async(invoice,text)=>{
+  await open(invoice as Record<string,unknown>,del,()=>undefined,'sales',invoice===approved?'PINV-0001':'REF-9');
+  expect(screen.getByRole('button',{name:'Delete draft'})).toBeDisabled();
+  expect(screen.getByTestId('delete-note')).toHaveTextContent(text);
+ });
+
+ it('shows the server refusal and keeps the invoice open',async()=>{
+  await open(base,del,(key)=>key===DELETE?json({error:'x',code:'INVOICE_DELETE_NOT_ALLOWED'},409):undefined);
+  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
+  fireEvent.click(within(group).getByRole('button',{name:'Delete permanently'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Only a draft invoice can be deleted');
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+ });
+
+ it('works for purchase invoices too',async()=>{
+  const fetchMock=await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined,'purchase');
+  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  fireEvent.click(within(await screen.findByRole('group',{name:'Permanently delete this draft invoice?'})).getByRole('button',{name:'Delete permanently'}));
+  await waitFor(()=>expect(calls(fetchMock,DELETE)).toHaveLength(1));
+ });
+
+ it('is fully available in Arabic',async()=>{
+  await i18n.changeLanguage('ar');
+  await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined);
+  fireEvent.click(screen.getByRole('button',{name:'حذف المسودة'}));
+  const group=await screen.findByRole('group',{name:'حذف مسودة الفاتورة نهائيًا؟'});
+  expect(group).toHaveTextContent('لا يمكن استرجاعها');
+  expect(within(group).getByRole('button',{name:'حذف نهائي'})).toBeInTheDocument();
  });
 });

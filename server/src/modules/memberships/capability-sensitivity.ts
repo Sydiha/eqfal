@@ -40,6 +40,7 @@ const SENSITIVE_EXACT = new Set([
   'fiscal_year.create',
   'fiscal_year.edit',
   'invoice.cancel',
+  'invoice.delete',
   'obligation.cancel',
   'obligation.confirm',
   'obligation.settle',

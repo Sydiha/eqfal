@@ -3,6 +3,8 @@ export type InvoiceCaps = {
   canView: boolean; canCreate: boolean; canEdit: boolean; canSubmit: boolean;
   /** invoice.cancel (draft and submitted invoices only; approved invoices are corrected by credit/debit notes). */
   canCancel?: boolean;
+  /** invoice.delete: physically delete a DRAFT invoice. Never offered as an action on any other status. */
+  canDelete?: boolean;
   /** invoice.adjust: register / edit / cancel a draft external credit or debit note. invoice.adjust_approve alone approves it (the generated obligation effect and DRAFT journal need no manual journal permission). */
   canAdjust?: boolean; canAdjustApprove?: boolean;
   /** invoice.recurring: create / edit / pause / resume / end recurring schedules and run due ones. Generated invoices are drafts only. */
@@ -78,3 +80,14 @@ export function sumDecimalStrings(values: ReadonlyArray<string | null | undefine
 
 export const PAGE_SIZE = 25;
 export const INVOICE_STATUSES = ['draft', 'submitted', 'approved', 'cancelled'] as const;
+
+export type DeleteAction = { visible: boolean; enabled: boolean; reason: string | null };
+
+/**
+ * Whether permanent deletion is offered. Only a draft can be deleted, and only with invoice.delete; the server and a database guard re-check both.
+ * `reason` is a key suffix under invoiceWorkspace.deleteReasons explaining why deletion is unavailable.
+ */
+export function deleteAction(invoice: { status: WorkflowInvoice['status'] }, caps: InvoiceCaps): DeleteAction {
+  if (invoice.status === 'draft') return caps.canDelete ? { visible: true, enabled: true, reason: null } : { visible: false, enabled: false, reason: 'noDelete' };
+  return { visible: !!caps.canDelete, enabled: false, reason: invoice.status };
+}

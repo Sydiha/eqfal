@@ -483,7 +483,9 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const router = readFileSync(join(__dirname, '../src/modules/invoices/invoice.router.ts'), 'utf8');
-    expect(router).not.toMatch(/invoiceRouter\.(delete|patch)\(/);
+    // Delete & Void Phase 1: the single DELETE route is gated by invoice.delete and the service deletes drafts only; there is still no PATCH route.
+    expect(router).not.toMatch(/invoiceRouter\.patch\(/);
+    expect(router.match(/invoiceRouter\.delete\([^\n]*/g)).toEqual(["invoiceRouter.delete('/invoices/:id', ...write, requireCapability('invoice.delete'), route((req, res) => handle(res, async (svc) => {"]);
     expect(router.match(/invoiceRouter\.\w+\('[^']*cancel[^']*'/g)).toEqual(["invoiceRouter.post('/invoices/:id/cancel'", "invoiceRouter.post('/invoice-adjustments/:id/cancel'"]); // invoice cancel (draft/submitted only) + cancel of a DRAFT external note, both capability-guarded
     const services = ['invoice.service.ts', 'invoice-approval.service.ts'].map((f) => readFileSync(join(__dirname, '../src/modules/invoices', f), 'utf8')).join('\n');
     // F4: the only cancellation write is restricted to draft/submitted rows; approved invoices are refused before it.

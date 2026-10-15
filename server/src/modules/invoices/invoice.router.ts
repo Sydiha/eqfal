@@ -134,6 +134,18 @@ invoiceRouter.post('/invoices/:id/cancel', ...write, requireCapability('invoice.
   res.json({ invoice: await svc.cancel(companyId, actorUserId, req.params.id!, version, reason) });
 })));
 
+// Phase 1 delete: physical deletion of a DRAFT invoice only. invoice.delete is its own capability (Full Access holds it through the wildcard; no role is granted it by default).
+// Non-draft invoices are refused by the service (INVOICE_DELETE_NOT_ALLOWED) and by a database guard; they are cancelled or corrected, never deleted.
+invoiceRouter.delete('/invoices/:id', ...write, requireCapability('invoice.delete'), route((req, res) => handle(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { invalidId(res); return; }
+  const raw = req.query.version;
+  const version = typeof raw === 'string' && /^[1-9]\d{0,9}$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(version)) throw new InvoiceError(400, 'INVOICE_VALIDATION', 'version must be a positive integer');
+  const { companyId, actorUserId } = companyAndActor(req);
+  await svc.deleteDraft(companyId, actorUserId, req.params.id!, version);
+  res.json({ deleted: true, id: req.params.id });
+})));
+
 // F1: final approval (submitted -> approved). invoice.approve alone authorizes it (Full Access holds it through the wildcard, migration 075);
 // the creator may approve (074). The obligation and journal are system effects; the journal stays DRAFT (never posted here).
 invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice.approve'), route(async (req, res) => {

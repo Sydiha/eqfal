@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
-import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,nextAction,settlementAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
+import {INVOICE_STATUSES,InvoiceCaps,PAGE_SIZE,deleteAction,nextAction,settlementAction,sumDecimalStrings} from './invoiceWorkspaceLogic';
 import {InvoiceNotes} from './InvoiceNotes';
 import {RecurringInvoices} from './RecurringInvoices';
 import {UUID_PATTERN} from './obligationSettlementLogic';
@@ -41,7 +41,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const prefix=direction==='purchase'?'purchaseInv':'salesInv';
  const unauthorizedRef=useRef(onUnauthorized);unauthorizedRef.current=onUnauthorized;
  const unauthorized=useCallback(()=>unauthorizedRef.current(),[]);
- const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null);
+ const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null),[confirmDelete,setConfirmDelete]=useState(false);
  const[rate,setRate]=useState<RateState|null>(null);
  const readFilters=():Filters=>({q:readQueryParameter(`${prefix}Q`)??'',status:readQueryParameter(`${prefix}Status`,{allowedValues:INVOICE_STATUSES})??'',party:readQueryParameter(`${prefix}Party`,{pattern:/^[0-9a-f-]{36}$/i})??'',from:validDate(readQueryParameter(`${prefix}From`)),to:validDate(readQueryParameter(`${prefix}To`))});
  const[filters,setFilters]=useState<Filters>(readFilters);
@@ -123,7 +123,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  useEffect(()=>{if(canView||canCreate)void loadParties()},[canView,canCreate,loadParties]);
  const loadDocuments=async()=>{if(!canViewDocuments)return;try{const response=await fetch('/api/documents');if(response.status===401){unauthorized();return;}if(response.ok)setDocuments(((await response.json()) as {documents?:EvidenceDocument[]}).documents??[])}catch{/* evidence linking is optional */}};
 
- const open=async(id:string)=>{setError(null);setConfirmPost(false);setCancelReason(null);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
+ const open=async(id:string)=>{setError(null);setConfirmPost(false);setCancelReason(null);setConfirmDelete(false);const response=await fetch(`/api/invoices/${id}`);if(response.status===401){unauthorized();return;}if(!response.ok){setLoadError(true);return;}setDetail((await response.json() as {invoice:Invoice}).invoice)};
  useEffect(()=>{const id=returnInvoiceRef.current;if(!id||!canView)return;returnInvoiceRef.current=null;writeQueryParameters({invoiceId:null},'replace');void open(id)},[canView]);
  const startNew=()=>{setError(null);setDetail(null);setForm({id:null,version:null,values:emptyForm()});void loadParties();void loadDocuments()};
  const startEdit=(invoice:Invoice)=>{setError(null);setDetail(null);setForm({id:invoice.id,version:invoice.version,values:fromInvoice(invoice)});void loadParties();void loadDocuments()};
@@ -140,6 +140,18 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const cancelInvoice=async(invoice:Invoice)=>{
   const next=await request(`/api/invoices/${invoice.id}/cancel`,'POST',{version:invoice.version,reason:(cancelReason??'').trim()});
   if(next){setCancelReason(null);await refresh();await open(next.id)}
+ };
+ // Permanent deletion of a DRAFT only (invoice.delete). The server refuses anything else; on success the invoice is gone and the list is reloaded.
+ const deleteInvoice=async(invoice:Invoice)=>{
+  setBusy(true);setError(null);
+  try{
+   const response=await fetch(`/api/invoices/${invoice.id}?version=${invoice.version}`,{method:'DELETE'});
+   if(response.status===401){unauthorized();return;}
+   const payload=await response.json().catch(()=>({})) as {deleted?:boolean;code?:string};
+   if(!response.ok||!payload.deleted){setError(errorText(payload.code));setConfirmDelete(false);return;}
+   setConfirmDelete(false);setDetail(null);await refresh();
+  }catch{setError(errorText(undefined));}
+  finally{setBusy(false)}
  };
  // Posting is an explicit, separate accounting act through the authorized journal API. The invoice is re-read afterwards so every figure comes from the server.
  const postJournal=async(invoice:Invoice)=>{
@@ -184,16 +196,20 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   const action=nextAction({status:invoice.status,created_by_user_id:invoice.created_by_user_id,obligation:invoice.obligation,journal:invoice.journal},caps);
   const settle=invoice.status==='approved'?settlementAction({status:invoice.status,obligation:invoice.obligation,journal:invoice.journal,outstanding_amount:invoice.outstanding_amount},caps):null;
   const reason=action.reason?t(`invoiceWorkspace.reasons.${action.reason}`):null;
+  const del=deleteAction(invoice,caps);
+  const deleteReason=del.reason?t(`invoiceWorkspace.deleteReasons.${del.reason}`):null;
   const settleReason=settle?.reason?t(`invoiceWorkspace.reasons.${settle.reason}`):null;
   const primaryLabel=action.kind==='submit'?t('salesInvoice.submit'):action.kind==='approve'?t('invoiceWorkspace.approve'):action.kind==='post'?t('invoiceWorkspace.postJournal'):null;
   const onPrimary=()=>{if(action.kind==='submit')void transition(invoice,'submit');else if(action.kind==='approve')void transition(invoice,'approve');else if(action.kind==='post')setConfirmPost(true)};
   return <>
    {settleReason&&settle&&!settle.enabled&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="settle-note">{settleReason}</p>}
    {reason&&<p className={`sales-invoices__hint sales-invoices__next${action.kind==='none'?'':' sales-invoices__next--blocked'}`} data-testid="next-action-note">{reason}</p>}
+   {deleteReason&&(del.visible||del.reason==='noDelete')&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="delete-note">{deleteReason}</p>}
    <div className="modal-actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
     {invoice.status==='draft'&&canEdit&&<button type="button" onClick={()=>startEdit(invoice)} disabled={busy}>{t('salesInvoice.edit')}</button>}
     {invoice.status==='submitted'&&canSubmit&&<button type="button" onClick={()=>void transition(invoice,'return')} disabled={busy}>{t('salesInvoice.return')}</button>}
     {(invoice.status==='draft'||invoice.status==='submitted')&&canCancel&&<button type="button" onClick={()=>setCancelReason('')} disabled={busy}>{t('salesInvoice.cancelInvoice')}</button>}
+    {del.visible&&<button type="button" onClick={()=>setConfirmDelete(true)} disabled={busy||!del.enabled}>{t('invoiceWorkspace.deleteInvoice')}</button>}
     {settle&&settle.reason!=='cancelled'&&<button type="button" className={primaryLabel?undefined:'primary'} onClick={()=>openSettlement(invoice)} disabled={busy||!settle.enabled}>{t(isPurchase?'invoiceWorkspace.recordPayment':'invoiceWorkspace.recordCollection')}</button>}
     {primaryLabel&&<button type="button" className="primary" onClick={onPrimary} disabled={busy||!action.enabled}>{primaryLabel}</button>}</div>
   </>;
@@ -240,7 +256,9 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
     {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
     {(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}
    </section>}
-   {cancelReason!==null?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmCancelTitle')}><p><strong>{t('invoiceWorkspace.confirmCancelTitle')}</strong></p><p>{t('invoiceWorkspace.confirmCancelBody')}</p>
+   {confirmDelete&&detail.status==='draft'?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmDeleteTitle')}><p><strong>{t('invoiceWorkspace.confirmDeleteTitle')}</strong></p><p>{t('invoiceWorkspace.confirmDeleteBody')}</p>
+     <div className="modal-actions"><button type="button" onClick={()=>setConfirmDelete(false)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void deleteInvoice(detail)} disabled={busy}>{t('invoiceWorkspace.confirmDelete')}</button></div></div>
+    :cancelReason!==null?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmCancelTitle')}><p><strong>{t('invoiceWorkspace.confirmCancelTitle')}</strong></p><p>{t('invoiceWorkspace.confirmCancelBody')}</p>
      <label>{t('invoiceWorkspace.cancellationReason')}<textarea value={cancelReason} maxLength={500} onChange={e=>setCancelReason(e.target.value)} required/></label>
      <div className="modal-actions"><button type="button" onClick={()=>setCancelReason(null)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void cancelInvoice(detail)} disabled={busy||cancelReason.trim()===''}>{t('invoiceWorkspace.confirmCancel')}</button></div></div>
     :confirmPost?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmPostTitle')}><p><strong>{t('invoiceWorkspace.confirmPostTitle')}</strong></p><p>{t('invoiceWorkspace.confirmPostBody')}</p>
