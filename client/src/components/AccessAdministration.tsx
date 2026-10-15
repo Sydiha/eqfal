@@ -4,6 +4,9 @@ import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/api
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import { capabilityGroupKey, capabilityGroupLabel, capabilityLabel, langOf } from '../labels/capabilityLabels';
+import { GrantImpact, SensitivityMap, grantImpact, newlyGranted, roleChangeImpact } from './accessRisk';
+import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
+import { SystemAdministration } from './SystemAdministration';
 import './AccessAdministration.css';
 
 export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean }
@@ -11,10 +14,14 @@ export interface AccessRole { id: string; name: string; is_full_access: boolean;
 interface Props {
   capabilities: readonly string[];
   currentUserId: string;
+  /** Shows the global administration tab (server re-verifies System Admin on every /api/admin request). */
+  isSystemAdmin?: boolean;
+  /** Active company display name, used in grant warnings. */
+  companyName?: string;
   onUnauthorized: () => void;
 }
 type ErrorKey = 'error' | 'invalidRequest' | 'forbidden' | 'notFound' | 'conflict';
-type Tab = 'members' | 'roles';
+type Tab = 'members' | 'roles' | 'global';
 type Dialogs = 'addMember' | 'createUser' | 'createRole' | null;
 
 async function request(url: string, options: RequestInit, onUnauthorized: () => void) {
@@ -47,17 +54,19 @@ function GroupCheckbox({ label, checked, indeterminate, disabled, onChange }: { 
  * Every action is also enforced server-side (capability, tenant scope and ceiling checks);
  * hiding controls here is only a convenience.
  */
-export function AccessAdministration({ capabilities, currentUserId, onUnauthorized }: Props) {
+export function AccessAdministration({ capabilities, currentUserId, isSystemAdmin = false, companyName = '', onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const lang = langOf(i18n.language);
   const can = (capability: string) => capabilities.includes(capability);
-  const canView = can('access.view');
-  const [tab, setTab] = useState<Tab>('members');
+  const canView = can('access.view') || isSystemAdmin;
+  const canViewCompany = can('access.view');
+  const [tab, setTab] = useState<Tab>(canViewCompany ? 'members' : 'global');
   const [members, setMembers] = useState<AccessMembership[]>([]);
   const [roles, setRoles] = useState<AccessRole[]>([]);
   const [allCapabilities, setAllCapabilities] = useState<string[]>([]);
-  const [explicitOnly, setExplicitOnly] = useState<string[]>([]);
-  const [loading, setLoading] = useState(canView);
+  const [sensitivity, setSensitivity] = useState<SensitivityMap>({});
+  const [pending, setPending] = useState<PendingGrant | null>(null);
+  const [loading, setLoading] = useState(canViewCompany);
   const [loaded, setLoaded] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
@@ -76,9 +85,9 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
       ]);
       setMembers(((await m.json()) as { memberships: AccessMembership[] }).memberships);
       setRoles(((await r.json()) as { roles: AccessRole[] }).roles);
-      const catalog = (await c.json()) as { capabilities: string[]; explicit_only?: string[] };
+      const catalog = (await c.json()) as { capabilities: string[]; sensitivity?: SensitivityMap };
       setAllCapabilities(catalog.capabilities);
-      setExplicitOnly(catalog.explicit_only ?? []);
+      setSensitivity(catalog.sensitivity ?? {});
       setLoaded(true);
     } catch (reason) {
       const aborted = reason instanceof DOMException && reason.name === 'AbortError';
@@ -88,17 +97,17 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   }, [onUnauthorized]);
 
   useEffect(() => {
-    if (!canView) return;
+    if (!canViewCompany) return;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [canView, load]);
+  }, [canViewCompany, load]);
 
   const mutate = async (work: () => Promise<unknown>, afterSuccess?: () => void) => {
     setBusy(true); setErrorKey(null); setFailure(null);
     try { await work(); afterSuccess?.(); await load(); }
     catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); } }
-    finally { setBusy(false); }
+    finally { setBusy(false); setPending(null); }
   };
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
@@ -113,6 +122,14 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
 
   if (!canView) return <section className="panel"><WorkspaceState>{t('access.noAccess')}</WorkspaceState></section>;
 
+  /** Runs action directly for ordinary authority; otherwise asks for a risk-appropriate confirmation first (UX only). */
+  const withConfirmation = (impact: GrantImpact, subject: string, subjectKind: 'user' | 'role', action: () => void) => {
+    if (impact.risk === 'normal') { action(); return; }
+    setErrorKey(null);
+    setPending({ impact, subject, subjectKind, companyName, run: action });
+  };
+  const roleById = (id: string | null) => roles.find((role) => role.id === id) ?? null;
+
   const addMember = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = String(new FormData(event.currentTarget).get('email') ?? '').trim();
@@ -124,7 +141,10 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     const body: Record<string, string> = { email: String(data.get('email') ?? '').trim(), password: String(data.get('password') ?? '') };
     const roleId = String(data.get('role_id') ?? '');
     if (roleId) body.role_id = roleId;
-    void mutate(() => request('/api/access/users', json('POST', body), onUnauthorized), () => setDialog(null));
+    const run = () => void mutate(() => request('/api/access/users', json('POST', body), onUnauthorized), () => setDialog(null));
+    const role = roleById(roleId || null);
+    if (!role) { run(); return; }
+    withConfirmation(roleChangeImpact(null, role, allCapabilities, sensitivity), body.email!, 'user', run);
   };
   const createRole = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -133,10 +153,17 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
   };
   const setActive = (member: AccessMembership, isActive: boolean) =>
     mutate(() => request(`/api/access/memberships/${member.id}/active`, json('PATCH', { is_active: isActive }), onUnauthorized));
-  const assignRole = (member: AccessMembership, roleId: string) =>
-    mutate(() => request(`/api/access/memberships/${member.id}/role`, json('PUT', { role_id: roleId }), onUnauthorized));
-  const toggleCapability = (role: AccessRole, capabilityId: string, grant: boolean) =>
-    mutate(() => request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(capabilityId)}`, { method: grant ? 'PUT' : 'DELETE' }, onUnauthorized));
+  const assignRole = (member: AccessMembership, roleId: string) => {
+    const next = roleById(roleId);
+    const run = () => void mutate(() => request(`/api/access/memberships/${member.id}/role`, json('PUT', { role_id: roleId }), onUnauthorized));
+    if (!next) { run(); return; }
+    withConfirmation(roleChangeImpact(roleById(member.role_id), next, allCapabilities, sensitivity), member.user_email, 'user', run);
+  };
+  const toggleCapability = (role: AccessRole, capabilityId: string, grant: boolean) => {
+    const run = () => void mutate(() => request(`/api/access/roles/${role.id}/capabilities/${encodeURIComponent(capabilityId)}`, { method: grant ? 'PUT' : 'DELETE' }, onUnauthorized));
+    if (!grant) { run(); return; }
+    withConfirmation(grantImpact([capabilityId], sensitivity), role.name, 'role', run);
+  };
 
   /** One atomic request for Select all / Clear all / group toggles; the role list is reloaded once afterwards (by mutate). */
   const bulkChange = (role: AccessRole, grants: string[], revokes: string[]) => {
@@ -144,7 +171,8 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
     const body: { grants?: string[]; revokes?: string[] } = {};
     if (grants.length) body.grants = grants;
     if (revokes.length) body.revokes = revokes;
-    void mutate(() => request(`/api/access/roles/${role.id}/capabilities/bulk`, json('POST', body), onUnauthorized));
+    const run = () => void mutate(() => request(`/api/access/roles/${role.id}/capabilities/bulk`, json('POST', body), onUnauthorized));
+    withConfirmation(grantImpact(newlyGranted(role.capabilities, grants), sensitivity), role.name, 'role', run);
   };
   const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
   const canGrantId = (id: string) => can('access.role.capability.grant') && can(id);
@@ -161,11 +189,13 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
       {tab === 'roles' && can('access.role.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('createRole'); }}>{t('access.createRole')}</button>}
     </header>
     <div role="tablist" aria-label={t('access.tabs')} className="acc-tabs">
-      <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'is-active' : ''} onClick={() => setTab('members')}>{t('access.membersTab')}</button>
-      <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => setTab('roles')}>{t('access.rolesTab')}</button>
+      {canViewCompany && <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'is-active' : ''} onClick={() => setTab('members')}>{t('access.membersTab')}</button>}
+      {canViewCompany && <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => setTab('roles')}>{t('access.rolesTab')}</button>}
+      {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => setTab('global')}>{t('systemAdmin.tab')}</button>}
     </div>
-    {errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
-    {loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
+    {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized}/>}
+    {tab !== 'global' && errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
+    {tab === 'global' ? null : loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
       <p className="acc-hint">{t('access.disableHint')}</p>
       <div className="acc-table"><table><thead><tr><th>{t('access.user')}</th><th>{t('access.role')}</th><th>{t('access.status')}</th><th>{t('access.actions')}</th></tr></thead>
         <tbody>{members.length === 0 ? <tr><td colSpan={4} className="acc-empty">{t('access.membersEmpty')}</td></tr> : members.map((member) => <tr key={member.id}>
@@ -194,14 +224,6 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
           <h3>{t('access.capabilities')} — {selectedRole.name}</h3>
           {selectedRole.is_full_access ? <>
             <p className="acc-hint">{t('access.fullAccessNote')}</p>
-            {explicitOnly.length > 0 && <section className="acc-group is-open">
-              <p className="acc-hint">{t('access.explicitOnlyNote')}</p>
-              <div className="acc-group-body">{explicitOnly.map((id) => {
-                const granted = selectedRole.capabilities.includes(id);
-                const canToggle = granted ? can('access.role.capability.revoke') : can('access.role.capability.grant');
-                return <label key={id} title={id}><input type="checkbox" checked={granted} disabled={busy || !canToggle} onChange={() => void toggleCapability(selectedRole, id, !granted)} />{capabilityLabel(id, lang)}</label>;
-              })}</div>
-            </section>}
           </> : <>
             <p className="acc-hint">{t('access.ceilingNote')}</p>
             {(() => {
@@ -241,6 +263,7 @@ export function AccessAdministration({ capabilities, currentUserId, onUnauthoriz
         </>}
       </div>
     </div>}
+    {pending && <GrantConfirmDialog pending={pending} busy={busy} onCancel={() => setPending(null)} />}
     {dialog === 'addMember' && <Dialog title={t('access.addMemberTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
       <form onSubmit={addMember} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label><small>{t('access.emailHint')}</small>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.add')}</button></div></form></Dialog>}

@@ -4,8 +4,12 @@ import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapa
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { AccessPolicyError } from './access-policy-error';
 import { MembershipService } from './membership.service';
+import { sensitivityMap } from './capability-sensitivity';
 
 export const accessAdministrationRouter = Router();
+
+// Company-scoped administration of the ACTIVE company. Capabilities (never role names) authorize each route; an active
+// System Admin resolves every capability in any active company it selects (MembershipRepository.getActiveCapabilities).
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,7 +41,7 @@ function exactObject(body: unknown, keys: string[]): body is Record<string, unkn
   return !!body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).every((key) => keys.includes(key));
 }
 
-function handleKnownError(error: unknown, res: Response): boolean {
+export function handleKnownError(error: unknown, res: Response): boolean {
   const message = error instanceof Error ? error.message : '';
   if (error instanceof AccessPolicyError) { res.status(403).json({ error: 'Forbidden', code: error.code }); return true; }
   if (/not found/i.test(message)) res.status(404).json({ error: 'Not found' });
@@ -60,7 +64,9 @@ accessAdministrationRouter.get('/access/roles', ...readGuards, asyncRoute(async 
 
 accessAdministrationRouter.get('/access/capabilities', ...readGuards, asyncRoute(async (_req, res) => {
   const value = service(res);
-  if (value) res.json({ capabilities: await value.listCapabilities(), explicit_only: await value.listExplicitOnlyCapabilities() });
+  if (!value) return;
+  const capabilities = await value.listCapabilities();
+  res.json({ capabilities, sensitivity: sensitivityMap(capabilities) });
 }));
 
 accessAdministrationRouter.post('/access/memberships', ...writeGuards('access.membership.create'), asyncRoute(async (req, res) => {

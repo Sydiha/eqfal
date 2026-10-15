@@ -5,6 +5,7 @@ import {
   ACCOUNTANT_CAPABILITIES,
   FINANCE_MANAGER_CAPABILITIES,
   LEGACY_UNASSIGNED_CAPABILITIES,
+  COMPANY_MANAGER_CAPABILITIES,
   VIEWER_CAPABILITIES,
 } from '../src/modules/memberships/default-role-capabilities';
 
@@ -81,7 +82,7 @@ async function provisionCapabilitiesByRole(): Promise<Record<string, string[]>> 
 }
 
 describe('company default roles provisioning', () => {
-  it('creates a new company with exactly 4 default roles', async () => {
+  it('creates a new company with exactly 5 default roles (Company Manager added by migration 075)', async () => {
     const { pool, sqls } = fakePool((sql) => {
       if (sql.includes('INSERT INTO companies')) {
         return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
@@ -94,7 +95,7 @@ describe('company default roles provisioning', () => {
 
     // Count role creation queries
     const roleInsertions = sqls.filter((s) => s.includes('INSERT INTO roles') && s.includes('RETURNING id'));
-    expect(roleInsertions).toHaveLength(4);
+    expect(roleInsertions).toHaveLength(5);
   });
 
   it('creates roles with correct names and is_full_access flags', async () => {
@@ -250,6 +251,17 @@ describe('company default roles provisioning', () => {
       // Limited roles only have company.view among company.* capabilities
       expect(byRole[roleName].filter((c) => c.startsWith('company.'))).toEqual(['company.view']);
     }
+  });
+
+  it('provisions the conservative Company Manager role: access administration and operational documents, no manual accounting, closing, tax approval or Full Access grant', async () => {
+    const byRole = await provisionCapabilitiesByRole();
+    expect(new Set(byRole['Company Manager'])).toEqual(new Set(COMPANY_MANAGER_CAPABILITIES));
+    for (const forbidden of ['accounting.journal.create', 'accounting.journal.edit', 'accounting.journal.post', 'fiscal_year.close', 'monthly_close.close',
+      'monthly_close.reopen', 'vat.close', 'vat.reopen', 'tax_workpaper.approve', 'invoice.approve', 'invoice.adjust_approve', 'access.full_access.grant']) {
+      expect(byRole['Company Manager']).not.toContain(forbidden);
+    }
+    expect(byRole['Company Manager']).toContain('access.membership.role.assign');
+    expect(byRole['Company Manager']).toContain('invoice.create');
   });
 
   it('provisions roles scoped to the newly created company', async () => {

@@ -16,6 +16,8 @@ export interface AuthSessionContext {
   user: {
     id: string;
     email: string;
+    /** Global System Admin (users.is_system_admin). Display/UX hint only; every check is re-derived server-side. */
+    isSystemAdmin: boolean;
   };
   allowedCompanies: AllowedCompany[];
   activeCompanyId: string | null;
@@ -49,11 +51,23 @@ export class SessionService {
     this.sessions = new SessionRepository(pool);
   }
 
+  /**
+   * Companies the user may select: every active company for an active System Admin (global authority), otherwise only
+   * companies with an active membership. The System Admin flag comes from the same users row that authenticated the
+   * request (session join or login lookup), never from client input.
+   */
+  private selectableCompanies(userId: string, isSystemAdmin: boolean): Promise<ActiveCompanyMembership[]> {
+    return isSystemAdmin
+      ? this.memberships.listAllActiveCompaniesForSystemAdmin(userId)
+      : this.memberships.listActiveCompaniesForUser(userId);
+  }
+
   async login(email: string, password: string): Promise<LoginResult | null> {
     const user = await this.auth.authenticate(email, password);
     if (!user) return null;
 
-    const memberships = await this.memberships.listActiveCompaniesForUser(user.id);
+    const isSystemAdmin = user.is_system_admin === true;
+    const memberships = await this.selectableCompanies(user.id, isSystemAdmin);
     const activeCompanyId = memberships[0]?.company_id ?? null;
     const token = crypto.randomBytes(32).toString('base64url');
     const tokenHash = hashToken(token);
@@ -72,7 +86,7 @@ export class SessionService {
 
     return {
       token,
-      user: { id: user.id, email: user.email },
+      user: { id: user.id, email: user.email, isSystemAdmin },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId,
       capabilities,
@@ -83,7 +97,7 @@ export class SessionService {
     const session = await this.sessions.findActiveByTokenHash(hashToken(token));
     if (!session) return null;
 
-    const memberships = await this.memberships.listActiveCompaniesForUser(session.user_id);
+    const memberships = await this.selectableCompanies(session.user_id, session.user_is_system_admin === true);
     const allowedIds = new Set(memberships.map((m) => m.company_id));
     const reconciledCompanyId =
       session.active_company_id && allowedIds.has(session.active_company_id)
@@ -99,7 +113,7 @@ export class SessionService {
       : [];
 
     return {
-      user: { id: session.user_id, email: session.user_email },
+      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: reconciledCompanyId,
       capabilities,
@@ -110,7 +124,7 @@ export class SessionService {
     const session = await this.sessions.findActiveByTokenHash(hashToken(token));
     if (!session) return null;
 
-    const memberships = await this.memberships.listActiveCompaniesForUser(session.user_id);
+    const memberships = await this.selectableCompanies(session.user_id, session.user_is_system_admin === true);
     const target = memberships.find((m) => m.company_id === requestedCompanyId);
     if (!target) return 'forbidden';
 
@@ -121,7 +135,7 @@ export class SessionService {
     );
 
     return {
-      user: { id: session.user_id, email: session.user_email },
+      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: requestedCompanyId,
       capabilities,

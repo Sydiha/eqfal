@@ -185,13 +185,6 @@ export class MembershipRepository {
     return rows.map((row) => row.id);
   }
 
-  /** Capabilities that no role (Full Access included) holds implicitly; they exist only as explicit role_capabilities rows. */
-  async listExplicitOnlyCapabilities(client?: PoolClient): Promise<string[]> {
-    const runner: QueryRunner = client ?? this.pool;
-    const { rows } = await runner.query<{ id: string }>('SELECT id FROM capabilities WHERE implicit_full_access = FALSE ORDER BY id');
-    return rows.map((row) => row.id);
-  }
-
   async findUserIdByEmail(email: string): Promise<string | null> {
     const { rows } = await this.pool.query<{ id: string }>(
       'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
@@ -251,19 +244,59 @@ export class MembershipRepository {
     return rows[0]?.has_full_access === true;
   }
 
+  /** Whether the user is an active global System Admin (users.is_system_admin, migration 075). */
+  async isActiveSystemAdmin(userId: string, client?: PoolClient): Promise<boolean> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ ok: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE AND is_system_admin = TRUE) AS ok',
+      [userId],
+    );
+    return rows[0]?.ok === true;
+  }
+
   /**
-   * Returns active capabilities only when membership, company, and role scope
-   * all agree. The explicit roles/company join is defense-in-depth against a
-   * corrupted or manually-written cross-company role_id.
+   * Every active company, for an active System Admin's company switcher (the caller has already verified System
+   * Admin status). Companies where the admin is an active member come first; membership_id/role_id are null otherwise.
+   */
+  async listAllActiveCompaniesForSystemAdmin(userId: string): Promise<ActiveCompanyMembership[]> {
+    const { rows } = await this.pool.query<ActiveCompanyMembership>(
+      `SELECT
+         m.id      AS membership_id,
+         c.id      AS company_id,
+         c.name    AS company_name,
+         c.name_ar AS company_name_ar,
+         m.role_id
+       FROM companies c
+       LEFT JOIN memberships m ON m.company_id = c.id AND m.user_id = $1 AND m.is_active = TRUE
+       WHERE c.is_active = TRUE
+       ORDER BY (m.id IS NULL) ASC, m.created_at ASC NULLS LAST, c.created_at ASC, c.id ASC`,
+      [userId],
+    );
+    return rows;
+  }
+
+  /**
+   * The single source of capability resolution (session context, administration ceilings, company management).
+   *  - Active System Admin: every registered capability in every ACTIVE company, with or without membership.
+   *  - Otherwise: the active membership's role in this active company. A Full Access role is a wildcard over every
+   *    registered capability (current and future); any other role holds exactly its role_capabilities rows.
+   * The explicit roles/company join is defense-in-depth against a corrupted or manually-written cross-company role_id.
    */
   async getActiveCapabilities(userId: string, companyId: string, client?: PoolClient): Promise<string[]> {
     const runner: QueryRunner = client ?? this.pool;
     const { rows } = await runner.query<{ capability_id: string }>(
       `SELECT cap.id AS capability_id
+       FROM capabilities cap
+       WHERE EXISTS (
+         SELECT 1 FROM users u JOIN companies c ON c.id = $2 AND c.is_active = TRUE
+         WHERE u.id = $1 AND u.is_active = TRUE AND u.is_system_admin = TRUE
+       )
+       UNION
+       SELECT cap.id AS capability_id
        FROM memberships m
        JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
+       JOIN capabilities cap ON r.is_full_access = TRUE
          OR EXISTS (
            SELECT 1
            FROM role_capabilities rc

@@ -8,6 +8,8 @@ export interface User {
   email: string;
   password_hash: string;
   is_active: boolean;
+  /** Global System Admin marker (migration 075). Optional so older fixtures without the column stay valid. */
+  is_system_admin?: boolean;
   created_at: Date;
   updated_at: Date;
 }

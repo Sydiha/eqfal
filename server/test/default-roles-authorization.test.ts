@@ -244,6 +244,8 @@ interface FakeDb {
   roles: Array<{ id: string; company_id: string; name: string; is_full_access: boolean }>;
   role_capabilities: Array<{ role_id: string; capability_id: string }>;
   memberships: Array<{ user_id: string; company_id: string; role_id: string; is_active: boolean }>;
+  /** Active global System Admins (users.is_system_admin, migration 075). */
+  system_admins?: string[];
 }
 
 /**
@@ -254,11 +256,15 @@ interface FakeDb {
  */
 function makeFakePool(db: FakeDb): Pool {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)/.test(sql)) {
+    if (!/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
       throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
     }
     const [userId, companyId] = params as [string, string];
     const rows: Array<{ capability_id: string }> = [];
+    // UNION branch 1: an active System Admin holds every capability in every active company.
+    if ((db.system_admins ?? []).includes(userId) && db.companies.some((c) => c.id === companyId && c.is_active)) {
+      for (const cap of db.capabilities) rows.push({ capability_id: cap });
+    }
     for (const m of db.memberships) {
       if (m.user_id !== userId || m.company_id !== companyId || !m.is_active) continue;
       if (!db.companies.some((c) => c.id === m.company_id && c.is_active)) continue;
@@ -270,7 +276,8 @@ function makeFakePool(db: FakeDb): Pool {
         }
       }
     }
-    return { rows, rowCount: rows.length };
+    const unique = [...new Map(rows.map((r) => [r.capability_id, r])).values()]; // UNION removes duplicates
+    return { rows: unique, rowCount: unique.length };
   });
   return { query, connect: vi.fn() } as unknown as Pool;
 }
@@ -313,7 +320,10 @@ describe('Real repository authorization', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('m.is_active  = TRUE');
-    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/);
+    // Full Access is a wildcard over every registered capability (no implicit_full_access exception since 075).
+    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/);
+    expect(sql).not.toContain('implicit_full_access');
+    expect(sql).toMatch(/u\.is_system_admin = TRUE/);
   });
 
   describe('Multi-company isolation', () => {

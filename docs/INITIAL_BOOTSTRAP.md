@@ -4,7 +4,7 @@ One-time, manually run CLI that creates the first company and its Full Access ad
 
 ## Safety properties
 - Refuses (exit code 2, nothing written) if **any** user or company already exists. No recovery/overwrite mode exists.
-- Single transaction: user, company, 4 default roles, Full Access membership, `company.create` and `bootstrap.initialize` audit entries commit together or not at all.
+- Single transaction: user, company, 5 default roles (Viewer, Accountant, Finance Manager, Company Manager, Full Access), Full Access membership, `company.create` and `bootstrap.initialize` audit entries commit together or not at all.
 - Concurrent runs are serialised (advisory lock + table lock); exactly one can succeed.
 - Reuses `CompanyManagementService` (same roles/permissions/audit as normal company creation). Never modifies or deletes existing rows. No schema change.
 - The password is never accepted as an argument or env var, never logged, never stored in audit data (only a bcrypt hash is stored). Minimum 12 characters, maximum 72 bytes.
@@ -30,3 +30,17 @@ DATABASE_URL=... node dist/cli/bootstrap-admin.js --email ... --company-slug ...
 
 ## Tests
 `server/test/bootstrap-admin.postgres.test.ts` creates and drops its own disposable database from `DATABASE_URL`, using synthetic data only.
+
+## Initial System Admin (separate, one-time, owner-approved)
+`bootstrap:admin` never creates a System Admin. The global System Admin (migration 075, `users.is_system_admin`) is set by a
+second explicit CLI, run only after separate written Owner approval naming the account:
+```
+cd server
+DATABASE_URL=... npm run bootstrap:system-admin -- --email admin@your-domain --confirm-email admin@your-domain
+# compiled: npm run bootstrap:system-admin:compiled -- --email ... --confirm-email ...
+```
+- Promotes an **existing, active** account only. It never creates users or credentials and accepts no password.
+- Refuses (`ALREADY_INITIALIZED`, nothing written) once any System Admin exists; later grants go through the
+  Global administration screen by an existing System Admin. Concurrent runs are serialised by an advisory lock.
+- Writes `system.admin.bootstrap` to the append-only `system_audit_log` (actor label `bootstrap-cli`).
+- The database refuses to remove or disable the last active System Admin.

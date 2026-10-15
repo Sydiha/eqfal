@@ -14,13 +14,13 @@ const roles = [
 const allCapabilities = ['document.view', 'document.edit', 'vat.view'];
 const ALL = ['access.view', 'access.membership.create', 'access.membership.status.edit', 'access.membership.role.assign', 'access.role.create', 'access.role.capability.grant', 'access.role.capability.revoke', 'document.view', 'document.edit'];
 
-function mockApi() {
+function mockApi(sensitivity: Record<string, 'sensitive' | 'critical'> = {}) {
   const calls: { url: string; method: string; body?: string }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
     if (url === '/api/access/memberships' && !init?.method) return new Response(JSON.stringify({ memberships: members }), { status: 200 });
     if (url === '/api/access/roles' && !init?.method) return new Response(JSON.stringify({ roles }), { status: 200 });
-    if (url === '/api/access/capabilities') return new Response(JSON.stringify({ capabilities: [...allCapabilities, 'invoice.view'], explicit_only: ['invoice.view'] }), { status: 200 });
+    if (url === '/api/access/capabilities') return new Response(JSON.stringify({ capabilities: [...allCapabilities, 'invoice.view'], sensitivity }), { status: 200 });
     return new Response('{}', { status: 200 });
   }));
   return calls;
@@ -70,6 +70,15 @@ describe('AccessAdministration', () => {
     renderIt(ALL);
     const row = (await screen.findByText('clerk@example.com')).closest('tr')!;
     fireEvent.change(within(row).getByRole('combobox'), { target: { value: 'r-full' } });
+    // Moving a member onto Full Access always asks for the strongest, explicit confirmation first.
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('every current and future permission');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('clerk@example.com');
+    const confirm = within(dialog).getByRole('button', { name: 'Grant' });
+    expect(confirm).toBeDisabled();
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    fireEvent.click(confirm);
     await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
     expect(JSON.parse(calls.find((c) => c.method === 'PUT')!.body!)).toEqual({ role_id: 'r-full' });
 
@@ -177,26 +186,60 @@ describe('AccessAdministration', () => {
     expect(screen.getByLabelText('Documents')).toBeDisabled();
   });
 
-  it('does not allow editing a Full Access role', async () => {
+  it('shows a Full Access role as holding every current and future permission, with nothing to edit', async () => {
     mockApi();
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
-    expect(screen.getByText(/implicit capability.*fixed and cannot be edited/)).toBeInTheDocument();
-    // Only explicit-grant capabilities are manageable; no bulk or group controls appear for a Full Access role.
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByText(/every permission in this company, including permissions added in the future/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
   });
 
-  it('grants an explicit-only capability on a Full Access role through the single-capability endpoint', async () => {
-    const calls = mockApi();
+  it('asks to confirm a sensitive grant, naming the role and company, and sends nothing when cancelled', async () => {
+    const calls = mockApi({ 'document.edit': 'sensitive' });
+    render(<AccessAdministration capabilities={ALL} currentUserId="u-1" companyName="Acme" onUnauthorized={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Documents: Expand' }));
+    fireEvent.click(screen.getByLabelText('Edit documents'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('the role "Clerk" new authority in Acme');
+    expect(within(dialog).getByText('Sensitive')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('checkbox')).toBeNull(); // sensitive: no explicit tick needed
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+    fireEvent.click(screen.getByLabelText('Edit documents'));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Grant' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.url.endsWith('/document.edit'))).toBe(true));
+  });
+
+  it('requires an explicit tick for a critical bulk grant, flagging only the newly granted capabilities', async () => {
+    const calls = mockApi({ 'document.edit': 'critical', 'document.view': 'sensitive' });
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
-    fireEvent.click(screen.getAllByRole('checkbox')[0]);
-    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.url === '/api/access/roles/r-full/capabilities/invoice.view')).toBe(true));
-    expect(calls.some((c) => c.url.endsWith('/bulk'))).toBe(false);
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    fireEvent.click(screen.getByLabelText('Documents'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Critical')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Sensitive')).toBeNull(); // document.view is already held: unchanged, not flagged
+    expect(within(dialog).getByRole('button', { name: 'Grant' })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Grant' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/capabilities/bulk'))).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.url.endsWith('/capabilities/bulk'))!.body!)).toEqual({ grants: ['document.edit'] });
+  });
+
+  it('never asks for confirmation when revoking, even a sensitive capability', async () => {
+    const calls = mockApi({ 'document.view': 'critical' });
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Clerk/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Documents: Expand' }));
+    fireEvent.click(screen.getByLabelText('View documents'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('renders Arabic labels', async () => {

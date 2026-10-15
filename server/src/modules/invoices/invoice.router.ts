@@ -134,8 +134,8 @@ invoiceRouter.post('/invoices/:id/cancel', ...write, requireCapability('invoice.
   res.json({ invoice: await svc.cancel(companyId, actorUserId, req.params.id!, version, reason) });
 })));
 
-// F1: final approval (submitted -> approved). invoice.approve is explicit-grant-only (migration 070); the service also requires
-// obligation.confirm + accounting.journal.create, forbids self-approval and checks the version. The journal stays DRAFT (never posted here).
+// F1: final approval (submitted -> approved). invoice.approve alone authorizes it (Full Access holds it through the wildcard, migration 075);
+// the creator may approve (074). The obligation and journal are system effects; the journal stays DRAFT (never posted here).
 invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice.approve'), route(async (req, res) => {
   if (!UUID.test(req.params.id!)) { invalidId(res); return; }
   if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
@@ -152,8 +152,8 @@ invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice
 }));
 
 // F4 completion: externally issued credit / debit notes (registration only: no issuing, numbering, e-invoicing or refunds).
-// invoice.adjust (register / edit / cancel a draft note) and invoice.adjust_approve (approve; also needs obligation.confirm + accounting.journal.create,
-// and never the registrant) are explicit-grant-only (migration 072); no grants exist.
+// invoice.adjust (register / edit / cancel a draft note) and invoice.adjust_approve (approve, the registrant included; the generated obligation
+// effect and DRAFT journal need no manual journal permission).
 async function adjustmentWork(res: Response, work: (svc: InvoiceAdjustmentService) => Promise<void>) {
   if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
   try {

@@ -37,9 +37,9 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
   const counts = async () => (await pool.query<{ u: string; c: string; r: string; m: string }>(
     'SELECT (SELECT count(*) FROM users) u, (SELECT count(*) FROM companies) c, (SELECT count(*) FROM roles) r, (SELECT count(*) FROM memberships) m')).rows[0]!;
 
-  it('creates user, company, 4 default roles, Full Access membership and audit entries', async () => {
+  it('creates user, company, 5 default roles, Full Access membership and audit entries', async () => {
     const result = await bootstrapInitialAdmin(pool, base());
-    expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+    expect(await counts()).toEqual({ u: '1', c: '1', r: '5', m: '1' });
     const user = (await pool.query('SELECT * FROM users WHERE id=$1', [result.userId])).rows[0];
     expect(user.email).toBe('admin@example.test');
     expect(user.password_hash).not.toContain(PASSWORD);
@@ -49,7 +49,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       [result.userId, result.companyId])).rows;
     expect(role).toEqual([{ name: 'Full Access', is_full_access: true }]);
     const names = (await pool.query('SELECT name FROM roles ORDER BY name')).rows.map((r) => r.name);
-    expect(names).toEqual(['Accountant', 'Finance Manager', 'Full Access', 'Viewer']);
+    expect(names).toEqual(['Accountant', 'Company Manager', 'Finance Manager', 'Full Access', 'Viewer']);
     const actions = (await pool.query('SELECT action FROM audit_log ORDER BY action')).rows.map((r) => r.action);
     expect(actions).toEqual(['bootstrap.initialize', 'company.create']);
     const audit = JSON.stringify((await pool.query('SELECT * FROM audit_log')).rows);
@@ -85,7 +85,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
     const first = await bootstrapInitialAdmin(pool, base());
     const hash = (await pool.query('SELECT password_hash FROM users')).rows[0].password_hash;
     await expect(bootstrapInitialAdmin(pool, { ...base(), email: 'other@example.test' })).rejects.toMatchObject({ code: 'ALREADY_INITIALIZED' });
-    expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+    expect(await counts()).toEqual({ u: '1', c: '1', r: '5', m: '1' });
     expect((await pool.query('SELECT id, password_hash FROM users')).rows[0]).toEqual({ id: first.userId, password_hash: hash });
   });
 
@@ -94,7 +94,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       bootstrapInitialAdmin(pool, { ...base(), email: `admin${i}@example.test`, company: { slug: `co-${i}`, name: `Co ${i}`, name_ar: null } })));
     expect(runs.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     for (const r of runs.filter((r) => r.status === 'rejected')) expect((r as PromiseRejectedResult).reason).toMatchObject({ code: 'ALREADY_INITIALIZED' });
-    expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+    expect(await counts()).toEqual({ u: '1', c: '1', r: '5', m: '1' });
   }, 60_000);
 
   describe('CLI', () => {
@@ -113,7 +113,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       const r = run(good, `${PASSWORD}\n`);
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout + r.stderr).not.toContain(PASSWORD);
-      expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+      expect(await counts()).toEqual({ u: '1', c: '1', r: '5', m: '1' });
       const again = run(good, `${PASSWORD}\n`);
       expect(again.status).toBe(2);
       expect(again.stdout + again.stderr).not.toContain(PASSWORD);
@@ -125,7 +125,7 @@ describeDatabase('initial company & administrator bootstrap (disposable PostgreS
       const r = spawnSync(process.execPath, [dist, ...good], { input: `${PASSWORD}\n`, encoding: 'utf8', env: { PATH: '', DATABASE_URL: testUrl.toString() } });
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout + r.stderr).not.toContain(PASSWORD);
-      expect(await counts()).toEqual({ u: '1', c: '1', r: '4', m: '1' });
+      expect(await counts()).toEqual({ u: '1', c: '1', r: '5', m: '1' });
     }, 120_000);
     it('rejects a password passed as an argument', () => {
       const r = run([...good, '--password', PASSWORD], '');

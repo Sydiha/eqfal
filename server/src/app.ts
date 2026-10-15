@@ -29,6 +29,7 @@ import { periodicAdjustmentsRouter } from './modules/periodic-adjustments/period
 import { annualClosingRouter } from './modules/annual-closing/annual-closing.router';
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
 import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
+import { systemAdminRouter } from './modules/memberships/system-admin.router';
 import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
 import { managerFinancialSnapshotRouter } from './modules/manager-financial-snapshot/manager-financial-snapshot.router';
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
@@ -85,6 +86,7 @@ app.use('/api', periodicAdjustmentsRouter);
 app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
 app.use('/api', accessAdministrationRouter);
+app.use('/api', systemAdminRouter);
 app.use('/api', companyRouter);
 app.use('/api', homeAlertsRouter);
 app.use('/api', managerFinancialSnapshotRouter);

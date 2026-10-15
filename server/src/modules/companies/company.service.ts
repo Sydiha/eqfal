@@ -3,6 +3,7 @@ import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import {
   ACCOUNTANT_CAPABILITIES,
+  COMPANY_MANAGER_CAPABILITIES,
   FINANCE_MANAGER_CAPABILITIES,
   VIEWER_CAPABILITIES,
 } from '../memberships/default-role-capabilities';
@@ -39,6 +40,7 @@ const DEFAULT_ROLES: DefaultRoleDefinition[] = [
   { name: 'Viewer', is_full_access: false, capabilities: [...VIEWER_CAPABILITIES] },
   { name: 'Accountant', is_full_access: false, capabilities: [...ACCOUNTANT_CAPABILITIES] },
   { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_CAPABILITIES] },
+  { name: 'Company Manager', is_full_access: false, capabilities: [...COMPANY_MANAGER_CAPABILITIES] },
   { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, capabilities: [] },
 ];
 
@@ -46,7 +48,8 @@ const DEFAULT_ROLES: DefaultRoleDefinition[] = [
  * CompanyManagementService
  *
  * Tenancy: every operation is scoped to companies in which the actor holds an ACTIVE
- * membership. Capabilities are resolved per TARGET company from the database (never from
+ * membership, except for an active global System Admin (users.is_system_admin), who may
+ * manage every company, including disabled ones, without a membership. Capabilities are resolved per TARGET company from the database (never from
  * request input) and deliberately ignore companies.is_active, so a disabled company can be
  * re-enabled by someone who holds company.status.edit in it. A company the actor has no
  * active membership in is reported as not found. There is no hard delete.
@@ -71,7 +74,16 @@ export class CompanyManagementService {
     }
   }
 
+  private async isSystemAdmin(userId: string, runner: Pick<Pool, 'query'> | PoolClient): Promise<boolean> {
+    const { rows } = await runner.query('SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE AND is_system_admin = TRUE', [userId]);
+    return rows.length > 0;
+  }
+
   private async capabilitiesIn(userId: string, companyId: string, runner: Pick<Pool, 'query'> | PoolClient): Promise<string[] | null> {
+    if (await this.isSystemAdmin(userId, runner)) {
+      if ((await runner.query('SELECT 1 FROM companies WHERE id = $1', [companyId])).rows.length === 0) return null;
+      return (await runner.query<{ id: string }>('SELECT id FROM capabilities ORDER BY id')).rows.map((row) => row.id);
+    }
     const membership = await runner.query<{ role_id: string | null }>(
       'SELECT role_id FROM memberships WHERE user_id = $1 AND company_id = $2 AND is_active = TRUE',
       [userId, companyId],
@@ -81,7 +93,7 @@ export class CompanyManagementService {
       `SELECT cap.id AS capability_id
        FROM memberships m
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
+       JOIN capabilities cap ON r.is_full_access = TRUE
          OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id)
        WHERE m.user_id = $1 AND m.company_id = $2 AND m.is_active = TRUE`,
       [userId, companyId],
@@ -100,13 +112,15 @@ export class CompanyManagementService {
   }
 
   async listForUser(userId: string): Promise<ManagedCompany[]> {
-    const { rows } = await this.pool.query<CompanyRow>(
-      `SELECT c.id, c.slug, c.name, c.name_ar, c.is_active, c.created_at
-       FROM companies c
-       JOIN memberships m ON m.company_id = c.id AND m.user_id = $1 AND m.is_active = TRUE
-       ORDER BY c.created_at ASC, c.id ASC`,
-      [userId],
-    );
+    const { rows } = (await this.isSystemAdmin(userId, this.pool))
+      ? await this.pool.query<CompanyRow>('SELECT id, slug, name, name_ar, is_active, created_at FROM companies ORDER BY created_at ASC, id ASC')
+      : await this.pool.query<CompanyRow>(
+        `SELECT c.id, c.slug, c.name, c.name_ar, c.is_active, c.created_at
+         FROM companies c
+         JOIN memberships m ON m.company_id = c.id AND m.user_id = $1 AND m.is_active = TRUE
+         ORDER BY c.created_at ASC, c.id ASC`,
+        [userId],
+      );
     const result: ManagedCompany[] = [];
     for (const row of rows) {
       const caps = (await this.capabilitiesIn(userId, row.id, this.pool)) ?? [];
@@ -115,7 +129,7 @@ export class CompanyManagementService {
     return result;
   }
 
-  /** Creates the company, provisions all 4 default roles, and assigns creator to Full Access role. */
+  /** Creates the company, provisions all default roles, and assigns creator to Full Access role. */
   async create(input: { slug: string; name: string; name_ar: string | null }, actorUserId: string): Promise<CompanyRow> {
     return this.transaction((client) => this.createWithClient(client, input, actorUserId));
   }
@@ -187,8 +201,8 @@ export class CompanyManagementService {
       await this.requireCapability(actorUserId, id, 'company.status.edit', client);
       const before = (await client.query<CompanyRow>('SELECT id, slug, name, name_ar, is_active, created_at FROM companies WHERE id = $1 FOR UPDATE', [id])).rows[0];
       if (!before) throw new CompanyAccessError('not_found');
-      if (!active) {
-        // Never let the actor lock themselves out of every company.
+      if (!active && !(await this.isSystemAdmin(actorUserId, client))) {
+        // Never let the actor lock themselves out of every company (a System Admin keeps global administration).
         const others = await client.query(
           `SELECT 1 FROM memberships m JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
            WHERE m.user_id = $1 AND m.is_active = TRUE AND m.company_id <> $2 LIMIT 1`,

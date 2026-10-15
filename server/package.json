@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit",
     "bootstrap:admin": "tsx src/cli/bootstrap-admin.ts",
     "bootstrap:admin:compiled": "node dist/cli/bootstrap-admin.js",
+    "bootstrap:system-admin": "tsx src/cli/bootstrap-system-admin.ts",
+    "bootstrap:system-admin:compiled": "node dist/cli/bootstrap-system-admin.js",
     "test": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run"
   },
   "dependencies": {

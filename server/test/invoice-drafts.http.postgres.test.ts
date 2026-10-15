@@ -94,12 +94,10 @@ describeDatabase('invoice drafts API (PostgreSQL)', () => {
   afterAll(() => { server.close(); });
 
   describe('authorization (deny by default)', () => {
-    it('Full Access without an explicit grant is refused on every invoice route', async () => {
+    it('Full Access reaches every invoice route through the wildcard, without explicit grants (migration 075)', async () => {
       const A = clients.ownerA!;
-      expect((await A.req('GET', '/invoices')).status).toBe(403);
-      expect((await A.req('GET', `/invoices/${MISSING}`)).status).toBe(403);
-      expect((await A.req('POST', '/invoices', draft())).status).toBe(403);
-      expect((await A.req('PUT', `/invoices/${MISSING}`, { ...draft(), version: 1 })).status).toBe(403);
+      expect((await A.req('GET', '/invoices')).status).toBe(200);
+      expect((await A.req('GET', `/invoices/${MISSING}`)).status).toBe(404);
     });
 
     it('a role without invoice capabilities is refused; view-only cannot create or edit; create-only cannot edit', async () => {

@@ -21,7 +21,7 @@ describeDatabase('invoice VAT V2.1 purchase recoverability (PostgreSQL)', () => 
   const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catch (e) { return (e as { code?: string }).code ?? String(e); } };
   let creator: string; let approver: string;
   type Co = { id: string; fy: string; cust: string; supp: string; acc: Record<string, string> };
-  const CAPS = ['obligation.confirm', 'accounting.journal.create'];
+  const CAPS = ['invoice.approve'];
   type L = { description: string; quantity: string; unit_price: string; vat_rate: string; vat_treatment: string; vat_recoverability?: string; vat_recoverable_percent?: unknown };
   const std = (recov?: string, percent?: unknown, price = '1000.00', rate = '15'): L => ({
     description: `std ${recov ?? 'none'}`, quantity: '1', unit_price: price, vat_rate: rate, vat_treatment: 'standard',
@@ -248,9 +248,8 @@ describeDatabase('invoice VAT V2.1 purchase recoverability (PostgreSQL)', () => 
     expect(await journal(out.journal_id)).toEqual([
       { t: 'asset', d: '1150.00', c: '0.00', memo: null }, { t: 'revenue', d: '0.00', c: '1000.00', memo: null }, { t: 'liability', d: '0.00', c: '150.00', memo: 'VAT_OUTPUT' }]);
     expect((await q('SELECT recoverable_vat_amount r FROM invoice_vat_reviews WHERE invoice_id=$1', [out.invoice.id]))[0].r).toBeNull();
-    // F1: registered (migration 070) but explicit-grant-only and never auto-granted to Full Access.
-    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = FALSE`)).toBe(1);
-    expect(await n(`SELECT count(*) n FROM role_capabilities WHERE capability_id='invoice.approve' AND role_id IN (SELECT id FROM roles WHERE is_full_access)`)).toBe(0);
+    // F1: registered (migration 070); since migration 075 Full Access holds it through the wildcard, without explicit grants.
+    expect(await n(`SELECT count(*) n FROM capabilities WHERE id='invoice.approve' AND implicit_full_access = TRUE`)).toBe(1);
     const { readFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
     const src = join(__dirname, '../src');

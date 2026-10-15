@@ -23,7 +23,8 @@ import { InvoiceError } from './invoice.service';
  *     ambiguous or a filed return would need amending: refused);
  *   - purchases keep the existing explicit recoverability rules (full / partial / non-recoverable), stated per line.
  */
-export const ADJUSTMENT_APPROVAL_CAPABILITIES = ['obligation.confirm', 'accounting.journal.create'] as const;
+/** invoice.adjust_approve alone authorizes approval; the obligation effect and the DRAFT journal are system-generated (owner decision 2026-10-15). */
+export const ADJUSTMENT_APPROVAL_CAPABILITIES = ['invoice.adjust_approve'] as const;
 
 type Direction = 'sales' | 'purchase';
 type NoteType = 'credit' | 'debit';
@@ -389,7 +390,7 @@ export class InvoiceAdjustmentService {
     return this.tx(async (client) => {
       const note = await this.lockDraft(client, companyId, id, expectedVersion);
       const missingCaps = ADJUSTMENT_APPROVAL_CAPABILITIES.filter((c) => !caps.includes(c));
-      if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approving a note also requires: ${missingCaps.join(', ')}`);
+      if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Approving a note requires: ${missingCaps.join(', ')}`);
       const invoice = (await client.query<{ direction: Direction }>('SELECT direction FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [note.original_invoice_id, companyId])).rows[0];
       if (!invoice) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
       const lines = (await client.query<NoteLine>(
