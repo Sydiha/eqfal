@@ -5,10 +5,10 @@ import { isOperationalSourceType, operationalSourceQuery, OperationalSource, Jou
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
-import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError } from './journal-posting-errors';
+import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
-export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError };
+export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError };
 export { FiscalYearClosedError };
 
 type Journal = {
@@ -41,6 +41,37 @@ async function source(companyId: string, type: string, id: string, client: PoolC
 }
 
 /**
+ * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
+ * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
+ */
+export type InternalPostingContext = { openingBalanceReviewId?: string };
+
+async function assertOpeningBalanceReviewContext(
+  client: PoolClient,
+  companyId: string,
+  journal: Pick<Journal, 'id' | 'fiscal_year_id'>,
+  reviewId: string | undefined,
+): Promise<void> {
+  const blocked = (message: string, code = OPENING_BALANCE_CONTEXT_CODE) => new OpeningBalanceJournalBlockedError(code, message);
+  if (!reviewId) {
+    throw blocked('Opening balance journals can only be posted by the approved opening balance review workflow', OPENING_BALANCE_MANUAL_CODE);
+  }
+  const review = (
+    await client.query<{ fiscal_year_id: string; status: string; journal_entry_id: string | null }>(
+      'SELECT fiscal_year_id,status,journal_entry_id FROM opening_balance_reviews WHERE id=$1 AND company_id=$2 FOR UPDATE',
+      [reviewId, companyId],
+    )
+  ).rows[0];
+  if (!review || review.fiscal_year_id !== journal.fiscal_year_id) throw blocked('Opening balance review does not match the journal');
+  if (review.status !== 'in_review' || review.journal_entry_id) throw blocked('Opening balance review is not awaiting approval');
+  const duplicate = await client.query(
+    "SELECT 1 FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance' AND status='posted' AND id<>$3 LIMIT 1",
+    [companyId, journal.fiscal_year_id, journal.id],
+  );
+  if (duplicate.rowCount) throw blocked('A posted opening balance journal already exists for this fiscal year');
+}
+
+/**
  * Canonical journal-posting contract.
  * Caller owns the surrounding transaction. This lets workflows such as
  * Opening Balance Review post a journal atomically with their own state change
@@ -51,6 +82,7 @@ export async function postJournalInTransaction(
   companyId: string,
   actor: string,
   id: string,
+  internal: InternalPostingContext = {},
 ): Promise<Journal> {
   const audit = new AuditLogRepository();
   const journal = (
@@ -65,6 +97,9 @@ export async function postJournalInTransaction(
   const year = await assertFiscalYearOpen(companyId, journal.fiscal_year_id, journal.accounting_date, client);
   if (journal.entry_type === 'opening_balance' && journal.accounting_date !== year.start_date) {
     throw new JournalPostingValidationError('Opening balance date must equal fiscal year start');
+  }
+  if (journal.entry_type === 'opening_balance') {
+    await assertOpeningBalanceReviewContext(client, companyId, journal, internal.openingBalanceReviewId);
   }
 
   if (journal.entry_type === 'standard' && !journal.source_type && !journal.source_id) {

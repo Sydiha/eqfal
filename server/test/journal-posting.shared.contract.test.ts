@@ -8,7 +8,7 @@ const shared=readFileSync(new URL('../src/modules/accounting/journal-posting.ts'
 describe('shared journal posting contract',()=>{
   it('normal accounting and opening-balance approval share one posting invariant',()=>{
     expect(accounting).toMatch(/postJournalInTransaction\(client,\s*companyId,\s*actor,\s*id\)/);
-    expect(opening).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
+    expect(opening).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id,\s*\{\s*openingBalanceReviewId:\s*review\.id\s*\}\)/);
     expect(shared).toContain('Opening balance date must equal fiscal year start');
     expect(shared).toMatch(/assertAccountingDateWritable\(companyId,\s*journal\.accounting_date,\s*client\)/);
     expect(shared).toContain('A posted journal requires at least two lines');

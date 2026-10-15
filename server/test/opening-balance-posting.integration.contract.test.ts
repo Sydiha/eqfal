@@ -6,7 +6,7 @@ const opening=readFileSync(new URL('../src/modules/opening-balances/opening-bala
 describe('opening balance posting integration contract',()=>{
   it('creates a draft opening journal then delegates canonical posting',()=>{
     expect(opening).toMatch(/entry_type,status,created_by\) VALUES\([^\n]*'opening_balance','draft'/);
-    expect(opening).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id\)/);
+    expect(opening).toMatch(/postJournalInTransaction\(c,\s*companyId,\s*actor,\s*journal\.id,\s*\{\s*openingBalanceReviewId:\s*review\.id\s*\}\)/);
     expect(opening).toMatch(/status='approved',journal_entry_id=\$3,approved_by=\$4/);
   });
 
