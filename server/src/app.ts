@@ -35,6 +35,7 @@ import { managerFinancialSnapshotRouter } from './modules/manager-financial-snap
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import { invoiceRouter } from './modules/invoices/invoice.router';
+import { recordDeletionRouter } from './modules/record-deletion/record-deletion.router';
 import { recurringInvoiceRouter } from './modules/invoices/recurring-invoice.router';
 import logger from './shared/logger';
 import config from './config';
@@ -74,6 +75,7 @@ app.use('/api', vatRouter);
 app.use('/api', vatReportRouter);
 app.use('/api', vatAdjustmentsRouter);
 app.use('/api', vatReturnsRouter);
+app.use('/api', recordDeletionRouter);
 app.use('/api', accountingRouter);
 app.use('/api', salesRouter);
 app.use('/api', purchasesRouter);

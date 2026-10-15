@@ -1,4 +1,5 @@
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
+import { DeleteRecordAction } from "./DeleteRecordAction";
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExportButtons } from "./ExportButtons";
@@ -162,6 +163,7 @@ interface Props {
   canCreateJournal: boolean;
   canEditJournal: boolean;
   canPost: boolean;
+  canDeleteJournal?: boolean;
   onUnauthorized: () => void;
   accountsFooter?: ReactNode;
 }
@@ -201,6 +203,7 @@ export function Accounting({
   canCreateJournal,
   canEditJournal,
   canPost,
+  canDeleteJournal = false,
   onUnauthorized,
   accountsFooter,
 }: Props) {
@@ -1446,6 +1449,17 @@ export function Accounting({
                     )}
                   </span>
                 </div>
+                {selected.status === "draft" && canDeleteJournal && selected.entry_type === "standard" && (
+                  <div className="ac-tab__actions">
+                    <DeleteRecordAction
+                      kind="journal"
+                      url={`/api/journals/${selected.id}`}
+                      name={selected.description}
+                      onUnauthorized={onUnauthorized}
+                      onDeleted={async () => { setSelected(null); mutationSucceeded(); await load(true); }}
+                    />
+                  </div>
+                )}
                 {selected.status === "draft" && (canEditJournal || canPost) && (
                   <div className="ac-tab__actions">
                     {canEditJournal && (

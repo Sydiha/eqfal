@@ -50,7 +50,7 @@ beforeEach(() => {
     { tbl: 'brand_new_table', pairs: [{ col: 'doc', ref: 'id' }, { col: 'company_id', ref: 'company_id' }] },
   ];
   referenced = new Set();
-  queued = [{ id: 'q1', company_id: 'co-a', storage_key: 'co-a/key-1', attempts: 0 }];
+  queued = [{ id: 'q1', store: 'documents', company_id: 'co-a', storage_key: 'co-a/key-1', attempts: 0 }];
   queueUpdates = [];
   vi.mocked(client.query).mockClear();
   vi.mocked(client.release).mockClear();

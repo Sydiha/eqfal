@@ -10,7 +10,7 @@ const INTERVAL_MS = 10 * 60 * 1000;
 
 export function startDocumentFileCleanupScheduler(pool: Pool, env: NodeJS.ProcessEnv = process.env): (() => void) | null {
   if (env['DOCUMENT_FILE_CLEANUP'] === 'off' || env['NODE_ENV'] === 'test') return null;
-  const cleanup = new DocumentFileCleanup(pool, getStorage('documents', config.documentStorageDir));
+  const cleanup = new DocumentFileCleanup(pool, getStorage('documents', config.documentStorageDir), { 'bank-imports': getStorage('bank-imports', config.bankStorageDir) });
   let running = false;
   const tick = async () => {
     if (running) return;
