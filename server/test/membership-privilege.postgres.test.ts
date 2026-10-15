@@ -42,14 +42,14 @@ describeDatabase('H3 owner-lockout and privilege rules with PostgreSQL', () => {
 
   it('the last active Full Access member cannot be disabled or demoted, but can once a second exists', async () => {
     const s = await seed();
-    await expect(service.setMembershipActive(s.owner.id, s.company, false, s.owner.user)).rejects.toMatchObject({ code: 'ACCESS_LAST_FULL_ACCESS' });
+    await expect(service.setMembershipActive(s.owner.id, s.company, false, s.owner.user)).rejects.toMatchObject({ code: 'ACCESS_SELF_LOCKOUT' });
     await expect(service.assignRoleForCompany(s.owner.id, s.admin, s.company, s.owner.user)).rejects.toMatchObject({ code: 'ACCESS_LAST_FULL_ACCESS' });
     const second = await (async () => {
       const user = (await pool.query<{ id: string }>("INSERT INTO users(email,password_hash) VALUES($1,'x') RETURNING id", [`o2-${s.company}@example.com`])).rows[0]!.id;
       return (await pool.query<{ id: string }>('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3) RETURNING id', [user, s.company, s.full])).rows[0]!.id;
     })();
     await expect(service.setMembershipActive(second, s.company, false, s.owner.user)).resolves.toMatchObject({ is_active: false });
-    await expect(service.setMembershipActive(s.owner.id, s.company, false, s.owner.user)).rejects.toMatchObject({ code: 'ACCESS_LAST_FULL_ACCESS' });
+    await expect(service.setMembershipActive(s.owner.id, s.company, false, s.owner.user)).rejects.toMatchObject({ code: 'ACCESS_SELF_LOCKOUT' });
   });
 
   it('two concurrent disables of the only two Full Access members cannot both succeed', async () => {
@@ -57,8 +57,8 @@ describeDatabase('H3 owner-lockout and privilege rules with PostgreSQL', () => {
     const user = (await pool.query<{ id: string }>("INSERT INTO users(email,password_hash) VALUES($1,'x') RETURNING id", [`o2-${s.company}@example.com`])).rows[0]!.id;
     const second = (await pool.query<{ id: string }>('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3) RETURNING id', [user, s.company, s.full])).rows[0]!.id;
     const results = await Promise.allSettled([
-      service.setMembershipActive(s.owner.id, s.company, false, s.owner.user),
-      service.setMembershipActive(second, s.company, false, user),
+      service.setMembershipActive(s.owner.id, s.company, false, user),
+      service.setMembershipActive(second, s.company, false, s.owner.user),
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     const active = await pool.query("SELECT 1 FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.company_id=$1 AND m.is_active AND r.is_full_access", [s.company]);

@@ -260,7 +260,12 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const fa = await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Full AccessA'] });
     expect(fa.status).toBe(403);
     expect(fa.json.code).toBe('ACCESS_ROLE_CEILING');
-    expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Finance ManagerA'] })).json.code).toBe('ACCESS_ROLE_CEILING');
+    // B2: an ordinary functional role (Finance Manager) is delegable even though the manager does not hold its capabilities...
+    expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Finance ManagerA'] })).status).toBe(200);
+    expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['ViewerA'] })).status).toBe(200);
+    // ...but never to the manager itself.
+    const selfFm = await mgr.req('PUT', `/access/memberships/${await membershipId(ids.mgrA!, ids.coA!)}/role`, { role_id: roles['Finance ManagerA'] });
+    expect(selfFm.json.code).toBe('ACCESS_ROLE_CEILING');
     expect((await mgr.req('PUT', `/access/roles/${roles['ViewerA']}/capabilities/accounting.journal.post`)).json.code).toBe('ACCESS_ROLE_CEILING');
     expect((await mgr.req('PUT', `/access/roles/${roles['ViewerA']}/capabilities/access.full_access.grant`)).json.code).toBe('ACCESS_ROLE_CEILING');
     const ownerMembership = await membershipId(ids.ownerA!, ids.coA!);
