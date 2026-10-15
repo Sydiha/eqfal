@@ -146,7 +146,8 @@ export class MembershipService {
   /**
    * Create a brand-new user account and attach it to the active company in one
    * transaction (user + membership + optional role + audit). The password is
-   * hashed with bcrypt here; the plaintext is never stored or logged.
+   * hashed with bcrypt here; the plaintext is never stored or logged. The new user must replace the
+   * administrator-chosen password at first login (must_change_password); existing users are untouched.
    * Throws pg 23505 when the email already has an account.
    */
   async createUserForCompany(email: string, password: string, roleId: string | null, companyId: string, actorUserId: string): Promise<Membership> {
@@ -154,7 +155,7 @@ export class MembershipService {
     return this.transaction(async (client) => {
       const role = roleId ? await this.repo.findRoleById(roleId, client) : null;
       if (roleId && (!role || role.company_id !== companyId)) throw new Error('Role not found');
-      const user = await new UserRepository(this.pool).create({ email, password: hash }, client);
+      const user = await new UserRepository(this.pool).create({ email, password: hash, mustChangePassword: true }, client);
       let membership = await this.repo.createMembership({ user_id: user.id, company_id: companyId }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.create', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { email: user.email, company_id: companyId } }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);

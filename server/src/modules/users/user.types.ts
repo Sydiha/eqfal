@@ -26,4 +26,6 @@ export interface CreateUserInput {
   email: string;
   /** Plaintext password — will be hashed before storage. */
   password: string;
+  /** Administratively chosen initial password: the user must replace it at first login (migration 082). */
+  mustChangePassword?: boolean;
 }

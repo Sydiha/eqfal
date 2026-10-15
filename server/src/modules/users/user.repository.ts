@@ -24,12 +24,20 @@ export class UserRepository {
     client?: PoolClient,
   ): Promise<User> {
     const runner: QueryRunner = client ?? this.pool;
-    const { rows } = await runner.query<User>(
-      `INSERT INTO users (email, password_hash)
-       VALUES (LOWER($1), $2)
-       RETURNING *`,
-      [input.email, input.password],
-    );
+    // The flag column is only named when requested, so account creation that never needs it (bootstrap) is unaffected.
+    const { rows } = input.mustChangePassword
+      ? await runner.query<User>(
+        `INSERT INTO users (email, password_hash, must_change_password)
+         VALUES (LOWER($1), $2, TRUE)
+         RETURNING *`,
+        [input.email, input.password],
+      )
+      : await runner.query<User>(
+        `INSERT INTO users (email, password_hash)
+         VALUES (LOWER($1), $2)
+         RETURNING *`,
+        [input.email, input.password],
+      );
     return rows[0] as User;
   }
 

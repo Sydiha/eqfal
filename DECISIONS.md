@@ -539,4 +539,4 @@ Replit يبقى runtime/practical validation target only وممنوع من Produ
 - إعادة تعيين الإداري: capability جديدة `access.user.password.reset` (migration 082) لا تُمنح لأي دور تلقائيًا (Full Access وSystem Admin فقط بالـ wildcard). تُطبَّق قاعدة الهدف نفسها (Full Access، المدير المساوٍ، System Admin خارج النطاق دون `access.full_access.grant`)، ولا إعادة تعيين للنفس، والحساب المنتمي لشركة أخرى لا يُعاد تعيينه إلا بواسطة System Admin (كلمة المرور على مستوى الحساب لا الشركة).
 - كلمة مؤقتة عشوائية (16 حرفًا) تُعرض مرة واحدة للمسؤول فقط وتُخزَّن كـ bcrypt؛ `users.must_change_password` يحجب كل API (403 `PASSWORD_CHANGE_REQUIRED`) عدا قراءة الجلسة وتغيير كلمة المرور وتسجيل الخروج.
 - التدقيق `access.user.password.reset` / `auth.password.change` دون أي كلمة أو hash. Rate limiting داخل الذاكرة (بلا خدمة مدفوعة). لا بريد إلكتروني ولا دعوات.
-- لم يُغيَّر: إنشاء مستخدم بكلمة يحددها المسؤول (`POST /access/users`) لا يفرض تغييرها عند أول دخول؛ يحتاج قرار المالك.
+- قرار المالك (2026-10-15): كل مستخدم جديد ينشئه مسؤول عبر `POST /access/users` يُنشأ بـ `must_change_password = TRUE` ويغيّر كلمته عند أول دخول. المستخدمون الحاليون لا يتأثرون (migration 082 لا تعدّل صفوف `users`).
