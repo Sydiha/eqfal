@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './SourceAuthority.css';
 
@@ -28,17 +28,20 @@ export function SourceAuthority({ canManage, onUnauthorized }: { canManage: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [voiding, setVoiding] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [voidConfirm, setVoidConfirm] = useState(false);
 
+  const unauthorized = useRef(onUnauthorized); // keep `call`/`load` stable even if the parent passes a new handler each render
+  unauthorized.current = onUnauthorized;
   const call = useCallback(async (url: string, init?: RequestInit) => {
     const response = await fetch(url, { credentials: 'same-origin', ...init });
-    if (response.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+    if (response.status === 401) { unauthorized.current(); throw new Error('unauthorized'); }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error('request'), { code: (body as { code?: string }).code ?? 'UNKNOWN' });
     return body as Record<string, unknown>;
-  }, [onUnauthorized]);
+  }, []);
   const show = (reasonValue: unknown) => {
     const code = (reasonValue as { code?: string } | null)?.code ?? 'UNKNOWN';
     const known = MESSAGES[code];
@@ -47,8 +50,10 @@ export function SourceAuthority({ canManage, onUnauthorized }: { canManage: bool
 
   const load = useCallback(async () => {
     setLoadFailed(false);
+    setLoading(true);
     try { setRanges(((await call('/api/ledger-source-authority')).ranges as Range[]) ?? []); } catch { setLoadFailed(true); }
     try { setYears((((await call('/api/fiscal-years')).fiscalYears as Year[]) ?? []).filter((y) => y.status !== 'closed')); } catch { setYears([]); }
+    setLoading(false);
   }, [call]);
   useEffect(() => { void load(); }, [load]);
 
@@ -104,12 +109,12 @@ export function SourceAuthority({ canManage, onUnauthorized }: { canManage: bool
           <textarea value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} required /></label>
         <label className="sa-check"><input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
           <span>{tx('أؤكد أنني أفهم أن هذا إعداد مسجّل فقط وغير جاهز مالياً.', 'I confirm I understand this is a recorded configuration only and is not financially ready.')}</span></label>
-        <button type="submit" disabled={busy || !confirm || !year || !cutover || !reason.trim()}>{tx('حفظ الإعداد', 'Save configuration')}</button>
+        <button type="submit" disabled={busy || !confirm || !year || !cutover || !reason.trim()}>{busy ? tx('جارٍ الحفظ…', 'Saving…') : tx('حفظ الإعداد', 'Save configuration')}</button>
       </form> : <p>{tx('لا تملك صلاحية إدارة سلطة المصدر.', 'You do not have permission to manage source authority.')}</p>}
     </div>}
     <div className="sa-card">
       <h3>{tx('الإعدادات المسجّلة', 'Recorded configurations')}</h3>
-      {ranges.length === 0 ? <p>{tx('لا توجد إعدادات.', 'No configurations.')}</p> :
+      {loading ? <p role="status">{tx('جارٍ التحميل…', 'Loading…')}</p> : ranges.length === 0 ? <p>{tx('لا توجد إعدادات.', 'No configurations.')}</p> :
         <table className="sa-table"><thead><tr><th>{tx('من', 'From')}</th><th>{tx('إلى', 'To')}</th><th>{tx('الحالة', 'Status')}</th><th>{tx('السبب', 'Reason')}</th><th /></tr></thead>
           <tbody>{ranges.map((r) => <tr key={r.id}><td>{r.from_date}</td><td>{r.to_date}</td>
             <td><span className={`sa-badge is-${r.status}`}>{statusLabel(r)}</span></td><td>{r.status === 'voided' ? r.void_reason : r.reason}</td>
@@ -117,7 +122,7 @@ export function SourceAuthority({ canManage, onUnauthorized }: { canManage: bool
       {voiding && <form onSubmit={submitVoid}>
         <label>{tx('سبب الإلغاء (إلزامي)', 'Void reason (required)')}<textarea value={voidReason} maxLength={500} onChange={(e) => setVoidReason(e.target.value)} required /></label>
         <label className="sa-check"><input type="checkbox" checked={voidConfirm} onChange={(e) => setVoidConfirm(e.target.checked)} /><span>{tx('أؤكد إلغاء هذا الإعداد. يبقى في السجل ولا يُحذف.', 'I confirm voiding this configuration. It stays in the history and is not deleted.')}</span></label>
-        <div><button type="submit" disabled={busy || !voidConfirm || !voidReason.trim()}>{tx('تأكيد الإلغاء', 'Confirm void')}</button>{' '}
+        <div><button type="submit" disabled={busy || !voidConfirm || !voidReason.trim()}>{busy ? tx('جارٍ الإلغاء…', 'Voiding…') : tx('تأكيد الإلغاء', 'Confirm void')}</button>{' '}
           <button type="button" className="secondary" onClick={() => setVoiding(null)}>{tx('رجوع', 'Back')}</button></div>
       </form>}
     </div>

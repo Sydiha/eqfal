@@ -93,6 +93,31 @@ describeDatabase('ledger source authority drafts (PostgreSQL)', () => {
     expect((await mkDraft(co2)).json.code).toBe('AUTHORITY_RANGE_OVERLAP');
   });
 
+  it('overlap is symmetric: an active range over a draft is refused (service and raw SQL), a disjoint one is allowed, and a voided draft frees the period', async () => {
+    const co = await setup('drSym');
+    const svc = new Service(h.db);
+    const draftId = (await mkDraft(co)).json.range.id as string; // 2026-01-01..2026-06-30
+    await expect(svc.create(co.id, co.owner.id, { fromDate: '2026-03-01', toDate: '2026-03-31', reason: 'x' })).rejects.toMatchObject({ code: 'AUTHORITY_RANGE_OVERLAP' });
+    let raw: string | null = null;
+    try { await h.db.query("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) VALUES($1,'2026-06-30','2026-07-15','external_reference_only','active','r',$2)", [co.id, co.owner.id]); } catch (e) { raw = (e as { message: string }).message; }
+    expect(raw).toBe('AUTHORITY_RANGE_OVERLAP');
+    expect((await svc.create(co.id, co.owner.id, { fromDate: '2026-07-01', toDate: '2026-07-31', reason: 'disjoint' })).status).toBe('active');
+    await co.manager.client.req('POST', `/ledger-source-authority/${draftId}/void-draft`, { reason: 'plan changed', confirm: true });
+    expect((await svc.create(co.id, co.owner.id, { fromDate: '2026-03-01', toDate: '2026-03-31', reason: 'now free' })).status).toBe('active');
+  });
+
+  it('concurrent draft and active inserts over the same dates: exactly one wins', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      const co = await setup(`drRace${i}`);
+      const svc = new Service(h.db);
+      const results = await Promise.allSettled([
+        mkDraft(co).then((r) => { if (r.status !== 201) throw new Error(r.json.code); return r; }),
+        svc.create(co.id, co.owner.id, { fromDate: '2026-02-01', toDate: '2026-02-28', reason: 'race' }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    }
+  });
+
   it('refuses a draft for a year already on the opening-balance path', async () => {
     const co = await setup('drOpening');
     await h.q("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by,entry_type) VALUES($1,$2,'2026-01-01','opening',$3,'opening_balance')", [co.id, co.fy, co.owner.id]);

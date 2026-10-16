@@ -95,6 +95,11 @@ export class LedgerSourceAuthorityService {
     await lockAccountingRange(companyId, from, to, client);
   }
 
+  /**
+   * INTERNAL, NOT EXPOSED: creates an ACTIVE range. No route calls it (a contract test enforces that), so no HTTP caller can activate authority.
+   * Closing the remaining raw path (this method and direct SQL still pass the 083 triggers) needs the accounting design for the cut-over
+   * journal and activation (C1B-3); until then it is kept only for backward compatibility with the C1B-1 tests.
+   */
   async create(companyId: string, actor: string, input: { fromDate: unknown; toDate: unknown; reason: unknown }): Promise<AuthorityRange> {
     if (!validDate(input.fromDate) || !validDate(input.toDate) || input.fromDate > input.toDate || !validReason(input.reason)) {
       throw new LedgerSourceAuthorityError('AUTHORITY_RANGE_INVALID');

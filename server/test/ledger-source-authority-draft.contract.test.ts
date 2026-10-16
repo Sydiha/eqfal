@@ -20,6 +20,17 @@ describe('migration 084 (static contract)', () => {
   });
 });
 
+describe('no production caller can activate authority', () => {
+  it('no source file outside the service itself calls create() or void() of the authority service', () => {
+    const { execSync } = require('child_process');
+    const files = execSync("grep -rlE 'LedgerSourceAuthorityService' src", { cwd: path.resolve(__dirname, '..') }).toString().trim().split('\n');
+    for (const file of files) {
+      if (file.endsWith('accounting/ledger-source-authority.ts')) continue;
+      expect(readFileSync(path.resolve(__dirname, '..', file), 'utf8')).not.toMatch(/\.(create|void)\(/);
+    }
+  });
+});
+
 describe('draft routes', () => {
   it('has no activation route, requires manage + same origin on writes, and enforces confirmation', () => {
     expect(router).not.toMatch(/'\/ledger-source-authority[^']*activat/i);

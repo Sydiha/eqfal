@@ -31,7 +31,7 @@ ALTER TABLE ledger_source_authority
 
 CREATE INDEX ledger_source_authority_draft_idx ON ledger_source_authority (company_id, from_date, to_date) WHERE status = 'draft';
 
--- INSERT guard: 'active' keeps the exact 083 checks. 'draft' only serialises per company and refuses overlap with another draft/active range;
+-- INSERT guard: overlap is symmetric (a new draft OR active range may not overlap an existing draft or active range). 'active' otherwise keeps the exact 083 checks. 'draft' only serialises per company and refuses overlap with another draft/active range;
 -- all other conflicts (journals, closed periods, opening path) are re-validated at activation, when they matter.
 CREATE OR REPLACE FUNCTION ledger_source_authority_guard_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -46,8 +46,10 @@ BEGIN
   IF NEW.status <> 'active' THEN
     RAISE EXCEPTION 'AUTHORITY_RANGE_INVALID' USING ERRCODE = '23514', DETAIL = 'A range is created draft or active';
   END IF;
+  -- Same company-level lock a draft insert takes (and the service takes first), so an active and a draft insert are strictly ordered.
+  PERFORM pg_advisory_xact_lock(hashtextextended('source-authority:' || NEW.company_id::text, 0));
   PERFORM ledger_source_authority_lock_months(NEW.company_id, NEW.from_date, NEW.to_date);
-  IF EXISTS (SELECT 1 FROM ledger_source_authority a WHERE a.company_id = NEW.company_id AND a.status = 'active'
+  IF EXISTS (SELECT 1 FROM ledger_source_authority a WHERE a.company_id = NEW.company_id AND a.status IN ('active', 'draft')
              AND a.from_date <= NEW.to_date AND a.to_date >= NEW.from_date) THEN
     RAISE EXCEPTION 'AUTHORITY_RANGE_OVERLAP' USING ERRCODE = '23514';
   END IF;
