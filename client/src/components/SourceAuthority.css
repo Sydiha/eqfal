@@ -1,0 +1,22 @@
+.source-authority{display:grid;gap:16px;max-width:1040px}
+.source-authority .sa-card{background:#fff;border:1px solid #dfe4ee;border-radius:18px;padding:20px;display:grid;gap:12px}
+.source-authority h2,.source-authority h3{margin:0}
+.source-authority .sa-paths{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.source-authority .sa-path{border:1px solid #dfe4ee;border-radius:12px;padding:14px;display:grid;gap:6px}
+.source-authority .sa-path.is-selected{border-color:#1f3a8a;box-shadow:0 0 0 2px rgba(31,58,138,.15)}
+.source-authority .sa-warning{border-radius:12px;background:#fff6e5;border:1px solid #f0c36d;padding:12px;color:#6b4a00}
+.source-authority .sa-error{border-radius:12px;background:#fdecec;border:1px solid #e5a5a5;padding:12px;color:#8a1f1f}
+.source-authority form{display:grid;gap:12px}
+.source-authority label{display:grid;gap:6px;font-weight:600}
+.source-authority input,.source-authority select,.source-authority textarea{font:inherit;border:1px solid #c9d1e0;border-radius:8px;padding:10px;min-height:44px}
+.source-authority .sa-check{display:flex;gap:10px;align-items:flex-start;font-weight:500}
+.source-authority .sa-check input{min-height:auto;margin-top:4px}
+.source-authority button{font:inherit;border-radius:12px;padding:10px 18px;min-height:44px;border:1px solid #1f3a8a;background:#1f3a8a;color:#fff;cursor:pointer}
+.source-authority button.secondary{background:#fff;color:#1f3a8a}
+.source-authority button:disabled{opacity:.5;cursor:not-allowed}
+.source-authority .sa-table{width:100%;border-collapse:collapse;display:block;overflow-x:auto}
+.source-authority .sa-table th,.source-authority .sa-table td{padding:8px 10px;border-bottom:1px solid #e8ecf4;text-align:start;white-space:nowrap}
+.source-authority .sa-badge{display:inline-block;border-radius:8px;padding:2px 10px;background:#fff6e5;color:#6b4a00;border:1px solid #f0c36d}
+.source-authority .sa-badge.is-voided{background:#eef0f4;color:#4a5160;border-color:#c9d1e0}
+.source-authority .sa-badge.is-active{background:#e6f4ea;color:#17602b;border-color:#9fd1ac}
+@media (max-width:640px){.source-authority .sa-card{padding:14px}}
