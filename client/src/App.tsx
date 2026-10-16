@@ -45,6 +45,7 @@ import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
 import { FixedAssetsModule } from './components/FixedAssetsModule';
 import { CompanyAccountingProfile } from './components/CompanyAccountingProfile';
+import { SourceAuthority } from './components/SourceAuthority';
 import { AccessAdministration } from './components/AccessAdministration';
 import { CompaniesManagement } from './components/CompaniesManagement';
 import { AuditLog } from './components/AuditLog';
@@ -64,7 +65,7 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile', 'access', 'companies', 'auditLog', 'account'];
+const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'assets', 'companyProfile', 'access', 'companies', 'sourceAuthority', 'auditLog', 'account'];
 
 function pageFromUrl(): Page {
   return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
@@ -210,6 +211,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canDeletePartner={c.includes('partner.delete')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} onUnauthorized={handleUnauthorized}/>}
+    {page === 'sourceAuthority' && <SourceAuthority canManage={c.includes('source_authority.manage')} onUnauthorized={handleUnauthorized}/>}
     {page === 'access' && <AccessAdministration capabilities={c} currentUserId={session.user.id} isSystemAdmin={session.user.isSystemAdmin === true} companyName={activeCompany?.name ?? ''} onUnauthorized={handleUnauthorized}/>}
     {page === 'companies' && <CompaniesManagement capabilities={c} onUnauthorized={handleUnauthorized} onChanged={refreshSession}/>}
     {page === 'auditLog' && <AuditLog canView={c.includes('audit.view')} onUnauthorized={handleUnauthorized}/>}

@@ -47,6 +47,7 @@ export const AUTHORITY_ERROR_CODES = [
   'AUTHORITY_RANGE_CLOSED_PERIOD',
   'AUTHORITY_ONBOARDING_PATH_CONFLICT',
   'LEDGER_SOURCE_AUTHORITY_IMMUTABLE',
+  'AUTHORITY_DRAFT_FISCAL_YEAR_INVALID',
 ] as const;
 
 export class LedgerSourceAuthorityError extends Error {
@@ -55,7 +56,7 @@ export class LedgerSourceAuthorityError extends Error {
 export class LedgerSourceAuthorityNotFoundError extends Error {}
 
 export type AuthorityRange = {
-  id: string; company_id: string; from_date: string; to_date: string; authority: 'external_reference_only'; status: 'active' | 'voided';
+  id: string; company_id: string; from_date: string; to_date: string; authority: 'external_reference_only'; status: 'draft' | 'active' | 'voided';
   reason: string; created_by: string; created_at: string; voided_by: string | null; voided_at: string | null; void_reason: string | null;
 };
 const COLUMNS = `id,company_id,from_date::text,to_date::text,authority,status,reason,created_by,created_at,voided_by,voided_at,void_reason`;
@@ -94,6 +95,11 @@ export class LedgerSourceAuthorityService {
     await lockAccountingRange(companyId, from, to, client);
   }
 
+  /**
+   * INTERNAL, NOT EXPOSED: creates an ACTIVE range. No route calls it (a contract test enforces that), so no HTTP caller can activate authority.
+   * Closing the remaining raw path (this method and direct SQL still pass the 083 triggers) needs the accounting design for the cut-over
+   * journal and activation (C1B-3); until then it is kept only for backward compatibility with the C1B-1 tests.
+   */
   async create(companyId: string, actor: string, input: { fromDate: unknown; toDate: unknown; reason: unknown }): Promise<AuthorityRange> {
     if (!validDate(input.fromDate) || !validDate(input.toDate) || input.fromDate > input.toDate || !validReason(input.reason)) {
       throw new LedgerSourceAuthorityError('AUTHORITY_RANGE_INVALID');
@@ -111,6 +117,78 @@ export class LedgerSourceAuthorityService {
       await this.audit.logEvent({
         company_id: companyId, actor_user_id: actor, action: 'ledger_source_authority.create', entity_type: 'ledger_source_authority', entity_id: row.id,
         before_data: null, after_data: { from_date: row.from_date, to_date: row.to_date, authority: row.authority, status: row.status }, reason,
+      }, client);
+      await client.query('COMMIT');
+      return row;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return translate(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * C1B-2: records the intent to follow the cut-over path. A draft has NO accounting effect (every guard reads status='active' only) and cannot be
+   * activated here. It must start on a fiscal year's first day and end before that year's last day (the native period begins the day after).
+   * Lock order matches create(): company authority lock -> fiscal years FOR SHARE -> month locks are NOT needed (a draft blocks nothing).
+   */
+  async createDraft(companyId: string, actor: string, input: { fromDate: unknown; toDate: unknown; reason: unknown }): Promise<AuthorityRange> {
+    if (!validDate(input.fromDate) || !validDate(input.toDate) || input.fromDate > input.toDate || !validReason(input.reason)) {
+      throw new LedgerSourceAuthorityError('AUTHORITY_RANGE_INVALID');
+    }
+    const { fromDate, toDate } = input;
+    const reason = input.reason.trim();
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`source-authority:${companyId}`]);
+      const year = (await client.query<{ id: string; status: string; end_date: string }>(
+        'SELECT id,status,end_date::text FROM fiscal_years WHERE company_id=$1 AND start_date=$2::date FOR SHARE', [companyId, fromDate],
+      )).rows[0];
+      if (!year || year.status === 'closed' || toDate >= year.end_date) throw new LedgerSourceAuthorityError('AUTHORITY_DRAFT_FISCAL_YEAR_INVALID');
+      const opening = await client.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance')
+            OR EXISTS (SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2)
+            OR EXISTS (SELECT 1 FROM fiscal_year_carryforwards WHERE company_id=$1 AND to_fiscal_year_id=$2)`, [companyId, year.id],
+      );
+      if (opening.rowCount) throw new LedgerSourceAuthorityError('AUTHORITY_ONBOARDING_PATH_CONFLICT');
+      const row = (await client.query<AuthorityRange>(
+        `INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) VALUES($1,$2,$3,'external_reference_only','draft',$4,$5) RETURNING ${COLUMNS}`,
+        [companyId, fromDate, toDate, reason, actor],
+      )).rows[0]!;
+      await this.audit.logEvent({
+        company_id: companyId, actor_user_id: actor, action: 'ledger_source_authority.draft_create', entity_type: 'ledger_source_authority', entity_id: row.id,
+        before_data: null, after_data: { from_date: row.from_date, to_date: row.to_date, authority: row.authority, status: row.status, fiscal_year_id: year.id }, reason,
+      }, client);
+      await client.query('COMMIT');
+      return row;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return translate(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async voidDraft(companyId: string, actor: string, id: string, reason: unknown): Promise<AuthorityRange> {
+    if (!validReason(reason)) throw new LedgerSourceAuthorityError('AUTHORITY_RANGE_INVALID');
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`source-authority:${companyId}`]);
+      const row = (await client.query<AuthorityRange>(
+        `UPDATE ledger_source_authority SET status='voided',voided_by=$3,voided_at=NOW(),void_reason=$4 WHERE id=$1 AND company_id=$2 AND status='draft' RETURNING ${COLUMNS}`,
+        [id, companyId, actor, reason.trim()],
+      )).rows[0];
+      if (!row) {
+        const exists = (await client.query('SELECT 1 FROM ledger_source_authority WHERE id=$1 AND company_id=$2', [id, companyId])).rowCount;
+        if (!exists) throw new LedgerSourceAuthorityNotFoundError();
+        throw new LedgerSourceAuthorityError('LEDGER_SOURCE_AUTHORITY_IMMUTABLE', 'Only a draft can be voided here');
+      }
+      await this.audit.logEvent({
+        company_id: companyId, actor_user_id: actor, action: 'ledger_source_authority.draft_void', entity_type: 'ledger_source_authority', entity_id: id,
+        before_data: { status: 'draft' }, after_data: { status: 'voided' }, reason: reason.trim(),
       }, client);
       await client.query('COMMIT');
       return row;

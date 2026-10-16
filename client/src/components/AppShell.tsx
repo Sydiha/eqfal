@@ -15,7 +15,7 @@ import '../shell-corrective.css';
 export type Page = NavigationPage;
 
 type IconComponent = React.FC<{ size?: number; stroke?: number; className?: string }>;
-type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile' | 'access' | 'companies' | 'auditLog' | 'account';
+type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile' | 'access' | 'companies' | 'sourceAuthority' | 'auditLog' | 'account';
 
 const iconMap: Record<IconName, IconComponent> = {
   home: IconHome,
@@ -36,6 +36,7 @@ const iconMap: Record<IconName, IconComponent> = {
   companyProfile: IconCompanyProfile,
   access: IconPartners,
   companies: IconCompanyProfile,
+  sourceAuthority: IconAnnualClose,
   auditLog: IconDocuments,
   account: IconPartners,
 };
@@ -45,7 +46,7 @@ function ShellIcon({ name }: { name: IconName }) {
   return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', auditLog: 'auditLog', account: 'account' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', auditLog: 'auditLog', account: 'account' };
 
 type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
@@ -53,7 +54,7 @@ export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] 
   { id: 'operations', pages: ['documents', 'banks', 'obligations'] },
   { id: 'accounting', pages: ['accounting', 'openingBalances', 'periodicAdjustments', 'assets', 'vat'] },
   { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears'] },
-  { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'auditLog'] },
+  { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'sourceAuthority', 'auditLog'] },
 ];
 const EXPANDED_STORAGE_KEY = 'eqfal.nav.expandedGroups';
 
@@ -79,7 +80,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
     writeExpandedGroups(next);
     return next;
   });
-  const pageLabel=(next:Page)=>next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
+  const pageLabel=(next:Page)=>next==='sourceAuthority'?(i18n.language==='ar'?'سلطة مصدر الدفاتر':'Ledger Source Authority'):next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
