@@ -1,22 +1,56 @@
-.source-authority{display:grid;gap:16px;max-width:1040px}
-.source-authority .sa-card{background:#fff;border:1px solid #dfe4ee;border-radius:18px;padding:20px;display:grid;gap:12px}
-.source-authority h2,.source-authority h3{margin:0}
-.source-authority .sa-paths{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-.source-authority .sa-path{border:1px solid #dfe4ee;border-radius:12px;padding:14px;display:grid;gap:6px}
-.source-authority .sa-path.is-selected{border-color:#1f3a8a;box-shadow:0 0 0 2px rgba(31,58,138,.15)}
-.source-authority .sa-warning{border-radius:12px;background:#fff6e5;border:1px solid #f0c36d;padding:12px;color:#6b4a00}
-.source-authority .sa-error{border-radius:12px;background:#fdecec;border:1px solid #e5a5a5;padding:12px;color:#8a1f1f}
-.source-authority form{display:grid;gap:12px}
-.source-authority label{display:grid;gap:6px;font-weight:600}
-.source-authority input,.source-authority select,.source-authority textarea{font:inherit;border:1px solid #c9d1e0;border-radius:8px;padding:10px;min-height:44px}
-.source-authority .sa-check{display:flex;gap:10px;align-items:flex-start;font-weight:500}
-.source-authority .sa-check input{min-height:auto;margin-top:4px}
-.source-authority button{font:inherit;border-radius:12px;padding:10px 18px;min-height:44px;border:1px solid #1f3a8a;background:#1f3a8a;color:#fff;cursor:pointer}
-.source-authority button.secondary{background:#fff;color:#1f3a8a}
-.source-authority button:disabled{opacity:.5;cursor:not-allowed}
-.source-authority .sa-table{width:100%;border-collapse:collapse;display:block;overflow-x:auto}
-.source-authority .sa-table th,.source-authority .sa-table td{padding:8px 10px;border-bottom:1px solid #e8ecf4;text-align:start;white-space:nowrap}
-.source-authority .sa-badge{display:inline-block;border-radius:8px;padding:2px 10px;background:#fff6e5;color:#6b4a00;border:1px solid #f0c36d}
-.source-authority .sa-badge.is-voided{background:#eef0f4;color:#4a5160;border-color:#c9d1e0}
-.source-authority .sa-badge.is-active{background:#e6f4ea;color:#17602b;border-color:#9fd1ac}
-@media (max-width:640px){.source-authority .sa-card{padding:14px}}
+/* Source Authority — aligned to the Fiscal Years pattern and brand tokens. Presentation only; scoped to .source-authority. */
+.panel.source-authority{--sa-ink:var(--text,#1e293b);--sa-muted:#64748b;--sa-border:#e4e8ec;--sa-soft:#f8fafc;--sa-primary:#00b894;--sa-navy:#0b1d3a;display:flex;flex-direction:column;gap:16px;max-width:none;margin:0;padding:0 0 28px;border:0;background:transparent;box-shadow:none}
+.source-authority h2,.source-authority h3,.source-authority p{margin:0}
+.source-authority button,.source-authority input,.source-authority select,.source-authority textarea{font-family:inherit}
+.source-authority .sa-icon{width:16px;height:16px;flex:none}
+.source-authority .sa-header h2{font-size:24px;font-weight:800;line-height:normal;color:var(--sa-ink)}
+.source-authority .sa-header p{margin-top:4px;color:var(--sa-muted);font-size:13px}
+.source-authority .sa-paths{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.source-authority .sa-path{display:flex;flex-direction:column;justify-content:space-between;gap:12px;min-width:0;padding:14px 16px;border:1px solid var(--sa-border);border-radius:12px;background:#fff}
+.source-authority .sa-path.is-selected{border-color:var(--sa-primary);background:#f0fdf9;box-shadow:0 0 0 1px var(--sa-primary)}
+.source-authority .sa-path h3{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;font-weight:800}
+.source-authority .sa-path__mark{display:inline-flex;color:#047857}
+.source-authority .sa-path p{margin-top:6px;color:var(--sa-muted);font-size:12.5px;line-height:1.7}
+.source-authority .sa-primary,.source-authority .sa-ghost,.source-authority .sa-dark{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
+.source-authority .sa-path .sa-ghost{align-self:flex-start}
+.source-authority .sa-primary{border:0;background:var(--sa-primary);color:#fff}
+.source-authority .sa-primary:hover:not(:disabled){background:#00a383}
+.source-authority .sa-ghost{border:1px solid var(--sa-border);background:#fff;color:var(--sa-ink);font-weight:600}
+.source-authority .sa-ghost:hover{background:var(--sa-soft);border-color:#cbd5e1}
+.source-authority .sa-dark{border:0;background:var(--sa-navy);color:#fff}
+.source-authority .sa-primary:disabled,.source-authority .sa-dark:disabled{border:1px solid var(--sa-border);background:#eef2f6;color:var(--sa-muted);cursor:not-allowed}
+.source-authority button:focus-visible,.source-authority input:focus-visible,.source-authority select:focus-visible,.source-authority textarea:focus-visible{outline:2px solid var(--sa-primary);outline-offset:2px}
+.source-authority .sa-card{display:grid;gap:14px;min-width:0;padding:16px;border:1px solid var(--sa-border);border-radius:12px;background:#fff}
+.source-authority .sa-card__head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.source-authority .sa-card__head h3{font-size:15px;font-weight:800}
+.source-authority .sa-muted{color:var(--sa-muted);font-size:12px}
+.source-authority .sa-warning{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:8px;background:#fff7e6;border:1px solid #f0c36d;color:#7a4b00;font-size:12.5px;line-height:1.8}
+.source-authority .sa-warning .sa-icon{margin-top:3px}
+.source-authority .sa-error{padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12.5px}
+.source-authority .sa-form{display:grid;gap:14px}
+.source-authority .sa-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.source-authority label{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--sa-ink);font-size:12px;font-weight:600}
+.source-authority input:not([type=checkbox]),.source-authority select,.source-authority textarea{width:100%;box-sizing:border-box;margin:0;padding:0 10px;border:1px solid #d6dde4;border-radius:6px;background:#fff;color:var(--sa-ink);font-size:12px;font-weight:400}
+.source-authority input:not([type=checkbox]),.source-authority select{height:36px}
+.source-authority textarea{min-height:76px;padding:8px 10px;resize:vertical}
+.source-authority .sa-check{flex-direction:row;align-items:flex-start;gap:10px;font-weight:500;line-height:1.7}
+.source-authority .sa-check input{flex:none;width:16px;height:16px;margin:3px 0 0;accent-color:var(--sa-primary)}
+.source-authority .sa-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--sa-border)}
+.source-authority .sa-void{padding-top:14px;border-top:1px solid var(--sa-border)}
+.source-authority .sa-state{padding:24px 12px;text-align:center;color:var(--sa-muted);font-size:13px;border:1px dashed var(--sa-border);border-radius:8px;background:var(--sa-soft)}
+.source-authority .sa-table{border:1px solid var(--sa-border);border-radius:8px;overflow-x:auto}
+.source-authority .sa-table table{width:100%;border-collapse:collapse}
+.source-authority .sa-table th{padding:12px 14px;background:var(--sa-soft);border-bottom:1px solid var(--sa-border);color:var(--sa-muted);font-size:11.5px;font-weight:500;text-align:start;white-space:nowrap}
+.source-authority .sa-table td{padding:12px 14px;border-bottom:1px solid var(--sa-border);font-size:12px;vertical-align:middle;text-align:start}
+.source-authority .sa-table tr:last-child td{border-bottom:0}
+.source-authority .sa-date{white-space:nowrap;direction:ltr;unicode-bidi:plaintext}
+.source-authority .sa-reason{min-width:160px;overflow-wrap:anywhere}
+.source-authority .sa-badge{display:inline-block;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;background:#fff6e5;color:#7a4b00;white-space:nowrap}
+.source-authority .sa-badge.is-active{background:#d5f5ea;color:#047857}
+.source-authority .sa-badge.is-voided{background:#eef2f6;color:#475569}
+@media(max-width:48em){
+ .source-authority .sa-paths,.source-authority .sa-fields{grid-template-columns:1fr}
+ .source-authority .sa-header h2{font-size:20px}
+ .source-authority .sa-table table{min-width:560px}
+ .source-authority .sa-actions button{flex:1}
+}

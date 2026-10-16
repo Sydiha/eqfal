@@ -78,53 +78,55 @@ export function SourceAuthority({ canManage, onUnauthorized }: { canManage: bool
   };
   const statusLabel = (r: Range) => r.status === 'draft' ? tx('إعداد مسجّل، غير جاهز مالياً', 'Recorded, not financially ready') : r.status === 'active' ? tx('فعّال', 'Active') : tx('ملغى', 'Voided');
 
+  const CheckIcon = () => <svg className="sa-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  const InfoIcon = () => <svg className="sa-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M8 7.2v3.6M8 5.2v.1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
+  const pathCard = (key: 'opening' | 'cutover', title: string, text: string) => <div className={`sa-path${path === key ? ' is-selected' : ''}`}>
+    <div className="sa-path__body"><h3>{title}{path === key && <span className="sa-path__mark"><CheckIcon /></span>}</h3><p>{text}</p></div>
+    <button type="button" className="sa-ghost" aria-pressed={path === key} onClick={() => setPath(key)}>{tx('عرض', 'Select')}</button>
+  </div>;
+
   return <section className="panel source-authority" aria-labelledby="sa-title" dir={ar ? 'rtl' : 'ltr'}>
-    <header><h2 id="sa-title">{tx('سلطة مصدر الدفاتر', 'Ledger Source Authority')}</h2>
+    <header className="sa-header"><h2 id="sa-title">{tx('سلطة مصدر الدفاتر', 'Ledger Source Authority')}</h2>
       <p>{tx('اختر كيف تبدأ الدفاتر داخل إقفال لكل سنة مالية. المساران يستبعد أحدهما الآخر.', 'Choose how the books start inside EQFAL for each fiscal year. The two paths exclude each other.')}</p></header>
     <div className="sa-paths">
-      <div className={`sa-path${path === 'opening' ? ' is-selected' : ''}`}>
-        <h3>{tx('1) أرصدة افتتاحية في أول السنة', '1) Opening balances at year start')}</h3>
-        <p>{tx('تُدخل أرصدة أول السنة المالية ثم تُرحَّل بقية الحركات داخل إقفال. لا يلزم إعداد هنا؛ استخدم شاشة الأرصدة الافتتاحية.', 'Enter the balances at the start of the fiscal year, then post all transactions in EQFAL. No setup is needed here; use the Opening Balances screen.')}</p>
-        <button type="button" className="secondary" onClick={() => setPath('opening')}>{tx('عرض', 'Select')}</button>
-      </div>
-      <div className={`sa-path${path === 'cutover' ? ' is-selected' : ''}`}>
-        <h3>{tx('2) قطع في منتصف السنة', '2) Mid-year cutover')}</h3>
-        <p>{tx('تبقى الفترة السابقة لتاريخ القطع مرجعاً خارجياً فقط، وتبدأ ترحيلات إقفال بعده بميزان مراجعة معتمد.', 'Activity up to the cutover date stays external reference only; EQFAL postings begin after it, from an approved trial balance.')}</p>
-        <button type="button" className="secondary" onClick={() => setPath('cutover')}>{tx('عرض', 'Select')}</button>
-      </div>
+      {pathCard('opening', tx('1) أرصدة افتتاحية في أول السنة', '1) Opening balances at year start'), tx('تُدخل أرصدة أول السنة المالية ثم تُرحَّل بقية الحركات داخل إقفال. لا يلزم إعداد هنا؛ استخدم شاشة الأرصدة الافتتاحية.', 'Enter the balances at the start of the fiscal year, then post all transactions in EQFAL. No setup is needed here; use the Opening Balances screen.'))}
+      {pathCard('cutover', tx('2) قطع في منتصف السنة', '2) Mid-year cutover'), tx('تبقى الفترة السابقة لتاريخ القطع مرجعاً خارجياً فقط، وتبدأ ترحيلات إقفال بعده بميزان مراجعة معتمد.', 'Activity up to the cutover date stays external reference only; EQFAL postings begin after it, from an approved trial balance.'))}
     </div>
     {error && <div className="sa-error" role="alert">{error}</div>}
     {loadFailed && <div className="sa-error" role="alert">{tx('تعذر تحميل الإعدادات.', 'The configurations could not be loaded.')}</div>}
-    {path === 'cutover' && <div className="sa-card">
-      <div className="sa-warning" role="note">{tx('تنبيه: حفظ هذا الإعداد تسجيل لنيّة القطع فقط. لا يغيّر أي ترحيل أو تقرير أو إقفال أو ضريبة، ولا يعني أن القطع جاهز مالياً. لا يمكن التفعيل قبل وجود قيد قطع معتمد ومرحّل بأرصدة متوازنة (مرحلة لاحقة).', 'Note: saving this only records the intent to cut over. It changes no posting, report, close or VAT, and does not mean the cutover is financially ready. Activation requires an approved, balanced and posted cutover journal (a later phase).')}</div>
-      {canManage ? <form onSubmit={submit}>
-        <label>{tx('السنة المالية', 'Fiscal year')}
-          <select value={yearId} onChange={(e) => setYearId(e.target.value)} required>
-            <option value="">{tx('اختر', 'Choose')}</option>
-            {years.map((y) => <option key={y.id} value={y.id}>{y.name} ({y.start_date} → {y.end_date})</option>)}
-          </select></label>
-        <label>{tx('آخر يوم تُحفظ دفاتره خارج إقفال (تاريخ القطع)', 'Last day whose books stay outside EQFAL (cutover date)')}
-          <input type="date" value={cutover} min={year?.start_date} max={year?.end_date} onChange={(e) => setCutover(e.target.value)} required /></label>
+    {path === 'cutover' && <section className="sa-card" aria-labelledby="sa-form-title">
+      <div className="sa-card__head"><h3 id="sa-form-title">{tx('إعداد القطع في منتصف السنة', 'Mid-year cutover setup')}</h3></div>
+      <div className="sa-warning" role="note"><InfoIcon /><div>{tx('تنبيه: حفظ هذا الإعداد تسجيل لنيّة القطع فقط. لا يغيّر أي ترحيل أو تقرير أو إقفال أو ضريبة، ولا يعني أن القطع جاهز مالياً. لا يمكن التفعيل قبل وجود قيد قطع معتمد ومرحّل بأرصدة متوازنة (مرحلة لاحقة).', 'Note: saving this only records the intent to cut over. It changes no posting, report, close or VAT, and does not mean the cutover is financially ready. Activation requires an approved, balanced and posted cutover journal (a later phase).')}</div></div>
+      {canManage ? <form onSubmit={submit} className="sa-form">
+        <div className="sa-fields">
+          <label>{tx('السنة المالية', 'Fiscal year')}
+            <select value={yearId} onChange={(e) => setYearId(e.target.value)} required>
+              <option value="">{tx('اختر', 'Choose')}</option>
+              {years.map((y) => <option key={y.id} value={y.id}>{y.name} ({y.start_date} → {y.end_date})</option>)}
+            </select></label>
+          <label>{tx('آخر يوم تُحفظ دفاتره خارج إقفال (تاريخ القطع)', 'Last day whose books stay outside EQFAL (cutover date)')}
+            <input type="date" value={cutover} min={year?.start_date} max={year?.end_date} onChange={(e) => setCutover(e.target.value)} required /></label>
+        </div>
         <label>{tx('السبب (إلزامي)', 'Reason (required)')}
           <textarea value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} required /></label>
         <label className="sa-check"><input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
           <span>{tx('أؤكد أنني أفهم أن هذا إعداد مسجّل فقط وغير جاهز مالياً.', 'I confirm I understand this is a recorded configuration only and is not financially ready.')}</span></label>
-        <button type="submit" disabled={busy || !confirm || !year || !cutover || !reason.trim()}>{busy ? tx('جارٍ الحفظ…', 'Saving…') : tx('حفظ الإعداد', 'Save configuration')}</button>
-      </form> : <p>{tx('لا تملك صلاحية إدارة سلطة المصدر.', 'You do not have permission to manage source authority.')}</p>}
-    </div>}
-    <div className="sa-card">
-      <h3>{tx('الإعدادات المسجّلة', 'Recorded configurations')}</h3>
-      {loading ? <p role="status">{tx('جارٍ التحميل…', 'Loading…')}</p> : ranges.length === 0 ? <p>{tx('لا توجد إعدادات.', 'No configurations.')}</p> :
-        <table className="sa-table"><thead><tr><th>{tx('من', 'From')}</th><th>{tx('إلى', 'To')}</th><th>{tx('الحالة', 'Status')}</th><th>{tx('السبب', 'Reason')}</th><th /></tr></thead>
-          <tbody>{ranges.map((r) => <tr key={r.id}><td>{r.from_date}</td><td>{r.to_date}</td>
-            <td><span className={`sa-badge is-${r.status}`}>{statusLabel(r)}</span></td><td>{r.status === 'voided' ? r.void_reason : r.reason}</td>
-            <td>{canManage && r.status === 'draft' && <button type="button" className="secondary" onClick={() => { setVoiding(r.id); setError(null); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table>}
-      {voiding && <form onSubmit={submitVoid}>
+        <div className="sa-actions"><button type="submit" className="sa-primary" disabled={busy || !confirm || !year || !cutover || !reason.trim()}>{busy ? tx('جارٍ الحفظ…', 'Saving…') : tx('حفظ الإعداد', 'Save configuration')}</button></div>
+      </form> : <p className="sa-muted">{tx('لا تملك صلاحية إدارة سلطة المصدر.', 'You do not have permission to manage source authority.')}</p>}
+    </section>}
+    <section className="sa-card" aria-labelledby="sa-register-title">
+      <div className="sa-card__head"><h3 id="sa-register-title">{tx('الإعدادات المسجّلة', 'Recorded configurations')}</h3>{!loading && ranges.length > 0 && <span className="sa-muted">{ranges.length}</span>}</div>
+      {loading ? <p role="status" className="sa-state">{tx('جارٍ التحميل…', 'Loading…')}</p> : ranges.length === 0 ? <p className="sa-state">{tx('لا توجد إعدادات.', 'No configurations.')}</p> :
+        <div className="sa-table"><table><thead><tr><th>{tx('من', 'From')}</th><th>{tx('إلى', 'To')}</th><th>{tx('الحالة', 'Status')}</th><th>{tx('السبب', 'Reason')}</th><th /></tr></thead>
+          <tbody>{ranges.map((r) => <tr key={r.id}><td className="sa-date">{r.from_date}</td><td className="sa-date">{r.to_date}</td>
+            <td><span className={`sa-badge is-${r.status}`}>{statusLabel(r)}</span></td><td className="sa-reason">{r.status === 'voided' ? r.void_reason : r.reason}</td>
+            <td>{canManage && r.status === 'draft' && <button type="button" className="sa-ghost" onClick={() => { setVoiding(r.id); setError(null); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table></div>}
+      {voiding && <form onSubmit={submitVoid} className="sa-form sa-void">
         <label>{tx('سبب الإلغاء (إلزامي)', 'Void reason (required)')}<textarea value={voidReason} maxLength={500} onChange={(e) => setVoidReason(e.target.value)} required /></label>
         <label className="sa-check"><input type="checkbox" checked={voidConfirm} onChange={(e) => setVoidConfirm(e.target.checked)} /><span>{tx('أؤكد إلغاء هذا الإعداد. يبقى في السجل ولا يُحذف.', 'I confirm voiding this configuration. It stays in the history and is not deleted.')}</span></label>
-        <div><button type="submit" disabled={busy || !voidConfirm || !voidReason.trim()}>{busy ? tx('جارٍ الإلغاء…', 'Voiding…') : tx('تأكيد الإلغاء', 'Confirm void')}</button>{' '}
-          <button type="button" className="secondary" onClick={() => setVoiding(null)}>{tx('رجوع', 'Back')}</button></div>
+        <div className="sa-actions"><button type="button" className="sa-ghost" onClick={() => setVoiding(null)}>{tx('رجوع', 'Back')}</button>
+          <button type="submit" className="sa-dark" disabled={busy || !voidConfirm || !voidReason.trim()}>{busy ? tx('جارٍ الإلغاء…', 'Voiding…') : tx('تأكيد الإلغاء', 'Confirm void')}</button></div>
       </form>}
-    </div>
+    </section>
   </section>;
 }
