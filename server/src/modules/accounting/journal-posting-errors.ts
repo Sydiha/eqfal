@@ -14,3 +14,11 @@ export const OPENING_BALANCE_CONTEXT_CODE = 'OPENING_BALANCE_REVIEW_CONTEXT_INVA
 export class OpeningBalanceJournalBlockedError extends JournalPostingConflictError {
   constructor(public readonly code: string, message: string) { super(message); }
 }
+
+export const LEDGER_SOURCE_AUTHORITY_BLOCKED_CODE = 'LEDGER_SOURCE_AUTHORITY_BLOCKED';
+export const ONBOARDING_PATH_CUTOVER_ACTIVE_CODE = 'ONBOARDING_PATH_CUTOVER_ACTIVE';
+
+/** A posting refused because the date (or the fiscal year, for an opening balance) is governed by an external-reference authority range. `code` is stable for the client. */
+export class LedgerSourceAuthorityBlockedError extends JournalPostingConflictError {
+  constructor(public readonly code: string, message: string) { super(message); }
+}

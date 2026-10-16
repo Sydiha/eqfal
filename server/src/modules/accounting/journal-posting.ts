@@ -5,10 +5,11 @@ import { isOperationalSourceType, operationalSourceQuery, OperationalSource, Jou
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
-import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
+import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
+import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
-export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError };
+export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
 export { FiscalYearClosedError };
 
 type Journal = {
@@ -69,6 +70,8 @@ async function assertOpeningBalanceReviewContext(
     [companyId, journal.fiscal_year_id, journal.id],
   );
   if (duplicate.rowCount) throw blocked('A posted opening balance journal already exists for this fiscal year');
+  // Path exclusivity: a fiscal year governed by an active external-reference range follows the cut-over path, never the opening path.
+  await assertFiscalYearNotInCutoverPath(client, companyId, journal.fiscal_year_id);
 }
 
 /**
@@ -112,6 +115,8 @@ export async function postJournalInTransaction(
   }
 
   await assertAccountingDateWritable(companyId, journal.accounting_date, client);
+  // Runs after the month lock above so a concurrent authority change is strictly ordered with this posting (no new lock).
+  await assertLedgerSourceAuthority(client, companyId, journal.accounting_date);
 
   const summary = (
     await client.query<{ count: string; debit: string; credit: string; active: string }>(

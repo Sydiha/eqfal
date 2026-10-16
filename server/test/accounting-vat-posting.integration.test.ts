@@ -29,6 +29,7 @@ function postingPool(){
   if(q.includes('FROM journal_entries WHERE id=$1 AND company_id=$2 FOR UPDATE'))return args[0]===journalId&&args[1]===company?result([journal]):result();
   if(q.includes('FROM fiscal_years WHERE id=$1 AND company_id=$2'))return result([{start_date:'2026-01-01',end_date:'2026-12-31'}]);
   if(q.includes('FROM monthly_close_periods'))return result();
+  if(q.includes('FROM ledger_source_authority'))return result();
   if(q.includes('COUNT(*)::text count')&&q.includes('FROM journal_lines'))return result([{count:'3',debit:'1150.00',credit:'1150.00',active:'3'}]);
   if(q.includes("FROM obligations o JOIN counterparties"))return result([{source_type:'obligation',source_id:sourceId,accounting_date:'2026-09-10',amount:'1150.00',description:'Obligation: Supplier',reference:null,context:{document_id:'ffffffff-ffff-4fff-8fff-ffffffffffff'}}]);
   if(q.startsWith('SELECT $1::numeric(18,2)=$2::numeric(18,2) matches'))return result([{matches:true}]);

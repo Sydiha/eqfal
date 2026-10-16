@@ -23,6 +23,9 @@ async function start(): Promise<void> {
       await pool.query('SELECT 1');
       logger.info('Database connected');
       await runMigrations(pool);
+      // The posting guard reads this table on every journal post: fail closed at start-up rather than reject postings at run time.
+      const ready = await pool.query("SELECT to_regclass('public.ledger_source_authority') IS NOT NULL AS ok");
+      if (!ready.rows[0]?.ok) throw new Error('ledger_source_authority table is missing (migration 083 not applied)');
     } catch (err) {
       logger.error({ err }, 'Database startup failed — aborting');
       throw err; // propagates to start().catch → process.exit(1)
