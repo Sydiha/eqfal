@@ -145,49 +145,83 @@ describeDatabase('ledger source authority (PostgreSQL)', () => {
     expect(ok.status).toBe(200);
   });
 
+  // Deterministic ordering: no sleeps decide who goes first. A transaction holds the month lock and signals; the other side is started and we
+  // poll pg_locks (bounded) until ITS backend is observed waiting on an advisory lock; only then is the holder released.
+  const waitUntilBlocked = async (pid: number) => {
+    for (let i = 0; i < 400; i++) {
+      if ((await h.count("SELECT COUNT(*)::text n FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted", [pid])) > 0) return;
+      await sleep(25);
+    }
+    throw new Error('backend never started waiting on the month lock');
+  };
+  const rawDraft = async (c: { query: (...a: any[]) => Promise<any> }, co: Co, date: string) => {
+    const id = (await c.query("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by) VALUES($1,$2,$3,'raw race',$4) RETURNING id", [co.id, co.fy, date, co.owner.id])).rows[0].id as string;
+    await c.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,sequence) VALUES($1,$2,$3,10,0,1),($1,$2,$4,0,10,2)', [co.id, id, co.bank, co.rev]);
+    return id;
+  };
+  const postSql = "UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1";
+
   it('serialises a range insert against a concurrent raw posting in both orders (no posted journal ever lands inside an active range)', async () => {
     const co = await setup('lsaRace');
-    // Order 1: the range commits first; the raw posting (which has been waiting on the month lock) is then refused.
-    const lateDraft = await draft(co, '2026-07-10');
-    await h.q("UPDATE journal_entries SET accounting_date='2026-07-10' WHERE id=$1", [lateDraft]);
-    await h.q('DELETE FROM journal_lines WHERE journal_entry_id=$1', [lateDraft]);
-    await h.q('DELETE FROM journal_entries WHERE id=$1', [lateDraft]);
-    const poster = (async () => {
-      const c = await h.db.connect();
-      try {
-        await c.query('BEGIN');
-        const id = (await c.query<{ id: string }>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by) VALUES($1,$2,'2026-07-10','raw race',$3) RETURNING id", [co.id, co.fy, co.owner.id])).rows[0]!.id;
-        await c.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,sequence) VALUES($1,$2,$3,10,0,1),($1,$2,$4,0,10,2)', [co.id, id, co.bank, co.rev]);
-        await sleep(250); // the draft is invisible to the range insert below; the lock taken by the posting trigger orders them
-        await c.query("UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1", [id, co.owner.id]);
-        await c.query('COMMIT');
-        return 'posted';
-      } catch (e) { await c.query('ROLLBACK').catch(() => undefined); return (e as Error).message; } finally { c.release(); }
-    })();
-    await sleep(60);
-    const created = await co.svc.create(co.id, co.owner.id, { fromDate: '2026-07-01', toDate: '2026-07-31', reason: 'External July' }).then(() => 'created', (e: { code?: string }) => e.code);
-    const posted = await poster;
-    expect([created, posted].sort()).toEqual(['LEDGER_SOURCE_AUTHORITY_BLOCKED', 'created'].sort());
+    // Order 1: the range transaction holds the month lock; the raw posting waits on it, and once the range commits it is refused.
+    const rangeTx = await h.db.connect();
+    const poster = await h.db.connect();
+    try {
+      await poster.query('BEGIN');
+      const draftId = await rawDraft(poster, co, '2026-07-10'); // uncommitted draft: invisible to the range insert
+      const posterPid = (await poster.query<{ pid: number }>('SELECT pg_backend_pid() pid')).rows[0]!.pid;
+      await rangeTx.query('BEGIN');
+      await rangeTx.query("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,reason,created_by) VALUES($1,'2026-07-01','2026-07-31','external_reference_only','External July',$2)", [co.id, co.owner.id]);
+      const posting = poster.query(postSql, [draftId, co.owner.id]).then(() => 'posted', (e: Error) => e.message);
+      await waitUntilBlocked(posterPid);
+      await rangeTx.query('COMMIT');
+      expect(await posting).toBe('LEDGER_SOURCE_AUTHORITY_BLOCKED');
+      await poster.query('ROLLBACK');
+    } finally { await rangeTx.query('ROLLBACK').catch(() => undefined); await poster.query('ROLLBACK').catch(() => undefined); rangeTx.release(); poster.release(); }
     expect(await postedInActiveRange(co)).toBe(0);
 
-    // Order 2: the posting commits first (it holds the lock until commit); the range insert then sees the journal and is refused.
-    const first = (async () => {
-      const c = await h.db.connect();
-      try {
-        await c.query('BEGIN');
-        const id = (await c.query<{ id: string }>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by) VALUES($1,$2,'2026-08-10','raw race 2',$3) RETURNING id", [co.id, co.fy, co.owner.id])).rows[0]!.id;
-        await c.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,sequence) VALUES($1,$2,$3,10,0,1),($1,$2,$4,0,10,2)', [co.id, id, co.bank, co.rev]);
-        await c.query("UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1", [id, co.owner.id]);
-        await sleep(250);
-        await c.query('COMMIT');
-        return 'posted';
-      } catch (e) { await c.query('ROLLBACK').catch(() => undefined); return (e as Error).message; } finally { c.release(); }
-    })();
-    await sleep(80);
-    const refused = await co.svc.create(co.id, co.owner.id, { fromDate: '2026-08-01', toDate: '2026-08-31', reason: 'External August' }).then(() => 'created', (e: { code?: string }) => e.code);
-    expect([await first, refused]).toEqual(['posted', 'AUTHORITY_RANGE_HAS_JOURNALS']);
+    // Order 2: the posting transaction holds the month lock; the range insert waits on it, and once the posting commits the range is refused.
+    const first = await h.db.connect();
+    const ranger = await h.db.connect();
+    try {
+      await first.query('BEGIN');
+      const id = await rawDraft(first, co, '2026-08-10');
+      await first.query(postSql, [id, co.owner.id]); // trigger takes the August lock here
+      const rangerPid = (await ranger.query<{ pid: number }>('SELECT pg_backend_pid() pid')).rows[0]!.pid;
+      const inserting = ranger.query("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,reason,created_by) VALUES($1,'2026-08-01','2026-08-31','external_reference_only','External August',$2)", [co.id, co.owner.id])
+        .then(() => 'created', (e: Error) => e.message);
+      await waitUntilBlocked(rangerPid);
+      await first.query('COMMIT');
+      expect(await inserting).toBe('AUTHORITY_RANGE_HAS_JOURNALS');
+    } finally { await first.query('ROLLBACK').catch(() => undefined); first.release(); ranger.release(); }
+    expect(await postedInActiveRange(co)).toBe(0);
+    expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND status='posted' AND accounting_date='2026-08-10'", [co.id])).toBe(1);
+  });
+
+  it('a posted journal cannot be moved (accounting_date, company_id, fiscal_year_id, status) by direct SQL, so the authority trigger cannot be bypassed after posting', async () => {
+    const co = await setup('lsaMove');
+    const other = await setup('lsaMoveOther');
+    const j = await draft(co, '2026-02-10');
+    expect((await post(co, j)).status).toBe(200);
+    await co.svc.create(co.id, co.owner.id, { fromDate: '2026-05-01', toDate: '2026-05-31', reason: 'External May' });
+    const fy2 = await h.fiscalYear(co.id, 'FY27', '2027-01-01', '2027-12-31');
+    for (const [sql, params] of [
+      ["UPDATE journal_entries SET accounting_date='2026-05-10' WHERE id=$1", [j]],
+      ['UPDATE journal_entries SET fiscal_year_id=$2 WHERE id=$1', [j, fy2]],
+      ['UPDATE journal_entries SET company_id=$2 WHERE id=$1', [j, other.id]],
+      ["UPDATE journal_entries SET status='draft' WHERE id=$1", [j]],
+      ['DELETE FROM journal_entries WHERE id=$1', [j]],
+    ] as const) {
+      expect(await rawFails(sql, [...params])).toBe('posted journal is immutable');
+    }
+    expect((await h.q<{ accounting_date: string; status: string }>("SELECT accounting_date::text,status FROM journal_entries WHERE id=$1", [j]))[0]).toEqual({ accounting_date: '2026-02-10', status: 'posted' });
+    // The only way into the ledger is the draft -> posted transition, and it is judged on the NEW date even when the same UPDATE changes it.
+    const d = await draft(co, '2026-06-10');
+    expect(await rawFails("UPDATE journal_entries SET status='posted',accounting_date='2026-05-12',posted_by=$2,posted_at=NOW() WHERE id=$1", [d, co.owner.id])).toBe('LEDGER_SOURCE_AUTHORITY_BLOCKED');
+    expect(await status(d)).toBe('draft');
     expect(await postedInActiveRange(co)).toBe(0);
   });
+
 
   it('concurrent overlapping inserts: exactly one wins', async () => {
     const co = await setup('lsaOver');
