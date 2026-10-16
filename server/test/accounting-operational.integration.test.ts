@@ -32,6 +32,7 @@ class AccountingPool{
    return{rows:found?[{one:1}]:[],rowCount:found?1:0};
   }
   if(sql.includes('FROM fiscal_years WHERE id=$1 AND company_id=$2'))return values[0]===yearId&&values[1]===company?{rows:[{start_date:'2026-01-01',end_date:'2026-12-31'}],rowCount:1}:{rows:[],rowCount:0};
+  if(sql.includes('FROM ledger_source_authority'))return{rows:[],rowCount:0};
   if(sql.includes('INSERT INTO journal_entries')){
    this.journal={id:journalId,company_id:String(values[0]),fiscal_year_id:String(values[1]),accounting_date:String(values[2]),description:String(values[3]),reference:null,source_type:String(values[5]),source_id:String(values[6]),entry_type:'standard',status:'draft',posted_at:null};
    return{rows:[this.journal],rowCount:1};
