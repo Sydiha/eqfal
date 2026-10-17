@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { seedActiveAuthorityRange } from './helpers/authority-fixture';
 import { startHarness } from './helpers/http-pg';
 
 // C1B-2 draft state over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
@@ -75,46 +76,41 @@ describeDatabase('ledger source authority drafts (PostgreSQL)', () => {
     expect((await co.owner.client.req('POST', `/journals/${j}/post`)).status).toBe(200);
     const { assertFiscalYearNotInCutoverPath } = await import('../src/modules/accounting/ledger-source-authority');
     await expect(assertFiscalYearNotInCutoverPath(h.db as never, co.id, co.fy)).resolves.toBeUndefined();
-    // an ACTIVE range elsewhere in the company is still enforced while a draft exists
-    const svc = new Service(h.db);
-    const active = await svc.create(co.id, co.owner.id, { fromDate: '2026-09-01', toDate: '2026-09-30', reason: 'External September' });
+    // an ACTIVE range elsewhere in the company (test fixture) is still enforced while a draft exists
+    const active = await seedActiveAuthorityRange(h.db, co.id, co.owner.id, '2026-09-01', '2026-09-30');
     const blocked = await co.owner.client.req('POST', `/journals/${await journal(co, '2026-09-05')}/post`);
     expect([blocked.status, blocked.json.code]).toEqual([409, 'LEDGER_SOURCE_AUTHORITY_BLOCKED']);
     expect(active.status).toBe('active');
   });
 
-  it('refuses overlap with another draft/active range, in both directions', async () => {
+  it('refuses a draft that overlaps another draft or an active range', async () => {
     const co = await setup('drOverlap');
     expect((await mkDraft(co)).status).toBe(201);
     const dup = await mkDraft(co, { to_date: '2026-03-31' });
     expect([dup.status, dup.json.code]).toEqual([409, 'AUTHORITY_RANGE_OVERLAP']);
     const co2 = await setup('drOverlap2');
-    await new Service(h.db).create(co2.id, co2.owner.id, { fromDate: '2026-01-01', toDate: '2026-02-28', reason: 'External' });
+    await seedActiveAuthorityRange(h.db, co2.id, co2.owner.id, '2026-01-01', '2026-02-28');
     expect((await mkDraft(co2)).json.code).toBe('AUTHORITY_RANGE_OVERLAP');
   });
 
-  it('overlap is symmetric: an active range over a draft is refused (service and raw SQL), a disjoint one is allowed, and a voided draft frees the period', async () => {
+  it('no path creates an active range (raw SQL refused even when disjoint), and a voided draft frees the period for a new draft', async () => {
     const co = await setup('drSym');
-    const svc = new Service(h.db);
     const draftId = (await mkDraft(co)).json.range.id as string; // 2026-01-01..2026-06-30
-    await expect(svc.create(co.id, co.owner.id, { fromDate: '2026-03-01', toDate: '2026-03-31', reason: 'x' })).rejects.toMatchObject({ code: 'AUTHORITY_RANGE_OVERLAP' });
-    let raw: string | null = null;
-    try { await h.db.query("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) VALUES($1,'2026-06-30','2026-07-15','external_reference_only','active','r',$2)", [co.id, co.owner.id]); } catch (e) { raw = (e as { message: string }).message; }
-    expect(raw).toBe('AUTHORITY_RANGE_OVERLAP');
-    expect((await svc.create(co.id, co.owner.id, { fromDate: '2026-07-01', toDate: '2026-07-31', reason: 'disjoint' })).status).toBe('active');
+    const raw = async (from: string, to: string, status: string) => {
+      try { await h.db.query("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) VALUES($1,$2,$3,'external_reference_only',$4,'r',$5)", [co.id, from, to, status, co.owner.id]); return null; } catch (e) { return (e as { message: string }).message; }
+    };
+    expect(await raw('2026-06-30', '2026-07-15', 'active')).toBe('AUTHORITY_ACTIVE_INSERT_FORBIDDEN');
+    expect(await raw('2026-07-01', '2026-07-31', 'active')).toBe('AUTHORITY_ACTIVE_INSERT_FORBIDDEN');
+    expect(await h.count("SELECT COUNT(*)::text n FROM ledger_source_authority WHERE company_id=$1 AND status='active'", [co.id])).toBe(0);
     await co.manager.client.req('POST', `/ledger-source-authority/${draftId}/void-draft`, { reason: 'plan changed', confirm: true });
-    expect((await svc.create(co.id, co.owner.id, { fromDate: '2026-03-01', toDate: '2026-03-31', reason: 'now free' })).status).toBe('active');
+    expect((await mkDraft(co)).status).toBe(201);
   });
 
-  it('concurrent draft and active inserts over the same dates: exactly one wins', async () => {
+  it('concurrent draft inserts over the same dates: exactly one wins', async () => {
     for (let i = 0; i < 5; i += 1) {
       const co = await setup(`drRace${i}`);
-      const svc = new Service(h.db);
-      const results = await Promise.allSettled([
-        mkDraft(co).then((r) => { if (r.status !== 201) throw new Error(r.json.code); return r; }),
-        svc.create(co.id, co.owner.id, { fromDate: '2026-02-01', toDate: '2026-02-28', reason: 'race' }),
-      ]);
-      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const results = await Promise.all([mkDraft(co), mkDraft(co, { to_date: '2026-02-28' })]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
     }
   });
 
@@ -142,7 +138,7 @@ describeDatabase('ledger source authority drafts (PostgreSQL)', () => {
   it('void-draft refuses an active range and is company scoped', async () => {
     const co = await setup('drScopeA');
     const other = await setup('drScopeB');
-    const active = await new Service(h.db).create(co.id, co.owner.id, { fromDate: '2026-01-01', toDate: '2026-01-31', reason: 'External' });
+    const active = await seedActiveAuthorityRange(h.db, co.id, co.owner.id, '2026-01-01', '2026-01-31');
     expect((await co.manager.client.req('POST', `/ledger-source-authority/${active.id}/void-draft`, { reason: 'x', confirm: true })).status).toBe(409);
     const dB = (await mkDraft(other)).json.range.id as string;
     expect((await co.manager.client.req('POST', `/ledger-source-authority/${dB}/void-draft`, { reason: 'x', confirm: true })).status).toBe(404);
