@@ -50,11 +50,11 @@ describe('application guard (mocked client)', () => {
     expect(err.code).toBe('ONBOARDING_PATH_CUTOVER_ACTIVE');
     await expect(assertFiscalYearNotInCutoverPath(client(1, false) as never, 'c', 'fy')).resolves.toBeUndefined();
   });
-  it('rejects malformed create input before touching the database', async () => {
+  it('rejects malformed draft input before touching the database', async () => {
     const db = { connect: vi.fn() };
     const svc = new LedgerSourceAuthorityService(db as never);
     for (const bad of [{ fromDate: '2026-02-30', toDate: '2026-03-01', reason: 'x' }, { fromDate: '2026-03-02', toDate: '2026-03-01', reason: 'x' }, { fromDate: '2026-01-01', toDate: '2026-01-31', reason: '  ' }]) {
-      await expect(svc.create('c', 'u', bad)).rejects.toMatchObject({ code: 'AUTHORITY_RANGE_INVALID' });
+      await expect(svc.createDraft('c', 'u', bad)).rejects.toMatchObject({ code: 'AUTHORITY_RANGE_INVALID' });
     }
     expect(db.connect).not.toHaveBeenCalled();
   });
