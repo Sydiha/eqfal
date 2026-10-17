@@ -13,9 +13,11 @@
 -- PREREQUISITES: 083 and 084 applied. Replaces two trigger functions only; no table, column, constraint, index or row changes.
 -- PRE-FLIGHT (Owner, read only): SELECT count(*) FROM ledger_source_authority WHERE status='active' was 0 on Replit (2026-10-17).
 -- PERFORMANCE: CREATE OR REPLACE FUNCTION only; no table lock beyond catalog updates.
--- ROLLBACK (safe at any time, changes no data): re-create ledger_source_authority_guard_insert() and ledger_source_authority_guard_update()
---   with their bodies from 084_ledger_source_authority_draft.sql, then DELETE FROM _schema_migrations WHERE filename =
---   '085_ledger_source_authority_lockdown.sql'. Rolling back re-opens raw active inserts and active voiding.
+-- ROLLBACK (changes no data, but is NOT a safe state): re-create ledger_source_authority_guard_insert() and
+--   ledger_source_authority_guard_update() with their bodies from 084_ledger_source_authority_draft.sql, then DELETE FROM _schema_migrations
+--   WHERE filename = '085_ledger_source_authority_lockdown.sql'. WARNING: rolling back RESTORES the unsafe paths this migration closes
+--   (raw SQL INSERT of an active range without a cut-over journal, and voiding an active range). Roll back only with explicit Owner
+--   approval, and only after confirming no active range exists and no code depends on 085.
 
 CREATE OR REPLACE FUNCTION ledger_source_authority_guard_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
