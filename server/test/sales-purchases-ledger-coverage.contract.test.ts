@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const obligations=readFileSync(new URL('../src/modules/obligations/obligation.router.ts',import.meta.url),'utf8');
 const custody=readFileSync(new URL('../src/modules/banking/custody.router.ts',import.meta.url),'utf8');
 const close=readFileSync(new URL('../src/modules/monthly-close/monthly-close.router.ts',import.meta.url),'utf8');
+const bankCore=readFileSync(new URL('../src/modules/banking/bank-reconciliation-core.ts',import.meta.url),'utf8');
 const sources=readFileSync(new URL('../src/modules/accounting/operational-sources.ts',import.meta.url),'utf8');
 
 describe('sales and purchases ledger coverage contract',()=>{
@@ -33,10 +34,13 @@ describe('sales and purchases ledger coverage contract',()=>{
   });
 
   it('does not treat a document match or reconciliation status as accounting completion',()=>{
-    expect(close).toContain("m.match_type='document'");
-    expect(close).toContain('JOIN document_settlements s');
-    expect(close).toContain("status='posted'");
+    // T2: the unresolved-bank-transaction definition is shared by monthly and annual closing and lives in the reconciliation core.
+    expect(close).toContain('UNRESOLVED_BANK_TRANSACTION_SQL');
+    expect(bankCore).toContain("m.match_type='document'");
+    expect(bankCore).toContain('JOIN document_settlements s');
+    expect(bankCore).toContain("status='posted'");
     expect(close).not.toMatch(/reconciliation_status[^\n]+bank_transactions/);
+    expect(bankCore.slice(bankCore.indexOf('UNRESOLVED_BANK_TRANSACTION_SQL'), bankCore.indexOf('export type OutstandingItem'))).not.toContain("reconciliation_status='reconciled'");
   });
 
   it('requires exact VAT tags, side, account type and aggregate amount while permitting zero VAT',()=>{

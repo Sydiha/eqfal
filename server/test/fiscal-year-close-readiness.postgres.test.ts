@@ -173,14 +173,17 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
     await expectCloses(miss);
   });
 
-  it('unreconciled bank transaction inside blocks, outside or reconciled does not (9, 10)', async () => {
+  it('unreconciled bank transaction inside blocks, outside the year does not (9, 10)', async () => {
     const hit = await world();
     await bankTx(hit, '2026-04-04');
     await expectBlocked(hit, 'unreconciled_bank_transactions');
     const miss = await world();
     await bankTx(miss, '2025-04-04');
-    await bankTx(miss, '2026-04-04', 'reconciled');
     await expectCloses(miss);
+    // T2: monthly and annual closing share one definition; a bare reconciled status without a ledger-bearing relationship is not resolution.
+    const statusOnly = await world();
+    await bankTx(statusOnly, '2026-04-04', 'reconciled');
+    await expectBlocked(statusOnly, 'unreconciled_bank_transactions');
   });
 
   it('applicable VAT with an unfiled period blocks; non-applicable company is not blocked (11, 12)', async () => {

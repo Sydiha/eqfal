@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import logger from '../../shared/logger';
+import { CompanyReconciliation, recordReconciliationSnapshots } from '../banking/bank-reconciliation-core';
 import {
   FiscalYear,
   CreateFiscalYearInput,
@@ -219,10 +220,14 @@ export class FiscalYearService {
       // then re-check readiness on this same transaction before changing status.
       const bounds = await loadFiscalYearBounds(client, companyId, id);
       await lockFiscalYearCloseScope(client, companyId, bounds);
-      const readiness = await getFiscalYearCloseReadiness(client, companyId, bounds);
+      const gate: { reconciliation?: CompanyReconciliation } = {};
+      const readiness = await getFiscalYearCloseReadiness(client, companyId, bounds, gate);
       if (!readiness.ready) {
         throw new FiscalYearCloseBlockedError(readiness.blockers, readiness.warnings);
       }
+
+      // T2: record the exact result the gate passed on (captured, never recomputed), taken under the per-account locks inside the readiness check.
+      if (gate.reconciliation) await recordReconciliationSnapshots(client, companyId, 'fiscal_year_close', id, gate.reconciliation, actorUserId);
 
       const updated = await this.fyRepo.updateStatus(id, companyId, 'closed', client);
       // Defensive: row vanished between the FOR UPDATE read and the UPDATE

@@ -27,6 +27,7 @@ function dbFor(row:RequirementRow){
   if(q.startsWith('SELECT *,period_start::text,period_end::text FROM monthly_close_periods'))return result([period]);
   if(q.startsWith('SELECT (SELECT COUNT(*) FROM documents'))return result([row]);
   if(q.startsWith('WITH material AS'))return result();
+  if(q.includes('company_bank_reconciliation_settings'))return result();
   if(q.startsWith('SELECT source_type,source_id FROM journal_entries'))return result();
   if(q.startsWith('SELECT (SELECT COUNT(*) FROM asset_depreciation_entries'))return result([{pending:'0',drafts:'0'}]);
   throw new Error(q);
