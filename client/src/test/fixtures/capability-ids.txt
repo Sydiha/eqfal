@@ -89,6 +89,7 @@ opening_balance.manage
 opening_balance.review
 opening_balance.submit
 opening_balance.view
+partner.account_mapping.manage
 partner.create
 partner.disable
 partner.edit
@@ -96,6 +97,10 @@ partner.manage
 partner.ownership.confirm
 partner.ownership.create
 partner.ownership.edit
+partner.transaction.create
+partner.transaction.post
+partner.transaction.reverse
+partner.transaction.view
 partner.view
 periodic_adjustment.approve
 periodic_adjustment.create

@@ -69,6 +69,11 @@ const OVERRIDES: Record<string, Pair> = {
   'bank.reconcile': ['Reconcile bank transactions', 'تسوية المعاملات البنكية'],
   'obligation.settle': ['Settle obligations', 'تسوية الالتزامات'], 'invoice.create': ['Create invoices', 'إنشاء الفواتير'],
   'payment.settle': ['Settle payments', 'تسوية الدفعات'],
+  'partner.transaction.view': ['View partner transactions and ledgers', 'عرض معاملات الشركاء وكشوفهم'],
+  'partner.transaction.create': ['Prepare partner transactions', 'إعداد معاملات الشركاء'],
+  'partner.transaction.post': ['Post partner transactions', 'ترحيل معاملات الشركاء'],
+  'partner.transaction.reverse': ['Reverse partner transactions', 'عكس معاملات الشركاء'],
+  'partner.account_mapping.manage': ['Manage partner account mappings', 'إدارة ربط حسابات الشركاء'],
   'document.upload': ['Upload documents', 'رفع المستندات'], 'document.submit': ['Submit documents for review', 'إرسال المستندات للمراجعة'],
 };
 

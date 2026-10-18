@@ -137,6 +137,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
     ['vat_incomplete', apply.vatApplicable ? num(d.vat!.summary.incomplete_periods) : 0],
     ['opening_balances_incomplete', apply.openingApplicable && !apply.openingApproved && !cutover ? Math.max(1, openingRows) : 0],
     ['partner_ownership_overlap', num(d.partners!.summary.overlapping_ownership_periods)],
+    ['partner_transactions_draft', num(d.partners!.summary.draft_partner_transactions)],
   ];
   const blockers = blockerSpec.filter(([, count]) => count > 0).map(([code, count]) => ({ code, count }));
 
