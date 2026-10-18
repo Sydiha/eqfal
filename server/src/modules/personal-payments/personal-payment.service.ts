@@ -450,7 +450,7 @@ export class PersonalPaymentService {
   /** Company outflows not yet explained by any workflow that could reimburse this payment (amount at most the outstanding amount). */
   async reimbursableBankTransactions(companyId: string, paymentId: string) {
     const p = (await this.db.query<{ status: string; outstanding: string; accounting_date: string }>(
-      `SELECT p.status, (p.amount-COALESCE((SELECT SUM(r.amount) FROM personal_payment_reimbursements r WHERE r.payment_id=p.id AND r.company_id=p.company_id),0))::text outstanding, p.accounting_date::text
+      `SELECT p.status, (p.amount-COALESCE((SELECT SUM(r.amount) FROM personal_payment_reimbursements r WHERE r.payment_id=p.id AND r.company_id=p.company_id),0))::text outstanding, GREATEST(p.accounting_date,p.payment_date)::text accounting_date
          FROM personal_payments p WHERE p.id=$1 AND p.company_id=$2`, [paymentId, companyId])).rows[0];
     if (!p) throw notFound();
     if (p.status !== 'approved') return { transactions: [] };
@@ -486,7 +486,7 @@ export class PersonalPaymentService {
       const amount = fromHalalas(toHalalas(bt.amount.slice(1)));
       const reimbursed = toHalalas((await c.query<{ s: string }>('SELECT COALESCE(SUM(amount),0)::text s FROM personal_payment_reimbursements WHERE payment_id=$1 AND company_id=$2', [paymentId, companyId])).rows[0]!.s);
       if (toHalalas(amount) > toHalalas(payment.amount) - reimbursed) throw conflict('PERSONAL_PAYMENT_OVER_REIMBURSEMENT', 'The bank transaction exceeds the outstanding amount');
-      if (bt.transaction_date < payment.accounting_date) throw conflict('PERSONAL_REIMBURSEMENT_DATE_INVALID', 'The reimbursement cannot precede the payment');
+      if (bt.transaction_date < payment.accounting_date || bt.transaction_date < payment.payment_date) throw conflict('PERSONAL_REIMBURSEMENT_DATE_INVALID', 'The reimbursement cannot precede the payer\'s payment or its accounting date');
 
       const bank = (await c.query<{ is_active: boolean; currency_code: string }>('SELECT is_active, currency_code FROM bank_accounts WHERE id=$1 AND company_id=$2 FOR SHARE', [bt.bank_account_id, companyId])).rows[0];
       if (!bank || !bank.is_active) throw conflict('PERSONAL_REIMBURSEMENT_BANK_INACTIVE', 'The bank account is inactive');

@@ -591,4 +591,154 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await readiness())['bank_transactions']).toBe(1);
     expect(unresolved).toBeTruthy();
   });
+
+  // ---- Focused pre-TEST review (PR #466): date policy, payer identity, reclassification without double counting
+
+  async function blockersFor(co: Co, start: string, end: string) {
+    const svc = await import('../src/modules/monthly-close/monthly-close.router');
+    const service = new svc.MonthlyCloseService(h.db);
+    return (service as unknown as { blockers: (c: string, f: string, s: string, e: string) => Promise<Record<string, number>> }).blockers(co.id, co.fy, start, end);
+  }
+
+  it('date policy: a September document paid in October is recognized in September, reimbursed no earlier than the payer paid', async () => {
+    const co = await setup('datepol');
+    const payer = await employeePayer(co);
+    const sepDoc = await doc(co, '500.00', '2026-09-10');
+    const d = await draft(co, body(co, payer.id, sepDoc, { payment_date: '2026-10-05' }));
+    // pending draft is counted in the month it will be recognized (September), not in October
+    expect((await blockersFor(co, '2026-09-01', '2026-09-30'))['obligations']).toBe(1);
+    expect((await blockersFor(co, '2026-10-01', '2026-10-31'))['obligations']).toBe(0);
+    await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
+    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    const row = (await h.q<{ payment_date: string; accounting_date: string; journal_entry_id: string }>('SELECT payment_date::text, accounting_date::text, journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]!;
+    expect(row.payment_date).toBe('2026-10-05');
+    expect(row.accounting_date).toBe('2026-09-10');                                   // same date rule as every document-based recognition
+    expect((await h.q<{ d: string }>('SELECT accounting_date::text d FROM journal_entries WHERE id=$1', [row.journal_entry_id]))[0]!.d).toBe('2026-09-10');
+    const sep = await blockersFor(co, '2026-09-01', '2026-09-30');
+    expect(sep['obligations']).toBe(0);
+    expect(sep['ledger']).toBe(0);                                                     // the posted entry satisfies document-recognition in September
+    // payable as of Sept 30 already shows the amount owed to the payer; reimbursement before the payer paid is refused
+    expect((await co.viewer.client.req('GET', '/personal-payments/payables?as_of=2026-09-30')).json.payers[0].outstanding_amount).toBe('500.00');
+    const early = await reimburse(co, d.id, await bankTx(co, '2026-09-20', '-100.00'));
+    expect(early.status).toBe(409);
+    expect(early.json.code).toBe('PERSONAL_REIMBURSEMENT_DATE_INVALID');
+    expect(await journalCount(co, 'personal_payment_reimbursement')).toBe(0);
+    const open = await co.reimburser.client.req('GET', `/personal-payments/${d.id}/reimbursable-bank-transactions`);
+    expect(open.json.transactions.every((t: { transaction_date: string }) => t.transaction_date >= '2026-10-05')).toBe(true);
+    const ok = await reimburse(co, d.id, await bankTx(co, '2026-10-20', '-100.00'));
+    expect(ok.status).toBe(201);
+    const rj = (await h.q<{ journal_entry_id: string }>('SELECT journal_entry_id FROM personal_payment_reimbursements WHERE payment_id=$1', [d.id]))[0]!.journal_entry_id;
+    expect((await h.q<{ d: string }>('SELECT accounting_date::text d FROM journal_entries WHERE id=$1', [rj]))[0]!.d).toBe('2026-10-20');
+  });
+
+  it('date policy: the closed period is the document month, not the payment month', async () => {
+    const co = await setup('datepol-closed');
+    const payer = await employeePayer(co);
+    const closeMonth = (start: string, end: string) => h.q("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'closed')", [co.id, co.fy, start, end]);
+    // September closed, October open: a September document paid in October cannot be recognized (nothing is back-dated into a closed month)
+    await closeMonth('2026-09-01', '2026-09-30');
+    const blocked = await co.preparer.client.req('POST', '/personal-payments', body(co, payer.id, await doc(co, '500.00', '2026-09-10'), { payment_date: '2026-10-05' }));
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.code).toBe('PERSONAL_PAYMENT_PERIOD_CLOSED');
+    // a document dated in the open October, paid the same month, is fine
+    expect((await co.preparer.client.req('POST', '/personal-payments', body(co, payer.id, await doc(co, '80.00', '2026-10-02'), { amount: '80.00', payment_date: '2026-10-05' }))).status).toBe(201);
+    // October closed, September open: recognition happens in September; the reimbursement dated in closed October is refused
+    const co2 = await setup('datepol-closed2');
+    const payer2 = await employeePayer(co2);
+    const id = await approved(co2, payer2.id, { payment_date: '2026-10-05' });
+    expect(id).toBeTruthy();
+    await h.q("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,'2026-10-01','2026-10-31','closed')", [co2.id, co2.fy]);
+    const r = await reimburse(co2, id, await bankTx(co2, '2026-10-20', '-100.00'));
+    expect(r.json.code).toBe('PERSONAL_PAYMENT_PERIOD_CLOSED');
+  });
+
+  it('payer identity: association is explicit, audited, immutable once in use, and never inferred from name or role', async () => {
+    const co = await setup('identity');
+    // an employee payer deliberately named like the partner is still an employee payer
+    const lookalike = await employeePayer(co, { display_name: 'Partner A', user_id: null });
+    const idEmp = await approved(co, lookalike.id);
+    const ledger = (await co.owner.client.req('GET', `/partners/${co.partnerA}/ledger?from=2026-01-01&to=2026-12-31`)).json;
+    expect(ledger.movements).toHaveLength(0);
+    const empJournal = (await h.q<{ journal_entry_id: string }>('SELECT journal_entry_id FROM personal_payments WHERE id=$1', [idEmp]))[0]!.journal_entry_id;
+    expect((await lines(empJournal)).some((l) => l.account_id === co.currentA)).toBe(false);
+    // partner association: explicit field, company-scoped, audited with the partner reference
+    const partnerPayerRow = await partnerPayer(co);
+    const audit = (await h.q<{ after_data: { partner_id?: string; company_id?: string } }>("SELECT after_data FROM audit_log WHERE company_id=$1 AND action='personal_payer.create' AND entity_id=$2", [co.id, partnerPayerRow.id]))[0]!;
+    expect(audit.after_data.partner_id).toBe(co.partnerA);
+    expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='personal_payer.create'", [co.id])).toBe(2);
+    // the association cannot be changed through the API
+    for (const patch of [{ partner_id: co.partnerA }, { user_id: co.employee.id }]) {
+      expect((await co.payerMgr.client.req('PATCH', `/personal-payments/payers/${lookalike.id}`, { ...patch, version: lookalike.version })).status).toBe(400);
+    }
+    // a partner payer can never be handed a parallel payable account
+    const toEmployee = await co.payerMgr.client.req('PATCH', `/personal-payments/payers/${partnerPayerRow.id}`, { payable_account_id: co.empPayable, version: partnerPayerRow.version });
+    expect(toEmployee.status).toBeGreaterThanOrEqual(400);
+    expect(await h.count('SELECT COUNT(*)::text n FROM personal_payers WHERE id=$1 AND payable_account_id IS NOT NULL', [partnerPayerRow.id])).toBe(0);
+    // once payments are in review or approved the association is frozen at database level
+    await approved(co, partnerPayerRow.id);
+    await expect(h.q('UPDATE personal_payers SET partner_id=NULL, payable_account_id=$2 WHERE id=$1', [partnerPayerRow.id, co.empPayable])).rejects.toThrow(/cannot change/);
+    await expect(h.q('UPDATE personal_payers SET payable_account_id=$2 WHERE id=$1', [lookalike.id, co.ap])).rejects.toThrow(/cannot change/);
+    // re-pointing the partner mapping afterwards does not rewrite history: the reimbursement debits the account the payment credited
+    const otherCurrent = await h.account(co.id, 'E-CUR-B', 'equity', 'equity');
+    await co.owner.client.req('PUT', `/partners/${co.partnerA}/account-mappings/current`, { account_id: otherCurrent });
+    const pid = (await h.q<{ id: string }>("SELECT id FROM personal_payments WHERE payer_id=$1", [partnerPayerRow.id]))[0]!.id;
+    expect((await reimburse(co, pid, await bankTx(co, '2026-04-01', '-100.00'))).status).toBe(201);
+    const rj = (await h.q<{ journal_entry_id: string }>('SELECT journal_entry_id FROM personal_payment_reimbursements WHERE payment_id=$1', [pid]))[0]!.journal_entry_id;
+    expect((await lines(rj)).find((l) => l.debit === '100.00')!.account_id).toBe(co.currentA);
+  });
+
+  it('reclassification with a prior partial settlement never double-counts the liability', async () => {
+    const co = await setup('reclass');
+    const emp = await employeePayer(co);
+    const ob = (await h.q<{ id: string }>("INSERT INTO obligations(company_id,direction,counterparty_id,original_amount,recognized_on,verification_status,source_type,created_by_user_id) VALUES($1,'payable',$2,800,'2026-03-01','confirmed','manual',$3) RETURNING id", [co.id, co.supplier, co.owner.id]))[0]!.id;
+    await h.postedJournal(co.id, co.fy, '2026-03-01', co.owner.id, [[co.expense, '800.00', '0.00'], [co.ap, '0.00', '800.00']], { source_type: 'obligation', source_id: ob });
+    // the company already settled 300 of the 800 from the bank: 500 is outstanding
+    await h.q('INSERT INTO obligation_settlements(company_id,obligation_id,bank_transaction_id,amount,created_by_user_id) VALUES($1,$2,$3,300,$4)', [co.id, ob, await bankTx(co, '2026-03-15', '-300.00'), co.owner.id]);
+    const aging = async () => (await co.owner.client.req('GET', '/obligations/aging?as_of_date=2026-12-31')).json.payables.total_outstanding as string;
+    expect(await aging()).toBe('500.00');
+    const req = (o: Record<string, unknown>) => ({ payer_id: emp.id, treatment: 'existing_obligation', payment_date: '2026-03-20', amount: '500.00', purpose: 'Paid supplier personally', obligation_id: ob, ...o });
+    expect((await co.preparer.client.req('POST', '/personal-payments', req({ amount: '500.01' }))).json.code).toBe('PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING');   // 800 is not available: 300 was settled
+    const d = await draft(co, req({}));
+    await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
+    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    // supplier payable is cleared once; what remains owed (500) is owed to the payer, not both
+    expect(await aging()).toBe('0.00');
+    const payables = (await co.viewer.client.req('GET', '/personal-payments/payables?as_of=2026-12-31')).json.payers;
+    expect(payables).toEqual([expect.objectContaining({ approved_amount: '500.00', outstanding_amount: '500.00' })]);
+    const totalOwed = Number(await aging()) + Number(payables[0].outstanding_amount);
+    expect(totalOwed).toBe(500);                                                       // same total the company owed before the reclassification
+    // expense and VAT were not recognized again; the partner statement is untouched
+    expect(await h.q<{ s: string }>('SELECT COALESCE(SUM(l.debit),0)::text s FROM journal_lines l WHERE l.company_id=$1 AND l.account_id=$2', [co.id, co.expense]).then((r) => r[0]!.s)).toBe('800.00');
+    expect((await co.owner.client.req('GET', `/partners/${co.partnerA}/ledger?from=2026-01-01&to=2026-12-31`)).json.movements).toHaveLength(0);
+    // nothing left on the obligation for a second reclassification or a bank settlement
+    expect((await co.preparer.client.req('POST', '/personal-payments', req({ amount: '0.01' }))).json.code).toBe('PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING');
+    await expect(h.q('INSERT INTO obligation_settlements(company_id,obligation_id,bank_transaction_id,amount,created_by_user_id) VALUES($1,$2,$3,1,$4)', [co.id, ob, await bankTx(co, '2026-04-01', '-1.00'), co.owner.id])).rejects.toThrow(/exceeds/);
+    // closing: the reclassified payable raises no blocker, the settled period is clean
+    expect((await blockersFor(co, '2026-03-01', '2026-03-31'))['obligations']).toBe(0);
+    // reimbursing the payer settles the individual payable only, the obligation stays cleared
+    expect((await reimburse(co, d.id, await bankTx(co, '2026-04-02', '-500.00'))).status).toBe(201);
+    expect(await aging()).toBe('0.00');
+    expect((await co.viewer.client.req('GET', '/personal-payments/payables?as_of=2026-12-31')).json.payers[0].outstanding_amount).toBe('0.00');
+  });
+
+  it('reclassification for a partner payer reaches the partner statement exactly once', async () => {
+    const co = await setup('reclass-partner');
+    const pp = await partnerPayer(co);
+    const ob = (await h.q<{ id: string }>("INSERT INTO obligations(company_id,direction,counterparty_id,original_amount,recognized_on,verification_status,source_type,created_by_user_id) VALUES($1,'payable',$2,800,'2026-03-01','confirmed','manual',$3) RETURNING id", [co.id, co.supplier, co.owner.id]))[0]!.id;
+    await h.postedJournal(co.id, co.fy, '2026-03-01', co.owner.id, [[co.expense, '800.00', '0.00'], [co.ap, '0.00', '800.00']], { source_type: 'obligation', source_id: ob });
+    const d = await draft(co, { payer_id: pp.id, treatment: 'existing_obligation', payment_date: '2026-03-20', amount: '500.00', purpose: 'Paid supplier personally', obligation_id: ob });
+    await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
+    await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});   // replay
+    const ledger = (await co.owner.client.req('GET', `/partners/${co.partnerA}/ledger?from=2026-01-01&to=2026-12-31`)).json;
+    expect(ledger.movements.filter((m: { kind: string }) => m.kind === 'personal_payment')).toHaveLength(1);
+    expect(ledger.classes.current.closing_balance).toBe('500.00');
+    const jr = (await h.q<{ journal_entry_id: string }>('SELECT journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]!.journal_entry_id;
+    expect(await lines(jr)).toEqual([
+      { account_id: co.ap, debit: '500.00', credit: '0.00', memo: 'personal_payment' },
+      { account_id: co.currentA, debit: '0.00', credit: '500.00', memo: 'personal_payment' },
+    ]);
+    expect((await h.q<{ n: string }>('SELECT obligation_adjustment_net($1,$2)::text n', [ob, co.id]))[0]!.n).toBe('-500.00');
+    expect(await journalCount(co, 'personal_payment')).toBe(1);
+  });
 });
