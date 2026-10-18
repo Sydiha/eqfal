@@ -131,6 +131,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
     ['unresolved_documents', num(d.documents!.summary.unresolved_documents)],
     ['unconfirmed_obligations', num(d.receivables_payables!.summary.unconfirmed_obligations)],
     ['unreconciled_bank_transactions', num(d.banking!.summary.unresolved_transactions)],
+    ['bank_reconciliation_unresolved', num(d.banking!.summary.reconciliation_blockers)],
     ['pending_periodic_adjustments', num(d.adjustments!.summary.unresolved_adjustments)],
     ['pending_depreciation', num(d.assets!.summary.pending_depreciation)],
     ['draft_fixed_assets', num(d.assets!.summary.draft_assets)],
@@ -149,6 +150,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
   if (openPayables > 0) warn('open_payable_balance', 1, String(d.receivables_payables!.summary.open_payable_balance));
   if (!['ready', 'not_applicable'].includes(d.zakat!.status)) warn('zakat_tax_workpaper_not_ready', 1, d.zakat!.status);
   if (!['ready', 'not_applicable'].includes(d.wht!.status)) warn('wht_review_not_ready', 1, d.wht!.status);
+  if (num(d.banking!.summary.reconciliation_warnings) > 0) warn('bank_reconciliation_attention', num(d.banking!.summary.reconciliation_warnings));
   const unconfirmedPartners = num(d.partners!.summary.unconfirmed_ownership_periods) + num(d.partners!.summary.ownership_gaps_needing_review);
   if (unconfirmedPartners > 0) warn('partner_ownership_unconfirmed', unconfirmedPartners);
   if (apply.vatApplicable && num(d.vat!.summary.boundary_review_periods) > 0) warn('vat_boundary_review', num(d.vat!.summary.boundary_review_periods));

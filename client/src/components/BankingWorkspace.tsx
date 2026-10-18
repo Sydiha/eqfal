@@ -5,6 +5,7 @@ import { Banking } from './Banking';
 import { BankTransactionsView } from './BankTransactionsView';
 import { SettlementPanel } from './SettlementPanel';
 import { CustodyPanel } from './CustodyPanel';
+import { BankStatementReconciliation } from './BankStatementReconciliation';
 import './banking-workspace.css';
 import './BankingApproved.css';
 import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
@@ -20,12 +21,15 @@ type Props = {
   canViewCustody: boolean;
   canManageCustody: boolean;
   canCloseCustody: boolean;
+  canManageStatements?: boolean;
+  canConfirmStatements?: boolean;
+  canManageReconciliationSettings?: boolean;
   onUnauthorized: () => void;
 };
 
-type BankingSection = 'transactions' | 'import' | 'accounts' | 'settlements' | 'custody';
+type BankingSection = 'transactions' | 'import' | 'accounts' | 'settlements' | 'custody' | 'reconciliation';
 type CoreSection = 'import' | 'accounts';
-const bankingSections = ['transactions', 'import', 'accounts', 'settlements', 'custody'] as const;
+const bankingSections = ['transactions', 'import', 'accounts', 'settlements', 'custody', 'reconciliation'] as const;
 const readSection = (): BankingSection => (readQueryParameter('section', { allowedValues: bankingSections }) as BankingSection | null) ?? 'transactions';
 
 const copy = {
@@ -35,12 +39,14 @@ const copy = {
     accounts: 'الحسابات',
     settlements: 'التسويات',
     custody: 'العهد والسلف',
+    reconciliation: 'مطابقة الرصيد',
     titles: {
       transactions: 'مطابقة الحركات البنكية',
       import: 'استيراد الكشوف البنكية',
       accounts: 'الحسابات البنكية',
       settlements: 'التسويات',
       custody: 'العهد والسلف',
+      reconciliation: 'مطابقة رصيد الكشف مع رصيد الدفتر',
     } as Record<BankingSection, string>,
     descriptions: {
       transactions: 'مراجعة ومطابقة حركات كشف الحساب البنكي مع قيود إقفال للتأكد من اكتمال التسويات البنكية',
@@ -48,6 +54,7 @@ const copy = {
       accounts: 'إدارة الحسابات البنكية المستخدمة في الاستيراد والمطابقة والتسويات',
       settlements: 'تسوية المستندات والالتزامات بالمدفوعات البنكية',
       custody: 'متابعة العهد والسلف وإغلاقها',
+      reconciliation: 'إدخال رصيد الكشف الختامي ومقارنته برصيد حساب الدفتر المربوط مع البنود المعلقة المثبتة',
     } as Record<BankingSection, string>,
     tabsLabel: 'أقسام البنوك',
     locale: 'ar-SA-u-ca-gregory',
@@ -58,12 +65,14 @@ const copy = {
     accounts: 'Accounts',
     settlements: 'Settlements',
     custody: 'Custody & advances',
+    reconciliation: 'Balance reconciliation',
     titles: {
       transactions: 'Bank transaction reconciliation',
       import: 'Bank statement import',
       accounts: 'Bank accounts',
       settlements: 'Settlements',
       custody: 'Custody & advances',
+      reconciliation: 'Statement balance versus ledger balance',
     } as Record<BankingSection, string>,
     descriptions: {
       transactions: 'Review and match bank statement transactions against ledger entries to confirm bank settlements are complete',
@@ -71,6 +80,7 @@ const copy = {
       accounts: 'Manage the bank accounts used for import, matching, and settlements',
       settlements: 'Settle documents and obligations against bank payments',
       custody: 'Track and close custody and advances',
+      reconciliation: 'Enter the statement ending balance and compare it with the linked ledger account, with evidenced outstanding items',
     } as Record<BankingSection, string>,
     tabsLabel: 'Banking sections',
     locale: 'en-US',
@@ -103,6 +113,7 @@ export function BankingWorkspace(props: Props) {
         {props.canImport && <Tabs.Tab value="import"><i aria-hidden="true"/>{s.import}</Tabs.Tab>}
         <Tabs.Tab value="accounts"><i aria-hidden="true"/>{s.accounts}</Tabs.Tab>
         {props.canSettle && <Tabs.Tab value="settlements"><i aria-hidden="true"/>{s.settlements}</Tabs.Tab>}
+        <Tabs.Tab value="reconciliation"><i aria-hidden="true"/>{s.reconciliation}</Tabs.Tab>
         {props.canViewCustody && <Tabs.Tab value="custody"><i aria-hidden="true"/>{s.custody}</Tabs.Tab>}
       </Tabs.List>
       <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6"/></svg></span>
@@ -128,6 +139,7 @@ export function BankingWorkspace(props: Props) {
     </div>}
 
     {section === 'settlements' && <div className="banking-feature-pane"><SettlementPanel canView={props.canView} canSettle={props.canSettle} onUnauthorized={props.onUnauthorized}/></div>}
+    {section === 'reconciliation' && <div className="banking-feature-pane"><BankStatementReconciliation canView={props.canView} canManageStatements={props.canManageStatements === true} canConfirmStatements={props.canConfirmStatements === true} canManageSettings={props.canManageReconciliationSettings === true} canManageLinks={props.canManage} onUnauthorized={props.onUnauthorized}/></div>}
     {section === 'custody' && <div className="banking-feature-pane"><CustodyPanel canView={props.canViewCustody} canManage={props.canManageCustody} canClose={props.canCloseCustody} onUnauthorized={props.onUnauthorized}/></div>}
   </Stack>;
 }

@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import logger from '../../shared/logger';
+import { evaluateCompanyBankReconciliation, recordReconciliationSnapshots } from '../banking/bank-reconciliation-core';
 import {
   FiscalYear,
   CreateFiscalYearInput,
@@ -223,6 +224,10 @@ export class FiscalYearService {
       if (!readiness.ready) {
         throw new FiscalYearCloseBlockedError(readiness.blockers, readiness.warnings);
       }
+
+      // T2: record what the close relied on. The calculation already ran under the per-account locks inside getFiscalYearCloseReadiness.
+      const bankReconciliation = await evaluateCompanyBankReconciliation(client, companyId, bounds.start_date, bounds.end_date);
+      await recordReconciliationSnapshots(client, companyId, 'fiscal_year_close', id, bankReconciliation, actorUserId);
 
       const updated = await this.fyRepo.updateStatus(id, companyId, 'closed', client);
       // Defensive: row vanished between the FOR UPDATE read and the UPDATE

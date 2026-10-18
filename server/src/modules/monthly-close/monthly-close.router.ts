@@ -8,17 +8,18 @@ import { lockAccountingRange } from './accounting-period.guard';
 import { VatService } from '../vat/vat.router';
 import { DOCUMENT_CARRIED_BY_APPROVED_INVOICE } from '../vat/vat-invoice';
 import { loadOperationalSources } from '../accounting/operational-sources';
+import { UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation, recordReconciliationSnapshots } from '../banking/bank-reconciliation-core';
 
 export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
 type FiscalYearOption = { id:string; company_id:string; name:string; start_date:string; end_date:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
-type BlockerCategory = 'documents'|'obligations'|'bank_transactions'|'vat'|'ledger'|'assets'|'opening_balances'|'periodic_adjustments';
+type BlockerCategory = 'documents'|'obligations'|'bank_transactions'|'vat'|'ledger'|'assets'|'opening_balances'|'periodic_adjustments'|'bank_reconciliation';
 /** `external_period`: the month lies inside an active cut-over range (books kept outside EQFAL). Its dated operational items are `warnings`, not blockers. */
-type Blockers = Record<BlockerCategory,number> & { total:number; external_period?:boolean; warnings?:Record<string,number> };
+type Blockers = Record<Exclude<BlockerCategory,'bank_reconciliation'>,number> & { bank_reconciliation?:number; total:number; external_period?:boolean; warnings?:Record<string,number> };
 type RequirementRow={documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string;vat_applicable?:string;invoice_vat_mismatches?:string;vat_requires_resolution?:string;opening_balances_applicable?:string;opening_balance_approved?:string;cutover_from?:string|null;cutover_to?:string|null};
-const BLOCKER_CAPABILITIES:Record<BlockerCategory,string>={documents:'document.view',obligations:'obligation.view',bank_transactions:'bank.view',vat:'vat.view',ledger:'accounting.view',assets:'asset.view',opening_balances:'opening_balance.view',periodic_adjustments:'periodic_adjustment.view'};
+const BLOCKER_CAPABILITIES:Record<BlockerCategory,string>={bank_reconciliation:'bank.view',documents:'document.view',obligations:'obligation.view',bank_transactions:'bank.view',vat:'vat.view',ledger:'accounting.view',assets:'asset.view',opening_balances:'opening_balance.view',periodic_adjustments:'periodic_adjustment.view'};
 export class MonthlyCloseValidationError extends Error { constructor(message:string,readonly code?:string){super(message);} }
 export class MonthlyCloseNotFoundError extends Error {}
 export class MonthlyCloseConflictError extends Error { constructor(message='Conflict',readonly code?:string){super(message);} }
@@ -85,12 +86,7 @@ export class MonthlyCloseService {
         WHERE s.company_id=$1 AND a.workflow_status='approved' AND s.status='pending'
           AND s.recognition_date BETWEEN $2 AND $3
       ) pending_adjustments)::text periodic_adjustments,
-      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND NOT (
-        EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
-        OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
-        OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
-        OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
-      ))::text bank_transactions,
+      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND ${UNRESOLVED_BANK_TRANSACTION_SQL})::text bank_transactions,
       (SELECT COUNT(*) FROM invoice_vat_reviews r JOIN invoices i ON i.id=r.invoice_id AND i.company_id=r.company_id
         JOIN obligations ob ON ob.company_id=i.company_id AND ob.invoice_id=i.id AND ob.source_type='invoice' AND NOT ob.is_cancelled AND ob.verification_status='confirmed'
         JOIN journal_entries je ON je.company_id=ob.company_id AND je.source_type='obligation' AND je.source_id=ob.id AND je.status='posted'
@@ -150,7 +146,13 @@ export class MonthlyCloseService {
       return{documents:0,obligations:0,bank_transactions:0,vat:0,ledger:independentDrafts,assets:0,opening_balances:0,periodic_adjustments:0,total:independentDrafts,external_period:true,
         warnings:{documents,obligations,bank_transactions,periodic_adjustments,assets,ledger:incompleteDocuments.size+unpostedSources}};
     }
-    return{documents,obligations,bank_transactions,vat,ledger,assets,opening_balances,periodic_adjustments,total:documents+obligations+bank_transactions+vat+ledger+assets+opening_balances+periodic_adjustments};
+    // T2: statement-balance reconciliation. Off by default; a closing transaction (PoolClient) locks each bank account before reading its statement.
+    const reconciliation=await evaluateCompanyBankReconciliation(client,companyId,start,end,{lock:'release' in client});
+    const reconciliationBlockers=reconciliation.blockers;
+    return{documents,obligations,bank_transactions,vat,ledger,assets,opening_balances,periodic_adjustments,
+      ...(reconciliation.effective_mode==='enforce'?{bank_reconciliation:reconciliationBlockers}:{}),
+      total:documents+obligations+bank_transactions+vat+ledger+assets+opening_balances+periodic_adjustments+reconciliationBlockers,
+      ...(reconciliation.warnings?{warnings:{bank_reconciliation:reconciliation.warnings}}:{})};
   }
   async fiscalYears(companyId:string){const {rows}=await this.db.query<FiscalYearOption>(`SELECT id,company_id,name,to_char(start_date,'YYYY-MM-DD') start_date,to_char(end_date,'YYYY-MM-DD') end_date,status,created_at,updated_at FROM fiscal_years WHERE company_id=$1 ORDER BY fiscal_years.start_date`,[companyId]);return{fiscalYears:rows};}
   async list(companyId:string,capabilities:readonly string[]){
@@ -159,7 +161,7 @@ export class MonthlyCloseService {
       const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end);
       const disclosed=Object.entries(BLOCKER_CAPABILITIES).filter(([,capability])=>capabilities.includes(capability)).reduce<Partial<Record<BlockerCategory,number>>>((result,[category])=>({...result,[category]:blockers[category as BlockerCategory]}),{});
       const disclosedTotal=Object.values(disclosed).reduce((total,count)=>total+(count??0),0);
-      const hasHiddenBlockers=Object.entries(BLOCKER_CAPABILITIES).some(([category,capability])=>!capabilities.includes(capability)&&blockers[category as BlockerCategory]>0);
+      const hasHiddenBlockers=Object.entries(BLOCKER_CAPABILITIES).some(([category,capability])=>!capabilities.includes(capability)&&(blockers[category as BlockerCategory]??0)>0);
       return {...period,blockers:disclosed,disclosed_total:disclosedTotal,has_hidden_blockers:hasHiddenBlockers,ready:blockers.total===0&&!blockers.external_period,external_period:blockers.external_period===true,...(blockers.warnings?{warnings:blockers.warnings}:{})};
     }))};
   }
@@ -171,7 +173,7 @@ export class MonthlyCloseService {
     const period=(await client.query<Period>("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'open') RETURNING *,period_start::text,period_end::text",[companyId,fiscalYearId,start,end])).rows[0]!;
     await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.create',entity_type:'monthly_close_period',entity_id:period.id,before_data:null,after_data:period as never},client);return period;
   });}
-  async close(companyId:string,actor:string,id:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='open')throw new MonthlyCloseConflictError('Period is not open','MONTHLY_CLOSE_PERIOD_NOT_OPEN');await lockAccountingRange(companyId,period.period_start,period.period_end,client);const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end,client);if(blockers.external_period)throw new MonthlyCloseConflictError('This month is maintained outside EQFAL and cannot be closed here','MONTHLY_CLOSE_EXTERNAL_PERIOD');if(blockers.total)throw new MonthlyCloseConflictError('Monthly close has blockers','MONTHLY_CLOSE_BLOCKED');const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='closed',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.close',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'open'},after_data:{status:'closed'}},client);return{...after,blockers,ready:true};});}
+  async close(companyId:string,actor:string,id:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='open')throw new MonthlyCloseConflictError('Period is not open','MONTHLY_CLOSE_PERIOD_NOT_OPEN');await lockAccountingRange(companyId,period.period_start,period.period_end,client);const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end,client);if(blockers.external_period)throw new MonthlyCloseConflictError('This month is maintained outside EQFAL and cannot be closed here','MONTHLY_CLOSE_EXTERNAL_PERIOD');if(blockers.total)throw new MonthlyCloseConflictError('Monthly close has blockers','MONTHLY_CLOSE_BLOCKED');await recordReconciliationSnapshots(client,companyId,'monthly_close',id,await evaluateCompanyBankReconciliation(client,companyId,period.period_start,period.period_end),actor);const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='closed',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.close',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'open'},after_data:{status:'closed'}},client);return{...after,blockers,ready:true};});}
   async reopen(companyId:string,actor:string,id:string,reason:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='closed')throw new MonthlyCloseConflictError('Period is not closed','MONTHLY_CLOSE_PERIOD_NOT_CLOSED');await lockAccountingRange(companyId,period.period_start,period.period_end,client);const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='open',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.reopen',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'closed'},after_data:{status:'open'},reason},client);return after;});}
 }
 function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new MonthlyCloseService(pool);}

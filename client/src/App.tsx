@@ -208,6 +208,9 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       canViewCustody={c.includes('custody.view')}
       canManageCustody={c.includes('custody.manage')}
       canCloseCustody={c.includes('custody.close')}
+      canManageStatements={c.includes('bank.statement.manage')}
+      canConfirmStatements={c.includes('bank.statement.confirm')}
+      canManageReconciliationSettings={c.includes('bank.reconciliation.settings')}
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canDeletePartner={c.includes('partner.delete')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} capabilities={c} onUnauthorized={handleUnauthorized}/>}

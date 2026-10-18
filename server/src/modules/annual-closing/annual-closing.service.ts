@@ -3,6 +3,7 @@ import { loadOperationalSources } from '../accounting/operational-sources';
 import { CUTOVER_BOUNDS_SQL } from '../accounting/external-period-guard';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
+import { UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
 
 type FiscalYear = { id: string; start_date: string; end_date: string; status: string };
@@ -134,7 +135,7 @@ export class AnnualClosingService {
       COUNT(*) FILTER (WHERE p.period_start <= $3 AND p.period_end >= $2 AND NOT (p.period_start >= $2 AND p.period_end <= $3))::text boundary
       FROM vat_periods p LEFT JOIN vat_returns r ON r.vat_period_id=p.id AND r.company_id=p.company_id WHERE p.company_id=$1`, [companyId, start, end])).rows[0]!;
     const generalSql = `SELECT
-      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND t.reconciliation_status<>'reconciled')::text banking,
+      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND ${UNRESOLVED_BANK_TRANSACTION_SQL})::text banking,
       (SELECT COUNT(*) FROM documents d WHERE d.company_id=$1 AND d.document_date BETWEEN $2 AND $3 AND (
         d.status IN ('uploaded','needs_review','incomplete') OR (d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND NOT (
           EXISTS (SELECT 1 FROM obligations o JOIN journal_entries j ON j.company_id=o.company_id AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted' WHERE o.company_id=d.company_id AND o.document_id=d.id AND NOT o.is_cancelled AND o.verification_status='confirmed')
@@ -155,6 +156,8 @@ export class AnnualClosingService {
       ) unresolved_adjustments)::text adjustments,
       (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved')::text opening_balances`;
     const general = (await this.db.query<CountRow>(generalSql, [companyId, nativeStart, end, fiscalYearId])).rows[0]!;
+    // T2: statement-balance reconciliation at the fiscal-year end. The close path (bounded, on a transaction client) locks each bank account first.
+    const reconciliation = await evaluateCompanyBankReconciliation(this.db, companyId, start, end, { lock: bounded });
     const externalGeneral = cut ? (await this.db.query<CountRow>(generalSql, [companyId, start, cut.to_date, fiscalYearId])).rows[0]! : null;
     if (cut) general.opening_balances = '0'; // the fiscal year follows the cut-over path: no opening-balance review applies
 
@@ -170,7 +173,7 @@ export class AnnualClosingService {
       monthly_close: domain(missingPeriods + openPeriods, { expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods, ...(cut ? { external_periods: allPeriods.length - periods.length, cutover_date: cut.to_date } : {}) }),
       ledger: domain(Number(ledger.draft_journals) + unpostedSources + unbalanced, { draft_journals: Number(ledger.draft_journals), unposted_operational_sources: unpostedSources, trial_balance_unbalanced: Boolean(unbalanced), ...(cut ? { external_unposted_sources: externalUnposted } : {}) }),
       vat: domain(Number(vat.incomplete), { incomplete_periods: Number(vat.incomplete), boundary_review_periods: Number(vat.boundary) }, Number(vat.boundary) > 0),
-      banking: domain(Number(general.banking), { unresolved_transactions: Number(general.banking), ...(externalGeneral ? { external_unresolved_transactions: Number(externalGeneral.banking) } : {}) }),
+      banking: domain(Number(general.banking) + reconciliation.blockers, { unresolved_transactions: Number(general.banking), reconciliation_mode: reconciliation.effective_mode, reconciliation_blockers: reconciliation.blockers, reconciliation_warnings: reconciliation.warnings, ...(externalGeneral ? { external_unresolved_transactions: Number(externalGeneral.banking) } : {}) }),
       documents: domain(Number(general.documents), { unresolved_documents: Number(general.documents), ...(externalGeneral ? { external_unresolved_documents: Number(externalGeneral.documents) } : {}) }),
       receivables_payables: domain(Number(general.obligations), { unconfirmed_obligations: Number(general.obligations), ...(externalGeneral ? { external_unconfirmed_obligations: Number(externalGeneral.obligations) } : {}), open_receivable_balance: general.open_receivables, open_payable_balance: general.open_payables }),
       partners: domain(Number(general.partner_unconfirmed) + Number(general.partner_overlaps) + Number(general.partner_draft_transactions), { unconfirmed_ownership_periods: Number(general.partner_unconfirmed), overlapping_ownership_periods: Number(general.partner_overlaps), ownership_gaps_needing_review: Number(general.partner_missing), draft_partner_transactions: Number(general.partner_draft_transactions) }, Number(general.partner_missing) > 0),

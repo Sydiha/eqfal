@@ -19,7 +19,7 @@ describe('Phase 7A annual closing contract', () => {
     expect(service).not.toMatch(/\b(INSERT|UPDATE|DELETE)\b/);
   });
   it('implements canonical blocker semantics and year-end obligation balances', () => {
-    for (const term of ["j.status='draft'", "status='posted'", "r.status <> 'filed'", "reconciliation_status<>'reconciled'", "verification_status='unconfirmed'", "status='pending'", "status<>'approved'"]) expect(service).toContain(term);
+    for (const term of ["j.status='draft'", "status='posted'", "r.status <> 'filed'", "UNRESOLVED_BANK_TRANSACTION_SQL", "verification_status='unconfirmed'", "status='pending'", "status<>'approved'"]) expect(service).toContain(term);
     expect(service).toContain("o.direction='receivable'"); expect(service).toContain("o.direction='payable'");
     expect(service).toContain('open_receivable_balance'); expect(service).toContain('open_payable_balance');
   });

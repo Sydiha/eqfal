@@ -39,6 +39,9 @@ bank.account.manage
 bank.import
 bank.match
 bank.reconcile
+bank.reconciliation.settings
+bank.statement.confirm
+bank.statement.manage
 bank.view
 company.create
 company.edit
