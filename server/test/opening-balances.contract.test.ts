@@ -34,6 +34,16 @@ describe('Phase 1C opening balance server contract',()=>{
     expect(source).toContain('obligation_id,custody_id');
   });
 
+  it('requires company-scoped partner attribution for partner categories and blocks submit/approve without it',()=>{
+    expect(source).toContain("const PARTNER_CATEGORIES=['partner_capital','partner_current','partner_loan']");
+    expect(source).toContain('partner_id is required for partner capital, current account and loan categories');
+    expect(source).toContain('partner_id is allowed only for partner capital, current account and loan categories');
+    expect(source).toContain('SELECT is_active FROM partners WHERE id=$1 AND company_id=$2');
+    expect(source).toMatch(/assertPartnerAttribution\(companyId,input\.category,input\.partnerId,c\)/);
+    expect(source).toMatch(/assertPartnerAttribution\(companyId,merged\.category,merged\.partnerId,c,before\.partner_id\)/);
+    expect(source.match(/assertReviewPartnerAttribution\(companyId,review\.id,c\)/g)?.length).toBe(2);
+  });
+
   it('keeps item writes draft-only and protects against stale item updates',()=>{
     expect(source).toContain("review.status!=='draft'");
     expect(source).toContain('Items are editable only in draft');
