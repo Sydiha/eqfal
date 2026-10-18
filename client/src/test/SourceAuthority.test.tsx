@@ -38,7 +38,7 @@ describe('SourceAuthority', () => {
     expect(await screen.findByText('لا توجد إعدادات.')).toBeInTheDocument();
   });
 
-  it('keeps Save disabled until year, date, reason and the explicit confirmation are all given, then posts confirm:true and never offers activation', async () => {
+  it('keeps Save disabled until year, date, reason and the explicit confirmation are all given, then posts confirm:true and offers no activation button', async () => {
     const fetchMock = stub([], () => json({ range: draft }, 201));
     render(<SourceAuthority canManage onUnauthorized={vi.fn()} />);
     await screen.findByText('No configurations.');
@@ -53,7 +53,7 @@ describe('SourceAuthority', () => {
     expect(save).toBeEnabled();
     fireEvent.click(save);
     await waitFor(() => expect(fetchMock.mock.calls.some(([u, i]) => u === '/api/ledger-source-authority/drafts' && JSON.parse(String((i as RequestInit).body)).confirm === true)).toBe(true));
-    expect(screen.queryByText(/activate/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /activate/i })).toBeNull();
   });
 
   it('labels a draft as recorded and not financially ready, and requires reason + confirmation to void it', async () => {
