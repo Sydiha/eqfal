@@ -43,7 +43,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
       expect(nullish.status).toBe(400);
       const ok = await post(co, item(co, { category, partner_id: co.partner }));
       expect(ok.status).toBe(201);
-      expect(ok.json.partner_id).toBe(co.partner);
+      expect(ok.json.item.partner_id).toBe(co.partner);
     }
     expect((await post(co, item(co, { partner_id: 'not-a-uuid' }))).status).toBe(400);
     expect((await post(co, item(co, { partner_id: '00000000-0000-4000-8000-000000000000' }))).status).toBe(400);
@@ -56,7 +56,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     expect((await post(co, item(co, { category: 'bank', account_id: co.bank, balance_side: 'debit', partner_id: co.partner }))).status).toBe(400);
     await h.q('UPDATE partners SET is_active=false WHERE id=$1', [co.other]);
     expect((await post(co, item(co, { partner_id: co.other }))).status).toBe(400);
-    const created = (await post(co, item(co, { partner_id: co.partner }))).json;
+    const created = (await post(co, item(co, { partner_id: co.partner }))).json.item;
     const patch = (body: Record<string, unknown>) => co.accountant.client.req('PATCH', `/opening-balances/${co.fy}/items/${created.id}`, { version: created.version, ...body });
     expect((await patch({ partner_id: null })).status).toBe(400);
     expect((await patch({ partner_id: co.foreignPartner })).status).toBe(400);
@@ -64,7 +64,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     expect((await patch({ partner_id: co.other })).status).toBe(400);
     const moved = await patch({ category: 'partner_loan' });
     expect(moved.status).toBe(200);
-    expect(moved.json.partner_id).toBe(co.partner);
+    expect(moved.json.item?.partner_id ?? moved.json.partner_id).toBe(co.partner);
     const audits = await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='opening_balance_item.update'", [co.id]);
     expect(audits).toBe(1);
   });
@@ -74,7 +74,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     const review = (await h.q<{ id: string }>('INSERT INTO opening_balance_reviews(company_id,fiscal_year_id,prepared_by) VALUES($1,$2,$3) RETURNING id', [co.id, co.fy, co.owner.id]))[0]!.id;
     await h.q("INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,confidence,created_by) VALUES($1,$2,'partner_capital',$3,500.00,'credit','internal_ledger','high',$4)", [co.id, review, co.capital, co.owner.id]);
     await h.q("INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,confidence,created_by) VALUES($1,$2,'bank',$3,500.00,'debit','internal_ledger','high',$4)", [co.id, review, co.bank, co.owner.id]);
-    expect((await co.accountant.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(400);
+    expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(400);
     await h.q("UPDATE opening_balance_reviews SET status='in_review',submitted_by=$2,submitted_at=NOW() WHERE id=$1", [review, co.owner.id]);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {})).status).toBe(400);
     const r = (await h.q<{ status: string; journal_entry_id: string | null }>('SELECT status,journal_entry_id FROM opening_balance_reviews WHERE id=$1', [review]))[0]!;
@@ -83,9 +83,9 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
 
   it('end to end: attributed item posts one journal, appears once in the partner ledger, and an approved review stays immutable', async () => {
     const co = await setup('attrE2E');
-    const cap = (await post(co, item(co, { partner_id: co.partner }))).json;
+    const cap = (await post(co, item(co, { partner_id: co.partner }))).json.item;
     expect((await post(co, item(co, { category: 'bank', account_id: co.bank, balance_side: 'debit' }))).status).toBe(201);
-    expect((await co.accountant.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(200);
+    expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(200);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {})).status).toBe(200);
     expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND entry_type='opening_balance' AND status='posted'", [co.id])).toBe(1);
     const ledger = (await co.owner.client.req('GET', `/partners/${co.partner}/ledger?from=2026-01-01&to=2026-12-31`)).json;
