@@ -1,0 +1,11 @@
+/* Statement balances table: one colgroup drives header and rows; cell alignment follows the page direction, and each value is isolated
+   in its own <bdi> so a Latin reference, a date range or an amount never flips the cell's text-align. */
+.bank-statement-reconciliation .bsr-table{width:100%;min-width:640px;table-layout:fixed;border-collapse:collapse}
+.bank-statement-reconciliation .bsr-col-ref{width:30%}
+.bank-statement-reconciliation .bsr-col-period{width:24%}
+.bank-statement-reconciliation .bsr-col-closing{width:17%}
+.bank-statement-reconciliation .bsr-col-status{width:12%}
+.bank-statement-reconciliation .bsr-col-actions{width:17%}
+.bank-statement-reconciliation .bsr-table th,.bank-statement-reconciliation .bsr-table td{text-align:start;vertical-align:middle;overflow-wrap:anywhere}
+.bank-statement-reconciliation .bsr-ltr{display:inline-block;unicode-bidi:isolate;direction:ltr;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bank-statement-reconciliation .bsr-text{unicode-bidi:isolate}

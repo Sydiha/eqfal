@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { readQueryParameter } from '../navigation/queryState';
+import './BankStatementReconciliation.css';
 
 type Mode = 'off' | 'warn' | 'enforce';
 type Settings = { mode: Mode; enforce_from: string | null; version: number };
@@ -29,7 +30,7 @@ const copy = {
     title: 'Statement balance reconciliation', mode: 'Closing check', modes: { off: 'Off', warn: 'Warn only', enforce: 'Enforced' } as Record<Mode, string>,
     effective: 'Effective from', save: 'Save', account: 'Bank account', periodEnd: 'Statement date', load: 'Calculate',
     draft: 'Draft', confirmed: 'Confirmed', superseded: 'Superseded', warning: 'Warning', blocker: 'Blocker', ok: 'Reconciled', noPermission: 'You can view this page but not change it.',
-    statements: 'Statement balances', ref: 'Statement reference', from: 'Period start', to: 'Period end', opening: 'Opening balance', closing: 'Closing balance', note: 'Note',
+    statements: 'Statement balances', ref: 'Statement reference', period: 'Period', from: 'Period start', to: 'Period end', opening: 'Opening balance', closing: 'Closing balance', note: 'Note',
     add: 'Save draft', confirm: 'Confirm', replace: 'Replace', remove: 'Delete draft', reason: 'Reason for replacement', status: 'Status', actions: 'Actions',
     links: 'Ledger account link', ledger: 'Ledger cash/bank account', validFrom: 'Valid from', link: 'Link', endLink: 'End link', validTo: 'Valid to', unlinked: 'No ledger account is linked for this date.',
     calc: 'Reconciliation', stmt: 'Statement closing balance', dit: 'Deposits in transit', op: 'Outstanding payments', adjBank: 'Adjusted bank balance', gl: 'Ledger balance (all posted lines)',
@@ -63,7 +64,7 @@ const copy = {
     title: 'مطابقة رصيد الكشف', mode: 'فحص الإقفال', modes: { off: 'متوقف', warn: 'تحذير فقط', enforce: 'إلزامي' } as Record<Mode, string>,
     effective: 'يسري من', save: 'حفظ', account: 'الحساب البنكي', periodEnd: 'تاريخ الكشف', load: 'احتساب',
     draft: 'مسودة', confirmed: 'معتمد', superseded: 'مستبدل', warning: 'تحذير', blocker: 'مانع إقفال', ok: 'مطابق', noPermission: 'يمكنك عرض هذه الصفحة دون تعديلها.',
-    statements: 'أرصدة الكشوف', ref: 'مرجع الكشف', from: 'بداية الفترة', to: 'نهاية الفترة', opening: 'الرصيد الافتتاحي', closing: 'الرصيد الختامي', note: 'ملاحظة',
+    statements: 'أرصدة الكشوف', ref: 'مرجع الكشف', period: 'الفترة', from: 'بداية الفترة', to: 'نهاية الفترة', opening: 'الرصيد الافتتاحي', closing: 'الرصيد الختامي', note: 'ملاحظة',
     add: 'حفظ كمسودة', confirm: 'اعتماد', replace: 'استبدال', remove: 'حذف المسودة', reason: 'سبب الاستبدال', status: 'الحالة', actions: 'الإجراءات',
     links: 'ربط حساب الدفتر', ledger: 'حساب النقد/البنك في الدفتر', validFrom: 'يسري من', link: 'ربط', endLink: 'إنهاء الربط', validTo: 'ينتهي في', unlinked: 'لا يوجد حساب دفتر مربوط لهذا التاريخ.',
     calc: 'المطابقة', stmt: 'الرصيد الختامي للكشف', dit: 'إيداعات في الطريق', op: 'مدفوعات معلقة', adjBank: 'رصيد البنك المعدّل', gl: 'رصيد الدفتر (كل القيود المرحّلة)',
@@ -261,11 +262,13 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     </Stack></Card>
 
     <Card withBorder><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
-      {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={640}><Table><Table.Thead><Table.Tr>
-        <Table.Th>{s.ref}</Table.Th><Table.Th>{s.to}</Table.Th><Table.Th>{s.closing}</Table.Th><Table.Th>{s.status}</Table.Th><Table.Th>{s.actions}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
-        {bankStatements.map(st => <Table.Tr key={st.id}><Table.Td dir="auto">{st.statement_ref}{st.replacement_reason && <Text size="xs" c="dimmed">{st.replacement_reason}</Text>}</Table.Td>
-          <Table.Td dir="ltr">{st.period_start} → {st.period_end}</Table.Td><Table.Td dir="ltr">{st.closing_balance} {st.currency_code}</Table.Td><Table.Td>{statusBadge(st.status)}</Table.Td>
-          <Table.Td><Group gap="xs">
+      {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={640}><Table className="bsr-table">
+        <colgroup><col className="bsr-col-ref"/><col className="bsr-col-period"/><col className="bsr-col-closing"/><col className="bsr-col-status"/><col className="bsr-col-actions"/></colgroup>
+        <Table.Thead><Table.Tr>
+        <Table.Th>{s.ref}</Table.Th><Table.Th>{s.period}</Table.Th><Table.Th>{s.closing}</Table.Th><Table.Th>{s.status}</Table.Th><Table.Th>{s.actions}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
+        {bankStatements.map(st => <Table.Tr key={st.id}><Table.Td><bdi dir="auto" className="bsr-text">{st.statement_ref}</bdi>{st.replacement_reason && <Text size="xs" c="dimmed"><bdi dir="auto">{st.replacement_reason}</bdi></Text>}</Table.Td>
+          <Table.Td><bdi dir="ltr" className="bsr-ltr">{st.period_start} → {st.period_end}</bdi></Table.Td><Table.Td><bdi dir="ltr" className="bsr-ltr">{st.closing_balance} {st.currency_code}</bdi></Table.Td><Table.Td>{statusBadge(st.status)}</Table.Td>
+          <Table.Td><Group gap="xs" justify="flex-start">
             {st.status === 'draft' && canConfirmStatements && <Button size="xs" onClick={() => setPending({ kind: 'confirm', st })}>{s.confirm}</Button>}
             {st.status === 'draft' && canManageStatements && <Button size="xs" color="red" variant="subtle" onClick={() => setPending({ kind: 'delete', st })}>{s.remove}</Button>}
             {st.status === 'confirmed' && canConfirmStatements && <Button size="xs" variant="default" onClick={() => setReplacing(st)}>{s.replace}</Button>}

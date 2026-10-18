@@ -134,4 +134,28 @@ describe('BankStatementReconciliation', () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryByText('raw backend english text')).toBeNull();
   });
+
+  it.each([['en', 'Statement reference', 'Period'], ['ar', 'مرجع الكشف', 'الفترة']] as const)('keeps one column definition for header and rows of the statement balances table (%s)', async (lang, refHeader, periodHeader) => {
+    await i18n.changeLanguage(lang);
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    renderIt({ canConfirmStatements: true, canManageStatements: true });
+    const table = (await screen.findByText('CONF-1')).closest('table')!;
+    const cols = table.querySelectorAll('colgroup > col');
+    const headers = table.querySelectorAll('thead th');
+    expect(cols.length).toBe(5);
+    expect(headers.length).toBe(5);
+    expect(headers[0]!.textContent).toBe(refHeader);
+    expect(headers[1]!.textContent).toBe(periodHeader);
+    const rows = table.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(3);
+    rows.forEach(row => expect(row.querySelectorAll(':scope > td').length).toBe(5));
+    // cell direction is never overridden (that would flip text-align away from the header); values are isolated inside the cell instead
+    table.querySelectorAll('th, td').forEach(cell => expect(cell.getAttribute('dir')).toBeNull());
+    const first = rows[0]!.querySelectorAll('td');
+    expect(first[1]!.querySelector('bdi')?.getAttribute('dir')).toBe('ltr');
+    expect(first[1]!.textContent).toBe('2026-01-01 → 2026-01-31');
+    expect(first[2]!.querySelector('bdi')?.getAttribute('dir')).toBe('ltr');
+    expect(first[2]!.textContent).toBe('1000.00 SAR');
+    expect(first[0]!.querySelector('bdi')?.getAttribute('dir')).toBe('auto');
+  });
 });
