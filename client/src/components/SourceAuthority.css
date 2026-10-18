@@ -54,3 +54,14 @@
  .source-authority .sa-table table{min-width:560px}
  .source-authority .sa-actions button{flex:1}
 }
+
+.source-authority .ca-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0}
+.source-authority .ca-totals>div{padding:10px 12px;border:1px solid var(--sa-border);border-radius:8px;background:var(--sa-soft)}
+.source-authority .ca-totals dt{color:var(--sa-muted);font-size:11.5px}
+.source-authority .ca-totals dd{margin:4px 0 0;font-size:13px;font-weight:700;overflow-wrap:anywhere}
+.source-authority .ca-acks{display:grid;gap:8px;margin:0;padding:12px;border:1px solid var(--sa-border);border-radius:8px}
+.source-authority .ca-acks legend{padding:0 6px;font-size:12px;font-weight:700}
+.source-authority .ca-review{display:grid;gap:12px;padding-top:14px;border-top:1px solid var(--sa-border)}
+.source-authority .ca-review h4{margin:0;font-size:14px;font-weight:800}
+.source-authority .ca-review ul{margin:0;padding-inline-start:28px}
+.source-authority .ca-audit{margin-top:12px}

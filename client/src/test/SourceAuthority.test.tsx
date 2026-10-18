@@ -38,7 +38,7 @@ describe('SourceAuthority', () => {
     expect(await screen.findByText('لا توجد إعدادات.')).toBeInTheDocument();
   });
 
-  it('keeps Save disabled until year, date, reason and the explicit confirmation are all given, then posts confirm:true and never offers activation', async () => {
+  it('keeps Save disabled until year, date, reason and the explicit confirmation are all given, then posts confirm:true and offers no activation button', async () => {
     const fetchMock = stub([], () => json({ range: draft }, 201));
     render(<SourceAuthority canManage onUnauthorized={vi.fn()} />);
     await screen.findByText('No configurations.');
@@ -53,7 +53,7 @@ describe('SourceAuthority', () => {
     expect(save).toBeEnabled();
     fireEvent.click(save);
     await waitFor(() => expect(fetchMock.mock.calls.some(([u, i]) => u === '/api/ledger-source-authority/drafts' && JSON.parse(String((i as RequestInit).body)).confirm === true)).toBe(true));
-    expect(screen.queryByText(/activate/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /activate/i })).toBeNull();
   });
 
   it('labels a draft as recorded and not financially ready, and requires reason + confirmation to void it', async () => {
@@ -89,5 +89,74 @@ describe('SourceAuthority', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'حفظ الإعداد' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('تتداخل');
+  });
+});
+
+describe('SourceAuthority cutover activation', () => {
+  const accounts = [
+    { id: 'a1', code: '1010', name: 'Bank', name_ar: null, name_en: null, is_active: true, account_type: 'asset' },
+    { id: 'a2', code: '3100', name: 'Retained', name_ar: null, name_en: null, is_active: true, account_type: 'equity' },
+  ];
+  const setup = (activate: () => Response = () => json({ replayed: false, journal_id: 'j-1' }, 201)) => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/cutover/preview')) return json({ valid: true, blockers: [], summary: { line_count: 2, total_debit: '100.00', total_credit: '100.00', cash_balance: '100.00', profit_or_loss_to_date: '0.00', retained_earnings_balance: '100.00', warnings: [{ code: 'CUTOVER_ACCOUNT_LEVEL_ONLY' }] } });
+      if (url.endsWith('/activate')) return activate();
+      if (init?.method === 'POST') return json({});
+      if (url === '/api/ledger-source-authority') return json({ ranges: [draft] });
+      if (url === '/api/accounts') return json({ accounts });
+      return json({ fiscalYears: [year] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+  const fill = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Activate' }));
+    await screen.findByText('Activate cutover', { selector: 'h3' });
+    fireEvent.change(screen.getByLabelText(/Approved trial balance reference/), { target: { value: 'TB-1' } });
+    fireEvent.change(screen.getByLabelText('Prepared by'), { target: { value: 'Accountant' } });
+    fireEvent.change(screen.getByLabelText('Retained earnings account'), { target: { value: 'a2' } });
+    fireEvent.change(screen.getByLabelText(/Trial balance \(account code/), { target: { value: '1010, 100.00, 0\n3100, 0, 100.00' } });
+  };
+
+  it('hides activation without the permission', async () => {
+    setup();
+    render(<SourceAuthority canManage onUnauthorized={vi.fn()} />);
+    await screen.findByText('Excel until June');
+    expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+  });
+
+  it('shows totals, blocks on missing acknowledgements, and activates once with a final confirmation', async () => {
+    const fetchMock = setup();
+    render(<SourceAuthority canManage canActivate onUnauthorized={vi.fn()} />);
+    await fill();
+    expect(screen.getByText('Balanced')).toBeInTheDocument();
+    const check = screen.getByRole('button', { name: 'Check and review' });
+    expect(check).toBeDisabled();
+    screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
+    expect(check).toBeEnabled();
+    fireEvent.click(check);
+    const go = await screen.findByRole('button', { name: 'Activate cutover' });
+    expect(go).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/final confirmation/));
+    fireEvent.click(go); fireEvent.click(go);
+    expect(await screen.findByText('Cutover activated')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/activate'))).toHaveLength(1);
+    const sent = JSON.parse(String((fetchMock.mock.calls.find(([u]) => String(u).endsWith('/activate'))![1] as RequestInit).body));
+    expect(sent.confirm).toBe(true);
+    expect(sent.idempotency_key).toMatch(/^cutover-/);
+  });
+
+  it('flags an unbalanced trial balance and shows server errors', async () => {
+    setup(() => json({ code: 'CUTOVER_ACCOUNT_INACTIVE' }, 409));
+    render(<SourceAuthority canManage canActivate onUnauthorized={vi.fn()} />);
+    await fill();
+    fireEvent.change(screen.getByLabelText(/Trial balance \(account code/), { target: { value: '1010, 100.00, 0\n3100, 0, 90.00' } });
+    expect(screen.getByText('Not balanced')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Trial balance \(account code/), { target: { value: '1010, 100.00, 0\n3100, 0, 100.00' } });
+    screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
+    fireEvent.click(screen.getByRole('button', { name: 'Check and review' }));
+    fireEvent.click(await screen.findByLabelText(/final confirmation/));
+    fireEvent.click(screen.getByRole('button', { name: 'Activate cutover' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('inactive');
   });
 });
