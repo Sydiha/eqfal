@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import type { CompanyReconciliation } from '../banking/bank-reconciliation-core';
 import { AnnualClosingService } from '../annual-closing/annual-closing.service';
 import { lockAccountingRange } from '../monthly-close/accounting-period.guard';
 import { lockVatPeriodScope } from '../vat/vat.router';
@@ -113,8 +114,12 @@ async function loadApplicability(client: PoolClient, companyId: string, year: Cl
  * transaction client (after the locks above) so the result cannot go stale
  * before the status UPDATE. Every dated blocker is bounded to the fiscal year.
  */
-export async function getFiscalYearCloseReadiness(client: PoolClient, companyId: string, year: CloseYear): Promise<FiscalYearCloseReadiness> {
-  const annual = await new AnnualClosingService(client).readiness(companyId, year.id, { fiscalYearBounded: true });
+export async function getFiscalYearCloseReadiness(
+  client: PoolClient, companyId: string, year: CloseYear, capture?: { reconciliation?: CompanyReconciliation },
+): Promise<FiscalYearCloseReadiness> {
+  const captureReconciliation: { value?: CompanyReconciliation } = {};
+  const annual = await new AnnualClosingService(client).readiness(companyId, year.id, { fiscalYearBounded: true, captureReconciliation });
+  if (capture) capture.reconciliation = captureReconciliation.value;
   const d = annual.domains;
   const apply = await loadApplicability(client, companyId, year);
   // C1B-3b: an active cut-over range replaces the opening-balance path for this year (first_live_accounting_date keeps its meaning).

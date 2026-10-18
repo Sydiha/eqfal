@@ -37,7 +37,7 @@ export type OutstandingItem = {
   journal_entry_id: string; accounting_date: string; description: string; bank_transaction_id: string; bank_transaction_date: string;
   kind: 'deposit_in_transit' | 'outstanding_payment'; amount: string; days_after_period_end: number; aged: boolean;
 };
-export type RejectedEvidence = { journal_entry_id: string; bank_transaction_id: string; reason: 'amount_or_direction_mismatch'; journal_net: string; bank_amount: string };
+export type RejectedEvidence = { journal_entry_id: string; bank_transaction_id: string; reason: 'amount_or_direction_mismatch' | 'duplicate_evidence'; journal_net: string; bank_amount: string };
 export type AccountReconciliation = {
   bank_account_id: string; display_name: string; currency_code: string; period_end: string;
   ledger_account_id: string | null; functional_currency: string | null;
@@ -162,9 +162,17 @@ async function evaluateAccount(db: Queryable, companyId: string, bank: Candidate
   const rejected: RejectedEvidence[] = [];
   let deposits = 0n;
   let payments = 0n;
-  for (const row of (await db.query<EvidenceRow>(EVIDENCE_SQL, [companyId, bank.id, link.account_id, periodEnd])).rows) {
+  const evidenceRows = (await db.query<EvidenceRow>(EVIDENCE_SQL, [companyId, bank.id, link.account_id, periodEnd])).rows;
+  // One imported bank row can offset only one GL entry. If several posted entries claim the same row (the schema should prevent it), none of them is trusted.
+  const claims = new Map<string, number>();
+  for (const row of evidenceRows) claims.set(row.bank_transaction_id, (claims.get(row.bank_transaction_id) ?? 0) + 1);
+  for (const row of evidenceRows) {
     const net = toCents(row.net);
     const bankAmount = toCents(row.bank_amount);
+    if ((claims.get(row.bank_transaction_id) ?? 0) > 1) {
+      rejected.push({ journal_entry_id: row.journal_id, bank_transaction_id: row.bank_transaction_id, reason: 'duplicate_evidence', journal_net: fromCents(net), bank_amount: fromCents(bankAmount) });
+      continue;
+    }
     // Evidence must agree with the imported bank row in amount AND direction; anything else stays in the unexplained difference.
     if (net === 0n || net !== bankAmount) {
       rejected.push({ journal_entry_id: row.journal_id, bank_transaction_id: row.bank_transaction_id, reason: 'amount_or_direction_mismatch', journal_net: fromCents(net), bank_amount: fromCents(bankAmount) });

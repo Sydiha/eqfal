@@ -235,6 +235,46 @@ describeDatabase('bank statement reconciliation (PostgreSQL)', () => {
     expect(result).toMatchObject({ outstanding_items: [], difference: '250.00', reconciled: false });
   });
 
+  it('uses the bank sign convention (credit/positive = money in = GL debit) in both directions and rejects opposite signs', async () => {
+    // imported statement rows: a debit column becomes a negative amount, a credit column a positive amount (bank.router.ts normalisation)
+    const co = await setup('sign');
+    await link(co);
+    await glEntry(co, '2026-01-05', '1000.00', 'in');
+    const receipt = await bankTx(co, '2026-02-04', '300.00');      // credit on the statement, cleared after month end
+    await glEntry(co, '2026-01-31', '300.00', 'in', receipt);      // GL: debit bank
+    const payment = await bankTx(co, '2026-02-02', '-100.00');     // debit on the statement
+    await glEntry(co, '2026-01-30', '100.00', 'out', payment);     // GL: credit bank
+    await confirmedStatement(co, '1000.00');                       // the bank holds 1000 at month end; GL 1200 = 1000 + 300 in transit - 100 outstanding
+    expect(await preview(co)).toMatchObject({ gl_balance: '1200.00', deposits_in_transit: '300.00', outstanding_payments: '100.00', adjusted_bank_balance: '1200.00', difference: '0.00', reconciled: true });
+    // opposite signs: a bank credit (+250) tied to a GL payment (credit bank) is rejected, never applied
+    const opp = await setup('signopp');
+    await link(opp);
+    await glEntry(opp, '2026-01-05', '1000.00', 'in');
+    const wrong = await bankTx(opp, '2026-02-04', '250.00');
+    await glEntry(opp, '2026-01-31', '250.00', 'out', wrong);
+    await confirmedStatement(opp, '1000.00');
+    const result = await preview(opp);
+    expect(result.rejected_evidence).toHaveLength(1);
+    expect(result).toMatchObject({ outstanding_items: [], difference: '250.00', reconciled: false });
+  });
+
+  it('never counts one bank row twice: the database refuses a second explanation and the evidence is applied once', async () => {
+    const co = await setup('dup');
+    await link(co);
+    await glEntry(co, '2026-01-05', '1000.00', 'in');
+    const later = await bankTx(co, '2026-02-03', '-250.00');
+    await glEntry(co, '2026-01-31', '250.00', 'out', later);       // document settlement path
+    const cp = (await h.q<{ id: string }>("INSERT INTO counterparties(company_id,name,type,created_by_user_id) VALUES($1,'Supplier','supplier',$2) RETURNING id", [co.id, co.owner.id]))[0]!.id;
+    const ob = (await h.q<{ id: string }>("INSERT INTO obligations(company_id,direction,counterparty_id,original_amount,recognized_on,verification_status,source_type,created_by_user_id) VALUES($1,'payable',$2,250,'2026-01-20','confirmed','manual',$3) RETURNING id", [co.id, cp, co.owner.id]))[0]!.id;
+    expect(await dbError('INSERT INTO obligation_settlements(company_id,obligation_id,bank_transaction_id,amount,created_by_user_id) VALUES($1,$2,$3,250,$4)', [co.id, ob, later, co.owner.id])).toMatch(/already explained/i);
+    // one journal per source and one explanation per bank row: the same row cannot back two entries
+    expect(await dbError("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,source_type,source_id,created_by) SELECT company_id,fiscal_year_id,accounting_date,'dup',source_type,source_id,created_by FROM journal_entries WHERE company_id=$1 AND source_type='document_settlement'", [co.id])).toMatch(/duplicate key/i);
+    await confirmedStatement(co, '1000.00');
+    const result = await preview(co);
+    expect(result.outstanding_items).toHaveLength(1);
+    expect(result).toMatchObject({ outstanding_payments: '250.00', difference: '0.00', reconciled: true });
+  });
+
   it('never treats a bank-only item as resolved before it is posted', async () => {
     const co = await setup('bankonly');
     await link(co);
@@ -284,8 +324,10 @@ describeDatabase('bank statement reconciliation (PostgreSQL)', () => {
     await confirmedStatement(co, '1000.00', { period_start: '2026-02-01', period_end: '2026-02-28' });
     const ok = await co.owner.client.req('POST', `/monthly-close-periods/${period}/close`);
     expect(ok.status).toBe(200);
-    const snap = (await h.q<{ outcome: string; statement_id: string; scope: string }>('SELECT outcome,statement_id,scope FROM bank_reconciliation_snapshots WHERE company_id=$1', [co.id]));
-    expect(snap).toEqual([{ outcome: 'reconciled', statement_id: expect.any(String), scope: 'monthly_close' }]);
+    const snap = (await h.q<{ outcome: string; statement_id: string; scope: string; difference: string; result: { difference: string; statement_id: string } }>('SELECT outcome,statement_id,scope,difference::text,result FROM bank_reconciliation_snapshots WHERE company_id=$1', [co.id]));
+    // the snapshot is the very result the gate passed on: same statement, zero difference
+    expect(snap).toEqual([{ outcome: 'reconciled', statement_id: expect.any(String), scope: 'monthly_close', difference: '0.00', result: expect.objectContaining({ difference: '0.00' }) }]);
+    expect(snap[0]!.result.statement_id).toBe(snap[0]!.statement_id);
   });
 
   it('rejects stale evidence: a replacement racing the close either blocks the close or lands before it', async () => {

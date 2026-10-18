@@ -3,7 +3,7 @@ import { loadOperationalSources } from '../accounting/operational-sources';
 import { CUTOVER_BOUNDS_SQL } from '../accounting/external-period-guard';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
-import { UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
+import { CompanyReconciliation, UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
 
 type FiscalYear = { id: string; start_date: string; end_date: string; status: string };
@@ -87,7 +87,7 @@ export class AnnualClosingService {
    * workpaper drift lookup (which needs a Pool, not a transaction client) is
    * skipped. Default behaviour is unchanged.
    */
-  async readiness(companyId: string, fiscalYearId: string, options: { fiscalYearBounded?: boolean } = {}): Promise<AnnualClosingResponse> {
+  async readiness(companyId: string, fiscalYearId: string, options: { fiscalYearBounded?: boolean; captureReconciliation?: { value?: CompanyReconciliation } } = {}): Promise<AnnualClosingResponse> {
     const bounded = options.fiscalYearBounded === true;
     const nextDay = (date: string) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
     const partnerOverlapLowerBound = bounded
@@ -158,6 +158,7 @@ export class AnnualClosingService {
     const general = (await this.db.query<CountRow>(generalSql, [companyId, nativeStart, end, fiscalYearId])).rows[0]!;
     // T2: statement-balance reconciliation at the fiscal-year end. The close path (bounded, on a transaction client) locks each bank account first.
     const reconciliation = await evaluateCompanyBankReconciliation(this.db, companyId, start, end, { lock: bounded });
+    if (options.captureReconciliation) options.captureReconciliation.value = reconciliation;
     const externalGeneral = cut ? (await this.db.query<CountRow>(generalSql, [companyId, start, cut.to_date, fiscalYearId])).rows[0]! : null;
     if (cut) general.opening_balances = '0'; // the fiscal year follows the cut-over path: no opening-balance review applies
 
