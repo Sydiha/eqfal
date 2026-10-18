@@ -26,7 +26,7 @@ function dbFor(row:RequirementRow){
   const q=sql.replace(/\s+/g,' ');
   if(q.startsWith('SELECT *,period_start::text,period_end::text FROM monthly_close_periods'))return result([period]);
   if(q.startsWith('SELECT (SELECT COUNT(*) FROM documents'))return result([row]);
-  if(q.startsWith('WITH material AS'))return result();
+  if(q.startsWith('WITH material AS')||q.includes('FROM ledger_source_authority'))return result();
   if(q.startsWith('SELECT source_type,source_id FROM journal_entries'))return result();
   if(q.startsWith('SELECT (SELECT COUNT(*) FROM asset_depreciation_entries'))return result([{pending:'0',drafts:'0'}]);
   throw new Error(q);

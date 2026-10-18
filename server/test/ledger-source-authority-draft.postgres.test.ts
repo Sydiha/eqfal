@@ -146,11 +146,11 @@ describeDatabase('ledger source authority drafts (PostgreSQL)', () => {
     expect((await h.q<{ status: string }>('SELECT status FROM ledger_source_authority WHERE id=$1', [dB]))[0]!.status).toBe('draft');
   });
 
-  it('the database refuses draft -> active, edits, deletes and a voided->anything change, even by raw SQL', async () => {
+  it('the database refuses draft -> active without cut-over evidence, edits, deletes and a voided->anything change, even by raw SQL', async () => {
     const co = await setup('drRaw');
     const id = (await mkDraft(co)).json.range.id as string;
     const fails = async (sql: string) => { try { await h.db.query(sql, [id]); return null; } catch (e) { return (e as { message: string }).message; } };
-    expect(await fails("UPDATE ledger_source_authority SET status='active' WHERE id=$1")).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
+    expect(await fails("UPDATE ledger_source_authority SET status='active' WHERE id=$1")).toBe('AUTHORITY_ACTIVATION_INCOMPLETE');
     expect(await fails("UPDATE ledger_source_authority SET to_date='2026-05-31' WHERE id=$1")).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
     expect(await fails('DELETE FROM ledger_source_authority WHERE id=$1')).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
     expect(await fails("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) SELECT company_id,'2026-08-01','2026-08-31','imported_ledger','draft','r',created_by FROM ledger_source_authority WHERE id=$1")).toMatch(/check/i);

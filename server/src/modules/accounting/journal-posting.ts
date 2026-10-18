@@ -5,11 +5,11 @@ import { isOperationalSourceType, operationalSourceQuery, OperationalSource, Jou
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
-import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
+import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE, CutoverJournalBlockedError, CUTOVER_JOURNAL_MANUAL_CODE, CUTOVER_JOURNAL_CONTEXT_CODE } from './journal-posting-errors';
 import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
-export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
+export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, CutoverJournalBlockedError };
 export { FiscalYearClosedError };
 
 type Journal = {
@@ -21,7 +21,7 @@ type Journal = {
   reference: string | null;
   source_type: string | null;
   source_id: string | null;
-  entry_type: 'standard' | 'opening_balance';
+  entry_type: 'standard' | 'opening_balance' | 'cutover_balance';
   status: 'draft' | 'posted';
   created_by: string;
   posted_by: string | null;
@@ -45,7 +45,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverRangeId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -72,6 +72,29 @@ async function assertOpeningBalanceReviewContext(
   if (duplicate.rowCount) throw blocked('A posted opening balance journal already exists for this fiscal year');
   // Path exclusivity: a fiscal year governed by an active external-reference range follows the cut-over path, never the opening path.
   await assertFiscalYearNotInCutoverPath(client, companyId, journal.fiscal_year_id);
+}
+
+/**
+ * A `cutover_balance` journal is postable only inside the cut-over activation transaction, for the DRAFT range that names it
+ * (in-process context, never derived from a request). The database trigger (086) independently requires a matching draft range.
+ */
+async function assertCutoverRangeContext(
+  client: PoolClient,
+  companyId: string,
+  journal: Pick<Journal, 'fiscal_year_id' | 'accounting_date'>,
+  rangeId: string | undefined,
+): Promise<void> {
+  if (!rangeId) {
+    throw new CutoverJournalBlockedError(CUTOVER_JOURNAL_MANUAL_CODE, 'Cut-over journals can only be posted by the approved cut-over activation workflow');
+  }
+  const range = (
+    await client.query(
+      `SELECT 1 FROM ledger_source_authority a JOIN fiscal_years f ON f.id=$3 AND f.company_id=a.company_id
+       WHERE a.id=$1 AND a.company_id=$2 AND a.status='draft' AND a.from_date=f.start_date AND a.to_date=$4::date FOR UPDATE OF a`,
+      [rangeId, companyId, journal.fiscal_year_id, journal.accounting_date],
+    )
+  ).rowCount;
+  if (!range) throw new CutoverJournalBlockedError(CUTOVER_JOURNAL_CONTEXT_CODE, 'The cut-over journal does not match a draft range awaiting activation');
 }
 
 /**
@@ -103,6 +126,10 @@ export async function postJournalInTransaction(
   }
   if (journal.entry_type === 'opening_balance') {
     await assertOpeningBalanceReviewContext(client, companyId, journal, internal.openingBalanceReviewId);
+  }
+
+  if (journal.entry_type === 'cutover_balance') {
+    await assertCutoverRangeContext(client, companyId, journal, internal.cutoverRangeId);
   }
 
   if (journal.entry_type === 'standard' && !journal.source_type && !journal.source_id) {

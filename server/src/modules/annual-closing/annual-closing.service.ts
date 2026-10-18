@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { loadOperationalSources } from '../accounting/operational-sources';
+import { loadActiveExternalRanges } from '../accounting/ledger-source-authority';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
@@ -97,7 +98,12 @@ export class AnnualClosingService {
     if (!fiscalYear) throw new AnnualClosingNotFoundError();
     const { start_date: start, end_date: end } = fiscalYear;
 
-    const periods = expectedMonthlyPeriods(start, end);
+    // C1B-3b: months up to the cut-over date D of an ACTIVE range are maintained outside EQFAL: they are neither expected nor blocking,
+    // and every dated operational check starts the day after D. first_live_accounting_date keeps its meaning.
+    const externalRanges = await loadActiveExternalRanges(this.db as PoolClient, companyId, fiscalYearId);
+    const externalThrough = externalRanges.reduce<string | null>((max, range) => (max === null || range.to_date > max ? range.to_date : max), null);
+    const checkStart = externalThrough === null ? start : (() => { const d = new Date(`${externalThrough}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); })();
+    const periods = expectedMonthlyPeriods(start, end).filter(item => externalThrough === null || item.period_end > externalThrough);
     const monthlyRows = (await this.db.query<{ period_start: string; period_end: string; status: string }>(
       'SELECT period_start::text,period_end::text,status FROM monthly_close_periods WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, fiscalYearId],
     )).rows;
@@ -105,7 +111,7 @@ export class AnnualClosingService {
     const missingPeriods = periods.filter(item => !monthlyByBounds.has(`${item.period_start}:${item.period_end}`)).length;
     const openPeriods = periods.filter(item => { const state = monthlyByBounds.get(`${item.period_start}:${item.period_end}`); return state !== undefined && state !== 'closed'; }).length;
 
-    const sources = (await loadOperationalSources(companyId, this.db)).filter(source => source.accounting_date >= start && source.accounting_date <= end);
+    const sources = (await loadOperationalSources(companyId, this.db)).filter(source => source.accounting_date >= checkStart && source.accounting_date <= end);
     const postedSources = (await this.db.query<{ source_type: string; source_id: string }>(
       "SELECT source_type,source_id::text FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND status='posted' AND source_type IS NOT NULL", [companyId, fiscalYearId],
     )).rows;
@@ -124,8 +130,8 @@ export class AnnualClosingService {
       COUNT(*) FILTER (WHERE p.period_start <= $3 AND p.period_end >= $2 AND NOT (p.period_start >= $2 AND p.period_end <= $3))::text boundary
       FROM vat_periods p LEFT JOIN vat_returns r ON r.vat_period_id=p.id AND r.company_id=p.company_id WHERE p.company_id=$1`, [companyId, start, end])).rows[0]!;
     const general = (await this.db.query<CountRow>(`SELECT
-      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND t.reconciliation_status<>'reconciled')::text banking,
-      (SELECT COUNT(*) FROM documents d WHERE d.company_id=$1 AND d.document_date BETWEEN $2 AND $3 AND (
+      (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $5 AND $3 AND t.reconciliation_status<>'reconciled')::text banking,
+      (SELECT COUNT(*) FROM documents d WHERE d.company_id=$1 AND d.document_date BETWEEN $5 AND $3 AND (
         d.status IN ('uploaded','needs_review','incomplete') OR (d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND NOT (
           EXISTS (SELECT 1 FROM obligations o JOIN journal_entries j ON j.company_id=o.company_id AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted' WHERE o.company_id=d.company_id AND o.document_id=d.id AND NOT o.is_cancelled AND o.verification_status='confirmed')
           OR EXISTS (SELECT 1 FROM custody_document_allocations a JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted' WHERE a.company_id=d.company_id AND a.document_id=d.id)
@@ -137,12 +143,12 @@ export class AnnualClosingService {
       (SELECT COUNT(*) FROM partner_ownership_periods a JOIN partner_ownership_periods b ON b.company_id=a.company_id AND b.partner_id=a.partner_id AND b.id>a.id WHERE a.company_id=$1 AND a.verification_status='confirmed' AND b.verification_status='confirmed' AND COALESCE(a.effective_to,'infinity'::date)>=b.effective_from AND COALESCE(b.effective_to,'infinity'::date)>=a.effective_from AND a.effective_from<=$3 AND b.effective_from<=$3${partnerOverlapLowerBound})::text partner_overlaps,
       (SELECT COUNT(*) FROM partners p WHERE p.company_id=$1 AND p.is_active AND NOT EXISTS (SELECT 1 FROM partner_ownership_periods h WHERE h.company_id=p.company_id AND h.partner_id=p.id AND h.verification_status='confirmed' AND h.effective_from<=$3 AND (h.effective_to IS NULL OR h.effective_to>=$2)))::text partner_missing,
       (SELECT COUNT(*) FROM asset_depreciation_entries e WHERE e.company_id=$1 AND e.status='pending' AND e.period_start<=$3 AND e.period_end>=$2)::text pending_depreciation,
-      (SELECT COUNT(*) FROM fixed_assets a WHERE a.company_id=$1 AND a.status='draft' AND a.acquisition_date BETWEEN $2 AND $3)::text draft_assets,
+      (SELECT COUNT(*) FROM fixed_assets a WHERE a.company_id=$1 AND a.status='draft' AND a.acquisition_date BETWEEN $5 AND $3)::text draft_assets,
       (SELECT COUNT(DISTINCT adjustment_id) FROM (
         SELECT a.id adjustment_id FROM periodic_adjustments a WHERE a.company_id=$1 AND a.workflow_status IN ('draft','in_review') AND a.recognition_start<=$3 AND a.recognition_end>=$2
         UNION SELECT s.adjustment_id FROM periodic_adjustment_schedule s JOIN periodic_adjustments a ON a.id=s.adjustment_id AND a.company_id=s.company_id WHERE s.company_id=$1 AND a.workflow_status='approved' AND s.status='pending' AND s.recognition_date BETWEEN $2 AND $3
       ) unresolved_adjustments)::text adjustments,
-      (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved')::text opening_balances`, [companyId, start, end, fiscalYearId])).rows[0]!;
+      (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved' AND $6::boolean=false)::text opening_balances`, [companyId, start, end, fiscalYearId, checkStart, externalThrough !== null])).rows[0]!;
 
     const profile=(await this.db.query<{id:string;tax_treatment:string}>(`SELECT id,tax_treatment FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>=$3) AND (tax_effective_from IS NULL OR tax_effective_from<=$2) ORDER BY effective_from DESC,version_no DESC LIMIT 1`,[companyId,start,end])).rows[0];
     const whtProfiles=(await this.db.query<WhtProfile>(`SELECT effective_from::text,effective_to::text,wht_profile,has_non_resident_dealings FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$2) ORDER BY effective_from,version_no`,[companyId,start,end])).rows;
@@ -153,7 +159,7 @@ export class AnnualClosingService {
     const financialBlockers=missingPeriods+openPeriods+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
 
     const domains: Record<string, AnnualClosingDomain> = {
-      monthly_close: domain(missingPeriods + openPeriods, { expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods }),
+      monthly_close: domain(missingPeriods + openPeriods, { external_through: externalThrough ?? '', expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods }),
       ledger: domain(Number(ledger.draft_journals) + unpostedSources + unbalanced, { draft_journals: Number(ledger.draft_journals), unposted_operational_sources: unpostedSources, trial_balance_unbalanced: Boolean(unbalanced) }),
       vat: domain(Number(vat.incomplete), { incomplete_periods: Number(vat.incomplete), boundary_review_periods: Number(vat.boundary) }, Number(vat.boundary) > 0),
       banking: domain(Number(general.banking), { unresolved_transactions: Number(general.banking) }),

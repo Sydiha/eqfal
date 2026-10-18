@@ -132,7 +132,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
     ['pending_depreciation', num(d.assets!.summary.pending_depreciation)],
     ['draft_fixed_assets', num(d.assets!.summary.draft_assets)],
     ['vat_incomplete', apply.vatApplicable ? num(d.vat!.summary.incomplete_periods) : 0],
-    ['opening_balances_incomplete', apply.openingApplicable && !apply.openingApproved ? Math.max(1, openingRows) : 0],
+    ['opening_balances_incomplete', apply.openingApplicable && !d.monthly_close!.summary.external_through && !apply.openingApproved ? Math.max(1, openingRows) : 0],
     ['partner_ownership_overlap', num(d.partners!.summary.overlapping_ownership_periods)],
   ];
   const blockers = blockerSpec.filter(([, count]) => count > 0).map(([code, count]) => ({ code, count }));
@@ -149,6 +149,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
   if (unconfirmedPartners > 0) warn('partner_ownership_unconfirmed', unconfirmedPartners);
   if (apply.vatApplicable && num(d.vat!.summary.boundary_review_periods) > 0) warn('vat_boundary_review', num(d.vat!.summary.boundary_review_periods));
   if (apply.vatRequiresResolution) warn('vat_profile_needs_review', 1);
+  if (d.monthly_close!.summary.external_through) warn('externally_maintained_period', 1, String(d.monthly_close!.summary.external_through));
   const pkg = (await client.query<{ status: string }>(
     'SELECT status FROM annual_closing_packages WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, year.id],
   )).rows[0];

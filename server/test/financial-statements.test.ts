@@ -4,10 +4,11 @@ import { FinancialStatementsService, FinancialStatementUnmappedError, FinancialS
 
 const year={start_date:'2026-01-01',end_date:'2026-12-31'};
 const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,opening_debit:'0',opening_credit:'0',...overrides});
-const database=(rows:unknown[])=>({query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})});
+const silent=<T extends {mock:unknown}>(inner:T):T=>{const f=((sql:string,...rest:unknown[])=>/ledger_source_authority/.test(String(sql))?Promise.resolve({rows:[]}):(inner as unknown as (...a:unknown[])=>unknown)(sql,...rest)) as unknown as T;(f as unknown as {mock:unknown}).mock=inner.mock;return f;};
+const database=(rows:unknown[])=>({query:silent(vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows}))});
 const snapshotDatabase=(results:unknown[][])=>{
   const pending=[...results];
-  const client={query:vi.fn(async(sql:string)=>sql.startsWith('BEGIN')||sql==='COMMIT'||sql==='ROLLBACK'?{rows:[]}:{rows:pending.shift()??[]}),release:vi.fn()};
+  const client={query:silent(vi.fn(async(sql:string)=>sql.startsWith('BEGIN')||sql==='COMMIT'||sql==='ROLLBACK'?{rows:[]}:{rows:pending.shift()??[]})),release:vi.fn()};
   return{db:{query:vi.fn(),connect:vi.fn().mockResolvedValue(client)},client};
 };
 
@@ -49,7 +50,7 @@ describe('Phase 5B financial statements',()=>{
   it('rejects report dates outside the active company fiscal year',async()=>{
     const db=database([]);
     await expect(new FinancialStatementsService(db as never).financialPosition('company','year','2027-01-01')).rejects.toBeInstanceOf(FinancialStatementValidationError);
-    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('company_id=$2'),['year','company']);
+    expect(db.query.mock.calls).toContainEqual([expect.stringContaining('company_id=$2'),['year','company']]);
   });
 
   it('blocks any non-zero posted activity on unmapped accounts',async()=>{

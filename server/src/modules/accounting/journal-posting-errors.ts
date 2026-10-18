@@ -22,3 +22,11 @@ export const ONBOARDING_PATH_CUTOVER_ACTIVE_CODE = 'ONBOARDING_PATH_CUTOVER_ACTI
 export class LedgerSourceAuthorityBlockedError extends JournalPostingConflictError {
   constructor(public readonly code: string, message: string) { super(message); }
 }
+
+export const CUTOVER_JOURNAL_MANUAL_CODE = 'CUTOVER_JOURNAL_MANUAL_BLOCKED';
+export const CUTOVER_JOURNAL_CONTEXT_CODE = 'CUTOVER_JOURNAL_CONTEXT_INVALID';
+
+/** A cut-over journal that is not created and posted by the approved cut-over activation workflow. `code` is stable for the client. */
+export class CutoverJournalBlockedError extends JournalPostingConflictError {
+  constructor(public readonly code: string, message: string) { super(message); }
+}

@@ -8,14 +8,15 @@ import { lockAccountingRange } from './accounting-period.guard';
 import { VatService } from '../vat/vat.router';
 import { DOCUMENT_CARRIED_BY_APPROVED_INVOICE } from '../vat/vat-invoice';
 import { loadOperationalSources } from '../accounting/operational-sources';
+import { loadActiveExternalRanges } from '../accounting/ledger-source-authority';
 
 export const monthlyCloseRouter = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Period = { id:string; company_id:string; fiscal_year_id:string; period_start:string; period_end:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
 type FiscalYearOption = { id:string; company_id:string; name:string; start_date:string; end_date:string; status:'open'|'closed'; created_at:Date; updated_at:Date };
-type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; opening_balances:number; periodic_adjustments:number; total:number };
-type BlockerCategory = Exclude<keyof Blockers,'total'>;
+type Blockers = { documents:number; obligations:number; bank_transactions:number; vat:number; ledger:number; assets:number; opening_balances:number; periodic_adjustments:number; total:number; external?:boolean; warnings?:Partial<Record<Exclude<keyof Blockers,'total'|'external'|'warnings'>,number>> };
+type BlockerCategory = Exclude<keyof Blockers,'total'|'external'|'warnings'>;
 type RequirementRow={documents:string;obligations:string;bank_transactions:string;opening_balances:string;periodic_adjustments:string;vat_applicable?:string;invoice_vat_mismatches?:string;vat_requires_resolution?:string;opening_balances_applicable?:string;opening_balance_approved?:string};
 const BLOCKER_CAPABILITIES:Record<BlockerCategory,string>={documents:'document.view',obligations:'obligation.view',bank_transactions:'bank.view',vat:'vat.view',ledger:'accounting.view',assets:'asset.view',opening_balances:'opening_balance.view',periodic_adjustments:'periodic_adjustment.view'};
 export class MonthlyCloseValidationError extends Error { constructor(message:string,readonly code?:string){super(message);} }
@@ -121,8 +122,13 @@ export class MonthlyCloseService {
     const openingBalancesApplicable=row.opening_balances_applicable===undefined?false:row.opening_balances_applicable==='true';
     const openingBalanceApproved=row.opening_balance_approved==='true';
     const openingBalanceRows=Number(row.opening_balances);
-    const opening_balances=row.opening_balances_applicable===undefined?openingBalanceRows:(openingBalancesApplicable?(openingBalanceApproved?0:Math.max(1,openingBalanceRows)):0);
-    const vat=vatApplicable?(vatRequiresResolution?1:(await new VatService(this.db).readiness(companyId,start,end,client)).ready?0:1):0;
+    // C1B-3b: with an ACTIVE external-reference range the year follows the cut-over path, so the opening-balance gate is not applicable to ANY month of it,
+    // and a month entirely inside the range is maintained outside EQFAL (items there are warnings, never blockers). first_live_accounting_date keeps its meaning.
+    const externalRanges=await loadActiveExternalRanges(client,companyId,fiscalYearId);
+    const cutoverYear=externalRanges.length>0;
+    const external=externalRanges.some(range=>start>=range.from_date&&end<=range.to_date);
+    const opening_balances=cutoverYear?0:row.opening_balances_applicable===undefined?openingBalanceRows:(openingBalancesApplicable?(openingBalanceApproved?0:Math.max(1,openingBalanceRows)):0);
+    const vat=external?0:vatApplicable?(vatRequiresResolution?1:(await new VatService(this.db).readiness(companyId,start,end,client)).ready?0:1):0;
     const incompleteDocuments=await this.incompleteMaterialDocuments(companyId,start,end,client);
     const sources=(await loadOperationalSources(companyId,client)).filter(source=>source.accounting_date>=start&&source.accounting_date<=end);
     let unpostedSources=0;
@@ -138,6 +144,11 @@ export class MonthlyCloseService {
       (SELECT COUNT(*) FROM asset_depreciation_entries WHERE company_id=$1 AND status='pending' AND period_end BETWEEN $2 AND $3)::text pending,
       (SELECT COUNT(*) FROM fixed_assets WHERE company_id=$1 AND source_type='document' AND status='draft' AND acquisition_date BETWEEN $2 AND $3)::text drafts`,[companyId,start,end])).rows[0]!;
     const assets=Number(assetCounts.pending)+Number(assetCounts.drafts);
+    if(external){
+      // Only an independent draft journal stays a blocker (it can never be posted inside the range, and a manual draft can be deleted).
+      const warnings={documents,obligations,bank_transactions,periodic_adjustments,assets,ledger:incompleteDocuments.size+unpostedSources};
+      return{documents:0,obligations:0,bank_transactions:0,vat:0,ledger:independentDrafts,assets:0,opening_balances:0,periodic_adjustments:0,total:independentDrafts,external:true,warnings};
+    }
     return{documents,obligations,bank_transactions,vat,ledger,assets,opening_balances,periodic_adjustments,total:documents+obligations+bank_transactions+vat+ledger+assets+opening_balances+periodic_adjustments};
   }
   async fiscalYears(companyId:string){const {rows}=await this.db.query<FiscalYearOption>(`SELECT id,company_id,name,to_char(start_date,'YYYY-MM-DD') start_date,to_char(end_date,'YYYY-MM-DD') end_date,status,created_at,updated_at FROM fiscal_years WHERE company_id=$1 ORDER BY fiscal_years.start_date`,[companyId]);return{fiscalYears:rows};}
@@ -147,8 +158,9 @@ export class MonthlyCloseService {
       const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end);
       const disclosed=Object.entries(BLOCKER_CAPABILITIES).filter(([,capability])=>capabilities.includes(capability)).reduce<Partial<Record<BlockerCategory,number>>>((result,[category])=>({...result,[category]:blockers[category as BlockerCategory]}),{});
       const disclosedTotal=Object.values(disclosed).reduce((total,count)=>total+(count??0),0);
+      const disclosedWarnings=Object.entries(BLOCKER_CAPABILITIES).filter(([,capability])=>capabilities.includes(capability)).reduce<Partial<Record<BlockerCategory,number>>>((result,[category])=>blockers.warnings?{...result,[category]:blockers.warnings[category as BlockerCategory]??0}:result,{});
       const hasHiddenBlockers=Object.entries(BLOCKER_CAPABILITIES).some(([category,capability])=>!capabilities.includes(capability)&&blockers[category as BlockerCategory]>0);
-      return {...period,blockers:disclosed,disclosed_total:disclosedTotal,has_hidden_blockers:hasHiddenBlockers,ready:blockers.total===0};
+      return {...period,blockers:disclosed,disclosed_total:disclosedTotal,has_hidden_blockers:hasHiddenBlockers,ready:blockers.total===0,external:blockers.external===true,...(blockers.external?{warnings:disclosedWarnings}:{})};
     }))};
   }
   async create(companyId:string,actor:string,fiscalYearId:string,start:string,end:string){return this.tx(async client=>{
@@ -159,7 +171,7 @@ export class MonthlyCloseService {
     const period=(await client.query<Period>("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'open') RETURNING *,period_start::text,period_end::text",[companyId,fiscalYearId,start,end])).rows[0]!;
     await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.create',entity_type:'monthly_close_period',entity_id:period.id,before_data:null,after_data:period as never},client);return period;
   });}
-  async close(companyId:string,actor:string,id:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='open')throw new MonthlyCloseConflictError('Period is not open','MONTHLY_CLOSE_PERIOD_NOT_OPEN');await lockAccountingRange(companyId,period.period_start,period.period_end,client);const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end,client);if(blockers.total)throw new MonthlyCloseConflictError('Monthly close has blockers','MONTHLY_CLOSE_BLOCKED');const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='closed',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.close',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'open'},after_data:{status:'closed'}},client);return{...after,blockers,ready:true};});}
+  async close(companyId:string,actor:string,id:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='open')throw new MonthlyCloseConflictError('Period is not open','MONTHLY_CLOSE_PERIOD_NOT_OPEN');await lockAccountingRange(companyId,period.period_start,period.period_end,client);if((await loadActiveExternalRanges(client,companyId,period.fiscal_year_id)).some(range=>period.period_start>=range.from_date&&period.period_end<=range.to_date))throw new MonthlyCloseConflictError('This month is maintained outside EQFAL and cannot be closed here','MONTHLY_CLOSE_EXTERNAL_PERIOD');const blockers=await this.blockers(companyId,period.fiscal_year_id,period.period_start,period.period_end,client);if(blockers.total)throw new MonthlyCloseConflictError('Monthly close has blockers','MONTHLY_CLOSE_BLOCKED');const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='closed',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.close',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'open'},after_data:{status:'closed'}},client);return{...after,blockers,ready:true};});}
   async reopen(companyId:string,actor:string,id:string,reason:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM monthly_close_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new MonthlyCloseNotFoundError();if(period.status!=='closed')throw new MonthlyCloseConflictError('Period is not closed','MONTHLY_CLOSE_PERIOD_NOT_CLOSED');await lockAccountingRange(companyId,period.period_start,period.period_end,client);const after=(await client.query<Period>("UPDATE monthly_close_periods SET status='open',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'monthly_close.reopen',entity_type:'monthly_close_period',entity_id:id,before_data:{status:'closed'},after_data:{status:'open'},reason},client);return after;});}
 }
 function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new MonthlyCloseService(pool);}

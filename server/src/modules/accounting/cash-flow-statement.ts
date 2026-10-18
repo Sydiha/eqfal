@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import type { CashFlowCategory, CashRole } from './account-classification.router';
+import { assertReportableAfterCutover, loadActiveExternalRanges } from './ledger-source-authority';
 
 export const CASH_FLOW_CLASSIFICATION_CODE='CASH_FLOW_CLASSIFICATION_BLOCKED';
 
@@ -11,7 +12,7 @@ export class CashFlowClassificationError extends Error{
 
 type QueryRunner=Pick<Pool|PoolClient,'query'>;
 type CashFlowLine={
-  journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance';source_type:string|null;source_id:string|null;
+  journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance'|'cutover_balance';source_type:string|null;source_id:string|null;
   account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;cash_role:CashRole;cash_flow_category:CashFlowCategory;debit:string;credit:string;
 };
 export type CashFlowBlocker={journal_id:string;accounting_date:string;reason:'unmapped'|'ambiguous';account_ids:string[]};
@@ -39,12 +40,13 @@ export class CashFlowStatementService{
       if(!year)throw new CashFlowNotFoundError();
       const from=start??year.start_date,to=end??year.end_date;
       if(!validDate(from)||!validDate(to)||from>to||from<year.start_date||to>year.end_date)throw new CashFlowValidationError('Invalid report date range');
+      assertReportableAfterCutover('cash_flow',await loadActiveExternalRanges(client,companyId,fiscalYearId),year.start_date,from,to);
       const lines=await this.lines(client,companyId,fiscalYearId,year.start_date,to);
-      const opening=lines.filter(line=>line.cash_role!=='non_cash'&&(line.entry_type==='opening_balance'||line.accounting_date<from)).reduce((sum,line)=>sum+amount(line),0);
+      const opening=lines.filter(line=>line.cash_role!=='non_cash'&&(line.entry_type==='opening_balance'||line.entry_type==='cutover_balance'||line.accounting_date<from)).reduce((sum,line)=>sum+amount(line),0);
       const closing=lines.filter(line=>line.cash_role!=='non_cash').reduce((sum,line)=>sum+amount(line),0);
       const journals=new Map<string,CashFlowLine[]>();
       for(const line of lines){
-        if(line.entry_type==='opening_balance'||line.accounting_date<from)continue;
+        if(line.entry_type==='opening_balance'||line.entry_type==='cutover_balance'||line.accounting_date<from)continue;
         const journal=journals.get(line.journal_id)??[];journal.push(line);journals.set(line.journal_id,journal);
       }
       const grouped:Record<Exclude<CashFlowCategory,'unmapped'>,Map<string,CashFlowRow>>={operating:new Map(),investing:new Map(),financing:new Map()};

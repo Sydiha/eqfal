@@ -40,6 +40,44 @@ export async function assertFiscalYearNotInCutoverPath(client: Queryable, compan
   }
 }
 
+/** An ACTIVE external-reference range (always starts on a fiscal year's first day, ends on a month end before the year's last day). */
+export type ActiveExternalRange = { id: string; from_date: string; to_date: string; fiscal_year_id: string };
+
+/**
+ * Active ranges that cover (part of) a fiscal year. `fiscalYearId` omitted => every active range of the company.
+ * One plain SELECT; no lock. A company with no active range gets an empty list (all callers then behave exactly as before).
+ */
+export async function loadActiveExternalRanges(db: Queryable, companyId: string, fiscalYearId?: string): Promise<ActiveExternalRange[]> {
+  return (await db.query<ActiveExternalRange>(
+    `SELECT a.id,a.from_date::text,a.to_date::text,f.id AS fiscal_year_id
+     FROM ledger_source_authority a JOIN fiscal_years f ON f.company_id=a.company_id AND f.start_date<=a.to_date AND f.end_date>=a.from_date
+     WHERE a.company_id=$1 AND a.status='active' AND ($2::uuid IS NULL OR f.id=$2::uuid) ORDER BY a.from_date`,
+    [companyId, fiscalYearId ?? null],
+  )).rows;
+}
+
+/** Report-period rules for a fiscal year whose books before the cut-over date are kept outside EQFAL. */
+export const EXTERNAL_PERIOD_REPORT_CODE = 'EXTERNAL_PERIOD_REPORT_UNAVAILABLE';
+export const CASH_FLOW_EXTERNAL_PERIOD_CODE = 'CASH_FLOW_EXTERNAL_PERIOD';
+export class ExternalPeriodReportError extends Error {
+  constructor(public readonly code: string, message: string, public readonly cutoverDate: string) { super(message); }
+}
+
+/** A balance as of `asOf`, or a period that ends on/after the cut-over date and starts at the year start or after it. */
+export function assertReportableAfterCutover(kind: 'as_of' | 'period' | 'cash_flow' | 'ends_after', ranges: ActiveExternalRange[], yearStart: string, from: string, to: string): void {
+  for (const range of ranges) {
+    const cutover = range.to_date;
+    const startsAtYear = from === yearStart;
+    if (kind === 'cash_flow') {
+      if (from <= cutover) throw new ExternalPeriodReportError(CASH_FLOW_EXTERNAL_PERIOD_CODE, 'Cash flow cannot be produced for a period that includes the externally maintained part of the year', cutover);
+    } else if (kind === 'as_of' || kind === 'ends_after') {
+      if (to < cutover) throw new ExternalPeriodReportError(EXTERNAL_PERIOD_REPORT_CODE, 'The report period ends before the cut-over date, whose books are kept outside EQFAL', cutover);
+    } else if (to < cutover || (from <= cutover && !startsAtYear)) {
+      throw new ExternalPeriodReportError(EXTERNAL_PERIOD_REPORT_CODE, 'The period cuts across the cut-over date; use the whole year to the cut-over date or later, or a period after it', cutover);
+    }
+  }
+}
+
 export const AUTHORITY_ERROR_CODES = [
   'AUTHORITY_RANGE_INVALID',
   'AUTHORITY_RANGE_OVERLAP',
@@ -49,6 +87,15 @@ export const AUTHORITY_ERROR_CODES = [
   'LEDGER_SOURCE_AUTHORITY_IMMUTABLE',
   'AUTHORITY_DRAFT_FISCAL_YEAR_INVALID',
   'AUTHORITY_ACTIVE_INSERT_FORBIDDEN',
+  'AUTHORITY_ACTIVATION_INCOMPLETE',
+  'AUTHORITY_CUTOVER_JOURNAL_INVALID',
+  'AUTHORITY_CUTOVER_JOURNAL_EXISTS',
+  'AUTHORITY_CUTOVER_DATE_INVALID',
+  'AUTHORITY_CUTOVER_UNBALANCED',
+  'AUTHORITY_CUTOVER_ACCOUNT_INVALID',
+  'AUTHORITY_VAT_PERIOD_CONFLICT',
+  'AUTHORITY_ANNUAL_PACKAGE_APPROVED',
+  'CUTOVER_JOURNAL_NO_DRAFT_RANGE',
 ] as const;
 
 export class LedgerSourceAuthorityError extends Error {
@@ -59,8 +106,9 @@ export class LedgerSourceAuthorityNotFoundError extends Error {}
 export type AuthorityRange = {
   id: string; company_id: string; from_date: string; to_date: string; authority: 'external_reference_only'; status: 'draft' | 'active' | 'voided';
   reason: string; created_by: string; created_at: string; voided_by: string | null; voided_at: string | null; void_reason: string | null;
+  cutover_journal_id: string | null; activated_by: string | null; activated_at: string | null;
 };
-const COLUMNS = `id,company_id,from_date::text,to_date::text,authority,status,reason,created_by,created_at,voided_by,voided_at,void_reason`;
+const COLUMNS = `id,company_id,from_date::text,to_date::text,authority,status,reason,created_by,created_at,voided_by,voided_at,void_reason,cutover_journal_id,activated_by,activated_at`;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (value: unknown): value is string => typeof value === 'string' && DATE.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const validReason = (value: unknown): value is string => typeof value === 'string' && value.trim().length >= 1 && value.trim().length <= 500;

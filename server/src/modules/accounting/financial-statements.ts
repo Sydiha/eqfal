@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
+import { assertReportableAfterCutover, loadActiveExternalRanges } from './ledger-source-authority';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
 
@@ -44,8 +45,8 @@ export class FinancialStatementsService{
     const rows=(await db.query<Movement>(
       `SELECT a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.account_type,a.statement_category,a.is_contra,
               COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
-              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
-              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.credit ELSE 0 END),0)::text opening_credit
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.account_type='equity') THEN l.debit ELSE 0 END),0)::text opening_debit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.account_type='equity') THEN l.credit ELSE 0 END),0)::text opening_credit
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -62,6 +63,14 @@ export class FinancialStatementsService{
     return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts,openingAccounts};
   }
 
+  /** C1B-3b: refuse periods that would mislead when the start of the year is maintained outside EQFAL. */
+  private async assertPeriod(companyId:string,fiscalYearId:string,kind:'as_of'|'period',start?:string,end?:string,db:QueryRunner=this.db){
+    const ranges=await loadActiveExternalRanges(db,companyId,fiscalYearId);
+    if(!ranges.length)return;
+    const year=(await db.query<{start_date:string;end_date:string}>('SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',[fiscalYearId,companyId])).rows[0];
+    if(year)assertReportableAfterCutover(kind,ranges,year.start_date,start??year.start_date,end??year.end_date);
+  }
+
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
     return categories.map(category=>{
       const categoryAccounts=accounts.filter(account=>account.statement_category===category);
@@ -70,6 +79,7 @@ export class FinancialStatementsService{
   }
 
   async financialPosition(companyId:string,fiscalYearId:string,asOf?:string){
+    await this.assertPeriod(companyId,fiscalYearId,'as_of',undefined,asOf);
     const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
     const sections=this.sections(report.accounts,financialPositionCategories);
     const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0);
@@ -83,6 +93,7 @@ export class FinancialStatementsService{
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
+    await this.assertPeriod(companyId,fiscalYearId,'period',start,end);
     const report=await this.movements(companyId,fiscalYearId,start,end);
     const sections=this.sections(report.accounts,profitOrLossCategories);
     const profit=this.earnings(report.accounts);
@@ -94,6 +105,7 @@ export class FinancialStatementsService{
     const client=await this.db.connect();
     try{
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await this.assertPeriod(companyId,fiscalYearId,'period',start,end,client);
       const period=await this.movements(companyId,fiscalYearId,start,end,client);
       const closing=await this.movements(companyId,fiscalYearId,undefined,period.end_date,client);
       const previousDate=new Date(`${period.start_date}T00:00:00Z`);
