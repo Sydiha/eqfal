@@ -12,7 +12,7 @@ export class CompanyAccountingProfileService {
   private readonly audit=new AuditLogRepository();
   constructor(private readonly pool:Pool){this.repo=new CompanyAccountingProfileRepository(pool);}
 
-  private async tx<T>(fn:(client:PoolClient)=>Promise<T>):Promise<T>{const client=await this.pool.connect();try{await client.query('BEGIN');const value=await fn(client);await client.query('COMMIT');return value;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}}
+  private async tx<T>(fn:(client:PoolClient)=>Promise<T>):Promise<T>{const client=await this.pool.connect();try{await client.query('BEGIN');const value=await fn(client);await client.query('COMMIT');return value;}catch(error){await client.query('ROLLBACK');if((error as{message?:string}).message==='CUTOVER_PROFILE_CHANGE_FORBIDDEN')throw new ProfileConflictError('An approved profile covering an activated cut-over window cannot be changed retroactively');throw error;}finally{client.release();}}
   private async lockCompany(companyId:string,client:PoolClient){await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[companyId]);}
   private validate(v:ProfileValues,approval=false):void{
     if(v.effective_from&&v.effective_to&&v.effective_to<v.effective_from)throw new ProfileValidationError('Invalid effective period');

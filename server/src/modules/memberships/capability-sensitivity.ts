@@ -24,6 +24,7 @@ const CRITICAL = new Set([
   'monthly_close.close',
   'monthly_close.reopen',
   'periodic_adjustment.post',
+  'source_authority.activate',
   'source_authority.manage',
   'source_authority.view',
   'vat.close',

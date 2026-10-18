@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
+import { assertStatementRange, CUTOVER_BOUNDS_SQL, CutoverBounds } from './external-period-guard';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
 
@@ -32,8 +33,8 @@ export class FinancialStatementsService{
   constructor(private db:Pool){}
 
   private async movements(companyId:string,fiscalYearId:string,start?:string,end?:string,db:QueryRunner=this.db){
-    const year=(await db.query<{start_date:string;end_date:string}>(
-      'SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',
+    const year=(await db.query<{start_date:string;end_date:string}&CutoverBounds>(
+      `SELECT start_date::text,end_date::text,${CUTOVER_BOUNDS_SQL} FROM fiscal_years WHERE id=$1 AND company_id=$2`,
       [fiscalYearId,companyId],
     )).rows[0];
     if(!year)throw new FinancialStatementNotFoundError();
@@ -41,11 +42,12 @@ export class FinancialStatementsService{
     if(!validDate(from)||!validDate(to)||from>to||from<year.start_date||to>year.end_date){
       throw new FinancialStatementValidationError('Invalid report date range');
     }
+    const cutoverDate=assertStatementRange(year,from,to);
     const rows=(await db.query<Movement>(
       `SELECT a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.account_type,a.statement_category,a.is_contra,
               COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
-              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.debit ELSE 0 END),0)::text opening_debit,
-              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' THEN l.credit ELSE 0 END),0)::text opening_credit
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.statement_category='equity') THEN l.debit ELSE 0 END),0)::text opening_debit,
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.statement_category='equity') THEN l.credit ELSE 0 END),0)::text opening_credit
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -59,7 +61,7 @@ export class FinancialStatementsService{
     const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
     const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(Number(rows[index]!.debit)!==0||Number(rows[index]!.credit)!==0));
     if(unmapped.length)throw new FinancialStatementUnmappedError(unmapped);
-    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,accounts,openingAccounts};
+    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,cutover_date:cutoverDate,accounts,openingAccounts};
   }
 
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
@@ -113,7 +115,7 @@ export class FinancialStatementsService{
       const difference=closingEquity-financialPositionEquity;
       await client.query('COMMIT');
       return{
-        fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,
+        fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
         statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
         direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
         current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),

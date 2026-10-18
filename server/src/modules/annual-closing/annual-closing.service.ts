@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { loadOperationalSources } from '../accounting/operational-sources';
+import { CUTOVER_BOUNDS_SQL } from '../accounting/external-period-guard';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
@@ -87,17 +88,23 @@ export class AnnualClosingService {
    */
   async readiness(companyId: string, fiscalYearId: string, options: { fiscalYearBounded?: boolean } = {}): Promise<AnnualClosingResponse> {
     const bounded = options.fiscalYearBounded === true;
-    const obligationDate = bounded ? 'o.recognized_on BETWEEN $2 AND $3' : 'o.recognized_on<=$3';
+    const nextDay = (date: string) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
     const partnerOverlapLowerBound = bounded
       ? " AND COALESCE(a.effective_to,'infinity'::date)>=$2 AND COALESCE(b.effective_to,'infinity'::date)>=$2"
       : '';
-    const fiscalYear = (await this.db.query<FiscalYear>(
-      'SELECT id,start_date::text,end_date::text,status FROM fiscal_years WHERE id=$1 AND company_id=$2', [fiscalYearId, companyId],
+    const fiscalYear = (await this.db.query<FiscalYear & { cutover_to?: string | null }>(
+      `SELECT id,start_date::text,end_date::text,status,${CUTOVER_BOUNDS_SQL} FROM fiscal_years WHERE id=$1 AND company_id=$2`, [fiscalYearId, companyId],
     )).rows[0];
     if (!fiscalYear) throw new AnnualClosingNotFoundError();
     const { start_date: start, end_date: end } = fiscalYear;
+    // C1B-3b: with an active cut-over range [start, D] the months up to D are maintained outside EQFAL. They are not native close requirements and
+    // their dated operational items cannot be posted, so they are reported as external (warnings) while integrity checks stay blockers.
+    const cut = fiscalYear.cutover_to ? { to_date: fiscalYear.cutover_to } : null;
+    const nativeStart = cut ? nextDay(cut.to_date) : start;
+    const obligationDate = bounded || cut ? 'o.recognized_on BETWEEN $2 AND $3' : 'o.recognized_on<=$3';
 
-    const periods = expectedMonthlyPeriods(start, end);
+    const allPeriods = expectedMonthlyPeriods(start, end);
+    const periods = cut ? allPeriods.filter(item => item.period_start >= nativeStart) : allPeriods;
     const monthlyRows = (await this.db.query<{ period_start: string; period_end: string; status: string }>(
       'SELECT period_start::text,period_end::text,status FROM monthly_close_periods WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, fiscalYearId],
     )).rows;
@@ -105,12 +112,15 @@ export class AnnualClosingService {
     const missingPeriods = periods.filter(item => !monthlyByBounds.has(`${item.period_start}:${item.period_end}`)).length;
     const openPeriods = periods.filter(item => { const state = monthlyByBounds.get(`${item.period_start}:${item.period_end}`); return state !== undefined && state !== 'closed'; }).length;
 
-    const sources = (await loadOperationalSources(companyId, this.db)).filter(source => source.accounting_date >= start && source.accounting_date <= end);
+    const allSources = (await loadOperationalSources(companyId, this.db)).filter(source => source.accounting_date >= start && source.accounting_date <= end);
+    const externalSources = cut ? allSources.filter(source => source.accounting_date <= cut.to_date) : [];
+    const sources = cut ? allSources.filter(source => source.accounting_date > cut.to_date) : allSources;
     const postedSources = (await this.db.query<{ source_type: string; source_id: string }>(
       "SELECT source_type,source_id::text FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND status='posted' AND source_type IS NOT NULL", [companyId, fiscalYearId],
     )).rows;
     const postedKeys = new Set(postedSources.map(item => `${item.source_type}:${item.source_id}`));
     const unpostedSources = sources.filter(source => !postedKeys.has(`${source.source_type}:${source.source_id}`)).length;
+    const externalUnposted = externalSources.filter(source => !postedKeys.has(`${source.source_type}:${source.source_id}`)).length;
     const ledger = (await this.db.query<CountRow>(`SELECT
       COUNT(*) FILTER (WHERE j.status='draft')::text draft_journals,
       COALESCE(SUM(l.debit) FILTER (WHERE j.status='posted'),0)::text total_debits,
@@ -123,7 +133,7 @@ export class AnnualClosingService {
       COUNT(*) FILTER (WHERE p.period_start >= $2 AND p.period_end <= $3 AND (p.status <> 'closed' OR r.status IS NULL OR r.status <> 'filed'))::text incomplete,
       COUNT(*) FILTER (WHERE p.period_start <= $3 AND p.period_end >= $2 AND NOT (p.period_start >= $2 AND p.period_end <= $3))::text boundary
       FROM vat_periods p LEFT JOIN vat_returns r ON r.vat_period_id=p.id AND r.company_id=p.company_id WHERE p.company_id=$1`, [companyId, start, end])).rows[0]!;
-    const general = (await this.db.query<CountRow>(`SELECT
+    const generalSql = `SELECT
       (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND t.reconciliation_status<>'reconciled')::text banking,
       (SELECT COUNT(*) FROM documents d WHERE d.company_id=$1 AND d.document_date BETWEEN $2 AND $3 AND (
         d.status IN ('uploaded','needs_review','incomplete') OR (d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND NOT (
@@ -142,7 +152,10 @@ export class AnnualClosingService {
         SELECT a.id adjustment_id FROM periodic_adjustments a WHERE a.company_id=$1 AND a.workflow_status IN ('draft','in_review') AND a.recognition_start<=$3 AND a.recognition_end>=$2
         UNION SELECT s.adjustment_id FROM periodic_adjustment_schedule s JOIN periodic_adjustments a ON a.id=s.adjustment_id AND a.company_id=s.company_id WHERE s.company_id=$1 AND a.workflow_status='approved' AND s.status='pending' AND s.recognition_date BETWEEN $2 AND $3
       ) unresolved_adjustments)::text adjustments,
-      (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved')::text opening_balances`, [companyId, start, end, fiscalYearId])).rows[0]!;
+      (SELECT COUNT(*) FROM opening_balance_reviews o WHERE o.company_id=$1 AND o.fiscal_year_id=$4 AND o.status<>'approved')::text opening_balances`;
+    const general = (await this.db.query<CountRow>(generalSql, [companyId, nativeStart, end, fiscalYearId])).rows[0]!;
+    const externalGeneral = cut ? (await this.db.query<CountRow>(generalSql, [companyId, start, cut.to_date, fiscalYearId])).rows[0]! : null;
+    if (cut) general.opening_balances = '0'; // the fiscal year follows the cut-over path: no opening-balance review applies
 
     const profile=(await this.db.query<{id:string;tax_treatment:string}>(`SELECT id,tax_treatment FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>=$3) AND (tax_effective_from IS NULL OR tax_effective_from<=$2) ORDER BY effective_from DESC,version_no DESC LIMIT 1`,[companyId,start,end])).rows[0];
     const whtProfiles=(await this.db.query<WhtProfile>(`SELECT effective_from::text,effective_to::text,wht_profile,has_non_resident_dealings FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$2) ORDER BY effective_from,version_no`,[companyId,start,end])).rows;
@@ -153,15 +166,15 @@ export class AnnualClosingService {
     const financialBlockers=missingPeriods+openPeriods+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
 
     const domains: Record<string, AnnualClosingDomain> = {
-      monthly_close: domain(missingPeriods + openPeriods, { expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods }),
-      ledger: domain(Number(ledger.draft_journals) + unpostedSources + unbalanced, { draft_journals: Number(ledger.draft_journals), unposted_operational_sources: unpostedSources, trial_balance_unbalanced: Boolean(unbalanced) }),
+      monthly_close: domain(missingPeriods + openPeriods, { expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods, ...(cut ? { external_periods: allPeriods.length - periods.length, cutover_date: cut.to_date } : {}) }),
+      ledger: domain(Number(ledger.draft_journals) + unpostedSources + unbalanced, { draft_journals: Number(ledger.draft_journals), unposted_operational_sources: unpostedSources, trial_balance_unbalanced: Boolean(unbalanced), ...(cut ? { external_unposted_sources: externalUnposted } : {}) }),
       vat: domain(Number(vat.incomplete), { incomplete_periods: Number(vat.incomplete), boundary_review_periods: Number(vat.boundary) }, Number(vat.boundary) > 0),
-      banking: domain(Number(general.banking), { unresolved_transactions: Number(general.banking) }),
-      documents: domain(Number(general.documents), { unresolved_documents: Number(general.documents) }),
-      receivables_payables: domain(Number(general.obligations), { unconfirmed_obligations: Number(general.obligations), open_receivable_balance: general.open_receivables, open_payable_balance: general.open_payables }),
+      banking: domain(Number(general.banking), { unresolved_transactions: Number(general.banking), ...(externalGeneral ? { external_unresolved_transactions: Number(externalGeneral.banking) } : {}) }),
+      documents: domain(Number(general.documents), { unresolved_documents: Number(general.documents), ...(externalGeneral ? { external_unresolved_documents: Number(externalGeneral.documents) } : {}) }),
+      receivables_payables: domain(Number(general.obligations), { unconfirmed_obligations: Number(general.obligations), ...(externalGeneral ? { external_unconfirmed_obligations: Number(externalGeneral.obligations) } : {}), open_receivable_balance: general.open_receivables, open_payable_balance: general.open_payables }),
       partners: domain(Number(general.partner_unconfirmed) + Number(general.partner_overlaps), { unconfirmed_ownership_periods: Number(general.partner_unconfirmed), overlapping_ownership_periods: Number(general.partner_overlaps), ownership_gaps_needing_review: Number(general.partner_missing) }, Number(general.partner_missing) > 0),
-      assets: domain(Number(general.pending_depreciation) + Number(general.draft_assets), { pending_depreciation: Number(general.pending_depreciation), draft_assets: Number(general.draft_assets) }),
-      adjustments: domain(Number(general.adjustments), { unresolved_adjustments: Number(general.adjustments) }),
+      assets: domain(Number(general.pending_depreciation) + Number(general.draft_assets), { pending_depreciation: Number(general.pending_depreciation), draft_assets: Number(general.draft_assets), ...(externalGeneral ? { external_pending_depreciation: Number(externalGeneral.pending_depreciation), external_draft_assets: Number(externalGeneral.draft_assets) } : {}) }),
+      adjustments: domain(Number(general.adjustments), { unresolved_adjustments: Number(general.adjustments), ...(externalGeneral ? { external_unresolved_adjustments: Number(externalGeneral.adjustments) } : {}) }),
       opening_balances: domain(Number(general.opening_balances), { unresolved_reviews: Number(general.opening_balances) }),
       zakat: taxReadiness(taxPath,profile?.id??null,workpaper?{...workpaper,unresolved:Number(workpaper.unresolved),source_drift:Boolean(liveTaxWorkpaper?.source_drift)}:null,financialBlockers),
       wht: whtReadiness(start,end,whtProfiles,whtReviews),

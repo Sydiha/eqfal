@@ -6,7 +6,7 @@ import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
 import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
-import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath } from './ledger-source-authority';
+import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath, assertCutoverPostingContext } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 
 export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
@@ -21,7 +21,7 @@ type Journal = {
   reference: string | null;
   source_type: string | null;
   source_id: string | null;
-  entry_type: 'standard' | 'opening_balance';
+  entry_type: 'standard' | 'opening_balance' | 'cutover_balance';
   status: 'draft' | 'posted';
   created_by: string;
   posted_by: string | null;
@@ -45,7 +45,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -103,6 +103,11 @@ export async function postJournalInTransaction(
   }
   if (journal.entry_type === 'opening_balance') {
     await assertOpeningBalanceReviewContext(client, companyId, journal, internal.openingBalanceReviewId);
+  }
+
+  if (journal.entry_type === 'cutover_balance') {
+    // In-process only (the DRAFT range being activated). Posted before the range turns active, so the active-range block never applies to it.
+    await assertCutoverPostingContext(client, companyId, journal, internal.cutoverAuthorityId);
   }
 
   if (journal.entry_type === 'standard' && !journal.source_type && !journal.source_id) {
