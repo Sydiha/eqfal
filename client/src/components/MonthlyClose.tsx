@@ -11,7 +11,7 @@ import { useActiveCompanyName } from '../context/CompanyContext';
 import { generatedStamp, monthlyCloseExport } from '../export/reportExport';
 import './MonthlyClose.css';
 
-type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number};
+type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number;bank_reconciliation:number};
 type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Partial<Blockers>;disclosed_total:number;has_hidden_blockers:boolean};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
 type DestinationPage='documents'|'banks'|'obligations'|'vat'|'accounting'|'assets'|'openingBalances'|'periodicAdjustments';
@@ -60,6 +60,8 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
   {key:'documents',allowed:viewCapabilities.documents,label:t('monthlyClose.documents',{count:selected.blockers.documents}).replace(/:\s*\d+$/,''),count:selected.blockers.documents,icon:<IcFileText/>,go:()=>drill('documents',{from:selected.period_start,to:selected.period_end})},
   {key:'obligations',allowed:viewCapabilities.obligations,label:t('monthlyClose.obligations',{count:selected.blockers.obligations}).replace(/:\s*\d+$/,''),count:selected.blockers.obligations,icon:<IcUsers/>,go:()=>drill('obligations',{confirmation:'unconfirmed',recognizedFrom:selected.period_start,recognizedTo:selected.period_end})},
   {key:'bank',allowed:viewCapabilities.bank,label:t('monthlyClose.transactions',{count:selected.blockers.bank_transactions}).replace(/:\s*\d+$/,''),count:selected.blockers.bank_transactions,icon:<IcCard/>,go:()=>drill('banks',{section:'transactions',from:selected.period_start,to:selected.period_end})},
+  // Present only when the company enforces statement-balance reconciliation for this period (the server omits the category otherwise).
+  {key:'bankReconciliation',allowed:viewCapabilities.bank,label:t('monthlyClose.bankReconciliation'),count:selected.blockers.bank_reconciliation,icon:<IcCard/>,go:()=>drill('banks',{section:'reconciliation',reconDate:selected.period_end.slice(0,10)})},
   {key:'vat',allowed:viewCapabilities.vat,label:t('nav.vat'),count:selected.blockers.vat,icon:<IcPercent/>,go:()=>drill('vat',{vatFrom:selected.period_start,vatTo:selected.period_end})},
   {key:'assets',allowed:viewCapabilities.assets,label:t('assets.title'),count:selected.blockers.assets,icon:<IcDatabase/>,go:()=>drill('assets',{assetFrom:selected.period_start,assetTo:selected.period_end})},
   {key:'openingBalances',allowed:viewCapabilities.openingBalances,label:t('monthlyClose.openingBalances'),count:selected.blockers.opening_balances,icon:<IcKey/>,go:()=>drill('openingBalances',{fiscalYear:selected.fiscal_year_id})},

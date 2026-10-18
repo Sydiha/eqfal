@@ -330,6 +330,51 @@ describeDatabase('bank statement reconciliation (PostgreSQL)', () => {
     expect(snap[0]!.result.statement_id).toBe(snap[0]!.statement_id);
   });
 
+  it('blocks a September monthly close on a 100.00 unexplained difference in enforce mode, independently of unrelated blockers, and reports it in the readiness list', async () => {
+    const co = await setup('sept');
+    await link(co, '2026-01-01');
+    await setMode(co, 'enforce', '2026-09-01');
+    const period = await monthPeriod(co, '2026-09-01', '2026-09-30');
+    const readiness = async () => (await co.owner.client.req('GET', '/monthly-close-periods')).json.periods.find((p: { id: string }) => p.id === period);
+    const sept = (o: Record<string, unknown> = {}) => ({ period_start: '2026-09-01', period_end: '2026-09-30', ...o });
+
+    // statement says 100.00, the ledger holds 0.00 -> exactly the owner's UAT scenario
+    const stmt = await confirmedStatement(co, '100.00', sept());
+    const first = await readiness();
+    expect(first.blockers.bank_reconciliation).toBe(1);
+    expect(first.disclosed_total).toBe(1);
+    expect(first.ready).toBe(false);
+    const blocked = await co.owner.client.req('POST', `/monthly-close-periods/${period}/close`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.code).toBe('MONTHLY_CLOSE_BLOCKED');
+    expect(await h.count("SELECT COUNT(*)::text n FROM bank_reconciliation_snapshots WHERE company_id=$1", [co.id])).toBe(0);
+
+    // an unrelated blocker (an unresolved bank row inside the month) is counted separately and does not hide or replace the reconciliation blocker
+    await bankTx(co, '2026-09-10', '5.00');
+    const both = await readiness();
+    expect(both.blockers.bank_reconciliation).toBe(1);
+    expect(both.blockers.bank_transactions).toBe(1);
+    expect(both.disclosed_total).toBe(2);
+
+    // the statement is corrected to the ledger value: the reconciliation blocker clears on its own, the unrelated one remains
+    const fix = await co.approver.client.req('POST', `/bank-statements/${stmt.id}/supersede`, { ...stmtBody(co, sept({ statement_ref: 'SEP-FIX', closing_balance: '0.00' })), version: stmt.version, reason: 'bank issued a corrected statement' });
+    expect(fix.status).toBe(201);
+    const afterFix = await readiness();
+    expect(afterFix.blockers.bank_reconciliation).toBe(0);
+    expect(afterFix.blockers.bank_transactions).toBe(1);
+    expect((await co.owner.client.req('POST', `/monthly-close-periods/${period}/close`)).status).toBe(409);
+  });
+
+  it('omits the reconciliation category outside enforce mode so the readiness list never shows an unrelated zero row', async () => {
+    const co = await setup('sept-off');
+    await link(co, '2026-01-01');
+    const period = await monthPeriod(co, '2026-09-01', '2026-09-30');
+    await confirmedStatement(co, '100.00', { period_start: '2026-09-01', period_end: '2026-09-30' });
+    const row = (await co.owner.client.req('GET', '/monthly-close-periods')).json.periods.find((p: { id: string }) => p.id === period);
+    expect(row.blockers.bank_reconciliation).toBeUndefined();
+    expect(row.ready).toBe(true);
+  });
+
   it('rejects stale evidence: a replacement racing the close either blocks the close or lands before it', async () => {
     const co = await setup('race');
     await link(co);

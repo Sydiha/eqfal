@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
@@ -70,5 +70,66 @@ describe('BankStatementReconciliation', () => {
     expect(screen.getByRole('button', { name: 'Delete draft' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+  });
+
+  it('validates the statement form with localized messages instead of browser or backend text, in English and Arabic', async () => {
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { unmount } = renderIt({ canManageStatements: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    expect((await screen.findAllByText('This field is required')).length).toBeGreaterThanOrEqual(3);
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+    fireEvent.change(document.querySelector('input[name="closing"]')!, { target: { value: '12.345' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(await screen.findByText('Enter a valid amount with at most two decimals')).toBeTruthy();
+    unmount();
+    await i18n.changeLanguage('ar');
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    const ui = renderIt({ canManageStatements: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'حفظ كمسودة' }));
+    expect((await screen.findAllByText('هذا الحقل مطلوب')).length).toBeGreaterThanOrEqual(3);
+    expect(ui.container.querySelector('.bank-statement-reconciliation')?.getAttribute('dir')).toBe('rtl');
+    expect(document.querySelector('input[name="closing"]')?.getAttribute('dir')).toBe('ltr');
+  });
+
+  it('requires an effective date before enforcing and localizes the message', async () => {
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    renderIt({ canManageSettings: true });
+    const select = (await screen.findAllByRole('combobox'))[0]!;
+    fireEvent.change(select, { target: { value: 'enforce' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('This field is required')).toBeTruthy();
+  });
+
+  it('asks for confirmation in the app dialog (not a browser dialog) and only confirms after the user agrees', async () => {
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    renderIt({ canConfirmStatements: true, canManageStatements: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Confirm this statement balance? Confirmed values cannot be edited.')).toBeTruthy();
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls.some(([u, init]) => String(u).endsWith('/confirm') && (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/confirm'))).toBe(false);
+  });
+
+  it.each([
+    ['en', 'BANK_STATEMENT_STALE', 'This statement balance was changed by someone else. Reload and try again.'],
+    ['ar', 'BANK_STATEMENT_DUPLICATE_PERIOD', 'يوجد رصيد كشف معتمد لهذا الحساب البنكي ولنهاية الفترة نفسها.'],
+  ] as const)('shows the localized %s message for backend code %s, never the raw backend text', async (lang, code, message) => {
+    await i18n.changeLanguage(lang);
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(JSON.stringify({ error: 'raw backend english text', code }), { status: 409 });
+      const body = url.startsWith('/api/bank-accounts') ? { accounts: [BANK] } : url.startsWith('/api/bank-statements') ? [statement('s1', 'draft', 'DRAFT-1')]
+        : url.startsWith('/api/bank-reconciliation/settings') ? { mode: 'off', enforce_from: null, version: 0 } : url.startsWith('/api/bank-reconciliation/preview') ? calc() : [];
+      return new Response(JSON.stringify(body), { status: 200 });
+    }));
+    renderIt({ canConfirmStatements: true });
+    fireEvent.click(await screen.findByRole('button', { name: lang === 'ar' ? 'اعتماد' : 'Confirm' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: lang === 'ar' ? 'اعتماد' : 'Confirm' }));
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryByText('raw backend english text')).toBeNull();
   });
 });
