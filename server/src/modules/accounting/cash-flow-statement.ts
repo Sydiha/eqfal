@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import type { CashFlowCategory, CashRole } from './account-classification.router';
+import { assertCashFlowRange, CUTOVER_BOUNDS_SQL, CutoverBounds } from './external-period-guard';
 
 export const CASH_FLOW_CLASSIFICATION_CODE='CASH_FLOW_CLASSIFICATION_BLOCKED';
 
@@ -11,7 +12,7 @@ export class CashFlowClassificationError extends Error{
 
 type QueryRunner=Pick<Pool|PoolClient,'query'>;
 type CashFlowLine={
-  journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance';source_type:string|null;source_id:string|null;
+  journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance'|'cutover_balance';source_type:string|null;source_id:string|null;
   account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;cash_role:CashRole;cash_flow_category:CashFlowCategory;debit:string;credit:string;
 };
 export type CashFlowBlocker={journal_id:string;accounting_date:string;reason:'unmapped'|'ambiguous';account_ids:string[]};
@@ -32,13 +33,14 @@ export class CashFlowStatementService{
     const client=await this.db.connect();
     try{
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const year=(await client.query<{start_date:string;end_date:string}>(
-        'SELECT start_date::text,end_date::text FROM fiscal_years WHERE id=$1 AND company_id=$2',
+      const year=(await client.query<{start_date:string;end_date:string}&CutoverBounds>(
+        `SELECT start_date::text,end_date::text,${CUTOVER_BOUNDS_SQL} FROM fiscal_years WHERE id=$1 AND company_id=$2`,
         [fiscalYearId,companyId],
       )).rows[0];
       if(!year)throw new CashFlowNotFoundError();
       const from=start??year.start_date,to=end??year.end_date;
       if(!validDate(from)||!validDate(to)||from>to||from<year.start_date||to>year.end_date)throw new CashFlowValidationError('Invalid report date range');
+      assertCashFlowRange(year,from);
       const lines=await this.lines(client,companyId,fiscalYearId,year.start_date,to);
       const opening=lines.filter(line=>line.cash_role!=='non_cash'&&(line.entry_type==='opening_balance'||line.accounting_date<from)).reduce((sum,line)=>sum+amount(line),0);
       const closing=lines.filter(line=>line.cash_role!=='non_cash').reduce((sum,line)=>sum+amount(line),0);

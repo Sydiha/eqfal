@@ -2,6 +2,8 @@ import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { lockAccountingDate } from '../monthly-close/accounting-period.guard';
 import {
+  CUTOVER_CONTEXT_INVALID_CODE,
+  CUTOVER_JOURNAL_MANUAL_CODE,
   LEDGER_SOURCE_AUTHORITY_BLOCKED_CODE,
   LedgerSourceAuthorityBlockedError,
   ONBOARDING_PATH_CUTOVER_ACTIVE_CODE,
@@ -40,6 +42,32 @@ export async function assertFiscalYearNotInCutoverPath(client: Queryable, compan
   }
 }
 
+export type ActiveCutover = { id: string; from_date: string; to_date: string };
+
+/** The active external-reference range that overlaps a fiscal year (C1B-3b readiness and report rules key on it), or null. */
+export async function loadActiveCutover(client: Queryable, companyId: string, fiscalYearId: string): Promise<ActiveCutover | null> {
+  return (await client.query<ActiveCutover>(
+    `SELECT a.id,a.from_date::text,a.to_date::text FROM ledger_source_authority a JOIN fiscal_years f ON f.id=$2 AND f.company_id=$1
+     WHERE a.company_id=$1 AND a.status='active' AND a.from_date<=f.end_date AND a.to_date>=f.start_date ORDER BY a.from_date LIMIT 1`,
+    [companyId, fiscalYearId],
+  )).rows[0] ?? null;
+}
+
+/** Cut-over journal posting context (never derived from a request): the DRAFT range the journal activates. */
+export async function assertCutoverPostingContext(
+  client: Queryable, companyId: string, journal: { fiscal_year_id: string; accounting_date: string }, authorityId: string | undefined,
+): Promise<void> {
+  if (!authorityId) {
+    throw new LedgerSourceAuthorityBlockedError(CUTOVER_JOURNAL_MANUAL_CODE, 'Cut-over journals can only be posted by the approved cut-over activation workflow');
+  }
+  const row = (await client.query(
+    `SELECT 1 FROM ledger_source_authority a JOIN fiscal_years f ON f.id=$3 AND f.company_id=$1
+     WHERE a.id=$2 AND a.company_id=$1 AND a.status='draft' AND a.from_date=f.start_date AND a.to_date=$4::date FOR UPDATE OF a`,
+    [companyId, authorityId, journal.fiscal_year_id, journal.accounting_date],
+  )).rowCount;
+  if (!row) throw new LedgerSourceAuthorityBlockedError(CUTOVER_CONTEXT_INVALID_CODE, 'The cut-over journal does not match a draft authority range');
+}
+
 export const AUTHORITY_ERROR_CODES = [
   'AUTHORITY_RANGE_INVALID',
   'AUTHORITY_RANGE_OVERLAP',
@@ -49,6 +77,25 @@ export const AUTHORITY_ERROR_CODES = [
   'LEDGER_SOURCE_AUTHORITY_IMMUTABLE',
   'AUTHORITY_DRAFT_FISCAL_YEAR_INVALID',
   'AUTHORITY_ACTIVE_INSERT_FORBIDDEN',
+  'CUTOVER_ACTIVATION_INCOMPLETE',
+  'CUTOVER_TB_REFERENCE_REQUIRED',
+  'CUTOVER_ACKNOWLEDGEMENTS_REQUIRED',
+  'CUTOVER_JOURNAL_INVALID',
+  'CUTOVER_JOURNAL_SHAPE_INVALID',
+  'CUTOVER_JOURNAL_UNBALANCED',
+  'CUTOVER_JOURNAL_ORPHAN',
+  'CUTOVER_DATE_NOT_MONTH_END',
+  'CUTOVER_ACCOUNT_UNMAPPED',
+  'CUTOVER_VAT_PERIOD_EXISTS',
+  'CUTOVER_ANNUAL_PACKAGE_APPROVED',
+  'CUTOVER_PROFILE_NOT_UNIQUE',
+  'CUTOVER_VAT_PROFILE_NEEDS_REVIEW',
+  'CUTOVER_VAT_QUARTER_BOUNDARY',
+  'CUTOVER_VAT_FREQUENCY_MISSING',
+  'CUTOVER_VAT_MEMO_FORBIDDEN',
+  'CUTOVER_CONTEXT_INVALID',
+  'CUTOVER_PROFILE_CHANGE_FORBIDDEN',
+  'VAT_PERIOD_EXTERNAL',
 ] as const;
 
 export class LedgerSourceAuthorityError extends Error {
@@ -65,7 +112,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (value: unknown): value is string => typeof value === 'string' && DATE.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const validReason = (value: unknown): value is string => typeof value === 'string' && value.trim().length >= 1 && value.trim().length <= 500;
 
-function translate(error: unknown): never {
+export function translate(error: unknown): never {
   const message = (error as { message?: string } | null)?.message;
   if (message && (AUTHORITY_ERROR_CODES as readonly string[]).includes(message)) throw new LedgerSourceAuthorityError(message);
   throw error;

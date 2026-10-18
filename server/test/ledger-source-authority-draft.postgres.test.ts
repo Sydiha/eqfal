@@ -150,7 +150,7 @@ describeDatabase('ledger source authority drafts (PostgreSQL)', () => {
     const co = await setup('drRaw');
     const id = (await mkDraft(co)).json.range.id as string;
     const fails = async (sql: string) => { try { await h.db.query(sql, [id]); return null; } catch (e) { return (e as { message: string }).message; } };
-    expect(await fails("UPDATE ledger_source_authority SET status='active' WHERE id=$1")).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
+    expect(await fails("UPDATE ledger_source_authority SET status='active' WHERE id=$1")).toBe('CUTOVER_ACTIVATION_INCOMPLETE');
     expect(await fails("UPDATE ledger_source_authority SET to_date='2026-05-31' WHERE id=$1")).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
     expect(await fails('DELETE FROM ledger_source_authority WHERE id=$1')).toBe('LEDGER_SOURCE_AUTHORITY_IMMUTABLE');
     expect(await fails("INSERT INTO ledger_source_authority(company_id,from_date,to_date,authority,status,reason,created_by) SELECT company_id,'2026-08-01','2026-08-31','imported_ledger','draft','r',created_by FROM ledger_source_authority WHERE id=$1")).toMatch(/check/i);

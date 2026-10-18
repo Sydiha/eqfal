@@ -117,6 +117,9 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
   const annual = await new AnnualClosingService(client).readiness(companyId, year.id, { fiscalYearBounded: true });
   const d = annual.domains;
   const apply = await loadApplicability(client, companyId, year);
+  // C1B-3b: an active cut-over range replaces the opening-balance path for this year (first_live_accounting_date keeps its meaning).
+  const cutoverDate = d.monthly_close!.summary.cutover_date;
+  const cutover = typeof cutoverDate === 'string' ? { to_date: cutoverDate } : null;
 
   const openingRows = num(d.opening_balances!.summary.unresolved_reviews);
   const blockerSpec: Array<[string, number]> = [
@@ -132,7 +135,7 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
     ['pending_depreciation', num(d.assets!.summary.pending_depreciation)],
     ['draft_fixed_assets', num(d.assets!.summary.draft_assets)],
     ['vat_incomplete', apply.vatApplicable ? num(d.vat!.summary.incomplete_periods) : 0],
-    ['opening_balances_incomplete', apply.openingApplicable && !apply.openingApproved ? Math.max(1, openingRows) : 0],
+    ['opening_balances_incomplete', apply.openingApplicable && !apply.openingApproved && !cutover ? Math.max(1, openingRows) : 0],
     ['partner_ownership_overlap', num(d.partners!.summary.overlapping_ownership_periods)],
   ];
   const blockers = blockerSpec.filter(([, count]) => count > 0).map(([code, count]) => ({ code, count }));
@@ -149,6 +152,19 @@ export async function getFiscalYearCloseReadiness(client: PoolClient, companyId:
   if (unconfirmedPartners > 0) warn('partner_ownership_unconfirmed', unconfirmedPartners);
   if (apply.vatApplicable && num(d.vat!.summary.boundary_review_periods) > 0) warn('vat_boundary_review', num(d.vat!.summary.boundary_review_periods));
   if (apply.vatRequiresResolution) warn('vat_profile_needs_review', 1);
+  if (cutover) {
+    warn('cutover_account_level_only', 1, cutover.to_date);
+    const external: Array<[string, unknown]> = [
+      ['external_unposted_operational_sources', d.ledger!.summary.external_unposted_sources],
+      ['external_unresolved_documents', d.documents!.summary.external_unresolved_documents],
+      ['external_unconfirmed_obligations', d.receivables_payables!.summary.external_unconfirmed_obligations],
+      ['external_unreconciled_bank_transactions', d.banking!.summary.external_unresolved_transactions],
+      ['external_pending_periodic_adjustments', d.adjustments!.summary.external_unresolved_adjustments],
+      ['external_pending_depreciation', d.assets!.summary.external_pending_depreciation],
+      ['external_draft_fixed_assets', d.assets!.summary.external_draft_assets],
+    ];
+    for (const [code, count] of external) if (num(count) > 0) warn(code, num(count), cutover.to_date);
+  }
   const pkg = (await client.query<{ status: string }>(
     'SELECT status FROM annual_closing_packages WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, year.id],
   )).rows[0];
