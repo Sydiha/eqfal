@@ -30,6 +30,7 @@ export const UNRESOLVED_BANK_TRANSACTION_SQL = `NOT (
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
+        OR EXISTS(SELECT 1 FROM personal_payment_reimbursements pr WHERE pr.company_id=t.company_id AND pr.bank_transaction_id=t.id AND pr.journal_entry_id IS NOT NULL)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
       )`;
 
@@ -104,6 +105,10 @@ const EVIDENCE_SQL = `WITH src AS (
   SELECT j.id, p.bank_transaction_id
     FROM journal_entries j JOIN partner_transactions p ON p.id=j.source_id AND p.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='partner_transaction' AND p.status='posted' AND p.bank_transaction_id IS NOT NULL
+  UNION ALL
+  SELECT j.id, r.bank_transaction_id
+    FROM journal_entries j JOIN personal_payment_reimbursements r ON r.id=j.source_id AND r.company_id=j.company_id
+   WHERE j.company_id=$1 AND j.source_type='personal_payment_reimbursement'
 )
 SELECT j.id journal_id, j.accounting_date::text, j.description, bt.id bank_transaction_id, bt.transaction_date::text bank_transaction_date,
        bt.amount::text bank_amount,

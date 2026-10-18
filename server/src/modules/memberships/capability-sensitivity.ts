@@ -26,6 +26,8 @@ const CRITICAL = new Set([
   'monthly_close.reopen',
   'partner.transaction.post',
   'partner.transaction.reverse',
+  'personal_payment.reimburse',
+  'personal_payment.review',
   'periodic_adjustment.post',
   'source_authority.activate',
   'source_authority.manage',
@@ -65,6 +67,8 @@ const SENSITIVE_EXACT = new Set([
   'partner.ownership.confirm',
   'partner.transaction.create',
   'payment.settle',
+  'personal_payment.create',
+  'personal_payment.submit',
 ]);
 
 export function capabilitySensitivity(id: string): CapabilitySensitivity {

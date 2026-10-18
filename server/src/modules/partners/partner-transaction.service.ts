@@ -28,7 +28,7 @@ export type PartnerTransactionRow = {
 };
 type Class = PartnerMappingKey;
 export type LedgerMovement = {
-  date: string; kind: 'opening_balance' | 'transaction' | 'reversal'; account_class: Class; transaction_id: string | null; transaction_type: PartnerTransactionType | null;
+  date: string; kind: 'opening_balance' | 'transaction' | 'reversal' | 'personal_payment' | 'personal_reimbursement'; account_class: Class; transaction_id: string | null; transaction_type: PartnerTransactionType | null;
   effect: string; running_balance: string; reference: string | null; description: string | null; channel: Channel | null; journal_entry_id: string | null;
   bank_transaction_id: string | null; document_id: string | null;
 };
@@ -361,6 +361,14 @@ export class PartnerTransactionService {
                 (CASE WHEN t.transaction_type IN ('capital_contribution','current_deposit','loan_received') THEN t.amount ELSE -t.amount END)::text, t.id, t.transaction_type,
                 t.reference, t.description, t.channel, t.journal_entry_id, t.bank_transaction_id, t.document_id, 1, t.created_at
            FROM partner_transactions t WHERE t.company_id=$1 AND ($2::uuid IS NULL OR t.partner_id=$2) AND t.status IN ('posted','reversed')
+         UNION ALL
+         SELECT py.partner_id, 'personal_payment', p.accounting_date::text, 'current', p.amount::text, p.id, NULL::text, NULL::text, p.purpose, NULL::text, p.journal_entry_id, NULL::uuid, p.document_id, 1, p.created_at
+           FROM personal_payments p JOIN personal_payers py ON py.id=p.payer_id AND py.company_id=p.company_id
+          WHERE p.company_id=$1 AND p.status='approved' AND py.partner_id IS NOT NULL AND ($2::uuid IS NULL OR py.partner_id=$2)
+         UNION ALL
+         SELECT py.partner_id, 'personal_reimbursement', r.reimbursement_date::text, 'current', (-r.amount)::text, p.id, NULL::text, NULL::text, p.purpose, NULL::text, r.journal_entry_id, r.bank_transaction_id, p.document_id, 1, r.created_at
+           FROM personal_payment_reimbursements r JOIN personal_payments p ON p.id=r.payment_id AND p.company_id=r.company_id JOIN personal_payers py ON py.id=p.payer_id AND py.company_id=p.company_id
+          WHERE r.company_id=$1 AND r.journal_entry_id IS NOT NULL AND py.partner_id IS NOT NULL AND ($2::uuid IS NULL OR py.partner_id=$2)
          UNION ALL
          SELECT t.partner_id, 'reversal', t.reversal_date::text,
                 (CASE t.transaction_type WHEN 'capital_contribution' THEN 'capital' WHEN 'loan_received' THEN 'loan' WHEN 'loan_repayment' THEN 'loan' ELSE 'current' END),

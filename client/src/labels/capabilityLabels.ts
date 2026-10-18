@@ -77,6 +77,13 @@ const OVERRIDES: Record<string, Pair> = {
   'partner.transaction.post': ['Post partner transactions', 'ترحيل معاملات الشركاء'],
   'partner.transaction.reverse': ['Reverse partner transactions', 'عكس معاملات الشركاء'],
   'partner.account_mapping.manage': ['Manage partner account mappings', 'إدارة ربط حسابات الشركاء'],
+  'personal_payment.view': ['View personal payments', 'عرض المدفوعات الشخصية'],
+  'personal_payment.create': ['Create and edit personal payment drafts', 'إنشاء وتعديل مسودات المدفوعات الشخصية'],
+  'personal_payment.submit': ['Submit personal payments for review', 'إرسال المدفوعات الشخصية للمراجعة'],
+  'personal_payment.review': ['Approve or reject personal payments', 'اعتماد أو رفض المدفوعات الشخصية'],
+  'personal_payment.reimburse': ['Reimburse personal payments from the bank', 'استرداد المدفوعات الشخصية من البنك'],
+  'personal_payment.audit.view': ['View personal payment history and journals', 'عرض سجل المدفوعات الشخصية وقيودها'],
+  'personal_payment.payer.manage': ['Manage personal payers', 'إدارة الدافعين الشخصيين'],
   'document.upload': ['Upload documents', 'رفع المستندات'], 'document.submit': ['Submit documents for review', 'إرسال المستندات للمراجعة'],
 };
 

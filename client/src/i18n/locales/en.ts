@@ -111,7 +111,7 @@ const en = {
     },
     classes: { capital: 'Capital', current: 'Current account', loan: 'Partner loan' }, choosePartner: 'Choose a partner', bankAccount: 'Bank account', chooseBank: 'Choose a bank account',
     bankTransaction: 'Bank statement transaction (optional)', noBankTransaction: 'Not linked to a bank statement', bankTransactionHelp: 'Only statement rows with the same account, date, amount and direction are listed. A bank statement is not required.',
-    reference: 'Reference', openingBalance: 'Opening balance', from: 'From', to: 'To', ledgerChoose: 'Choose a partner and a valid date range.', opening: 'Opening balance', increases: 'Increases', decreases: 'Decreases', closing: 'Closing balance',
+    reference: 'Reference', openingBalance: 'Opening balance', personalPayment: 'Personal payment paid for the company', personalReimbursement: 'Reimbursement of personal payment', from: 'From', to: 'To', ledgerChoose: 'Choose a partner and a valid date range.', opening: 'Opening balance', increases: 'Increases', decreases: 'Decreases', closing: 'Closing balance',
     draftsExcluded: '{{count}} draft transaction(s) are not included until posted.', account: 'Account', movement: 'Movement', runningBalance: 'Balance', noMovements: 'No movements in this period.',
     mappingsHelp: 'Accounts are never chosen automatically. Map each partner’s capital, current and loan accounts, and the cash and bank accounts. A transaction cannot be posted until its accounts are mapped.',
     notMapped: 'Not mapped', mappingInvalid: 'This account is inactive or no longer of an allowed type.', mapKeys: { capital: 'Capital account', current: 'Current account', loan: 'Loan account' }, cashAccounts: 'Cash and bank accounts',

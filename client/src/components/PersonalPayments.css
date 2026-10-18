@@ -1,0 +1,8 @@
+.personal-payments { display: grid; gap: 12px; }
+.personal-payments header p { margin: 4px 0 0; color: var(--text-muted, #667085); }
+.personal-payments .pp-form { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; max-width: 560px; }
+.personal-payments .pp-form label { display: grid; gap: 4px; font-weight: 500; }
+.personal-payments .pp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.personal-payments .pp-message { padding: 8px 12px; border-radius: 8px; background: #fdecea; color: #8a1c1c; }
+.personal-payments small { color: var(--text-muted, #667085); }
+.personal-payments .pp-primary { align-self: start; }
