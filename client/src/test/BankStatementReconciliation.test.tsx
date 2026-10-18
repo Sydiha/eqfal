@@ -95,6 +95,8 @@ describe('BankStatementReconciliation', () => {
   it('requires an effective date before enforcing and localizes the message', async () => {
     mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
     renderIt({ canManageSettings: true });
+    await screen.findByText('Draft');   // initial load finished: it would otherwise overwrite the mode chosen below
+    await screen.findByText('Reconciled');
     const select = (await screen.findAllByRole('combobox'))[0]!;
     fireEvent.change(select, { target: { value: 'enforce' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
