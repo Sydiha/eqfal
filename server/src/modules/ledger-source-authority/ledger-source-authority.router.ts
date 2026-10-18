@@ -13,7 +13,7 @@ const route = (handler: (req: Request, res: Response) => Promise<void>): Request
   void handler(req, res).catch((error) => {
     if (error instanceof LedgerSourceAuthorityNotFoundError) { res.status(404).json({ error: 'Not found' }); return; }
     if (error instanceof LedgerSourceAuthorityError) {
-      res.status(error.code === 'AUTHORITY_RANGE_INVALID' || error.code === 'CUTOVER_LINES_INVALID' ? 400 : 409).json({ error: error.message, code: error.code });
+      res.status(error.code === 'AUTHORITY_RANGE_INVALID' || error.code === 'CUTOVER_LINES_INVALID' ? 400 : 409).json({ error: error.message, code: error.code, ...('detail' in error && (error as { detail?: unknown }).detail !== undefined ? { detail: (error as { detail?: unknown }).detail } : {}) });
       return;
     }
     next(error);

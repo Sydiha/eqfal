@@ -24,6 +24,14 @@ describe('C1B-3b contracts', () => {
     expect(parseCutoverInput({ ...ok(), lines: [{ account_id: U, debit: '1.234', credit: '0' }] }, true)).toBeNull();
   });
 
+  it('parses the per-account cash confirmations strictly, de-duplicated and defaulting to none', () => {
+    expect(parseCutoverInput(ok(), true)!.cash_non_cash_confirmed_account_ids).toEqual([]);
+    expect(parseCutoverInput({ ...ok(), cash_non_cash_confirmed_account_ids: [U.toUpperCase(), U, V] }, true)!.cash_non_cash_confirmed_account_ids).toEqual([U, V]);
+    expect(parseCutoverInput({ ...ok(), cash_non_cash_confirmed_account_ids: ['nope'] }, true)).toBeNull();
+    expect(parseCutoverInput({ ...ok(), cash_non_cash_confirmed_account_ids: 'all' }, true)).toBeNull();
+    expect(parseCutoverInput({ ...ok(), cash_non_cash_confirmed_account_ids: [1] }, true)).toBeNull();
+  });
+
   it('migration 086 never grants the activation capability to a role and protects the cut-over journal', () => {
     expect(sql).toMatch(/INSERT INTO capabilities[^;]*source_authority\.activate/);
     expect(sql).not.toMatch(/INSERT INTO role_capabilities/i);

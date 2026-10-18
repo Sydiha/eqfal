@@ -26,6 +26,8 @@ export type CutoverInput = {
   tb_prepared_by: string;
   acknowledgements: { retained_earnings: true; current_year_pnl: true; cash_balances: true; account_level_limitations: true };
   idempotency_key?: string;
+  /** Accounts that look like cash/bank but are classified non_cash, each individually confirmed by the accountant. Never changes a classification. */
+  cash_non_cash_confirmed_account_ids: string[];
 };
 export type CutoverWarning = { code: string; detail?: unknown };
 export type CutoverSummary = {
@@ -33,7 +35,7 @@ export type CutoverSummary = {
   retained_earnings_balance: string; warnings: CutoverWarning[];
 };
 export type CutoverResult = { valid: true; replayed: boolean; dry_run: boolean; range: AuthorityRange; journal_id: string | null; summary: CutoverSummary };
-export type CutoverPreviewResult = { valid: boolean; blockers: Array<{ code: string }>; summary: CutoverSummary | null; range_id: string };
+export type CutoverPreviewResult = { valid: boolean; blockers: Array<{ code: string; detail?: unknown }>; summary: CutoverSummary | null; range_id: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MONEY = /^\d{1,16}(\.\d{1,2})?$/;
@@ -49,7 +51,7 @@ const money = (value: bigint): string => { const neg = value < 0n; const a = neg
 export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverInput | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const x = body as Record<string, unknown>;
-  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', 'acknowledgements', 'idempotency_key', 'confirm'];
+  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', 'acknowledgements', 'idempotency_key', 'cash_non_cash_confirmed_account_ids', 'confirm'];
   if (Object.keys(x).some((k) => !allowed.includes(k))) return null;
   if (!Array.isArray(x['lines']) || x['lines'].length === 0 || x['lines'].length > MAX_LINES) return null;
   const lines: CutoverLine[] = [];
@@ -69,22 +71,28 @@ export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverIn
   if (typeof ack !== 'object' || ack === null || Array.isArray(ack)) return null;
   const a = ack as Record<string, unknown>;
   if (Object.keys(a).some((k) => !(REQUIRED_ACKS as readonly string[]).includes(k)) || REQUIRED_ACKS.some((k) => a[k] !== true)) return null;
+  const rawConfirmed = x['cash_non_cash_confirmed_account_ids'] ?? [];
+  if (!Array.isArray(rawConfirmed) || rawConfirmed.length > MAX_LINES || rawConfirmed.some((id) => typeof id !== 'string' || !UUID.test(id))) return null;
+  const confirmed = [...new Set((rawConfirmed as string[]).map((id) => id.toLowerCase()))].sort();
   const key = x['idempotency_key'];
   if (key !== undefined && (typeof key !== 'string' || !KEY.test(key))) return null;
   if (requireKey && key === undefined) return null;
   return {
     lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by,
     acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true },
+    cash_non_cash_confirmed_account_ids: confirmed,
     ...(key === undefined ? {} : { idempotency_key: key as string }),
   };
 }
 
 function payloadHash(input: CutoverInput): string {
   const lines = [...input.lines].map((l) => ({ a: l.account_id, d: money(cents(l.debit)), c: money(cents(l.credit)) })).sort((p, q) => p.a.localeCompare(q.a));
-  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, ack: input.acknowledgements })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, ack: input.acknowledgements, cash: [...input.cash_non_cash_confirmed_account_ids].sort() })).digest('hex');
 }
 
-type AccountRow = { id: string; code: string; name: string; is_active: boolean; account_type: string; statement_category: string; cash_role: string; cash_flow_category: string };
+const CASH_NAME = /(bank|cash|petty|safe|treasury|صندوق|نقد|بنك|مصرف|خزينة|خزنة)/i;
+
+type AccountRow = { id: string; code: string; name: string; name_ar: string | null; name_en: string | null; is_active: boolean; account_type: string; statement_category: string; cash_role: string; cash_flow_category: string };
 
 /** Pure input checks + heuristic warnings (read-only). Throws CutoverValidationError with a stable code for every blocker. */
 async function validateInput(client: PoolClient, companyId: string, input: CutoverInput): Promise<{ summary: CutoverSummary; net: Map<string, bigint> }> {
@@ -97,7 +105,7 @@ async function validateInput(client: PoolClient, companyId: string, input: Cutov
   if (net.size < 2) throw new CutoverValidationError('CUTOVER_LINES_INVALID');
   const ids = [...new Set([...net.keys(), input.retained_earnings_account_id])];
   const accounts = new Map((await client.query<AccountRow>(
-    'SELECT id,code,name,is_active,account_type,statement_category,cash_role,cash_flow_category FROM accounts WHERE company_id=$1 AND id=ANY($2::uuid[])', [companyId, ids],
+    'SELECT id,code,name,name_ar,name_en,is_active,account_type,statement_category,cash_role,cash_flow_category FROM accounts WHERE company_id=$1 AND id=ANY($2::uuid[])', [companyId, ids],
   )).rows.map((a) => [a.id, a]));
   for (const id of ids) if (!accounts.has(id)) throw new CutoverValidationError('CUTOVER_ACCOUNT_NOT_FOUND', { account_id: id });
   const re = accounts.get(input.retained_earnings_account_id)!;
@@ -106,6 +114,17 @@ async function validateInput(client: PoolClient, companyId: string, input: Cutov
   if (inactive.length) throw new CutoverValidationError('CUTOVER_ACCOUNT_INACTIVE', { account_ids: inactive });
   const unmapped = [...net.keys()].filter((id) => accounts.get(id)!.statement_category === 'unmapped');
   if (unmapped.length) throw new CutoverValidationError('CUTOVER_ACCOUNT_UNMAPPED', { account_ids: unmapped });
+  // Cash safeguard: a balance-sheet asset that reads like cash/bank but is classified non_cash would silently drop out of the cash-flow
+  // statement. Each such account needs the accountant's individual confirmation; classifications are never changed here.
+  const suspect = [...net].filter(([id, v]) => {
+    const a = accounts.get(id)!;
+    return v !== 0n && a.account_type === 'asset' && a.cash_role === 'non_cash' && CASH_NAME.test(`${a.name} ${a.name_ar ?? ''} ${a.name_en ?? ''}`);
+  }).map(([id]) => id);
+  const confirmedIds = input.cash_non_cash_confirmed_account_ids;
+  const stray = confirmedIds.filter((id) => !suspect.includes(id));
+  if (stray.length) throw new CutoverValidationError('CUTOVER_CASH_CONFIRMATION_INVALID', { account_ids: stray });
+  const unconfirmed = suspect.filter((id) => !confirmedIds.includes(id));
+  if (unconfirmed.length) throw new CutoverValidationError('CUTOVER_CASH_CLASSIFICATION_UNCONFIRMED', { accounts: unconfirmed.map((id) => ({ id, code: accounts.get(id)!.code, name: accounts.get(id)!.name })) });
   let debit = 0n, credit = 0n;
   for (const v of net.values()) if (v > 0n) debit += v; else credit -= v;
   if (debit !== credit || debit === 0n) throw new CutoverValidationError('CUTOVER_JOURNAL_UNBALANCED', { total_debit: money(debit), total_credit: money(credit) });
@@ -147,7 +166,7 @@ export class LedgerCutoverService {
     } catch (error) {
       if (error instanceof LedgerSourceAuthorityNotFoundError) throw error;
       if (error instanceof LedgerSourceAuthorityError) {
-        return { valid: false, blockers: [{ code: error.code }], summary: null, range_id: rangeId };
+        return { valid: false, blockers: [{ code: error.code, ...(error instanceof CutoverValidationError && error.detail !== undefined ? { detail: error.detail } : {}) }], summary: null, range_id: rangeId };
       }
       throw error;
     }
@@ -210,7 +229,7 @@ export class LedgerCutoverService {
       }
       await postJournalInTransaction(client, companyId, actor, journal.id, { cutoverAuthorityId: range.id });
 
-      const snapshot = { summary, vat_profile: profile[0] ? { id: profile[0].id, version_no: profile[0].version_no, vat_status: profile[0].vat_status, vat_filing_frequency: profile[0].vat_filing_frequency } : null, retained_earnings_account_id: input.retained_earnings_account_id };
+      const snapshot = { summary, vat_profile: profile[0] ? { id: profile[0].id, version_no: profile[0].version_no, vat_status: profile[0].vat_status, vat_filing_frequency: profile[0].vat_filing_frequency } : null, retained_earnings_account_id: input.retained_earnings_account_id, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids };
       const key = input.idempotency_key ?? `preview-${range.id}`;
       const active = (await client.query<AuthorityRange>(
         `UPDATE ledger_source_authority SET status='active',cutover_journal_id=$3,activated_by=$4,activated_at=NOW(),tb_reference=$5,tb_prepared_by=$6,
@@ -222,7 +241,7 @@ export class LedgerCutoverService {
       await this.audit.logEvent({
         company_id: companyId, actor_user_id: actor, action: 'ledger_source_authority.activate', entity_type: 'ledger_source_authority', entity_id: range.id,
         before_data: { status: 'draft' },
-        after_data: { status: 'active', from_date: range.from_date, to_date: range.to_date, cutover_journal_id: journal.id, tb_reference: input.tb_reference, tb_prepared_by: input.tb_prepared_by, acknowledgements: input.acknowledgements, totals: { total_debit: summary.total_debit, total_credit: summary.total_credit, line_count: summary.line_count }, warnings: summary.warnings.map((w) => w.code), vat_profile: snapshot.vat_profile },
+        after_data: { status: 'active', from_date: range.from_date, to_date: range.to_date, cutover_journal_id: journal.id, tb_reference: input.tb_reference, tb_prepared_by: input.tb_prepared_by, acknowledgements: input.acknowledgements, totals: { total_debit: summary.total_debit, total_credit: summary.total_credit, line_count: summary.line_count }, warnings: summary.warnings.map((w) => w.code), vat_profile: snapshot.vat_profile, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids },
         reason: range.reason,
       }, client);
       if (dryRun) await client.query('ROLLBACK'); else await client.query('COMMIT');

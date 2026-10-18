@@ -92,6 +92,45 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     expect(await h.count("SELECT COUNT(*) n FROM journal_entries WHERE company_id=$1", [co.id])).toBe(0);
   });
 
+  it('cash safeguard: a cash-like account classified non_cash blocks until each account is individually confirmed, and the evidence records it', async () => {
+    const co = await setup('cashsg');
+    await h.q("UPDATE accounts SET name='Petty cash float' WHERE id=$1", [co.recv]);
+    const id = await draft(co);
+    const seen = await preview(co, id);
+    expect(seen.json.valid).toBe(false);
+    expect(seen.json.blockers[0]).toMatchObject({ code: 'CUTOVER_CASH_CLASSIFICATION_UNCONFIRMED', detail: { accounts: [{ id: co.recv, code: 'C-AR' }] } });
+    const blocked = await activate(co, id);
+    expect([blocked.status, blocked.json.code]).toEqual([409, 'CUTOVER_CASH_CLASSIFICATION_UNCONFIRMED']);
+    expect(await cutJournals(co)).toBe(0);
+    expect(await status(id)).toBe('draft');
+    const wrong = await activate(co, id, { cash_non_cash_confirmed_account_ids: [co.recv, co.cap] });
+    expect([wrong.status, wrong.json.code]).toEqual([409, 'CUTOVER_CASH_CONFIRMATION_INVALID']);
+    expect((await activate(co, id, { cash_non_cash_confirmed_account_ids: ['not-a-uuid'] })).status).toBe(400);
+    expect((await preview(co, id, { cash_non_cash_confirmed_account_ids: [co.recv] })).json.valid).toBe(true);
+    expect(await status(id)).toBe('draft');
+    const ok = await activate(co, id, { cash_non_cash_confirmed_account_ids: [co.recv] });
+    expect(ok.status).toBe(201);
+    expect((await h.q<{ cash_role: string }>('SELECT cash_role FROM accounts WHERE id=$1', [co.recv]))[0]!.cash_role).toBe('non_cash');
+    const snap = (await h.q<{ activation_snapshot: { cash_non_cash_confirmed_account_ids: string[] } }>('SELECT activation_snapshot FROM ledger_source_authority WHERE id=$1', [id]))[0]!.activation_snapshot;
+    expect(snap.cash_non_cash_confirmed_account_ids).toEqual([co.recv]);
+    const audit = (await h.q<{ after_data: { cash_non_cash_confirmed_account_ids: string[] } }>("SELECT after_data FROM audit_log WHERE company_id=$1 AND action='ledger_source_authority.activate'", [co.id]))[0]!.after_data;
+    expect(audit.cash_non_cash_confirmed_account_ids).toEqual([co.recv]);
+  });
+
+  it('cash safeguard: a cash-classified account, a zero balance or a non-asset never needs confirmation, and confirmations are part of the idempotent payload', async () => {
+    const co = await setup('cashok');
+    await h.q("UPDATE accounts SET name='Cash clearing' WHERE id=$1", [co.cap]);
+    const id = await draft(co);
+    expect((await preview(co, id)).json.valid).toBe(true);
+    await h.q("UPDATE accounts SET name='Bank guarantee' WHERE id=$1", [co.recv]);
+    const body = cut(co, { idempotency_key: 'cash-idem-1', cash_non_cash_confirmed_account_ids: [co.recv] });
+    const first = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, body);
+    const replay = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, body);
+    const changed = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, { ...body, cash_non_cash_confirmed_account_ids: [] });
+    expect([first.status, replay.status, changed.status]).toEqual([201, 200, 409]);
+    expect(await cutJournals(co)).toBe(1);
+  });
+
   it('is idempotent: same key+payload replays (200), different payload or key conflicts', async () => {
     const co = await setup('idem');
     const id = await draft(co);
