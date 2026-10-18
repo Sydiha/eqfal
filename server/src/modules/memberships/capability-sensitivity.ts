@@ -23,6 +23,8 @@ const CRITICAL = new Set([
   'fiscal_year.close',
   'monthly_close.close',
   'monthly_close.reopen',
+  'partner.transaction.post',
+  'partner.transaction.reverse',
   'periodic_adjustment.post',
   'source_authority.activate',
   'source_authority.manage',
@@ -59,6 +61,7 @@ const SENSITIVE_EXACT = new Set([
   'obligation.settlement.create',
   'obligation.settlement.remove',
   'partner.ownership.confirm',
+  'partner.transaction.create',
   'payment.settle',
 ]);
 

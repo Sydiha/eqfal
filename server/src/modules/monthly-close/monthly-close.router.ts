@@ -88,6 +88,7 @@ export class MonthlyCloseService {
       (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND NOT (
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
+        OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
       ))::text bank_transactions,
       (SELECT COUNT(*) FROM invoice_vat_reviews r JOIN invoices i ON i.id=r.invoice_id AND i.company_id=r.company_id

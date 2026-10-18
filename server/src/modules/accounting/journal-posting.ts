@@ -8,6 +8,7 @@ import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
 import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
 import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath, assertCutoverPostingContext } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
+import { partnerJournalIsExact, partnerReversalJournalIsExact } from './partner-transaction-posting';
 
 export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
 export { FiscalYearClosedError };
@@ -31,7 +32,7 @@ type Journal = {
 };
 
 async function source(companyId: string, type: string, id: string, client: PoolClient) {
-  if (type !== 'periodic_adjustment' && !isOperationalSourceType(type)) {
+  if (type !== 'periodic_adjustment' && type !== 'partner_transaction' && type !== 'partner_transaction_reversal' && !isOperationalSourceType(type)) {
     throw new JournalPostingValidationError('Unsupported operational source type');
   }
   const row = (
@@ -224,6 +225,14 @@ export async function postJournalInTransaction(
           'Periodic adjustment journal must use the configured balance-sheet and P&L accounts',
         );
       }
+    }
+
+    if (journal.source_type === 'partner_transaction' && !(await partnerJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
+      throw new JournalPostingValidationError('Partner transaction journal must use the configured partner and cash/bank accounts');
+    }
+
+    if (journal.source_type === 'partner_transaction_reversal' && !(await partnerReversalJournalIsExact(client, companyId, id, operationalSource.context))) {
+      throw new JournalPostingValidationError('Partner transaction reversal journal must mirror the original journal');
     }
 
     await enforceVatRecognition(companyId, id, journal.source_type, journal.source_id, client);
