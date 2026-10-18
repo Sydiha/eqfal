@@ -128,7 +128,8 @@ export class LedgerSourceAuthorityService {
   constructor(private readonly db: Pool) {}
 
   async list(companyId: string): Promise<AuthorityRange[]> {
-    return (await this.db.query<AuthorityRange>(`SELECT ${COLUMNS} FROM ledger_source_authority WHERE company_id=$1 ORDER BY from_date, created_at, id`, [companyId])).rows;
+    // Read-only activation audit fields (null until C1B-3b activation) so the UI can show the cut-over journal, effective date and acknowledgements.
+    return (await this.db.query<AuthorityRange>(`SELECT ${COLUMNS},cutover_journal_id,activated_by,activated_at,tb_reference,tb_prepared_by,acknowledgements,activation_snapshot FROM ledger_source_authority WHERE company_id=$1 ORDER BY from_date, created_at, id`, [companyId])).rows;
   }
 
   /**
