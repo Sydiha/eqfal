@@ -152,4 +152,20 @@ describe('PersonalPayments', () => {
     fireEvent.click(screen.getByLabelText(/I have reviewed this payment/));
     expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
   });
+  it('keeps the confirmation checkbox inside its label and orders the actions Close, Reject, Approve in both languages', async () => {
+    for (const lang of ['en', 'ar'] as const) {
+      await i18n.changeLanguage(lang);
+      stubFetch({ '/review': () => new Response(JSON.stringify(reviewData())) });
+      const { unmount } = renderIt(ALL);
+      await screen.findByText('Taxi');
+      fireEvent.click(screen.getByRole('button', { name: lang === 'en' ? 'Review' : 'مراجعة' }));
+      const checkbox = await screen.findByRole('checkbox');
+      const label = checkbox.closest('label.pp-confirm')!;
+      expect(label.textContent).toMatch(lang === 'en' ? /I have reviewed this payment/ : /راجعتُ هذه الدفعة/);
+      expect(label.firstElementChild).toBe(checkbox);
+      const row = checkbox.closest('.pp-review-footer')!.querySelector('.pp-review-actions')!;
+      expect(Array.from(row.querySelectorAll('button')).map(b => b.textContent)).toEqual(lang === 'en' ? ['Close', 'Reject', 'Approve'] : ['إغلاق', 'رفض', 'اعتماد']);
+      unmount();
+    }
+  });
 });

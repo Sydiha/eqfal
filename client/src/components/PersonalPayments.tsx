@@ -256,11 +256,13 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
             {rv.accounts && <small>{rv.accounts.source === 'projected' ? L.projected : L.posted}</small>}
             {history && history.length > 0 && <><h4>{L.history}</h4><ul className="pp-history">{history.map(h => <li key={h.id}>{h.created_at.slice(0, 16).replace('T', ' ')} — {h.event_type}{h.reason ? `: ${h.reason}` : ''} <small dir="ltr">{h.actor_email}</small></li>)}</ul></>}
             {rv.blockers.length > 0 && <p role="status">{L.blocked} {rv.blockers.map(b => L.errors[b] ?? b).join(' ')}</p>}
-            {rp.status === 'submitted' && <label className="pp-confirm"><input type="checkbox" checked={reviewing.confirmed} onChange={e => setReviewing({ ...reviewing, confirmed: e.target.checked })} /> {L.confirmReview}</label>}
-            <div className="pp-actions">
-              {rp.status === 'submitted' && <button type="button" className="pp-primary" disabled={busy || !rv.can_decide || !reviewing.confirmed} onClick={approveReviewed}>{L.approve}</button>}
-              {rp.status === 'submitted' && <button type="button" disabled={busy} onClick={() => setRejecting({ id: rp.id, reason: '' })}>{L.reject}</button>}
-              <button type="button" onClick={() => { setReviewing(null); setRejecting(null); }}>{L.closeReview}</button>
+            <div className="pp-review-footer">
+              {rp.status === 'submitted' && <label className="pp-confirm"><input type="checkbox" checked={reviewing.confirmed} onChange={e => setReviewing({ ...reviewing, confirmed: e.target.checked })} /><span>{L.confirmReview}</span></label>}
+              <div className="pp-review-actions">
+                <button type="button" onClick={() => { setReviewing(null); setRejecting(null); }}>{L.closeReview}</button>
+                {rp.status === 'submitted' && <button type="button" disabled={busy} onClick={() => setRejecting({ id: rp.id, reason: '' })}>{L.reject}</button>}
+                {rp.status === 'submitted' && <button type="button" className="pp-primary" disabled={busy || !rv.can_decide || !reviewing.confirmed} onClick={approveReviewed}>{L.approve}</button>}
+              </div>
             </div>
           </section>;
         })()}
