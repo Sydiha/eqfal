@@ -32,7 +32,7 @@ type ReviewData = {
     obligation: { id: string; recognized_on: string; original_amount: string; counterparty_name: string } | null;
     expense_account: { code: string; name: string } | null;
     accounts: { source: 'posted' | 'projected'; debit: { code: string; name: string } | null; credit: { code: string; name: string } | null } | null;
-    blockers: string[]; is_own_submission: boolean; can_decide: boolean;
+    blockers: string[]; can_decide: boolean;
   };
   history?: Array<{ id: string; event_type: string; from_status: string | null; to_status: string | null; actor_email: string; reason: string | null; created_at: string }>;
 };
@@ -47,7 +47,7 @@ const TEXT = {
     document: 'Expense document', obligation: 'Payable obligation', expenseAccount: 'Expense account', select: 'Select…', status: 'Status', outstanding: 'Outstanding', reimbursed: 'Reimbursed', actions: 'Actions',
     review: 'Review', closeReview: 'Close', reviewTitle: 'Review before approval', submittedBy: 'Submitted by', createdBy: 'Prepared by', reviewedBy: 'Reviewed by', counterparty: 'Counterparty', supportingDocument: 'Supporting document',
     openDocument: 'Open document', paymentDate: 'Payment date', accountingDate: 'Accounting date', treatmentLabel: 'Treatment', debitAccount: 'Debit account', creditAccount: 'Credit account',
-    projected: 'Projected: nothing has been posted yet.', posted: 'Posted accounts.', history: 'History', ownSubmission: 'You submitted this payment, so another reviewer must approve or reject it.',
+    projected: 'Projected: nothing has been posted yet.', posted: 'Posted accounts.', history: 'History',
     blocked: 'Approval is currently blocked:', confirmReview: 'I have reviewed this payment, its document and the accounts above.', none2: '—',
     submit: 'Submit', approve: 'Approve', reject: 'Reject', reopen: 'Reopen as draft', remove: 'Delete', reimburse: 'Reimburse', reason: 'Rejection reason', confirmReject: 'Confirm rejection',
     bankTx: 'Company bank outflow', record: 'Record reimbursement', noBank: 'No eligible bank outflow.', empty: 'No personal payments yet.', loading: 'Loading…', error: 'Unable to load personal payments.',
@@ -63,7 +63,7 @@ const TEXT = {
       PERSONAL_PAYMENT_DOCUMENT_AMOUNT_MISMATCH: 'The amount must equal the document total.', PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING: 'The amount exceeds the obligation outstanding balance.',
       PERSONAL_PAYMENT_OVER_REIMBURSEMENT: 'The reimbursement exceeds the remaining balance.', PERSONAL_BANK_TRANSACTION_ALREADY_EXPLAINED: 'This bank transaction is already explained elsewhere.',
       PERSONAL_PAYMENT_BANK_LEDGER_UNMAPPED: 'The bank account is not linked to a ledger account.', PERSONAL_PAYMENT_VERSION_CONFLICT: 'The record changed. Reload and try again.',
-      PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN: 'You cannot approve or reject a payment you submitted.', PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'The payment changed after you opened it. Review it again.',
+      PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'The payment changed after you opened it. Review it again.',
       PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED: 'Confirm that you reviewed the payment first.', PERSONAL_PAYER_INACTIVE: 'The payer is inactive.', PERSONAL_PAYER_DUPLICATE: 'This payer is already registered.',
     } as Record<string, string>, generic: 'The action could not be completed.',
   },
@@ -74,7 +74,7 @@ const TEXT = {
     document: 'مستند المصروف', obligation: 'الذمة الدائنة', expenseAccount: 'حساب المصروف', select: 'اختر…', status: 'الحالة', outstanding: 'المتبقي', reimbursed: 'المسترد', actions: 'الإجراءات',
     review: 'مراجعة', closeReview: 'إغلاق', reviewTitle: 'المراجعة قبل الاعتماد', submittedBy: 'أرسلها', createdBy: 'أعدّها', reviewedBy: 'راجعها', counterparty: 'الطرف المقابل', supportingDocument: 'المستند الداعم',
     openDocument: 'فتح المستند', paymentDate: 'تاريخ الدفع', accountingDate: 'التاريخ المحاسبي', treatmentLabel: 'المعالجة', debitAccount: 'الحساب المدين', creditAccount: 'الحساب الدائن',
-    projected: 'متوقَّع: لم يُرحَّل شيء بعد.', posted: 'الحسابات المرحَّلة.', history: 'السجل', ownSubmission: 'أنت من أرسل هذه الدفعة، لذا يجب أن يعتمدها أو يرفضها مراجع آخر.',
+    projected: 'متوقَّع: لم يُرحَّل شيء بعد.', posted: 'الحسابات المرحَّلة.', history: 'السجل',
     blocked: 'الاعتماد متوقف حالياً:', confirmReview: 'راجعتُ هذه الدفعة ومستندها والحسابات أعلاه.', none2: '—',
     submit: 'إرسال للمراجعة', approve: 'اعتماد', reject: 'رفض', reopen: 'إعادة فتحها كمسودة', remove: 'حذف', reimburse: 'استرداد', reason: 'سبب الرفض', confirmReject: 'تأكيد الرفض',
     bankTx: 'حركة صرف من بنك الشركة', record: 'تسجيل الاسترداد', noBank: 'لا توجد حركة بنكية مؤهلة.', empty: 'لا توجد مدفوعات شخصية بعد.', loading: 'جارٍ التحميل…', error: 'تعذّر تحميل المدفوعات الشخصية.',
@@ -90,7 +90,7 @@ const TEXT = {
       PERSONAL_PAYMENT_DOCUMENT_AMOUNT_MISMATCH: 'يجب أن يساوي المبلغ إجمالي المستند.', PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING: 'المبلغ يتجاوز المتبقي من الذمة.',
       PERSONAL_PAYMENT_OVER_REIMBURSEMENT: 'الاسترداد يتجاوز الرصيد المتبقي.', PERSONAL_BANK_TRANSACTION_ALREADY_EXPLAINED: 'هذه الحركة البنكية مفسَّرة بالفعل في مسار آخر.',
       PERSONAL_PAYMENT_BANK_LEDGER_UNMAPPED: 'الحساب البنكي غير مربوط بحساب دفتري.', PERSONAL_PAYMENT_VERSION_CONFLICT: 'تغيّر السجل. أعد التحميل وحاول مجدداً.',
-      PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN: 'لا يمكنك اعتماد أو رفض دفعة أرسلتها بنفسك.', PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'تغيّرت الدفعة بعد فتحها. راجعها من جديد.',
+      PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'تغيّرت الدفعة بعد فتحها. راجعها من جديد.',
       PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED: 'أكّد أولاً أنك راجعت الدفعة.', PERSONAL_PAYER_INACTIVE: 'الدافع غير نشط.', PERSONAL_PAYER_DUPLICATE: 'هذا الدافع مسجل بالفعل.',
     } as Record<string, string>, generic: 'تعذّر تنفيذ الإجراء.',
   },
@@ -255,12 +255,11 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
             </dl>
             {rv.accounts && <small>{rv.accounts.source === 'projected' ? L.projected : L.posted}</small>}
             {history && history.length > 0 && <><h4>{L.history}</h4><ul className="pp-history">{history.map(h => <li key={h.id}>{h.created_at.slice(0, 16).replace('T', ' ')} — {h.event_type}{h.reason ? `: ${h.reason}` : ''} <small dir="ltr">{h.actor_email}</small></li>)}</ul></>}
-            {rv.is_own_submission && <p role="status">{L.ownSubmission}</p>}
             {rv.blockers.length > 0 && <p role="status">{L.blocked} {rv.blockers.map(b => L.errors[b] ?? b).join(' ')}</p>}
-            {rp.status === 'submitted' && !rv.is_own_submission && <label className="pp-confirm"><input type="checkbox" checked={reviewing.confirmed} onChange={e => setReviewing({ ...reviewing, confirmed: e.target.checked })} /> {L.confirmReview}</label>}
+            {rp.status === 'submitted' && <label className="pp-confirm"><input type="checkbox" checked={reviewing.confirmed} onChange={e => setReviewing({ ...reviewing, confirmed: e.target.checked })} /> {L.confirmReview}</label>}
             <div className="pp-actions">
               {rp.status === 'submitted' && <button type="button" className="pp-primary" disabled={busy || !rv.can_decide || !reviewing.confirmed} onClick={approveReviewed}>{L.approve}</button>}
-              {rp.status === 'submitted' && <button type="button" disabled={busy || rv.is_own_submission} onClick={() => setRejecting({ id: rp.id, reason: '' })}>{L.reject}</button>}
+              {rp.status === 'submitted' && <button type="button" disabled={busy} onClick={() => setRejecting({ id: rp.id, reason: '' })}>{L.reject}</button>}
               <button type="button" onClick={() => { setReviewing(null); setRejecting(null); }}>{L.closeReview}</button>
             </div>
           </section>;

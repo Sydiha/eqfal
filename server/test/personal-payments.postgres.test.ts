@@ -760,7 +760,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect(r.json.payment).toMatchObject({ status: 'submitted', payer_name: 'Manager M', counterparty_name: 'Supplier', treatment: 'new_expense', payment_date: '2026-03-12', accounting_date: '2026-03-10', amount: '500.00', purpose: 'Client lunch' });
     expect(r.json.review).toMatchObject({
       submitted_by_email: expect.stringContaining(`${'rv'}-sub`), document: { id: document, filename: expect.any(String) },
-      accounts: { source: 'projected', debit: { id: co.expense }, credit: { id: co.empPayable } }, blockers: [], is_own_submission: false, can_decide: true,
+      accounts: { source: 'projected', debit: { id: co.expense }, credit: { id: co.empPayable } }, blockers: [], can_decide: true,
     });
     expect(r.json.history.map((e: { event_type: string }) => e.event_type)).toEqual(['submitted']);
     // reading changes nothing
@@ -788,34 +788,65 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await other.reviewer.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'x' })).status).toBe(404);
   });
 
-  it('a user cannot approve or reject a payment they submitted, whatever the UI shows', async () => {
-    const co = await setup('sod');
-    const both = await h.user('sod-both');
-    await h.member(co.id, both.id, ['personal_payment.view', 'personal_payment.submit', 'personal_payment.review', 'personal_payment.audit.view']);
+  it('approval is capability-based: review holders may decide any payment including their own, everyone else is denied', async () => {
+    const co = await setup('cap');
+    // one person who prepared, submitted, personally paid and reviews
+    const both = await h.user('cap-both');
+    await h.member(co.id, both.id, ['personal_payment.view', 'personal_payment.create', 'personal_payment.submit', 'personal_payment.review', 'personal_payment.audit.view']);
     await both.client.login();
-    const payer = await employeePayer(co);
-    const d = await draft(co, body(co, payer.id, await doc(co)));
-    expect((await both.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
-    const view = await both.client.req('GET', `/personal-payments/${d.id}/review`);
-    expect(view.json.review).toMatchObject({ is_own_submission: true, can_decide: false });
-    const own = await approve(both as Co['reviewer'], d.id);
-    expect(own.status).toBe(403);
-    expect(own.json.code).toBe('PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN');
-    const rej = await both.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'mine' });
-    expect(rej.status).toBe(403);
-    expect(rej.json.code).toBe('PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN');
-    expect((await h.q<{ status: string; journal_entry_id: string | null }>('SELECT status,journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]).toEqual({ status: 'submitted', journal_entry_id: null });
-    expect(await journalCount(co, 'personal_payment')).toBe(0);
-    // a different reviewer decides; the submitter still cannot, even to replay an approved payment
-    expect((await approve(co.reviewer, d.id)).status).toBe(200);
-    expect((await approve(both as Co['reviewer'], d.id)).status).toBe(403);
+    // a person with create and submit but no review capability
+    const maker = await h.user('cap-maker');
+    await h.member(co.id, maker.id, ['personal_payment.view', 'personal_payment.create', 'personal_payment.submit']);
+    await maker.client.login();
+    const own = await employeePayer(co, { user_id: both.id, display_name: 'Both (employee)' });
+    const mk = async (u: typeof both, payer: string) => {
+      const r = await u.client.req('POST', '/personal-payments', body(co, payer, await doc(co)));
+      expect(r.status, JSON.stringify(r.json)).toBe(201);
+      expect((await u.client.req('POST', `/personal-payments/${r.json.payment.id}/submit`, {})).status).toBe(200);
+      return r.json.payment.id as string;
+    };
+    const row = async (id: string) => (await h.q<{ status: string; submitted_by: string; created_by: string; reviewed_by: string | null; journal_entry_id: string | null }>(
+      'SELECT status,submitted_by,created_by,reviewed_by,journal_entry_id FROM personal_payments WHERE id=$1', [id]))[0]!;
+    const actors = async (id: string) => (await h.q<{ event_type: string; actor_user_id: string }>('SELECT event_type,actor_user_id FROM personal_payment_events WHERE payment_id=$1 ORDER BY created_at,id', [id]));
+
+    // 1. created, submitted and personally paid by the reviewer: approval succeeds and both identities are recorded
+    const mine = await mk(both, own.id);
+    const view = await both.client.req('GET', `/personal-payments/${mine}/review`);
+    expect(view.json.review.can_decide).toBe(true);
+    expect(view.json.review).not.toHaveProperty('is_own_submission');
+    const a = await approve(both as Co['reviewer'], mine);
+    expect(a.status, JSON.stringify(a.json)).toBe(200);
+    expect(await row(mine)).toMatchObject({ status: 'approved', submitted_by: both.id, created_by: both.id, reviewed_by: both.id });
+    expect((await actors(mine)).map((e) => `${e.event_type}:${e.actor_user_id === both.id ? 'both' : 'other'}`)).toEqual(['submitted:both', 'approved:both']);
+    expect((await h.q<{ actor: string }>("SELECT actor_user_id actor FROM audit_log WHERE entity_id=$1 AND action='personal_payment.approve'", [mine]))[0]!.actor).toBe(both.id);
     expect(await journalCount(co, 'personal_payment')).toBe(1);
-    // the approval stays attributed to the independent reviewer in the audit trail
-    expect((await h.q<{ actor: string }>("SELECT actor_user_id actor FROM audit_log WHERE entity_id=$1 AND action='personal_payment.approve'", [d.id]))[0]!.actor).toBe(co.reviewer.id);
-    // a reopened and resubmitted payment is judged against its new submitter
-    const d2 = await draft(co, body(co, payer.id, await doc(co)));
-    expect((await co.submitter.client.req('POST', `/personal-payments/${d2.id}/submit`, {})).status).toBe(200);
-    expect((await both.client.req('POST', `/personal-payments/${d2.id}/reject`, { reason: 'not mine, may reject' })).status).toBe(200);
+
+    // 2. rejecting one's own submission works and stays attributed
+    const rejectedOwn = await mk(both, own.id);
+    expect((await both.client.req('POST', `/personal-payments/${rejectedOwn}/reject`, { reason: 'duplicate' })).status).toBe(200);
+    expect(await row(rejectedOwn)).toMatchObject({ status: 'rejected', submitted_by: both.id, reviewed_by: both.id });
+
+    // 3. a payment submitted by someone else is approved by the reviewer; submitter and approver are different people on the record
+    const payer = await employeePayer(co, { user_id: co.employee.id });
+    const theirs = await draft(co, body(co, payer.id, await doc(co)));
+    expect((await co.submitter.client.req('POST', `/personal-payments/${theirs.id}/submit`, {})).status).toBe(200);
+    expect((await approve(both as Co['reviewer'], theirs.id)).status).toBe(200);
+    expect(await row(theirs.id)).toMatchObject({ status: 'approved', submitted_by: co.submitter.id, reviewed_by: both.id });
+    expect(await journalCount(co, 'personal_payment')).toBe(2);
+
+    // 4. without personal_payment.review nobody decides: not the submitter, not the preparer, not someone who made and submitted their own
+    const denied = await mk(maker, payer.id);
+    for (const u of [maker, co.submitter, co.preparer, co.viewer, co.reimburser]) {
+      expect((await approve(u as Co['reviewer'], denied)).status).toBe(403);
+      expect((await u.client.req('POST', `/personal-payments/${denied}/reject`, { reason: 'x' })).status).toBe(403);
+    }
+    expect((await row(denied)).status).toBe('submitted');
+    expect(await journalCount(co, 'personal_payment')).toBe(2);
+
+    // 5. company isolation still applies to a reviewer of another company
+    const other = await setup('cap-x');
+    expect((await approve(other.reviewer, denied, { version: 1 })).status).toBe(404);
+    expect((await row(denied)).status).toBe('submitted');
   });
 
   it('approval requires an explicit confirmation of the reviewed version before anything is posted', async () => {

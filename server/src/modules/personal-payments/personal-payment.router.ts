@@ -115,7 +115,7 @@ personalPaymentRouter.get('/personal-payments/:id/review', ...read, run(async (s
   const caps = ctx(q).capabilities;
   const audit = caps.includes('personal_payment.audit.view');
   const reviewer = caps.includes('personal_payment.review');
-  r.json(await s.review(ctx(q).activeCompanyId, ctx(q).user.id, idParam(q), { includeAccounts: reviewer || audit, includeHistory: reviewer || audit, includeJournalLinks: audit }));
+  r.json(await s.review(ctx(q).activeCompanyId, idParam(q), { includeAccounts: reviewer || audit, includeHistory: reviewer || audit, includeJournalLinks: audit }));
 }));
 
 personalPaymentRouter.get('/personal-payments/:id', ...read, run(async (s, q, r) => {

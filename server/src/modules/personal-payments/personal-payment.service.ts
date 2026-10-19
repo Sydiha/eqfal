@@ -36,7 +36,7 @@ type PaymentRow = {
   id: string; company_id: string; payer_id: string; payer_name?: string; payer_kind?: 'partner' | 'employee'; treatment: Treatment; payment_date: string; accounting_date: string;
   amount: string; currency_code: string; purpose: string; counterparty_id: string | null; counterparty_name?: string | null; document_id: string | null; obligation_id: string | null;
   expense_account_id: string | null; status: Status; debit_account_id: string | null; credit_account_id: string | null; journal_entry_id: string | null;
-  submitted_at: string | null; reviewed_at: string | null; rejection_reason: string | null; version: number; created_at: string; submitted_by?: string | null;
+  submitted_at: string | null; reviewed_at: string | null; rejection_reason: string | null; version: number; created_at: string;
   reimbursed_amount?: string; outstanding_amount?: string; settlement_status?: 'none' | 'partial' | 'full';
 };
 const COLUMNS = `p.id,p.company_id,p.payer_id,p.treatment,p.payment_date::text,p.accounting_date::text,p.amount::text,p.currency_code,p.purpose,p.counterparty_id,p.document_id,
@@ -219,13 +219,13 @@ export class PersonalPaymentService {
    * Read-only review view: everything a reviewer must see before approving. For a payment not yet approved the accounts are the projection approval
    * would use (nothing is written); once approved they are the posted snapshot. `blockers` lists why approval would currently be refused.
    */
-  async review(companyId: string, actor: string, id: string, o: { includeAccounts: boolean; includeHistory: boolean; includeJournalLinks: boolean }) {
+  async review(companyId: string, id: string, o: { includeAccounts: boolean; includeHistory: boolean; includeJournalLinks: boolean }) {
     const { payment, reimbursements } = await this.get(companyId, id, o.includeJournalLinks);
     const x = (await this.db.query<{
-      submitted_by: string | null; submitted_by_email: string | null; created_by_email: string | null; reviewed_by_email: string | null;
+      submitted_by_email: string | null; created_by_email: string | null; reviewed_by_email: string | null;
       document_filename: string | null; document_date: string | null; document_total: string | null; expense_code: string | null; expense_name: string | null;
     }>(
-      `SELECT p.submitted_by, su.email submitted_by_email, cu.email created_by_email, ru.email reviewed_by_email,
+      `SELECT su.email submitted_by_email, cu.email created_by_email, ru.email reviewed_by_email,
               d.original_filename document_filename, d.document_date::text document_date, d.total_amount::text document_total, ea.code expense_code, ea.name expense_name
          FROM personal_payments p
          LEFT JOIN users su ON su.id=p.submitted_by LEFT JOIN users cu ON cu.id=p.created_by LEFT JOIN users ru ON ru.id=p.reviewed_by
@@ -262,7 +262,6 @@ export class PersonalPaymentService {
     const history = o.includeHistory ? (await this.db.query(
       `SELECT e.id, e.event_type, e.from_status, e.to_status, e.actor_user_id, u.email actor_email, e.reason, e.amount::text, e.created_at${o.includeJournalLinks ? ', e.journal_entry_id, e.reimbursement_id' : ''}
          FROM personal_payment_events e JOIN users u ON u.id=e.actor_user_id WHERE e.payment_id=$1 AND e.company_id=$2 ORDER BY e.created_at, e.id`, [id, companyId])).rows : undefined;
-    const own = x.submitted_by !== null && x.submitted_by === actor;
     return {
       payment: o.includeAccounts ? payment : { ...payment, debit_account_id: null, credit_account_id: null },
       reimbursements,
@@ -273,8 +272,7 @@ export class PersonalPaymentService {
         expense_account: x.expense_code ? { code: x.expense_code, name: x.expense_name } : null,
         accounts: o.includeAccounts ? { source, debit: await accountOf(debitId), credit: await accountOf(creditId) } : null,
         blockers: o.includeAccounts ? blockers : [],
-        is_own_submission: own,
-        can_decide: payment.status === 'submitted' && !own && (!o.includeAccounts || blockers.length === 0),
+        can_decide: payment.status === 'submitted' && (!o.includeAccounts || blockers.length === 0),
       },
       ...(history ? { history } : {}),
     };
@@ -372,15 +370,9 @@ export class PersonalPaymentService {
   }
 
   private async lockRow(c: PoolClient, companyId: string, id: string): Promise<PaymentRow> {
-    const row = (await c.query<PaymentRow>(`SELECT ${COLUMNS}, p.submitted_by FROM personal_payments p WHERE p.id=$1 AND p.company_id=$2 FOR UPDATE`, [id, companyId])).rows[0];
+    const row = (await c.query<PaymentRow>(`SELECT ${COLUMNS} FROM personal_payments p WHERE p.id=$1 AND p.company_id=$2 FOR UPDATE`, [id, companyId])).rows[0];
     if (!row) throw notFound();
     return row;
-  }
-  /** Separation of duties, enforced here and not by the UI: whoever submitted a payment can neither approve nor reject it. */
-  private assertNotOwnSubmission(row: PaymentRow, actor: string) {
-    if (row.submitted_by && row.submitted_by === actor) {
-      throw new PersonalPaymentError(403, 'PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN', 'You cannot approve or reject a personal payment you submitted');
-    }
   }
   private inputOf(r: PaymentRow): PaymentInput {
     return { payerId: r.payer_id, treatment: r.treatment, paymentDate: r.payment_date, amount: r.amount, purpose: r.purpose, counterpartyId: r.counterparty_id,
@@ -450,7 +442,6 @@ export class PersonalPaymentService {
   async approve(companyId: string, actor: string, id: string, reviewedVersion: number, includeAudit = false) {
     return this.tx(async (c) => {
       const row = await this.lockRow(c, companyId, id);
-      this.assertNotOwnSubmission(row, actor);
       if (row.status === 'approved') return { payment: (await this.get(companyId, id, includeAudit, c)).payment, replayed: true };
       if (row.status !== 'submitted') throw conflict('PERSONAL_PAYMENT_NOT_SUBMITTED', 'Only a submitted personal payment can be approved');
       // The confirmation names the exact version the reviewer looked at; a payment changed since then must be reviewed again.
@@ -495,7 +486,6 @@ export class PersonalPaymentService {
   async reject(companyId: string, actor: string, id: string, reason: string) {
     return this.tx(async (c) => {
       const row = await this.lockRow(c, companyId, id);
-      this.assertNotOwnSubmission(row, actor);
       if (row.status !== 'submitted') throw conflict('PERSONAL_PAYMENT_NOT_SUBMITTED', 'Only a submitted personal payment can be rejected');
       await c.query("UPDATE personal_payments SET status='rejected', reviewed_by=$3, reviewed_at=NOW(), rejection_reason=$4, version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status='submitted'", [id, companyId, actor, reason]);
       await this.event(c, companyId, id, actor, { type: 'rejected', from: 'submitted', to: 'rejected', reason });
