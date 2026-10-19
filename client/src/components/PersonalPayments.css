@@ -1,0 +1,25 @@
+.personal-payments { display: grid; gap: 12px; }
+.personal-payments header p { margin: 4px 0 0; color: var(--text-muted, #667085); }
+.personal-payments .pp-form { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; max-width: 560px; }
+.personal-payments .pp-form label { display: grid; gap: 4px; font-weight: 500; }
+.personal-payments .pp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.personal-payments .pp-message { padding: 8px 12px; border-radius: 8px; background: #fdecea; color: #8a1c1c; }
+.personal-payments small { color: var(--text-muted, #667085); }
+.personal-payments .pp-primary { align-self: start; }
+.personal-payments .pp-review { max-width: 720px; }
+.personal-payments .pp-facts { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 4px 12px; margin: 0; }
+.personal-payments .pp-facts dt { color: var(--text-muted, #667085); }
+.personal-payments .pp-facts dd { margin: 0; overflow-wrap: anywhere; }
+.personal-payments .pp-history { margin: 0; padding-inline-start: 18px; }
+/* Review footer: the confirmation and the actions. The workspace-wide input rule (width:100%) must not stretch the checkbox. */
+.personal-payments .pp-review-footer { display: grid; gap: 12px; margin-block-start: 4px; padding-block-start: 12px; border-block-start: 1px solid var(--border, #d9dee7); }
+.personal-payments .pp-review .pp-confirm { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-weight: 500; line-height: 1.5; text-align: start; }
+.personal-payments .pp-review .pp-confirm input[type="checkbox"] { flex: 0 0 auto; width: 18px; min-width: 18px; height: 18px; min-height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--brand-teal, #00b894); }
+.personal-payments .pp-review .pp-confirm span { flex: 1 1 auto; min-width: 0; }
+.personal-payments .pp-review-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.personal-payments .pp-review-actions button { min-width: 96px; }
+@media (max-width: 560px) {
+  .personal-payments .pp-facts { grid-template-columns: 1fr; }
+  .personal-payments .pp-review-actions { flex-direction: column-reverse; }
+  .personal-payments .pp-review-actions button { width: 100%; }
+}

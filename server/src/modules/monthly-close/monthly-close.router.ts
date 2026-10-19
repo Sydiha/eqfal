@@ -50,15 +50,20 @@ export class MonthlyCloseService {
       FROM material m JOIN custody_document_allocations a ON a.document_id=m.id AND a.company_id=$1
       LEFT JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted'
       WHERE m.document_type='expense' GROUP BY m.id,m.total_amount
+    ), personal_path AS (
+      SELECT m.id document_id,(p.amount=m.total_amount) amount_ok,EXISTS(SELECT 1 FROM journal_entries j WHERE j.company_id=$1 AND j.source_type='personal_payment' AND j.source_id=p.id AND j.status='posted') posted
+      FROM material m JOIN personal_payments p ON p.document_id=m.id AND p.company_id=$1 AND p.status='approved' WHERE m.document_type='expense'
     ), recognition AS (
       SELECT m.id,m.document_type,m.review_status,m.vat_amount,
-       CASE WHEN m.document_type='expense' THEN ((op.document_id IS NOT NULL)::int+(cp.document_id IS NOT NULL)::int)=1 AND COALESCE(op.posted,cp.amount_ok AND cp.posted,FALSE)
+       CASE WHEN m.document_type='expense' THEN ((op.document_id IS NOT NULL)::int+(cp.document_id IS NOT NULL)::int+(pp.document_id IS NOT NULL)::int)=1 AND COALESCE(op.posted,cp.amount_ok AND cp.posted,pp.amount_ok AND pp.posted,FALSE)
             ELSE op.document_id IS NOT NULL AND op.posted END recognition_ok
-      FROM material m LEFT JOIN obligation_path op ON op.document_id=m.id LEFT JOIN custody_path cp ON cp.document_id=m.id
+      FROM material m LEFT JOIN obligation_path op ON op.document_id=m.id LEFT JOIN custody_path cp ON cp.document_id=m.id LEFT JOIN personal_path pp ON pp.document_id=m.id
     ), recognition_journals AS (
       SELECT o.document_id,j.id journal_id FROM obligations o JOIN journal_entries j ON j.company_id=o.company_id AND j.source_type='obligation' AND j.source_id=o.id AND j.status='posted' WHERE o.company_id=$1
       UNION ALL
       SELECT a.document_id,j.id FROM custody_document_allocations a JOIN journal_entries j ON j.company_id=a.company_id AND j.source_type='custody_allocation' AND j.source_id=a.id AND j.status='posted' WHERE a.company_id=$1
+      UNION ALL
+      SELECT p.document_id,j.id FROM personal_payments p JOIN journal_entries j ON j.company_id=p.company_id AND j.source_type='personal_payment' AND j.source_id=p.id AND j.status='posted' WHERE p.company_id=$1 AND p.document_id IS NOT NULL
     ), vat_lines AS (
       SELECT r.id document_id,
        COALESCE(SUM(CASE WHEN r.document_type='sale' AND l.memo='VAT_OUTPUT' AND a.account_type='liability' AND l.debit=0 THEN l.credit WHEN r.document_type<>'sale' AND l.memo='VAT_INPUT' AND a.account_type='asset' AND l.credit=0 THEN l.debit ELSE 0 END),0) vat_covered,
@@ -72,7 +77,8 @@ export class MonthlyCloseService {
   private async blockers(companyId:string,fiscalYearId:string,start:string,end:string,client:PoolClient|Pool=this.db,capture?:{reconciliation?:CompanyReconciliation}):Promise<Blockers>{
     const {rows}=await client.query<RequirementRow>(`SELECT
       (SELECT COUNT(*) FROM documents WHERE company_id=$1 AND document_date BETWEEN $2 AND $3 AND status IN ('uploaded','needs_review','incomplete'))::text documents,
-      (SELECT COUNT(*) FROM obligations WHERE company_id=$1 AND recognized_on BETWEEN $2 AND $3 AND NOT is_cancelled AND verification_status='unconfirmed')::text obligations,
+      ((SELECT COUNT(*) FROM obligations WHERE company_id=$1 AND recognized_on BETWEEN $2 AND $3 AND NOT is_cancelled AND verification_status='unconfirmed')
+        + (SELECT COUNT(*) FROM personal_payments pp WHERE pp.company_id=$1 AND pp.status IN ('draft','submitted') AND pp.accounting_date BETWEEN $2 AND $3))::text obligations,
       (SELECT COUNT(*) FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$4 AND status<>'approved')::text opening_balances,
       (SELECT COUNT(DISTINCT adjustment_id) FROM (
         SELECT a.id adjustment_id

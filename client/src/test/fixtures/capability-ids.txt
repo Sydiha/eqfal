@@ -113,6 +113,13 @@ periodic_adjustment.post
 periodic_adjustment.review
 periodic_adjustment.submit
 periodic_adjustment.view
+personal_payment.audit.view
+personal_payment.create
+personal_payment.payer.manage
+personal_payment.reimburse
+personal_payment.review
+personal_payment.submit
+personal_payment.view
 report.view
 tax_workpaper.adjustment.create
 tax_workpaper.adjustment.delete

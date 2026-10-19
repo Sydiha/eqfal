@@ -76,6 +76,8 @@ describe('BankStatementReconciliation', () => {
     mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     const { unmount } = renderIt({ canManageStatements: true });
+    await screen.findByText('Draft');   // initial load finished: a late load would otherwise reset the form errors asserted below
+    await screen.findByText('Reconciled');
     fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
     expect((await screen.findAllByText('This field is required')).length).toBeGreaterThanOrEqual(3);
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
@@ -86,6 +88,10 @@ describe('BankStatementReconciliation', () => {
     await i18n.changeLanguage('ar');
     mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
     const ui = renderIt({ canManageStatements: true });
+    await screen.findByText('DRAFT-1');
+    const arFetch = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    await waitFor(() => expect(arFetch.mock.calls.some(([u]) => String(u).startsWith('/api/bank-reconciliation/preview'))).toBe(true));
+    await new Promise(resolve => setTimeout(resolve, 50));   // let the preview response land
     fireEvent.click(await screen.findByRole('button', { name: 'حفظ كمسودة' }));
     expect((await screen.findAllByText('هذا الحقل مطلوب')).length).toBeGreaterThanOrEqual(3);
     expect(ui.container.querySelector('.bank-statement-reconciliation')?.getAttribute('dir')).toBe('rtl');
