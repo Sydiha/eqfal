@@ -48,7 +48,7 @@ describe('personal payments: migration 089 and capabilities', () => {
     for (const c of CAPABILITIES) expect(router).toContain(`'${c}'`);
     expect(router).toMatch(/const write = \[requireSameOrigin/);
     const handlers = router.match(/personalPaymentRouter\.(get|post|patch|delete|put)\(/g) ?? [];
-    expect(handlers.length).toBe(16);
+    expect(handlers.length).toBe(17);
     const writes = router.match(/personalPaymentRouter\.(post|patch|delete|put)\([^\n]*/g) ?? [];
     for (const w of writes) expect(w).toContain('...write');
   });

@@ -111,6 +111,13 @@ personalPaymentRouter.get('/personal-payments', ...read, run(async (s, q, r) => 
   r.json(await s.list(ctx(q).activeCompanyId, { payerId, status: status as string | undefined, from: from as string | undefined, to: to as string | undefined, limit }));
 }));
 
+personalPaymentRouter.get('/personal-payments/:id/review', ...read, run(async (s, q, r) => {
+  const caps = ctx(q).capabilities;
+  const audit = caps.includes('personal_payment.audit.view');
+  const reviewer = caps.includes('personal_payment.review');
+  r.json(await s.review(ctx(q).activeCompanyId, ctx(q).user.id, idParam(q), { includeAccounts: reviewer || audit, includeHistory: reviewer || audit, includeJournalLinks: audit }));
+}));
+
 personalPaymentRouter.get('/personal-payments/:id', ...read, run(async (s, q, r) => {
   r.json(await s.get(ctx(q).activeCompanyId, idParam(q), ctx(q).capabilities.includes('personal_payment.audit.view')));
 }));
@@ -143,8 +150,10 @@ personalPaymentRouter.post('/personal-payments/:id/submit', ...write, requireCap
 
 personalPaymentRouter.post('/personal-payments/:id/approve', ...write, requireCapability('personal_payment.review'), run(async (s, q, r) => {
   const id = idParam(q);
-  if (!emptyBody(q.body)) throw bad();
-  r.json(await s.approve(ctx(q).activeCompanyId, ctx(q).user.id, id, ctx(q).capabilities.includes('personal_payment.audit.view')));
+  const b = q.body;
+  if (!plain(b) || !only(b, ['confirm_review', 'version'])) throw bad();
+  if (b['confirm_review'] !== true) throw new PersonalPaymentError(400, 'PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED', 'Approval requires explicit confirmation that the payment was reviewed');
+  r.json(await s.approve(ctx(q).activeCompanyId, ctx(q).user.id, id, version(b['version']), ctx(q).capabilities.includes('personal_payment.audit.view')));
 }));
 
 personalPaymentRouter.post('/personal-payments/:id/reject', ...write, requireCapability('personal_payment.review'), run(async (s, q, r) => {

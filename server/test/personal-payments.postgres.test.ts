@@ -85,10 +85,15 @@ describeDatabase('personal payments (PostgreSQL)', () => {
   async function approved(co: Co, payer: string, o: Record<string, unknown> = {}, total = '500.00') {
     const d = await draft(co, body(co, payer, await doc(co, total), { amount: total, ...o }));
     expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
-    const r = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    const r = await approve(co.reviewer, d.id);
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     return d.id;
   }
+  /** Approval takes an explicit confirmation naming the version that was reviewed; this reads the current version the way the review screen does. */
+  const approve = async (u: Co['reviewer'], id: string, o: Record<string, unknown> = {}) => {
+    const g = await u.client.req('GET', `/personal-payments/${id}`);
+    return u.client.req('POST', `/personal-payments/${id}/approve`, { confirm_review: true, version: g.json.payment?.version ?? 1, ...o });
+  };
   const lines = (journal: string) => h.q<{ account_id: string; debit: string; credit: string; memo: string }>('SELECT account_id,debit::text,credit::text,memo FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence', [journal]);
   const reimburse = (co: Co, payment: string, bankTransactionId: string) => co.reimburser.client.req('POST', `/personal-payments/${payment}/reimbursements`, { bank_transaction_id: bankTransactionId });
   const journalCount = (co: Co, type: string) => h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type=$2', [co.id, type]);
@@ -103,11 +108,11 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const d = await draft(co, body(co, payer.id, document));
     expect((await co.preparer.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(403);
     expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
-    expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(403);
-    expect((await co.preparer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(403);
+    expect((await approve(co.submitter, d.id)).status).toBe(403);
+    expect((await approve(co.preparer, d.id)).status).toBe(403);
     expect((await co.viewer.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'x' })).status).toBe(403);
-    expect((await co.reimburser.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(403);
-    expect((await co.reviewer2.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    expect((await approve(co.reimburser, d.id)).status).toBe(403);
+    expect((await approve(co.reviewer2, d.id)).status).toBe(200);
     expect((await co.viewer.client.req('POST', `/personal-payments/${d.id}/reimbursements`, { bank_transaction_id: randomUUID() })).status).toBe(403);
     expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/reimbursements`, { bank_transaction_id: randomUUID() })).status).toBe(403);
     // view-only users read the register; financial/audit history needs its own capability
@@ -193,7 +198,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect(ledger.movements.filter((m: { kind: string }) => m.kind === 'personal_payment')).toHaveLength(1);
     expect(ledger.classes.current).toMatchObject({ increases: '500.00', decreases: '0.00', closing_balance: '500.00' });
     // approving again (replay) never duplicates the statement row or the journal
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${paymentId}/approve`, {})).json.replayed).toBe(true);
+    expect((await approve(co.reviewer, paymentId)).json.replayed).toBe(true);
     const bt = await bankTx(co, '2026-04-01', '-200.00');
     expect((await reimburse(co, paymentId, bt)).status).toBe(201);
     ledger = (await co.owner.client.req('GET', `/partners/${co.partnerA}/ledger?from=2026-01-01&to=2026-12-31`)).json;
@@ -217,7 +222,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     await co.owner.client.req('PUT', `/partners/${co.partnerA}/account-mappings/current`, { account_id: co.currentA });
     expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
     await co.owner.client.req('DELETE', `/partners/${co.partnerA}/account-mappings/current`);
-    const a = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    const a = await approve(co.reviewer, d.id);
     expect(a.status).toBe(409);
     expect(a.json.code).toBe('PERSONAL_PAYMENT_MAPPING_MISSING');
     expect(await journalCount(co, 'personal_payment')).toBe(0);
@@ -227,7 +232,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const d2 = await draft(co, body(co, emp.id, await doc(co)));
     await co.submitter.client.req('POST', `/personal-payments/${d2.id}/submit`, {});
     await h.q('UPDATE accounts SET is_active=false WHERE id=$1', [co.empPayable]);
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d2.id}/approve`, {})).json.code).toBe('PERSONAL_PAYMENT_MAPPING_MISSING');
+    expect((await approve(co.reviewer, d2.id)).json.code).toBe('PERSONAL_PAYMENT_MAPPING_MISSING');
     expect(await journalCount(co, 'personal_payment')).toBe(0);
   });
 
@@ -314,7 +319,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const payer = await employeePayer(co);
     const d = await draft(co, body(co, payer.id, await doc(co)));
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
-    const approvals = await Promise.all([1, 2, 3].map(() => co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})));
+    const approvals = await Promise.all([1, 2, 3].map(() => approve(co.reviewer, d.id)));
     expect(approvals.map((r) => r.status)).toEqual([200, 200, 200]);
     expect(approvals.filter((r) => r.json.replayed === false)).toHaveLength(1);
     expect(await journalCount(co, 'personal_payment')).toBe(1);
@@ -361,7 +366,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await co.preparer.client.req('POST', '/personal-payments', req({ document_id: await doc(co) }))).status).toBe(400);
     const d = await draft(co, req({}));
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
-    const a = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    const a = await approve(co.reviewer, d.id);
     expect(a.status, JSON.stringify(a.json)).toBe(200);
     const journal = (await h.q<{ journal_entry_id: string }>('SELECT journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]!.journal_entry_id;
     expect(await lines(journal)).toEqual([
@@ -384,7 +389,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     // full outstanding can still be reclassified; reimbursement then settles the individual payable only
     const d2 = await draft(co, req({ amount: '300.00' }));
     await co.submitter.client.req('POST', `/personal-payments/${d2.id}/submit`, {});
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d2.id}/approve`, {})).status).toBe(200);
+    expect((await approve(co.reviewer, d2.id)).status).toBe(200);
     expect((await h.q<{ n: string }>('SELECT obligation_adjustment_net($1,$2)::text n', [ob, co.id]))[0]!.n).toBe('-800.00');
     expect((await reimburse(co, d.id, await bankTx(co, '2026-04-02', '-500.00'))).status).toBe(201);
     expect(await journalCount(co, 'personal_payment')).toBe(2);
@@ -445,7 +450,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await co.preparer.client.req('PATCH', `/personal-payments/${d.id}`, { ...body(co, payer.id, await doc(co)), version: 99 })).json.code).toBe('PERSONAL_PAYMENT_VERSION_CONFLICT');
     const edited = await co.preparer.client.req('PATCH', `/personal-payments/${d.id}`, { ...body(co, payer.id, await doc(co), { purpose: 'Edited' }), version: d.version });
     expect(edited.status, JSON.stringify(edited.json)).toBe(200);
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).json.code).toBe('PERSONAL_PAYMENT_NOT_SUBMITTED');
+    expect((await approve(co.reviewer, d.id)).json.code).toBe('PERSONAL_PAYMENT_NOT_SUBMITTED');
     expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
     // submitted: no edits, no deletes, even straight in SQL
     expect((await co.preparer.client.req('PATCH', `/personal-payments/${d.id}`, { ...body(co, payer.id, await doc(co)), version: edited.json.payment.version + 1 })).json.code).toBe('PERSONAL_PAYMENT_NOT_DRAFT');
@@ -458,13 +463,13 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const rej = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'Receipt unreadable' });
     expect(rej.json.payment).toMatchObject({ status: 'rejected', rejection_reason: 'Receipt unreadable' });
     expect(await journalCount(co, 'personal_payment')).toBe(0);
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).json.code).toBe('PERSONAL_PAYMENT_NOT_SUBMITTED');
+    expect((await approve(co.reviewer, d.id)).json.code).toBe('PERSONAL_PAYMENT_NOT_SUBMITTED');
     await expect(h.q("UPDATE personal_payments SET purpose='x' WHERE id=$1", [d.id])).rejects.toThrow(/reopened as a draft/);
     // correction: reopen, fix, resubmit, approve; the history keeps every step
     expect((await co.viewer.client.req('POST', `/personal-payments/${d.id}/reopen`, {})).status).toBe(403);
     expect((await co.preparer.client.req('POST', `/personal-payments/${d.id}/reopen`, {})).json.payment.status).toBe('draft');
     expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    expect((await approve(co.reviewer, d.id)).status).toBe(200);
     const history = (await co.reviewer.client.req('GET', `/personal-payments/${d.id}`)).json.history.map((e: { event_type: string }) => e.event_type);
     expect(history).toEqual(['submitted', 'rejected', 'reopened', 'submitted', 'approved']);
     // approved: immutable and not deletable; events are append-only; a reopened draft with history cannot be deleted
@@ -487,14 +492,14 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const d = await draft(co, body(co, payer.id, await doc(co)));
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
     await h.q("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,'2026-03-01','2026-03-31','closed')", [co.id, co.fy]);
-    const closed = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    const closed = await approve(co.reviewer, d.id);
     expect(closed.status).toBe(409);
     expect(closed.json.code).toBe('PERSONAL_PAYMENT_PERIOD_CLOSED');
     expect(await journalCount(co, 'personal_payment')).toBe(0);
     expect((await co.preparer.client.req('POST', '/personal-payments', body(co, payer.id, await doc(co)))).json.code).toBe('PERSONAL_PAYMENT_PERIOD_CLOSED');
     await h.q("UPDATE monthly_close_periods SET status='open' WHERE company_id=$1", [co.id]);
     await seedActiveAuthorityRange(h.db, co.id, co.owner.id, '2026-03-01', '2026-03-31');
-    const external = await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    const external = await approve(co.reviewer, d.id);
     expect(external.status).toBe(409);
     expect(JSON.stringify(external.json)).toMatch(/AUTHORITY|external/i);
     expect(await journalCount(co, 'personal_payment')).toBe(0);
@@ -504,7 +509,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const d2 = await draft(co2, body(co2, payer2.id, await doc(co2)));
     await co2.submitter.client.req('POST', `/personal-payments/${d2.id}/submit`, {});
     await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [co2.fy]);
-    expect((await co2.reviewer.client.req('POST', `/personal-payments/${d2.id}/approve`, {})).json.code).toBe('PERSONAL_PAYMENT_FISCAL_YEAR_CLOSED');
+    expect((await approve(co2.reviewer, d2.id)).json.code).toBe('PERSONAL_PAYMENT_FISCAL_YEAR_CLOSED');
     // a closed period also blocks a reimbursement dated in it
     const co3 = await setup('period3');
     const payer3 = await employeePayer(co3);
@@ -523,7 +528,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     const payerA = await employeePayer(a);
     const idA = await approved(a, payerA.id);
     for (const [method, url, payload] of [
-      ['GET', `/personal-payments/${idA}`], ['POST', `/personal-payments/${idA}/approve`, {}], ['POST', `/personal-payments/${idA}/reject`, { reason: 'x' }],
+      ['GET', `/personal-payments/${idA}`], ['POST', `/personal-payments/${idA}/approve`, { confirm_review: true, version: 1 }], ['GET', `/personal-payments/${idA}/review`], ['POST', `/personal-payments/${idA}/reject`, { reason: 'x' }],
       ['POST', `/personal-payments/${idA}/reopen`, {}], ['POST', `/personal-payments/${idA}/submit`, {}], ['PATCH', `/personal-payments/payers/${payerA.id}`, { is_active: false, version: 1 }],
       ['GET', `/personal-payments/${idA}/reimbursable-bank-transactions`],
     ] as const) {
@@ -579,7 +584,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect(blockers['ledger']).toBeGreaterThan(0);                // the approved document has no recognition yet
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
     expect((await readiness())['obligations']).toBe(1);           // still pending review
-    await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
+    await approve(co.reviewer, d.id);
     blockers = await readiness();
     expect(blockers['obligations']).toBe(0);
     expect(blockers['ledger']).toBe(0);                           // posted personal payment is a valid recognition path for the expense document
@@ -609,7 +614,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await blockersFor(co, '2026-09-01', '2026-09-30'))['obligations']).toBe(1);
     expect((await blockersFor(co, '2026-10-01', '2026-10-31'))['obligations']).toBe(0);
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    expect((await approve(co.reviewer, d.id)).status).toBe(200);
     const row = (await h.q<{ payment_date: string; accounting_date: string; journal_entry_id: string }>('SELECT payment_date::text, accounting_date::text, journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]!;
     expect(row.payment_date).toBe('2026-10-05');
     expect(row.accounting_date).toBe('2026-09-10');                                   // same date rule as every document-based recognition
@@ -700,7 +705,7 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     expect((await co.preparer.client.req('POST', '/personal-payments', req({ amount: '500.01' }))).json.code).toBe('PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING');   // 800 is not available: 300 was settled
     const d = await draft(co, req({}));
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
-    expect((await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {})).status).toBe(200);
+    expect((await approve(co.reviewer, d.id)).status).toBe(200);
     // supplier payable is cleared once; what remains owed (500) is owed to the payer, not both
     expect(await aging()).toBe('0.00');
     const payables = (await co.viewer.client.req('GET', '/personal-payments/payables?as_of=2026-12-31')).json.payers;
@@ -728,8 +733,8 @@ describeDatabase('personal payments (PostgreSQL)', () => {
     await h.postedJournal(co.id, co.fy, '2026-03-01', co.owner.id, [[co.expense, '800.00', '0.00'], [co.ap, '0.00', '800.00']], { source_type: 'obligation', source_id: ob });
     const d = await draft(co, { payer_id: pp.id, treatment: 'existing_obligation', payment_date: '2026-03-20', amount: '500.00', purpose: 'Paid supplier personally', obligation_id: ob });
     await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {});
-    await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});
-    await co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, {});   // replay
+    await approve(co.reviewer, d.id);
+    await approve(co.reviewer, d.id);   // replay
     const ledger = (await co.owner.client.req('GET', `/partners/${co.partnerA}/ledger?from=2026-01-01&to=2026-12-31`)).json;
     expect(ledger.movements.filter((m: { kind: string }) => m.kind === 'personal_payment')).toHaveLength(1);
     expect(ledger.classes.current.closing_balance).toBe('500.00');
@@ -739,6 +744,99 @@ describeDatabase('personal payments (PostgreSQL)', () => {
       { account_id: co.currentA, debit: '0.00', credit: '500.00', memo: 'personal_payment' },
     ]);
     expect((await h.q<{ n: string }>('SELECT obligation_adjustment_net($1,$2)::text n', [ob, co.id]))[0]!.n).toBe('-500.00');
+    expect(await journalCount(co, 'personal_payment')).toBe(1);
+  });
+  // ---------------------------------------------------------------- approval governance: review view, separation of duties, explicit confirmation
+
+  it('review view shows everything needed before approval, read-only, and is company-scoped', async () => {
+    const co = await setup('rv');
+    const payer = await employeePayer(co);
+    const document = await doc(co);
+    const d = await draft(co, body(co, payer.id, document, { counterparty_id: co.supplier }));
+    expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
+    const before = await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1', [co.id]);
+    const r = await co.reviewer.client.req('GET', `/personal-payments/${d.id}/review`);
+    expect(r.status).toBe(200);
+    expect(r.json.payment).toMatchObject({ status: 'submitted', payer_name: 'Manager M', counterparty_name: 'Supplier', treatment: 'new_expense', payment_date: '2026-03-12', accounting_date: '2026-03-10', amount: '500.00', purpose: 'Client lunch' });
+    expect(r.json.review).toMatchObject({
+      submitted_by_email: expect.stringContaining(`${'rv'}-sub`), document: { id: document, filename: expect.any(String) },
+      accounts: { source: 'projected', debit: { id: co.expense }, credit: { id: co.empPayable } }, blockers: [], is_own_submission: false, can_decide: true,
+    });
+    expect(r.json.history.map((e: { event_type: string }) => e.event_type)).toEqual(['submitted']);
+    // reading changes nothing
+    expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1', [co.id])).toBe(before);
+    expect((await h.q<{ status: string }>('SELECT status FROM personal_payments WHERE id=$1', [d.id]))[0]!.status).toBe('submitted');
+    // a view-only user sees the payment but neither the accounts nor the history
+    const v = await co.viewer.client.req('GET', `/personal-payments/${d.id}/review`);
+    expect(v.status).toBe(200);
+    expect(v.json.review.accounts).toBeNull();
+    expect(v.json.history).toBeUndefined();
+    // a payer without a valid mapping is shown as a blocker before anyone clicks approve
+    await h.q('UPDATE accounts SET is_active=false WHERE id=$1', [co.empPayable]);
+    const blocked = await co.reviewer.client.req('GET', `/personal-payments/${d.id}/review`);
+    expect(blocked.json.review.blockers).toContain('PERSONAL_PAYMENT_MAPPING_MISSING');
+    expect(blocked.json.review.can_decide).toBe(false);
+    await h.q('UPDATE accounts SET is_active=true WHERE id=$1', [co.empPayable]);
+    expect((await approve(co.reviewer, d.id)).status).toBe(200);
+    const posted = await co.reviewer.client.req('GET', `/personal-payments/${d.id}/review`);
+    expect(posted.json.review.accounts).toMatchObject({ source: 'posted', debit: { id: co.expense }, credit: { id: co.empPayable } });
+    expect(posted.json.review.reviewed_by_email).toBeTruthy();
+    // another company can neither read nor decide it
+    const other = await setup('rv-x');
+    expect((await other.reviewer.client.req('GET', `/personal-payments/${d.id}/review`)).status).toBe(404);
+    expect((await approve(other.reviewer, d.id, { version: 1 })).status).toBe(404);
+    expect((await other.reviewer.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'x' })).status).toBe(404);
+  });
+
+  it('a user cannot approve or reject a payment they submitted, whatever the UI shows', async () => {
+    const co = await setup('sod');
+    const both = await h.user('sod-both');
+    await h.member(co.id, both.id, ['personal_payment.view', 'personal_payment.submit', 'personal_payment.review', 'personal_payment.audit.view']);
+    await both.client.login();
+    const payer = await employeePayer(co);
+    const d = await draft(co, body(co, payer.id, await doc(co)));
+    expect((await both.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
+    const view = await both.client.req('GET', `/personal-payments/${d.id}/review`);
+    expect(view.json.review).toMatchObject({ is_own_submission: true, can_decide: false });
+    const own = await approve(both as Co['reviewer'], d.id);
+    expect(own.status).toBe(403);
+    expect(own.json.code).toBe('PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN');
+    const rej = await both.client.req('POST', `/personal-payments/${d.id}/reject`, { reason: 'mine' });
+    expect(rej.status).toBe(403);
+    expect(rej.json.code).toBe('PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN');
+    expect((await h.q<{ status: string; journal_entry_id: string | null }>('SELECT status,journal_entry_id FROM personal_payments WHERE id=$1', [d.id]))[0]).toEqual({ status: 'submitted', journal_entry_id: null });
+    expect(await journalCount(co, 'personal_payment')).toBe(0);
+    // a different reviewer decides; the submitter still cannot, even to replay an approved payment
+    expect((await approve(co.reviewer, d.id)).status).toBe(200);
+    expect((await approve(both as Co['reviewer'], d.id)).status).toBe(403);
+    expect(await journalCount(co, 'personal_payment')).toBe(1);
+    // the approval stays attributed to the independent reviewer in the audit trail
+    expect((await h.q<{ actor: string }>("SELECT actor_user_id actor FROM audit_log WHERE entity_id=$1 AND action='personal_payment.approve'", [d.id]))[0]!.actor).toBe(co.reviewer.id);
+    // a reopened and resubmitted payment is judged against its new submitter
+    const d2 = await draft(co, body(co, payer.id, await doc(co)));
+    expect((await co.submitter.client.req('POST', `/personal-payments/${d2.id}/submit`, {})).status).toBe(200);
+    expect((await both.client.req('POST', `/personal-payments/${d2.id}/reject`, { reason: 'not mine, may reject' })).status).toBe(200);
+  });
+
+  it('approval requires an explicit confirmation of the reviewed version before anything is posted', async () => {
+    const co = await setup('cfm');
+    const payer = await employeePayer(co);
+    const d = await draft(co, body(co, payer.id, await doc(co)));
+    expect((await co.submitter.client.req('POST', `/personal-payments/${d.id}/submit`, {})).status).toBe(200);
+    const version = (await co.reviewer.client.req('GET', `/personal-payments/${d.id}`)).json.payment.version;
+    const post = (b: unknown) => co.reviewer.client.req('POST', `/personal-payments/${d.id}/approve`, b);
+    expect((await post({})).json.code).toBe('PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED');
+    expect((await post([])).status).toBe(400);
+    expect((await post({ version })).json.code).toBe('PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED');
+    expect((await post({ confirm_review: false, version })).json.code).toBe('PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED');
+    expect((await post({ confirm_review: 'yes', version })).json.code).toBe('PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED');
+    expect((await post({ confirm_review: true })).status).toBe(400);
+    expect((await post({ confirm_review: true, version, extra: 1 })).status).toBe(400);
+    const stale = await post({ confirm_review: true, version: version - 1 });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW');
+    expect(await journalCount(co, 'personal_payment')).toBe(0);
+    expect((await post({ confirm_review: true, version })).status).toBe(200);
     expect(await journalCount(co, 'personal_payment')).toBe(1);
   });
 });

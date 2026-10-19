@@ -36,7 +36,7 @@ type PaymentRow = {
   id: string; company_id: string; payer_id: string; payer_name?: string; payer_kind?: 'partner' | 'employee'; treatment: Treatment; payment_date: string; accounting_date: string;
   amount: string; currency_code: string; purpose: string; counterparty_id: string | null; counterparty_name?: string | null; document_id: string | null; obligation_id: string | null;
   expense_account_id: string | null; status: Status; debit_account_id: string | null; credit_account_id: string | null; journal_entry_id: string | null;
-  submitted_at: string | null; reviewed_at: string | null; rejection_reason: string | null; version: number; created_at: string;
+  submitted_at: string | null; reviewed_at: string | null; rejection_reason: string | null; version: number; created_at: string; submitted_by?: string | null;
   reimbursed_amount?: string; outstanding_amount?: string; settlement_status?: 'none' | 'partial' | 'full';
 };
 const COLUMNS = `p.id,p.company_id,p.payer_id,p.treatment,p.payment_date::text,p.accounting_date::text,p.amount::text,p.currency_code,p.purpose,p.counterparty_id,p.document_id,
@@ -215,6 +215,71 @@ export class PersonalPaymentService {
     return { payment: visible, reimbursements, ...(history ? { history } : {}) };
   }
 
+  /**
+   * Read-only review view: everything a reviewer must see before approving. For a payment not yet approved the accounts are the projection approval
+   * would use (nothing is written); once approved they are the posted snapshot. `blockers` lists why approval would currently be refused.
+   */
+  async review(companyId: string, actor: string, id: string, o: { includeAccounts: boolean; includeHistory: boolean; includeJournalLinks: boolean }) {
+    const { payment, reimbursements } = await this.get(companyId, id, o.includeJournalLinks);
+    const x = (await this.db.query<{
+      submitted_by: string | null; submitted_by_email: string | null; created_by_email: string | null; reviewed_by_email: string | null;
+      document_filename: string | null; document_date: string | null; document_total: string | null; expense_code: string | null; expense_name: string | null;
+    }>(
+      `SELECT p.submitted_by, su.email submitted_by_email, cu.email created_by_email, ru.email reviewed_by_email,
+              d.original_filename document_filename, d.document_date::text document_date, d.total_amount::text document_total, ea.code expense_code, ea.name expense_name
+         FROM personal_payments p
+         LEFT JOIN users su ON su.id=p.submitted_by LEFT JOIN users cu ON cu.id=p.created_by LEFT JOIN users ru ON ru.id=p.reviewed_by
+         LEFT JOIN documents d ON d.id=p.document_id AND d.company_id=p.company_id
+         LEFT JOIN accounts ea ON ea.id=p.expense_account_id AND ea.company_id=p.company_id
+        WHERE p.id=$1 AND p.company_id=$2`, [id, companyId])).rows[0]!;
+    const obligation = payment.obligation_id ? (await this.db.query(
+      `SELECT o.id, o.recognized_on::text, o.original_amount::text, c.name counterparty_name FROM obligations o JOIN counterparties c ON c.id=o.counterparty_id AND c.company_id=o.company_id
+        WHERE o.id=$1 AND o.company_id=$2`, [payment.obligation_id, companyId])).rows[0] ?? null : null;
+
+    const blockers: string[] = [];
+    let debitId = payment.debit_account_id;
+    let creditId = payment.credit_account_id;
+    let source: 'posted' | 'projected' = 'posted';
+    if (payment.status !== 'approved') {
+      source = 'projected';
+      try {
+        const payer = await resolvePayerAccount(this.db, companyId, payment.payer_id, false);
+        creditId = payer?.accountId ?? null;
+        if (!creditId) blockers.push('PERSONAL_PAYMENT_MAPPING_MISSING');
+        if (payment.treatment === 'new_expense') debitId = payment.expense_account_id;
+        else {
+          const posted = (await this.db.query<{ id: string }>("SELECT id FROM journal_entries WHERE company_id=$1 AND source_type='obligation' AND source_id=$2 AND status='posted'", [companyId, payment.obligation_id])).rows[0];
+          debitId = posted ? await this.obligationPayableAccount(this.db as unknown as PoolClient, companyId, posted.id) : null;
+          if (!posted) blockers.push('PERSONAL_PAYMENT_OBLIGATION_NOT_POSTED');
+        }
+        if (debitId && debitId === creditId) blockers.push('PERSONAL_PAYMENT_MAPPING_CONFLICT');
+      } catch (e) {
+        blockers.push(e instanceof PersonalPaymentError ? e.code : 'PERSONAL_PAYMENT_PROJECTION_FAILED');
+      }
+    }
+    const accountOf = async (accountId: string | null) => accountId
+      ? (await this.db.query<{ id: string; code: string; name: string }>('SELECT id, code, name FROM accounts WHERE id=$1 AND company_id=$2', [accountId, companyId])).rows[0] ?? null : null;
+    const history = o.includeHistory ? (await this.db.query(
+      `SELECT e.id, e.event_type, e.from_status, e.to_status, e.actor_user_id, u.email actor_email, e.reason, e.amount::text, e.created_at${o.includeJournalLinks ? ', e.journal_entry_id, e.reimbursement_id' : ''}
+         FROM personal_payment_events e JOIN users u ON u.id=e.actor_user_id WHERE e.payment_id=$1 AND e.company_id=$2 ORDER BY e.created_at, e.id`, [id, companyId])).rows : undefined;
+    const own = x.submitted_by !== null && x.submitted_by === actor;
+    return {
+      payment: o.includeAccounts ? payment : { ...payment, debit_account_id: null, credit_account_id: null },
+      reimbursements,
+      review: {
+        submitted_by_email: x.submitted_by_email, created_by_email: x.created_by_email, reviewed_by_email: x.reviewed_by_email,
+        document: payment.document_id ? { id: payment.document_id, filename: x.document_filename, date: x.document_date, total: x.document_total } : null,
+        obligation,
+        expense_account: x.expense_code ? { code: x.expense_code, name: x.expense_name } : null,
+        accounts: o.includeAccounts ? { source, debit: await accountOf(debitId), credit: await accountOf(creditId) } : null,
+        blockers: o.includeAccounts ? blockers : [],
+        is_own_submission: own,
+        can_decide: payment.status === 'submitted' && !own && (!o.includeAccounts || blockers.length === 0),
+      },
+      ...(history ? { history } : {}),
+    };
+  }
+
   private snapshot(r: PaymentRow) {
     return { payer_id: r.payer_id, treatment: r.treatment, payment_date: r.payment_date, accounting_date: r.accounting_date, amount: r.amount, purpose: r.purpose,
       counterparty_id: r.counterparty_id, document_id: r.document_id, obligation_id: r.obligation_id, expense_account_id: r.expense_account_id, status: r.status, version: r.version };
@@ -307,9 +372,15 @@ export class PersonalPaymentService {
   }
 
   private async lockRow(c: PoolClient, companyId: string, id: string): Promise<PaymentRow> {
-    const row = (await c.query<PaymentRow>(`SELECT ${COLUMNS} FROM personal_payments p WHERE p.id=$1 AND p.company_id=$2 FOR UPDATE`, [id, companyId])).rows[0];
+    const row = (await c.query<PaymentRow>(`SELECT ${COLUMNS}, p.submitted_by FROM personal_payments p WHERE p.id=$1 AND p.company_id=$2 FOR UPDATE`, [id, companyId])).rows[0];
     if (!row) throw notFound();
     return row;
+  }
+  /** Separation of duties, enforced here and not by the UI: whoever submitted a payment can neither approve nor reject it. */
+  private assertNotOwnSubmission(row: PaymentRow, actor: string) {
+    if (row.submitted_by && row.submitted_by === actor) {
+      throw new PersonalPaymentError(403, 'PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN', 'You cannot approve or reject a personal payment you submitted');
+    }
   }
   private inputOf(r: PaymentRow): PaymentInput {
     return { payerId: r.payer_id, treatment: r.treatment, paymentDate: r.payment_date, amount: r.amount, purpose: r.purpose, counterpartyId: r.counterparty_id,
@@ -376,11 +447,14 @@ export class PersonalPaymentService {
   }
 
   /** Approval creates the liability and posts atomically; replaying an approved payment returns it unchanged (the unique journal source index is the backstop). */
-  async approve(companyId: string, actor: string, id: string, includeAudit = false) {
+  async approve(companyId: string, actor: string, id: string, reviewedVersion: number, includeAudit = false) {
     return this.tx(async (c) => {
       const row = await this.lockRow(c, companyId, id);
+      this.assertNotOwnSubmission(row, actor);
       if (row.status === 'approved') return { payment: (await this.get(companyId, id, includeAudit, c)).payment, replayed: true };
       if (row.status !== 'submitted') throw conflict('PERSONAL_PAYMENT_NOT_SUBMITTED', 'Only a submitted personal payment can be approved');
+      // The confirmation names the exact version the reviewer looked at; a payment changed since then must be reviewed again.
+      if (row.version !== reviewedVersion) throw conflict('PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW', 'The payment changed after it was reviewed; review it again before approving');
       const input = this.inputOf(row);
       await this.validate(c, companyId, input, id, 'UPDATE');
       const payer = await resolvePayerAccount(c, companyId, row.payer_id, true);
@@ -421,6 +495,7 @@ export class PersonalPaymentService {
   async reject(companyId: string, actor: string, id: string, reason: string) {
     return this.tx(async (c) => {
       const row = await this.lockRow(c, companyId, id);
+      this.assertNotOwnSubmission(row, actor);
       if (row.status !== 'submitted') throw conflict('PERSONAL_PAYMENT_NOT_SUBMITTED', 'Only a submitted personal payment can be rejected');
       await c.query("UPDATE personal_payments SET status='rejected', reviewed_by=$3, reviewed_at=NOW(), rejection_reason=$4, version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status='submitted'", [id, companyId, actor, reason]);
       await this.event(c, companyId, id, actor, { type: 'rejected', from: 'submitted', to: 'rejected', reason });

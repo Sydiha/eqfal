@@ -8,6 +8,12 @@ const base = { payer_id: 'y1', payer_name: 'Manager M', payer_kind: 'employee', 
 const draft = { ...base, id: 'p1', status: 'draft' };
 const submitted = { ...base, id: 'p2', status: 'submitted', purpose: 'Taxi' };
 const approved = { ...base, id: 'p3', status: 'approved', purpose: 'Hotel', reimbursed_amount: '200.00', outstanding_amount: '300.00', settlement_status: 'partial' };
+const reviewData = (own = false, blockers: string[] = []) => ({
+  payment: { ...submitted, counterparty_name: 'Supplier' },
+  review: { submitted_by_email: 'sub@example.com', created_by_email: 'prep@example.com', reviewed_by_email: null, document: { id: 'd1', filename: 'receipt.pdf', date: '2026-03-10', total: '500.00' }, obligation: null,
+    expense_account: { code: '5100', name: 'Meals' }, accounts: { source: 'projected', debit: { code: '5100', name: 'Meals' }, credit: { code: '2200', name: 'Payable to Manager M' } }, blockers, is_own_submission: own, can_decide: !own && blockers.length === 0 },
+  history: [{ id: 'e1', event_type: 'submitted', from_status: 'draft', to_status: 'submitted', actor_email: 'sub@example.com', reason: null, created_at: '2026-03-11T08:30:00Z' }],
+});
 const payables = { as_of: '2026-10-18', payers: [{ payer_id: 'y1', payer_name: 'Manager M', payer_kind: 'employee', approved_amount: '500.00', reimbursed_amount: '200.00', outstanding_amount: '300.00' }] };
 const payers = { payers: [{ id: 'y1', display_name: 'Manager M', partner_id: null, partner_name: null, payable_account_code: '2200', is_active: true, version: 1, mapping_valid: true, user_email: null }] };
 
@@ -17,6 +23,7 @@ function stubFetch(extra: Record<string, () => Response> = {}) {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, init });
     for (const key of Object.keys(extra)) if (url.includes(key)) return extra[key]!();
+    if (url.endsWith('/review')) return new Response(JSON.stringify(reviewData()));
     if (url.includes('/payables')) return new Response(JSON.stringify(payables));
     if (url.endsWith('/payers')) return new Response(JSON.stringify(payers));
     if (url.includes('/lookups')) return new Response(JSON.stringify({ payers: [{ id: 'y1', display_name: 'Manager M', is_partner: false }], documents: [], obligations: [], expense_accounts: [] }));
@@ -54,7 +61,8 @@ describe('PersonalPayments', () => {
     unmount();
     renderIt(['personal_payment.view', 'personal_payment.review', 'personal_payment.reimburse']);
     await screen.findByText('Taxi');
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Reimburse' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
   });
@@ -65,6 +73,8 @@ describe('PersonalPayments', () => {
     await screen.findByText('Client lunch');
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(calls.some(c => c.url === '/api/personal-payments/p1/submit' && c.init?.method === 'POST')).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByLabelText(/I have reviewed this payment/));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/no valid account mapping/i);
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
@@ -91,8 +101,47 @@ describe('PersonalPayments', () => {
     renderIt(ALL);
     await screen.findByText('Client lunch');
     expect(screen.getByRole('heading', { name: 'المدفوعات الشخصية' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'اعتماد' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'مراجعة' }));
+    fireEvent.click(await screen.findByLabelText(/راجعتُ هذه الدفعة/));
     fireEvent.click(screen.getByRole('button', { name: 'اعتماد' }));
     expect((await screen.findByRole('alert')).textContent).toContain('الفترة المحاسبية مغلقة');
+  });
+  it('shows the full read-only review and requires an explicit confirmation before approving the reviewed version', async () => {
+    const calls = stubFetch();
+    renderIt(ALL);
+    await screen.findByText('Taxi');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    const panel = await screen.findByRole('region', { name: 'Review before approval' });
+    for (const t of ['Manager M', 'sub@example.com', 'prep@example.com', 'Supplier', '5100 Meals', '2200 Payable to Manager M', '2026-03-12', '2026-03-10', 'Projected: nothing has been posted yet.']) expect(panel.textContent).toContain(t);
+    expect((screen.getByRole('link', { name: /receipt\.pdf/ }) as HTMLAnchorElement).getAttribute('href')).toBe('/api/documents/d1/file');
+    expect(calls.some(c => c.init?.method === 'POST')).toBe(false);
+    const approve = screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement;
+    expect(approve.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/I have reviewed this payment/));
+    expect(approve.disabled).toBe(false);
+    fireEvent.click(approve);
+    await waitFor(() => expect(calls.some(c => c.url === '/api/personal-payments/p2/approve' && c.init?.body === JSON.stringify({ confirm_review: true, version: 1 }))).toBe(true));
+  });
+
+  it('does not offer to approve or reject a payment the user submitted and explains why', async () => {
+    const calls = stubFetch({ '/review': () => new Response(JSON.stringify(reviewData(true))) });
+    renderIt(ALL);
+    await screen.findByText('Taxi');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    expect((await screen.findByText(/another reviewer must approve or reject it/)).textContent).toBeTruthy();
+    expect(screen.queryByLabelText(/I have reviewed this payment/)).toBeNull();
+    expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.some(c => c.init?.method === 'POST')).toBe(false);
+  });
+
+  it('keeps approval disabled and lists the blocker when the accounts cannot be resolved', async () => {
+    stubFetch({ '/review': () => new Response(JSON.stringify(reviewData(false, ['PERSONAL_PAYMENT_MAPPING_MISSING']))) });
+    renderIt(ALL);
+    await screen.findByText('Taxi');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    expect((await screen.findByText(/Approval is currently blocked/)).textContent).toMatch(/no valid account mapping/i);
+    fireEvent.click(screen.getByLabelText(/I have reviewed this payment/));
+    expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

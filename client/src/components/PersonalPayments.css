@@ -6,3 +6,10 @@
 .personal-payments .pp-message { padding: 8px 12px; border-radius: 8px; background: #fdecea; color: #8a1c1c; }
 .personal-payments small { color: var(--text-muted, #667085); }
 .personal-payments .pp-primary { align-self: start; }
+.personal-payments .pp-review { max-width: 720px; }
+.personal-payments .pp-facts { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 4px 12px; margin: 0; }
+.personal-payments .pp-facts dt { color: var(--text-muted, #667085); }
+.personal-payments .pp-facts dd { margin: 0; overflow-wrap: anywhere; }
+.personal-payments .pp-history { margin: 0; padding-inline-start: 18px; }
+.personal-payments .pp-review label.pp-confirm { display: flex; align-items: flex-start; gap: 8px; font-weight: 500; }
+@media (max-width: 560px) { .personal-payments .pp-facts { grid-template-columns: 1fr; } }

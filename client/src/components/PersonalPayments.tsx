@@ -10,7 +10,7 @@ type Status = 'draft' | 'submitted' | 'approved' | 'rejected';
 type Treatment = 'new_expense' | 'existing_obligation';
 type Payment = {
   id: string; payer_id: string; payer_name?: string; payer_kind?: 'partner' | 'employee'; treatment: Treatment; payment_date: string; accounting_date: string; amount: string;
-  purpose: string; document_id: string | null; obligation_id: string | null; expense_account_id: string | null; counterparty_id: string | null; status: Status;
+  purpose: string; document_id: string | null; obligation_id: string | null; expense_account_id: string | null; counterparty_id: string | null; counterparty_name?: string | null; status: Status;
   rejection_reason: string | null; version: number; reimbursed_amount?: string; outstanding_amount?: string; settlement_status?: 'none' | 'partial' | 'full';
 };
 type Payer = { id: string; display_name: string; partner_id: string | null; partner_name: string | null; payable_account_code: string | null; is_active: boolean; version: number; mapping_valid: boolean; user_email: string | null };
@@ -24,6 +24,19 @@ type PayerExtras = { accounts?: Array<{ id: string; code: string; name: string }
 type BankTx = { id: string; bank_account_name: string; transaction_date: string; amount: string; description: string | null };
 type Payables = { as_of: string; payers: Array<{ payer_id: string; payer_name: string; payer_kind: string; approved_amount: string; reimbursed_amount: string; outstanding_amount: string }> };
 
+type ReviewData = {
+  payment: Payment & { currency_code?: string };
+  review: {
+    submitted_by_email: string | null; created_by_email: string | null; reviewed_by_email: string | null;
+    document: { id: string; filename: string | null; date: string | null; total: string | null } | null;
+    obligation: { id: string; recognized_on: string; original_amount: string; counterparty_name: string } | null;
+    expense_account: { code: string; name: string } | null;
+    accounts: { source: 'posted' | 'projected'; debit: { code: string; name: string } | null; credit: { code: string; name: string } | null } | null;
+    blockers: string[]; is_own_submission: boolean; can_decide: boolean;
+  };
+  history?: Array<{ id: string; event_type: string; from_status: string | null; to_status: string | null; actor_email: string; reason: string | null; created_at: string }>;
+};
+
 export type PersonalPaymentsProps = { capabilities: string[]; onUnauthorized: () => void };
 
 const TEXT = {
@@ -32,6 +45,10 @@ const TEXT = {
     tabs: { payments: 'Payments', payables: 'Amounts owed', payers: 'Payers' }, newPayment: 'New personal payment', edit: 'Edit', save: 'Save draft', cancel: 'Cancel',
     payer: 'Payer', treatment: 'Treatment', newExpense: 'New expense (document)', existingObligation: 'Existing payable (reclassify)', date: 'Payment date', amount: 'Amount (SAR)', purpose: 'Purpose',
     document: 'Expense document', obligation: 'Payable obligation', expenseAccount: 'Expense account', select: 'Select…', status: 'Status', outstanding: 'Outstanding', reimbursed: 'Reimbursed', actions: 'Actions',
+    review: 'Review', closeReview: 'Close', reviewTitle: 'Review before approval', submittedBy: 'Submitted by', createdBy: 'Prepared by', reviewedBy: 'Reviewed by', counterparty: 'Counterparty', supportingDocument: 'Supporting document',
+    openDocument: 'Open document', paymentDate: 'Payment date', accountingDate: 'Accounting date', treatmentLabel: 'Treatment', debitAccount: 'Debit account', creditAccount: 'Credit account',
+    projected: 'Projected: nothing has been posted yet.', posted: 'Posted accounts.', history: 'History', ownSubmission: 'You submitted this payment, so another reviewer must approve or reject it.',
+    blocked: 'Approval is currently blocked:', confirmReview: 'I have reviewed this payment, its document and the accounts above.', none2: '—',
     submit: 'Submit', approve: 'Approve', reject: 'Reject', reopen: 'Reopen as draft', remove: 'Delete', reimburse: 'Reimburse', reason: 'Rejection reason', confirmReject: 'Confirm rejection',
     bankTx: 'Company bank outflow', record: 'Record reimbursement', noBank: 'No eligible bank outflow.', empty: 'No personal payments yet.', loading: 'Loading…', error: 'Unable to load personal payments.',
     forbidden: 'You do not have permission to view personal payments.', employee: 'Employee / manager', partner: 'Partner (current account)', owed: 'Owed to payer', approvedTotal: 'Approved',
@@ -46,7 +63,8 @@ const TEXT = {
       PERSONAL_PAYMENT_DOCUMENT_AMOUNT_MISMATCH: 'The amount must equal the document total.', PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING: 'The amount exceeds the obligation outstanding balance.',
       PERSONAL_PAYMENT_OVER_REIMBURSEMENT: 'The reimbursement exceeds the remaining balance.', PERSONAL_BANK_TRANSACTION_ALREADY_EXPLAINED: 'This bank transaction is already explained elsewhere.',
       PERSONAL_PAYMENT_BANK_LEDGER_UNMAPPED: 'The bank account is not linked to a ledger account.', PERSONAL_PAYMENT_VERSION_CONFLICT: 'The record changed. Reload and try again.',
-      PERSONAL_PAYER_INACTIVE: 'The payer is inactive.', PERSONAL_PAYER_DUPLICATE: 'This payer is already registered.',
+      PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN: 'You cannot approve or reject a payment you submitted.', PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'The payment changed after you opened it. Review it again.',
+      PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED: 'Confirm that you reviewed the payment first.', PERSONAL_PAYER_INACTIVE: 'The payer is inactive.', PERSONAL_PAYER_DUPLICATE: 'This payer is already registered.',
     } as Record<string, string>, generic: 'The action could not be completed.',
   },
   ar: {
@@ -54,6 +72,10 @@ const TEXT = {
     tabs: { payments: 'المدفوعات', payables: 'المبالغ المستحقة', payers: 'الدافعون' }, newPayment: 'دفعة شخصية جديدة', edit: 'تعديل', save: 'حفظ المسودة', cancel: 'إلغاء',
     payer: 'الدافع', treatment: 'المعالجة', newExpense: 'مصروف جديد (مستند)', existingObligation: 'ذمة دائنة قائمة (إعادة تصنيف)', date: 'تاريخ الدفع', amount: 'المبلغ (ر.س)', purpose: 'الغرض',
     document: 'مستند المصروف', obligation: 'الذمة الدائنة', expenseAccount: 'حساب المصروف', select: 'اختر…', status: 'الحالة', outstanding: 'المتبقي', reimbursed: 'المسترد', actions: 'الإجراءات',
+    review: 'مراجعة', closeReview: 'إغلاق', reviewTitle: 'المراجعة قبل الاعتماد', submittedBy: 'أرسلها', createdBy: 'أعدّها', reviewedBy: 'راجعها', counterparty: 'الطرف المقابل', supportingDocument: 'المستند الداعم',
+    openDocument: 'فتح المستند', paymentDate: 'تاريخ الدفع', accountingDate: 'التاريخ المحاسبي', treatmentLabel: 'المعالجة', debitAccount: 'الحساب المدين', creditAccount: 'الحساب الدائن',
+    projected: 'متوقَّع: لم يُرحَّل شيء بعد.', posted: 'الحسابات المرحَّلة.', history: 'السجل', ownSubmission: 'أنت من أرسل هذه الدفعة، لذا يجب أن يعتمدها أو يرفضها مراجع آخر.',
+    blocked: 'الاعتماد متوقف حالياً:', confirmReview: 'راجعتُ هذه الدفعة ومستندها والحسابات أعلاه.', none2: '—',
     submit: 'إرسال للمراجعة', approve: 'اعتماد', reject: 'رفض', reopen: 'إعادة فتحها كمسودة', remove: 'حذف', reimburse: 'استرداد', reason: 'سبب الرفض', confirmReject: 'تأكيد الرفض',
     bankTx: 'حركة صرف من بنك الشركة', record: 'تسجيل الاسترداد', noBank: 'لا توجد حركة بنكية مؤهلة.', empty: 'لا توجد مدفوعات شخصية بعد.', loading: 'جارٍ التحميل…', error: 'تعذّر تحميل المدفوعات الشخصية.',
     forbidden: 'لا تملك صلاحية عرض المدفوعات الشخصية.', employee: 'موظف / مدير', partner: 'شريك (الحساب الجاري)', owed: 'مستحق للدافع', approvedTotal: 'المعتمد',
@@ -68,7 +90,8 @@ const TEXT = {
       PERSONAL_PAYMENT_DOCUMENT_AMOUNT_MISMATCH: 'يجب أن يساوي المبلغ إجمالي المستند.', PERSONAL_PAYMENT_EXCEEDS_OUTSTANDING: 'المبلغ يتجاوز المتبقي من الذمة.',
       PERSONAL_PAYMENT_OVER_REIMBURSEMENT: 'الاسترداد يتجاوز الرصيد المتبقي.', PERSONAL_BANK_TRANSACTION_ALREADY_EXPLAINED: 'هذه الحركة البنكية مفسَّرة بالفعل في مسار آخر.',
       PERSONAL_PAYMENT_BANK_LEDGER_UNMAPPED: 'الحساب البنكي غير مربوط بحساب دفتري.', PERSONAL_PAYMENT_VERSION_CONFLICT: 'تغيّر السجل. أعد التحميل وحاول مجدداً.',
-      PERSONAL_PAYER_INACTIVE: 'الدافع غير نشط.', PERSONAL_PAYER_DUPLICATE: 'هذا الدافع مسجل بالفعل.',
+      PERSONAL_PAYMENT_SELF_REVIEW_FORBIDDEN: 'لا يمكنك اعتماد أو رفض دفعة أرسلتها بنفسك.', PERSONAL_PAYMENT_CHANGED_SINCE_REVIEW: 'تغيّرت الدفعة بعد فتحها. راجعها من جديد.',
+      PERSONAL_PAYMENT_REVIEW_CONFIRMATION_REQUIRED: 'أكّد أولاً أنك راجعت الدفعة.', PERSONAL_PAYER_INACTIVE: 'الدافع غير نشط.', PERSONAL_PAYER_DUPLICATE: 'هذا الدافع مسجل بالفعل.',
     } as Record<string, string>, generic: 'تعذّر تنفيذ الإجراء.',
   },
 };
@@ -103,6 +126,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
   const [rejecting, setRejecting] = useState<{ id: string; reason: string } | null>(null);
   const [reimbursing, setReimbursing] = useState<{ payment: Payment; options: BankTx[]; chosen: string } | null>(null);
   const [payerForm, setPayerForm] = useState({ display_name: '', partner_id: '', payable_account_id: '', user_id: '' });
+  const [reviewing, setReviewing] = useState<{ data: ReviewData; confirmed: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const fail = useCallback((e: unknown) => setMessage((e instanceof ApiError && e.code && L.errors[e.code]) || L.generic), [L]);
@@ -143,6 +167,15 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
     });
   };
   const post = (id: string, action: string, body: unknown = {}) => act(() => api(`/api/personal-payments/${id}/${action}`, send('POST', body), onUnauthorized));
+  const openReview = async (p: Payment) => {
+    setMessage(null); setRejecting(null);
+    try { setReviewing({ data: await api<ReviewData>(`/api/personal-payments/${p.id}/review`, {}, onUnauthorized), confirmed: false }); } catch (e) { fail(e); }
+  };
+  const approveReviewed = () => {
+    if (!reviewing?.confirmed) return;
+    const { payment } = reviewing.data;
+    void act(async () => { await api(`/api/personal-payments/${payment.id}/approve`, send('POST', { confirm_review: true, version: payment.version }), onUnauthorized); setReviewing(null); });
+  };
   const startReimburse = async (payment: Payment) => {
     setMessage(null);
     try {
@@ -196,11 +229,43 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
             <td className="pp-actions">
               {p.status === 'draft' && can('personal_payment.create') && <><button type="button" onClick={() => void openForm(p)}>{L.edit}</button><button type="button" disabled={busy} onClick={() => void act(() => api(`/api/personal-payments/${p.id}?version=${p.version}`, { method: 'DELETE' }, onUnauthorized))}>{L.remove}</button></>}
               {p.status === 'draft' && can('personal_payment.submit') && <button type="button" disabled={busy} onClick={() => void post(p.id, 'submit')}>{L.submit}</button>}
-              {p.status === 'submitted' && can('personal_payment.review') && <><button type="button" disabled={busy} onClick={() => void post(p.id, 'approve')}>{L.approve}</button><button type="button" onClick={() => setRejecting({ id: p.id, reason: '' })}>{L.reject}</button></>}
+              {p.status === 'submitted' && can('personal_payment.review') && <button type="button" disabled={busy} onClick={() => void openReview(p)}>{L.review}</button>}
               {p.status === 'rejected' && can('personal_payment.create') && <button type="button" disabled={busy} onClick={() => void post(p.id, 'reopen')}>{L.reopen}</button>}
               {p.status === 'approved' && p.settlement_status !== 'full' && can('personal_payment.reimburse') && <button type="button" onClick={() => void startReimburse(p)}>{L.reimburse}</button>}
             </td></tr>)}</tbody></table></div>}
-        {rejecting && <form className="pp-form" onSubmit={e => { e.preventDefault(); void post(rejecting.id, 'reject', { reason: rejecting.reason }).then(() => setRejecting(null)); }}>
+        {reviewing && (() => {
+          const { payment: rp, review: rv, history } = reviewing.data;
+          const acct = (a: { code: string; name: string } | null | undefined) => a ? `${a.code} ${a.name}` : L.none2;
+          const treatmentText = rp.treatment === 'new_expense' ? L.newExpense : L.existingObligation;
+          return <section className="pp-form pp-review" aria-label={L.reviewTitle}>
+            <h3>{L.reviewTitle}</h3>
+            <dl className="pp-facts">
+              <dt>{L.payer}</dt><dd>{rp.payer_name} <small>{rp.payer_kind === 'partner' ? L.partner : L.employee}</small></dd>
+              <dt>{L.submittedBy}</dt><dd dir="ltr">{rv.submitted_by_email ?? L.none2}</dd>
+              <dt>{L.createdBy}</dt><dd dir="ltr">{rv.created_by_email ?? L.none2}</dd>
+              <dt>{L.counterparty}</dt><dd>{rp.counterparty_name ?? rv.obligation?.counterparty_name ?? L.none2}</dd>
+              <dt>{L.supportingDocument}</dt><dd>{rv.document ? <a href={`/api/documents/${rv.document.id}/file`} target="_blank" rel="noreferrer">{L.openDocument}: {rv.document.filename}</a> : rv.obligation ? `${rv.obligation.counterparty_name} (${rv.obligation.recognized_on})` : L.none2}</dd>
+              <dt>{L.amount}</dt><dd>{money(rp.amount)}</dd>
+              <dt>{L.paymentDate}</dt><dd>{rp.payment_date}</dd>
+              <dt>{L.accountingDate}</dt><dd>{rp.accounting_date}</dd>
+              <dt>{L.treatmentLabel}</dt><dd>{treatmentText}</dd>
+              <dt>{L.purpose}</dt><dd>{rp.purpose}</dd>
+              <dt>{L.status}</dt><dd><StatusBadge status={rp.status}>{L.statuses[rp.status]}</StatusBadge></dd>
+              {rv.accounts && <><dt>{L.debitAccount}</dt><dd>{acct(rv.accounts.debit)}</dd><dt>{L.creditAccount}</dt><dd>{acct(rv.accounts.credit)}</dd></>}
+            </dl>
+            {rv.accounts && <small>{rv.accounts.source === 'projected' ? L.projected : L.posted}</small>}
+            {history && history.length > 0 && <><h4>{L.history}</h4><ul className="pp-history">{history.map(h => <li key={h.id}>{h.created_at.slice(0, 16).replace('T', ' ')} — {h.event_type}{h.reason ? `: ${h.reason}` : ''} <small dir="ltr">{h.actor_email}</small></li>)}</ul></>}
+            {rv.is_own_submission && <p role="status">{L.ownSubmission}</p>}
+            {rv.blockers.length > 0 && <p role="status">{L.blocked} {rv.blockers.map(b => L.errors[b] ?? b).join(' ')}</p>}
+            {rp.status === 'submitted' && !rv.is_own_submission && <label className="pp-confirm"><input type="checkbox" checked={reviewing.confirmed} onChange={e => setReviewing({ ...reviewing, confirmed: e.target.checked })} /> {L.confirmReview}</label>}
+            <div className="pp-actions">
+              {rp.status === 'submitted' && <button type="button" className="pp-primary" disabled={busy || !rv.can_decide || !reviewing.confirmed} onClick={approveReviewed}>{L.approve}</button>}
+              {rp.status === 'submitted' && <button type="button" disabled={busy || rv.is_own_submission} onClick={() => setRejecting({ id: rp.id, reason: '' })}>{L.reject}</button>}
+              <button type="button" onClick={() => { setReviewing(null); setRejecting(null); }}>{L.closeReview}</button>
+            </div>
+          </section>;
+        })()}
+        {rejecting && <form className="pp-form" onSubmit={e => { e.preventDefault(); void post(rejecting.id, 'reject', { reason: rejecting.reason }).then(() => { setRejecting(null); setReviewing(null); }); }}>
           <label>{L.reason}<input required maxLength={500} value={rejecting.reason} onChange={e => setRejecting({ ...rejecting, reason: e.target.value })} /></label>
           <div className="pp-actions"><button type="submit" className="pp-primary" disabled={busy}>{L.confirmReject}</button><button type="button" onClick={() => setRejecting(null)}>{L.cancel}</button></div></form>}
         {reimbursing && <form className="pp-form" onSubmit={e => { e.preventDefault(); void post(reimbursing.payment.id, 'reimbursements', { bank_transaction_id: reimbursing.chosen }).then(() => setReimbursing(null)); }}>
