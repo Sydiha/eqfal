@@ -9,6 +9,7 @@ import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPost
 import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath, assertCutoverPostingContext } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 import { partnerJournalIsExact, partnerReversalJournalIsExact } from './partner-transaction-posting';
+import { isPersonalPaymentSourceType, personalPaymentJournalIsExact, personalReimbursementJournalIsExact } from './personal-payment-posting';
 
 export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
 export { FiscalYearClosedError };
@@ -32,7 +33,7 @@ type Journal = {
 };
 
 async function source(companyId: string, type: string, id: string, client: PoolClient) {
-  if (type !== 'periodic_adjustment' && type !== 'partner_transaction' && type !== 'partner_transaction_reversal' && !isOperationalSourceType(type)) {
+  if (type !== 'periodic_adjustment' && type !== 'partner_transaction' && type !== 'partner_transaction_reversal' && !isPersonalPaymentSourceType(type) && !isOperationalSourceType(type)) {
     throw new JournalPostingValidationError('Unsupported operational source type');
   }
   const row = (
@@ -229,6 +230,14 @@ export async function postJournalInTransaction(
 
     if (journal.source_type === 'partner_transaction' && !(await partnerJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
       throw new JournalPostingValidationError('Partner transaction journal must use the configured partner and cash/bank accounts');
+    }
+
+    if (journal.source_type === 'personal_payment' && !(await personalPaymentJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
+      throw new JournalPostingValidationError('Personal payment journal must use the payer account and the approved debit account');
+    }
+
+    if (journal.source_type === 'personal_payment_reimbursement' && !(await personalReimbursementJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
+      throw new JournalPostingValidationError('Personal payment reimbursement journal must be debit payer account and credit the bank ledger account');
     }
 
     if (journal.source_type === 'partner_transaction_reversal' && !(await partnerReversalJournalIsExact(client, companyId, id, operationalSource.context))) {

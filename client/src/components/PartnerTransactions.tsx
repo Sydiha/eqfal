@@ -23,7 +23,7 @@ type PartnerMapping = { partner_id: string; partner_name: string; mapping_key: A
 type CashMapping = { bank_account_id: string | null; bank_account_name: string | null; account_id: string; account_code: string; account_name: string; valid: boolean };
 type Mappings = { partner_mappings: PartnerMapping[]; cash_mappings: CashMapping[]; bank_accounts: BankAccount[]; accounts?: AccountOption[] };
 type ClassSummary = { opening_balance: string; increases: string; decreases: string; closing_balance: string };
-type Movement = { date: string; kind: 'opening_balance' | 'transaction' | 'reversal'; account_class: AccountClass; transaction_type: TxType | null; effect: string; running_balance: string; reference: string | null; description: string | null };
+type Movement = { date: string; kind: 'opening_balance' | 'transaction' | 'reversal' | 'personal_payment' | 'personal_reimbursement'; account_class: AccountClass; transaction_type: TxType | null; effect: string; running_balance: string; reference: string | null; description: string | null };
 type Ledger = { classes: Record<AccountClass, ClassSummary>; movements: Movement[]; draft_transactions_excluded: number };
 type Balances = { as_of: string; partners: Array<{ partner_id: string; partner_name: string; capital: string; current: string; loan: string }> };
 
@@ -342,7 +342,7 @@ function LedgerTab({ partners, initial, onUnauthorized, message, typeLabel, mone
           <tbody>
             {ledger.movements.length === 0 ? <tr><td colSpan={6} className="ptx-empty">{t('partnerTx.noMovements')}</td></tr> : ledger.movements.map((m, i) => <tr key={`${m.date}-${i}`}>
               <td dir="ltr">{m.date}</td>
-              <td>{m.kind === 'reversal' ? `${t('partnerTx.reversalOf')} ${typeLabel(m.transaction_type)}` : typeLabel(m.transaction_type)}</td>
+              <td>{m.kind === 'reversal' ? `${t('partnerTx.reversalOf')} ${typeLabel(m.transaction_type)}` : m.kind === 'personal_payment' ? t('partnerTx.personalPayment') : m.kind === 'personal_reimbursement' ? t('partnerTx.personalReimbursement') : typeLabel(m.transaction_type)}</td>
               <td>{t(`partnerTx.classes.${m.account_class}`)}</td>
               <td>{money(m.effect)}</td>
               <td>{money(m.running_balance)}</td>

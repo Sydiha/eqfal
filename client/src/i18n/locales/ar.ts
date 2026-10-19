@@ -111,7 +111,7 @@ const ar = {
     },
     classes: { capital: 'رأس المال', current: 'الحساب الجاري', loan: 'قرض الشريك' }, choosePartner: 'اختر شريكاً', bankAccount: 'الحساب البنكي', chooseBank: 'اختر حساباً بنكياً',
     bankTransaction: 'حركة كشف البنك (اختياري)', noBankTransaction: 'غير مرتبطة بكشف بنكي', bankTransactionHelp: 'تظهر فقط حركات الكشف المطابقة في الحساب والتاريخ والمبلغ والاتجاه. كشف البنك غير مطلوب.',
-    reference: 'المرجع', openingBalance: 'رصيد افتتاحي', from: 'من', to: 'إلى', ledgerChoose: 'اختر شريكاً ونطاق تواريخ صحيحاً.', opening: 'الرصيد الافتتاحي', increases: 'الزيادات', decreases: 'التخفيضات', closing: 'الرصيد الختامي',
+    reference: 'المرجع', openingBalance: 'رصيد افتتاحي', personalPayment: 'دفعة شخصية نيابةً عن الشركة', personalReimbursement: 'استرداد دفعة شخصية', from: 'من', to: 'إلى', ledgerChoose: 'اختر شريكاً ونطاق تواريخ صحيحاً.', opening: 'الرصيد الافتتاحي', increases: 'الزيادات', decreases: 'التخفيضات', closing: 'الرصيد الختامي',
     draftsExcluded: '{{count}} معاملة مسودة غير محتسبة حتى يتم ترحيلها.', account: 'الحساب', movement: 'الحركة', runningBalance: 'الرصيد', noMovements: 'لا توجد حركات في هذه الفترة.',
     mappingsHelp: 'لا تُختار الحسابات تلقائياً. اربط حسابات رأس المال والجاري والقرض لكل شريك، وحسابات النقد والبنوك. لا يمكن ترحيل معاملة قبل ربط حساباتها.',
     notMapped: 'غير مربوط', mappingInvalid: 'هذا الحساب غير نشط أو لم يعد من النوع المسموح.', mapKeys: { capital: 'حساب رأس المال', current: 'الحساب الجاري', loan: 'حساب القرض' }, cashAccounts: 'حسابات النقد والبنوك',
