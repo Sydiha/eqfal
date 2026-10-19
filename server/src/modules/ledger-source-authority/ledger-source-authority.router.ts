@@ -111,6 +111,6 @@ ledgerSourceAuthorityRouter.post('/ledger-source-authority/:id/cutover/parse-fil
   const cur = (await pool.query<{ functional_currency: string }>(
     `SELECT functional_currency FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=($2::date+1) AND (effective_to IS NULL OR effective_to>=($2::date+1))`, [companyId, range.to_date])).rows;
   const result = parseTrialBalanceTable(sheet.rows, sheet.formulaCells, accounts, { ...(mapping ? { mapping } : {}), functionalCurrency: cur.length === 1 ? cur[0]!.functional_currency : null });
-  if (result.status === 'parsed' && sheet.sheetCount > 1) result.warnings.push({ code: 'TB_FIRST_SHEET_ONLY' });
+  if (result.status === 'parsed' && sheet.sheetCount > 1) result.errors.push({ code: 'TB_MULTIPLE_SHEETS' });
   res.json({ ...result, functional_currency: cur.length === 1 ? cur[0]!.functional_currency : null, cutover_date: range.to_date });
 }));

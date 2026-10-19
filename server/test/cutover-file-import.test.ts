@@ -104,6 +104,12 @@ describe('I1 trial balance parsing', () => {
     const none = parse(rows(['Code', 'Debit', 'Credit', 'Currency'], ['1000', 10, null, 'SAR'], ['2000', null, 10, 'SAR']), ACC, { functionalCurrency: null });
     if (none.status !== 'parsed') throw new Error('x'); expect(none.errors.map((e) => e.code)).toContain('TB_CURRENCY_UNVERIFIABLE');
   });
+  it('a totals row that disagrees with the lines, or an account with no amount, is an error not a silent skip', () => {
+    const t = parse(rows(['Code', 'Name', 'Debit', 'Credit'], ['1000', 'A', 10, null], ['2000', 'B', null, 10], [null, 'Total', 25, 25]));
+    if (t.status !== 'parsed') throw new Error('x'); expect(t.errors.map((e) => e.code)).toContain('TB_TOTAL_ROW_MISMATCH');
+    const blank = parse(rows(['Code', 'Debit', 'Credit'], ['1000', 10, null], ['2000', null, 10], ['3000', null, null]));
+    if (blank.status !== 'parsed') throw new Error('x'); expect(blank.errors.map((e) => e.code)).toContain('TB_AMOUNT_MISSING');
+  });
   it('parseAmount is exact and never rounds', () => {
     expect(parseAmount('1,234.56')).toBe(123456n); expect(parseAmount('٣٫٥٠')).toBe(350n); expect(parseAmount('12-')).toBe(-1200n);
     expect(() => parseAmount('1.005')).toThrow(); expect(() => parseAmount(0.125)).toThrow(); expect(() => parseAmount('1e5')).toThrow();
@@ -134,6 +140,12 @@ describe('I1 parse-file endpoint', () => {
     expect((await post(Buffer.from('PK\x03\x04garbage'))).status).toBe(400);
     expect((await post(Buffer.from('x'), 'tb.txt', 'text/plain')).status).toBe(400);
     expect((await post(Buffer.from('Code,Debit,Credit\n'), 'tb.csv', 'text/csv', { 'x-tb-mapping': 'not-json' })).status).toBe(400);
+  });
+  it('rejects a multi-sheet workbook instead of reading only the first sheet', async () => {
+    setCtx(['source_authority.activate']); mockDb();
+    const sheet = '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Code</t></is></c><c r="B1" t="inlineStr"><is><t>Debit</t></is></c><c r="C1" t="inlineStr"><is><t>Credit</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>1000</t></is></c><c r="B2"><v>5</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>2000</t></is></c><c r="C3"><v>5</v></c></row></sheetData></worksheet>';
+    const res = await post(zip({ 'xl/worksheets/sheet1.xml': sheet, 'xl/worksheets/sheet2.xml': sheet }));
+    expect(res.status).toBe(200); expect(res.body.errors.map((e: { code: string }) => e.code)).toContain('TB_MULTIPLE_SHEETS');
   });
   it('refuses non-draft ranges and unknown ranges', async () => {
     setCtx(['source_authority.activate']); mockDb('active'); expect((await post(xlsx(good as never))).status).toBe(409);

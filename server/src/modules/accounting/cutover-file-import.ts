@@ -88,6 +88,14 @@ export function parseTrialBalanceTable(
   const lines: TbLine[] = [];
   const data = rows.filter((r) => r.sourceRowNumber > m.header_row && !isBlank(r));
   const codeCount = new Map<string, number>();
+  // Rows ignored as totals are only safe if they agree with the imported lines; otherwise a real balance could be dropped silently.
+  const totalRows: Array<{ row: number; d: bigint; c: bigint } | { row: number; bad: true }> = [];
+  const readSides = (r: RawRow): { d: bigint; c: bigint } | null => {
+    try {
+      if (signed) { const b = parseAmount(r.cells[m.balance!]) ?? 0n; return b > 0n ? { d: b, c: 0n } : { d: 0n, c: -b }; }
+      return { d: parseAmount(r.cells[m.debit!]) ?? 0n, c: parseAmount(r.cells[m.credit!]) ?? 0n };
+    } catch { return null; }
+  };
   let dr = 0n, cr = 0n;
   for (const r of data) {
     const row = r.sourceRowNumber;
@@ -98,16 +106,18 @@ export function parseTrialBalanceTable(
     const label = text(m.name !== undefined ? r.cells[m.name] : null);
     const anyAmount = [m.debit, m.credit, m.balance].some((c) => c !== undefined && text(r.cells[c]) !== '');
     if (!code) {
-      if (!anyAmount || TOTAL_ROW.test(label)) { if (anyAmount) warnings.push({ code: 'TB_TOTAL_ROW_IGNORED', row }); continue; }
+      if (!anyAmount) continue;
+      if (TOTAL_ROW.test(label)) { const sd = readSides(r); totalRows.push(sd ? { row, ...sd } : { row, bad: true }); continue; }
       errors.push({ code: 'TB_CODE_MISSING', row }); continue;
     }
-    if (TOTAL_ROW.test(code)) { warnings.push({ code: 'TB_TOTAL_ROW_IGNORED', row }); continue; }
+    if (TOTAL_ROW.test(code)) { const sd = readSides(r); totalRows.push(sd ? { row, ...sd } : { row, bad: true }); continue; }
     if (m.currency !== undefined) {
       const cur = text(r.cells[m.currency]).toUpperCase();
       if (cur && opts.functionalCurrency === null) { errors.push({ code: 'TB_CURRENCY_UNVERIFIABLE', row }); continue; }
       if (cur && cur !== opts.functionalCurrency) { errors.push({ code: 'TB_CURRENCY_MISMATCH', row, detail: cur }); continue; }
     }
     let d = 0n, c = 0n;
+    if (!anyAmount) { errors.push({ code: 'TB_AMOUNT_MISSING', row }); continue; }
     try {
       if (signed) { const b = parseAmount(r.cells[m.balance!]) ?? 0n; if (b > 0n) d = b; else c = -b; }
       else {
@@ -128,6 +138,10 @@ export function parseTrialBalanceTable(
   if (lines.length > TB_MAX_LINES) errors.push({ code: 'TB_TOO_MANY_ROWS' });
   if (lines.length < 2) errors.push({ code: 'TB_TOO_FEW_LINES' });
   for (const l of lines) if (l.status !== 'ok') errors.push({ code: `TB_ACCOUNT_${l.status.toUpperCase()}`, row: l.row, detail: l.code });
+  for (const t of totalRows) {
+    const agrees = !('bad' in t) && ((t.d === dr && t.c === cr) || (signed && t.d === 0n && t.c === 0n));
+    if (agrees) warnings.push({ code: 'TB_TOTAL_ROW_IGNORED', row: t.row }); else errors.push({ code: 'TB_TOTAL_ROW_MISMATCH', row: t.row });
+  }
   const balanced = dr === cr && dr > 0n;
   if (!balanced && lines.length) errors.push({ code: 'TB_UNBALANCED' });
   if (m.currency === undefined) warnings.push({ code: 'TB_CURRENCY_ASSUMED_FUNCTIONAL' });

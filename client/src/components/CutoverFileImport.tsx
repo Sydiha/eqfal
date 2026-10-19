@@ -31,7 +31,9 @@ const TB_MESSAGES: Record<string, { ar: string; en: string }> = {
   TB_TOTAL_ROW_IGNORED: { ar: 'تم تجاهل سطر إجماليات.', en: 'A totals row was ignored.' },
   TB_ZERO_ROW_SKIPPED: { ar: 'تم تخطي سطر برصيد صفري.', en: 'A zero-balance row was skipped.' },
   TB_CURRENCY_ASSUMED_FUNCTIONAL: { ar: 'لا يوجد عمود عملة: يُفترض أن الأرصدة بالعملة الوظيفية للشركة.', en: 'No currency column: balances are assumed to be in the company functional currency.' },
-  TB_FIRST_SHEET_ONLY: { ar: 'الملف يحوي أكثر من ورقة؛ قُرئت الورقة الأولى فقط.', en: 'The workbook has several sheets; only the first was read.' },
+  TB_MULTIPLE_SHEETS: { ar: 'الملف يحوي أكثر من ورقة؛ لا يُقبل لتفادي استيراد ناقص. اترك ورقة ميزان المراجعة وحدها.', en: 'The workbook has several sheets and is rejected to avoid an incomplete import. Keep only the trial balance sheet.' },
+  TB_TOTAL_ROW_MISMATCH: { ar: 'سطر إجماليات لا يطابق السطور المستوردة؛ قد يكون حساب فعلي أُسقط. أصلح الملف.', en: 'A totals row does not match the imported lines; a real account may have been dropped. Fix the file.' },
+  TB_AMOUNT_MISSING: { ar: 'سطر بحساب لكن بلا أي مبلغ (اكتب 0 صراحةً إن كان الرصيد صفراً).', en: 'A row has an account but no amount (write 0 explicitly if the balance is zero).' },
 };
 const ROLES: Array<[keyof Omit<Mapping, 'header_row'>, string, string]> = [
   ['code', 'رمز الحساب', 'Account code'], ['name', 'اسم الحساب (اختياري)', 'Account name (optional)'], ['debit', 'مدين', 'Debit'],
