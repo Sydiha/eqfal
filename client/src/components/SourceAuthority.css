@@ -33,8 +33,9 @@
 .source-authority input:not([type=checkbox]),.source-authority select,.source-authority textarea{width:100%;box-sizing:border-box;margin:0;padding:0 10px;border:1px solid #d6dde4;border-radius:6px;background:#fff;color:var(--sa-ink);font-size:12px;font-weight:400}
 .source-authority input:not([type=checkbox]),.source-authority select{height:36px}
 .source-authority textarea{min-height:76px;padding:8px 10px;resize:vertical}
-.source-authority .sa-check{flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:10px;width:fit-content;max-width:100%;font-weight:500;line-height:1.7;cursor:pointer}
-.source-authority .sa-check input{flex:none;width:16px;height:16px;margin:3px 0 0;accent-color:var(--sa-primary)}
+.source-authority .sa-check{flex-direction:row;align-items:flex-start;gap:10px;min-width:0;font-weight:500;line-height:1.7;cursor:pointer}
+.source-authority .sa-check input{flex:none;width:16px;height:16px;min-width:0;min-height:0;margin:3px 0 0;padding:0;accent-color:var(--sa-primary)}
+.source-authority .sa-check span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .source-authority .sa-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--sa-border)}
 .source-authority .sa-void{padding-top:14px;border-top:1px solid var(--sa-border)}
 .source-authority .sa-state{padding:24px 12px;text-align:center;color:var(--sa-muted);font-size:13px;border:1px dashed var(--sa-border);border-radius:8px;background:var(--sa-soft)}
@@ -59,7 +60,7 @@
 .source-authority .ca-totals>div{padding:10px 12px;border:1px solid var(--sa-border);border-radius:8px;background:var(--sa-soft)}
 .source-authority .ca-totals dt{color:var(--sa-muted);font-size:11.5px}
 .source-authority .ca-totals dd{margin:4px 0 0;font-size:13px;font-weight:700;overflow-wrap:anywhere}
-.source-authority .ca-acks{display:grid;align-content:start;justify-items:start;gap:10px;min-width:0;margin:0;padding:12px;border:1px solid var(--sa-border);border-radius:8px}
+.source-authority .ca-acks{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:10px;min-width:0;margin:0;padding:12px;border:1px solid var(--sa-border);border-radius:8px}
 .source-authority .ca-acks legend{padding:0 6px;font-size:12px;font-weight:700}
 .source-authority .ca-review{display:grid;gap:12px;padding-top:14px;border-top:1px solid var(--sa-border)}
 .source-authority .ca-review h4{margin:0;font-size:14px;font-weight:800}
@@ -78,6 +79,5 @@
 .source-authority .ca-file .sa-warning{margin:0}
 .source-authority .ca-file .sa-warning li,.source-authority .ca-file ul.sa-error li{margin-inline-start:0}
 @media(max-width:48em){
- .source-authority .sa-check{width:100%}
  .source-authority .ca-totals{grid-template-columns:1fr}
 }
