@@ -5,6 +5,7 @@ import { assertFiscalYearOpen, FiscalYearClosedError } from '../accounting/fisca
 import { loadValidMappings, requiredKeys } from './invoice-account-mapping.service';
 import { InvoiceError } from './invoice.service';
 import { lockVatDates } from '../vat/vat.router';
+import { lockCompanyProfileShared } from '../company-accounting-profile/profile-locks';
 import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, purchaseLineRecoverable, toHalalas } from '../vat/vat-invoice';
 
 /**
@@ -104,6 +105,8 @@ export class InvoiceApprovalService {
     //   fiscal-year row -> document row -> VAT month lock -> accounting month lock.
     // Every other writer takes them in this order, so approval must too (any other order can deadlock against them).
     await assertFiscalYearOpen(companyId, fiscalYearId, before.issue_date, client);
+    // A profile correction holds this key exclusively; free tax dates beyond its month locks are serialised here (after the fiscal-year row, before document/VAT/accounting locks).
+    await lockCompanyProfileShared(client, companyId);
     const linked = (await client.query<{ document_id: string }>('SELECT document_id FROM invoice_source_links WHERE invoice_id = $1 AND company_id = $2', [invoiceId, companyId])).rows[0];
     if (linked) await client.query('SELECT 1 FROM documents WHERE id = $1 AND company_id = $2 FOR UPDATE', [linked.document_id, companyId]);
     await lockVatDates(companyId, [before.tax_point_date!], client);
