@@ -395,6 +395,36 @@ function detectTransactionTable(rows: PhysicalRow[], physicalFormulaCells: Set<s
   return { headers, rows: dataRows.map((row) => row.cells), sourceRowNumbers, formulaCells, detectionScore: best.score };
 }
 
+function extractSheetRows(xml: string, shared: string[]): { rows: PhysicalRow[]; formulaCells: Set<string> } {
+  const rows: PhysicalRow[] = []; const formulaCells = new Set<string>();
+  let fallbackRow = 1;
+  for (const rowMatch of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/gi)) {
+    const rowAttrs = rowMatch[1]!; const rowBody = rowMatch[2]!;
+    const sourceRowNumber = Number(rowAttrs.match(/\br="(\d+)"/i)?.[1] ?? fallbackRow);
+    fallbackRow = sourceRowNumber + 1;
+    const row: Cell[] = [];
+    for (const cellMatch of rowBody.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)) {
+      const attrs = cellMatch[1]!; const body = cellMatch[2]!;
+      const ref = attrs.match(/\br="([^"]+)"/i)?.[1] ?? `A${sourceRowNumber}`;
+      const index = colIndex(ref); const type = attrs.match(/\bt="([^"]+)"/i)?.[1] ?? 'n';
+      if (/<f(?:\s|>)/i.test(body)) formulaCells.add(`${sourceRowNumber}:${index}`);
+      let value: Cell = null;
+      if (type === 'inlineStr') value = xmlTag(body, 't');
+      else {
+        const raw = xmlTag(body, 'v');
+        if (raw !== null) {
+          if (type === 's') value = shared[Number(raw)] ?? '';
+          else if (type === 'str') value = raw;
+          else value = Number.isFinite(Number(raw)) ? Number(raw) : raw;
+        }
+      }
+      row[index] = value;
+    }
+    rows.push({ sourceRowNumber, cells: row });
+  }
+  return { rows, formulaCells };
+}
+
 function parseXlsx(data: Buffer): ParsedTable {
   const zip = readZipEntries(data);
   const sharedXml = zip.get('xl/sharedStrings.xml')?.toString('utf8') ?? '';
@@ -418,32 +448,7 @@ function parseXlsx(data: Buffer): ParsedTable {
   for (const sheetPath of candidates) {
     const xml = zip.get(sheetPath)?.toString('utf8');
     if (!xml) continue;
-    const rows: PhysicalRow[] = []; const formulaCells = new Set<string>();
-    let fallbackRow = 1;
-    for (const rowMatch of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/gi)) {
-      const rowAttrs = rowMatch[1]!; const rowBody = rowMatch[2]!;
-      const sourceRowNumber = Number(rowAttrs.match(/\br="(\d+)"/i)?.[1] ?? fallbackRow);
-      fallbackRow = sourceRowNumber + 1;
-      const row: Cell[] = [];
-      for (const cellMatch of rowBody.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)) {
-        const attrs = cellMatch[1]!; const body = cellMatch[2]!;
-        const ref = attrs.match(/\br="([^"]+)"/i)?.[1] ?? `A${sourceRowNumber}`;
-        const index = colIndex(ref); const type = attrs.match(/\bt="([^"]+)"/i)?.[1] ?? 'n';
-        if (/<f(?:\s|>)/i.test(body)) formulaCells.add(`${sourceRowNumber}:${index}`);
-        let value: Cell = null;
-        if (type === 'inlineStr') value = xmlTag(body, 't');
-        else {
-          const raw = xmlTag(body, 'v');
-          if (raw !== null) {
-            if (type === 's') value = shared[Number(raw)] ?? '';
-            else if (type === 'str') value = raw;
-            else value = Number.isFinite(Number(raw)) ? Number(raw) : raw;
-          }
-        }
-        row[index] = value;
-      }
-      rows.push({ sourceRowNumber, cells: row });
-    }
+    const { rows, formulaCells } = extractSheetRows(xml, shared);
     if (!rows.some((row) => !rowIsBlank(row.cells))) continue;
     try {
       const detected = detectTransactionTable(rows, formulaCells);
@@ -951,3 +956,22 @@ bankRouter.patch('/bank-import-batches/:id/mapping', requireSameOrigin, requireA
 bankRouter.get('/bank-import-batches/:id/preview', requireAuth, requireActiveCompany, requireCapability(IMPORT), asyncRoute(async(req,res)=>{const c=activeContext(req,res);if(!c)return;const s=serviceOr503(res);if(!s)return;try{const preview=await s.preview(req.params.id,c.activeCompanyId);res.json({...preview,rows:preview.rows.slice(0,MAX_PREVIEW_ROWS)});}catch(err){if(err instanceof BankNotFoundError){res.status(404).json({error:'Bank import not found'});return;}if(err instanceof BankConflictError){res.status(409).json({error:err.message});return;}throw err;}}));
 bankRouter.post('/bank-import-batches/:id/confirm', requireSameOrigin, requireAuth, requireActiveCompany, requireCapability(IMPORT), asyncRoute(async(req,res)=>{const c=activeContext(req,res);if(!c)return;const s=serviceOr503(res);if(!s)return;try{res.json(await s.confirm(req.params.id,c.activeCompanyId,c.user.id));}catch(err){if(err instanceof BankNotFoundError){res.status(404).json({error:'Bank import not found'});return;}if(err instanceof BankConflictError){res.status(409).json({error:err.message});return;}if(err instanceof BankValidationError){res.status(400).json({error:err.message});return;}throw err;}}));
 bankRouter.get('/bank-transactions', requireAuth, requireActiveCompany, requireCapability(VIEW), asyncRoute(async(req,res)=>{const c=activeContext(req,res);if(!c)return;const s=serviceOr503(res);if(!s)return;res.json({transactions:await s.listTransactions(c.activeCompanyId)});}));
+/** Generic raw table reader (no bank-specific detection) for other importers. Same ZIP/size protections as bank imports. */
+export function readRawSheet(format: SourceFormat, data: Buffer): { rows: PhysicalRow[]; formulaCells: Set<string>; sheetCount: number } {
+  if (format === 'csv') {
+    const rows = parseCsvText(decodeCsv(data)).map((cells, index) => ({ sourceRowNumber: index + 1, cells }));
+    return { rows, formulaCells: new Set(), sheetCount: 1 };
+  }
+  const zip = readZipEntries(data);
+  const shared: string[] = [];
+  for (const match of (zip.get('xl/sharedStrings.xml')?.toString('utf8') ?? '').matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/gi)) {
+    shared.push([...match[1]!.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/gi)].map((m) => decodeXml(m[1]!)).join(''));
+  }
+  const sheetNames = [...zip.keys()].filter((k) => /^xl\/worksheets\/[^/]+\.xml$/.test(k));
+  const first = zip.has('xl/worksheets/sheet1.xml') ? 'xl/worksheets/sheet1.xml' : sheetNames.sort()[0];
+  const xml = first ? zip.get(first)?.toString('utf8') : undefined;
+  if (!xml) throw new BankValidationError('Invalid XLSX archive');
+  return { ...extractSheetRows(xml, shared), sheetCount: sheetNames.length };
+}
+
+export { uploadFormat as detectUploadFormat, decodeFilename as decodeUploadFilename };

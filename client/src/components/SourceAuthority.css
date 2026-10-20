@@ -65,3 +65,5 @@
 .source-authority .ca-review h4{margin:0;font-size:14px;font-weight:800}
 .source-authority .ca-review ul{margin:0;padding-inline-start:28px}
 .source-authority .ca-audit{margin-top:12px}
+.source-authority .ca-table-wrap{overflow-x:auto;max-width:100%}
+.source-authority .ca-file select{max-width:100%}

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { CutoverFileImport } from './CutoverFileImport';
 
 export interface CutoverRange { id: string; from_date: string; to_date: string }
 export interface CutoverAccount { id: string; code: string; name: string; name_ar: string | null; name_en: string | null; is_active: boolean; account_type: string }
@@ -132,6 +133,7 @@ export function CutoverActivation({ range, accounts, accountsFailed, call, tx, a
       <label>{tx('حساب الأرباح المبقاة', 'Retained earnings account')}
         <select value={reId} onChange={(e) => { setReId(e.target.value); reset(); }}><option value="">{tx('اختر', 'Choose')}</option>{equity.map((a) => <option key={a.id} value={a.id}>{a.code} — {name(a)}</option>)}</select></label>
     </div>
+    <CutoverFileImport rangeId={range.id} accounts={accounts} call={call} tx={tx} onApply={(t) => { setText(t); reset(); }} />
     <label>{tx('ميزان المراجعة (رمز الحساب، مدين، دائن — سطر لكل حساب)', 'Trial balance (account code, debit, credit — one line per account)')}
       <textarea value={text} dir="ltr" rows={8} placeholder="1010, 5000.00, 0" onChange={(e) => { setText(e.target.value); reset(); }} /></label>
     {tb.problems.length > 0 && <div className="sa-error" role="alert">{tb.problems.map((p) => `${tx('سطر', 'Row')} ${p.row}: ${p.kind === 'unknown' ? tx('رمز حساب غير معروف', 'unknown account code') : p.kind === 'duplicate' ? tx('حساب مكرر', 'duplicate account') : tx('صيغة غير صالحة', 'invalid format')}`).join(' · ')}</div>}
