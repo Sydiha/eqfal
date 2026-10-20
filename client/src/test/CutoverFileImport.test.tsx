@@ -31,8 +31,16 @@ describe('CutoverFileImport', () => {
     upload();
     const btn = await screen.findByText('Use these lines in the form');
     expect(btn).toBeDisabled();
+    expect(screen.queryByText('Code not found in the chart of accounts.')).not.toBeNull();
     fireEvent.change(screen.getByLabelText('Choose an account for row 2'), { target: { value: 'a1' } });
-    expect(btn).not.toBeDisabled(); fireEvent.click(btn);
+    expect(screen.queryByText('Code not found in the chart of accounts.')).toBeNull();
+    expect(screen.getByText('Manually mapped')).toBeTruthy();
+    expect(btn).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Choose an account for row 2'), { target: { value: '' } });
+    expect(screen.queryByText('Code not found in the chart of accounts.')).not.toBeNull();
+    expect(btn).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Choose an account for row 2'), { target: { value: 'a1' } });
+    fireEvent.click(btn);
     expect(textarea().value).toBe('1000, 100.00, 0.00\n2000, 0.00, 100.00');
   });
   it('blocks duplicate mapping, unbalanced files and ambiguous/duplicate rows', async () => {
