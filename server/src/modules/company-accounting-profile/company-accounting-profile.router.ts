@@ -9,7 +9,7 @@ export const companyAccountingProfileRouter=Router();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const keys=['accounting_framework','accounting_framework_notes','functional_currency','reporting_currency','first_live_accounting_date','vat_status','vat_registration_number','vat_registered_from','vat_deregistered_from','vat_filing_frequency','tax_treatment','ownership_context','tax_effective_from','tax_notes','wht_profile','has_non_resident_dealings','effective_from','effective_to','change_reason'] as const;
-const reviewKeys=['accounting_framework','accounting_framework_notes','tax_treatment','ownership_context','tax_effective_from','tax_notes','wht_profile','has_non_resident_dealings'] as const;
+const reviewKeys=['accounting_framework','accounting_framework_notes','tax_treatment','ownership_context','tax_effective_from','tax_notes','wht_profile','has_non_resident_dealings','effective_from','effective_to'] as const;
 const required=['accounting_framework','functional_currency','reporting_currency','first_live_accounting_date','vat_status','tax_treatment','ownership_context','wht_profile','has_non_resident_dealings'] as const;
 const base=[requireAuth,requireActiveCompany];
 const route=(fn:(req:Request,res:Response,next:NextFunction)=>Promise<void>)=>(req:Request,res:Response,next:NextFunction)=>{void fn(req,res,next).catch(next);};
