@@ -112,7 +112,7 @@ export function CutoverFileImport({ rangeId, accounts, call, tx, onApply }: {
           <td className="sa-num"><bdi dir="ltr">{l.row}</bdi></td><td><bdi dir="ltr">{l.code}</bdi></td><td>{l.name ?? '—'}</td><td className="sa-num"><bdi dir="ltr">{l.debit}</bdi></td><td className="sa-num"><bdi dir="ltr">{l.credit}</bdi></td>
           <td>{l.status === 'ok' ? <span>{a ? `${a.code} — ${tx(a.name_ar ?? a.name, a.name_en ?? a.name)}` : '—'}</span>
             : blocked ? <span className="sa-error">{m(`TB_ACCOUNT_${l.status.toUpperCase()}`)}</span>
-            : <label><span className="sa-error">{m(`TB_ACCOUNT_${l.status.toUpperCase()}`)} </span>
+            : <label>{a ? <span className="sa-badge is-active" role="status">{tx('تمت المطابقة يدوياً', 'Manually mapped')}</span> : <span className="sa-error">{m(`TB_ACCOUNT_${l.status.toUpperCase()}`)} </span>}
               <select aria-label={`${tx('اختر حساباً للسطر', 'Choose an account for row')} ${l.row}`} value={pick[l.row] ?? ''} onChange={(e) => setPick({ ...pick, [l.row]: e.target.value })}>
                 <option value="">{tx('اختر حساباً', 'Choose an account')}</option>{active.map((x) => <option key={x.id} value={x.id}>{x.code} — {tx(x.name_ar ?? x.name, x.name_en ?? x.name)}</option>)}</select></label>}
             {dup && <span className="sa-error"> {tx('حساب مكرر بعد الربط', 'Account used more than once')}</span>}</td></tr>)}</tbody></table></div>
