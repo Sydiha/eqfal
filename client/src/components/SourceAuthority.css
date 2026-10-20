@@ -66,4 +66,9 @@
 .source-authority .ca-review ul{margin:0;padding-inline-start:28px}
 .source-authority .ca-audit{margin-top:12px}
 .source-authority .ca-table-wrap{overflow-x:auto;max-width:100%}
+.source-authority .ca-table-wrap .sa-table{min-width:640px}
+.source-authority .ca-table-wrap td.sa-date{unicode-bidi:isolate;direction:ltr;text-align:end;font-variant-numeric:tabular-nums}
+.source-authority .ca-table-wrap td:nth-child(2){text-align:start}
+.source-authority .ca-table-wrap th:nth-child(4),.source-authority .ca-table-wrap th:nth-child(5){text-align:end}
+.source-authority .ca-totals dd.sa-date{unicode-bidi:isolate;font-variant-numeric:tabular-nums}
 .source-authority .ca-file select{max-width:100%}
