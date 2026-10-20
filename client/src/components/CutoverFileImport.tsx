@@ -107,9 +107,9 @@ export function CutoverFileImport({ rangeId, accounts, call, tx, onApply }: {
     {parsed && review && <div className="ca-file-review">
       {review.blocking.length > 0 && <ul className="sa-error" role="alert">{review.blocking.map((e, i) => <li key={i}>{e.row ? `${tx('سطر', 'Row')} ${e.row}: ` : ''}{m(e.code)}{e.detail ? ` (${e.detail})` : ''}</li>)}</ul>}
       {parsed.warnings.length > 0 && <ul className="sa-warning">{parsed.warnings.map((w, i) => <li key={i}>{w.row ? `${tx('سطر', 'Row')} ${w.row}: ` : ''}{m(w.code)}</li>)}</ul>}
-      <div className="ca-table-wrap"><table className="sa-table"><thead><tr><th>{tx('سطر', 'Row')}</th><th>{tx('الرمز', 'Code')}</th><th>{tx('الاسم في الملف', 'Name in file')}</th><th>{tx('مدين', 'Debit')}</th><th>{tx('دائن', 'Credit')}</th><th>{tx('الحساب المربوط', 'Mapped account')}</th></tr></thead>
+      <div className="sa-table ca-table-wrap"><table><thead><tr><th className="sa-num">{tx('سطر', 'Row')}</th><th>{tx('الرمز', 'Code')}</th><th>{tx('الاسم في الملف', 'Name in file')}</th><th className="sa-num">{tx('مدين', 'Debit')}</th><th className="sa-num">{tx('دائن', 'Credit')}</th><th>{tx('الحساب المربوط', 'Mapped account')}</th></tr></thead>
         <tbody>{review.rows.map(({ l, a, dup, blocked }) => <tr key={l.row}>
-          <td className="sa-date">{l.row}</td><td className="sa-date" dir="ltr">{l.code}</td><td>{l.name ?? '—'}</td><td className="sa-date">{l.debit}</td><td className="sa-date">{l.credit}</td>
+          <td className="sa-num"><bdi dir="ltr">{l.row}</bdi></td><td><bdi dir="ltr">{l.code}</bdi></td><td>{l.name ?? '—'}</td><td className="sa-num"><bdi dir="ltr">{l.debit}</bdi></td><td className="sa-num"><bdi dir="ltr">{l.credit}</bdi></td>
           <td>{l.status === 'ok' ? <span>{a ? `${a.code} — ${tx(a.name_ar ?? a.name, a.name_en ?? a.name)}` : '—'}</span>
             : blocked ? <span className="sa-error">{m(`TB_ACCOUNT_${l.status.toUpperCase()}`)}</span>
             : <label><span className="sa-error">{m(`TB_ACCOUNT_${l.status.toUpperCase()}`)} </span>
