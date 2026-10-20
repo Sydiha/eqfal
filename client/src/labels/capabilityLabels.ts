@@ -10,7 +10,7 @@ const pick = (pair: Pair, lang: Lang) => (lang === 'ar' ? pair[1] : pair[0]);
 
 const VERBS: Record<string, Pair> = {
   view: ['View', 'عرض'], create: ['Create', 'إنشاء'], edit: ['Edit', 'تعديل'], manage: ['Manage', 'إدارة'],
-  approve: ['Approve', 'اعتماد'], review: ['Review', 'مراجعة'], submit: ['Submit', 'إرسال'], post: ['Post', 'ترحيل'],
+  approve: ['Approve', 'اعتماد'], correct: ['Correct', 'تصحيح'], review: ['Review', 'مراجعة'], submit: ['Submit', 'إرسال'], post: ['Post', 'ترحيل'],
   close: ['Close', 'إغلاق'], reopen: ['Reopen', 'إعادة فتح'], cancel: ['Cancel', 'إلغاء'], disable: ['Disable', 'تعطيل'],
   confirm: ['Confirm', 'تأكيد'], settle: ['Settle', 'تسوية'], delete: ['Delete', 'حذف'], dispose: ['Dispose of', 'استبعاد'],
   import: ['Import', 'استيراد'], match: ['Match', 'مطابقة'], reconcile: ['Reconcile', 'تسوية'], upload: ['Upload', 'رفع'],

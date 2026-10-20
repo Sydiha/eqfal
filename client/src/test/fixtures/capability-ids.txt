@@ -48,6 +48,7 @@ company.edit
 company.status.edit
 company.view
 company_accounting_profile.approve
+company_accounting_profile.correct
 company_accounting_profile.create
 company_accounting_profile.edit
 company_accounting_profile.manage

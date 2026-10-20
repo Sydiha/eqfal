@@ -60,6 +60,7 @@ const ACTIONS: Record<string, Pair> = {
   'company_accounting_profile.create': ['Create accounting profile', 'إنشاء ملف محاسبي'], 'company_accounting_profile.submit_review': ['Submit accounting profile for review', 'إرسال الملف المحاسبي للمراجعة'],
   'company_accounting_profile.review': ['Review accounting profile', 'مراجعة الملف المحاسبي'], 'company_accounting_profile.approve': ['Approve accounting profile', 'اعتماد الملف المحاسبي'],
   'company_accounting_profile.supersede': ['Supersede accounting profile', 'استبدال الملف المحاسبي'], 'company_accounting_profile.update_draft': ['Update draft accounting profile', 'تعديل مسودة الملف المحاسبي'],
+  'company_accounting_profile.correction_create': ['Create corrective accounting profile', 'إنشاء نسخة تصحيحية للملف المحاسبي'],
   'company_accounting_profile.update_professional_review': ['Update accounting profile professional review', 'تعديل المراجعة المهنية للملف المحاسبي'],
   'counterparty.update': ['Update counterparty', 'تعديل طرف مقابل'], 'document.mark_incomplete': ['Mark document incomplete', 'وسم مستند بأنه غير مكتمل'], 'document.reject': ['Reject document', 'رفض مستند'],
   'fiscal_year.create': ['Create fiscal year', 'إنشاء سنة مالية'], 'fiscal_year.status_change': ['Change fiscal year status', 'تغيير حالة سنة مالية'], 'fiscal_year.update': ['Update fiscal year', 'تعديل سنة مالية'],

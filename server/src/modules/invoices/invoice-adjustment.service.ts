@@ -3,6 +3,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import { assertFiscalYearOpen, FiscalYearClosedError } from '../accounting/fiscal-year-posting.guard';
 import { lockVatDates } from '../vat/vat.router';
+import { lockCompanyProfileShared } from '../company-accounting-profile/profile-locks';
 import { fromHalalas, groupInvoiceLines, InvoiceVatGroup, InvoiceVatTreatment, purchaseLineRecoverable, toHalalas } from '../vat/vat-invoice';
 import { loadValidMappings, requiredKeys } from './invoice-account-mapping.service';
 import { computeLine, formatMoney, InvoiceMathError, parseRecoverablePercent } from './invoice-math';
@@ -403,6 +404,7 @@ export class InvoiceAdjustmentService {
       if (years.length !== 1) throw conflict('INVOICE_FISCAL_YEAR_UNRESOLVED', years.length === 0 ? 'No fiscal year covers the note date' : 'More than one fiscal year covers the note date');
       const fiscalYearId = years[0]!.id;
       await assertFiscalYearOpen(companyId, fiscalYearId, note.adjustment_date, client);
+      await lockCompanyProfileShared(client, companyId);
       const linked = (await client.query<{ document_id: string }>('SELECT document_id FROM invoice_adjustment_source_links WHERE adjustment_id = $1 AND company_id = $2', [id, companyId])).rows[0];
       if (linked) await client.query('SELECT 1 FROM documents WHERE id = $1 AND company_id = $2 FOR UPDATE', [linked.document_id, companyId]);
       const taxPoint = (await client.query<{ tax_point_date: string }>('SELECT tax_point_date::text FROM invoices WHERE id = $1 AND company_id = $2', [note.original_invoice_id, companyId])).rows[0]?.tax_point_date;

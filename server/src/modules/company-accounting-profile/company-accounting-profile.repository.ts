@@ -106,6 +106,32 @@ export class CompanyAccountingProfileRepository {
     return this.decorate(rows[0]&&{...rows[0],closed_period_impact:false});
   }
 
+  async createCorrection(companyId:string,version:number,actor:string,correctsId:string,reason:string,input:ProfileValues,runner:Runner):Promise<CompanyAccountingProfile>{
+    const keys=Object.keys(input) as (keyof ProfileValues)[];
+    const values=keys.map(key=>input[key]);
+    const {rows}=await runner.query<Omit<CompanyAccountingProfile,'professional_review_required'>>(
+      `INSERT INTO company_accounting_profiles(company_id,version_no,prepared_by_user_id,corrects_profile_id,correction_reason,${keys.join(',')})
+       VALUES($1,$2,$3,$4,$5,${keys.map((_,i)=>`$${i+6}`).join(',')}) RETURNING ${RETURNING}`,[companyId,version,actor,correctsId,reason,...values]);
+    return this.decorate({...rows[0]!,closed_period_impact:false})!;
+  }
+
+  async supersede(companyId:string,id:string,byId:string,runner:Runner):Promise<CompanyAccountingProfile|null>{
+    const {rows}=await runner.query<Omit<CompanyAccountingProfile,'professional_review_required'>>(
+      `UPDATE company_accounting_profiles SET workflow_status='superseded',superseded_at=NOW(),superseded_by_profile_id=$3,updated_at=NOW()
+       WHERE id=$1 AND company_id=$2 AND workflow_status='approved' RETURNING ${RETURNING}`,[id,companyId,byId]);
+    return this.decorate(rows[0]&&{...rows[0],closed_period_impact:false});
+  }
+
+  async isCorrection(companyId:string,id:string,runner:Runner):Promise<boolean>{
+    return Boolean((await runner.query('SELECT 1 FROM company_accounting_profiles WHERE id=$1 AND company_id=$2 AND corrects_profile_id IS NOT NULL',[id,companyId])).rowCount);
+  }
+
+  async openCorrectionFor(companyId:string,id:string,runner:Runner):Promise<string|null>{
+    const {rows}=await runner.query<{id:string}>(
+      `SELECT id FROM company_accounting_profiles WHERE company_id=$1 AND corrects_profile_id=$2 AND workflow_status IN ('draft','needs_review','reviewed') LIMIT 1`,[companyId,id]);
+    return rows[0]?.id??null;
+  }
+
   async closedPeriodImpact(companyId:string,date:string|null,runner:Runner):Promise<boolean>{
     if(!date)return false;
     return Boolean((await runner.query(`SELECT 1 FROM monthly_close_periods WHERE company_id=$1 AND status='closed' AND period_start<=$2 AND period_end>=$2 LIMIT 1`,[companyId,date])).rowCount);
