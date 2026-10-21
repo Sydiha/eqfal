@@ -40,3 +40,52 @@ describe('S2 UAT findings', () => {
     }
   });
 });
+
+import { render as renderWithProviders, screen as s2 } from './test-utils';
+import { AnnualClosing } from '../components/AnnualClosing';
+import { afterEach } from 'vitest';
+import { annualPackageExport, packageCutoverLines } from '../export/reportExport';
+import { toCsv } from '../export/downloadExport';
+
+describe('S2 package export: supplement versions and cutover disclosure (spec v2 G/H)', () => {
+  const summary = { cutover_date: '2025-06-30', cash_flow_supplement: 'complete', cash_flow_supplement_version: 2, cash_flow_revision_pending: true, equity_supplement: 'complete', equity_supplement_version: 1, equity_revision_pending: false, tb_basis: 'pre_closing_acknowledged', blockers: '' };
+  it.each(['en', 'ar'])('carries both approved version numbers from the snapshot manifest into the export (%s)', async (lng) => {
+    await i18n.changeLanguage(lng);
+    const t = i18n.t.bind(i18n);
+    const labels = { cash_flow: t('annualClosing.package.sections.pre_cutover_cash_flow'), equity: t('annualClosing.package.sections.pre_cutover_equity') };
+    const lines = packageCutoverLines(t, summary, labels);
+    expect(lines).toContainEqual([`${t('accounting.statements.preCutover.supplementVersion')} — ${labels.cash_flow}`, `2 — ${t('accounting.statements.preCutover.revisionPending')}`]);
+    expect(lines).toContainEqual([`${t('accounting.statements.preCutover.supplementVersion')} — ${labels.equity}`, '1']);
+    const doc = annualPackageExport({ ar: lng === 'ar', company: 'Co', generatedAt: 'now', fiscalYear: 'FY', startDate: '2025-01-01', endDate: '2025-12-31', title: 'P', labels: { fiscalYear: 'f', range: 'r', packageState: 's', section: 'S', state: 'st', source: 'so', blockers: 'b', snapshot: '' }, packageState: 'Draft', snapshotLines: [], rows: [], cutover: lines });
+    const csv = toCsv(doc.rows);
+    expect(csv).toContain('2025-06-30');
+    expect(csv).toContain(labels.equity);
+    expect(csv).not.toContain('annualClosing.');
+    expect(csv).not.toContain('accounting.statements');
+  });
+  it('omits the block for a year without a cutover, and shows "not recorded" when no version is approved', async () => {
+    await i18n.changeLanguage('en');
+    const t = i18n.t.bind(i18n);
+    expect(packageCutoverLines(t, undefined, { cash_flow: 'c', equity: 'e' })).toEqual([]);
+    expect(packageCutoverLines(t, { ...summary, equity_supplement_version: '' }, { cash_flow: 'c', equity: 'e' }).at(-1)).toEqual([`${t('accounting.statements.preCutover.supplementVersion')} — e`, 'Not recorded']);
+  });
+});
+
+describe('S2 package tab: versions flow from the snapshot manifest to the screen', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('reads pre_cutover_history.summary of the latest snapshot', async () => {
+    await i18n.changeLanguage('en');
+    const summary = { cutover_date: '2025-06-30', cash_flow_supplement_version: 3, cash_flow_revision_pending: false, equity_supplement_version: 4, equity_revision_pending: false, tb_basis: 'pre_closing_acknowledged', blockers: '' };
+    const manifest = [{ section: 'pre_cutover_history', status: 'ready', blocker_count: 0, blockers: [], source: 'ledger-source-authority', summary }];
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: '2025', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ready: true, blocker_count: 0, financial_statements_readiness: { status: 'ready', label: '', label_ar: '' }, zakat_readiness: { status: 'ready' }, domains: {}, package_manifest: [] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ package: { id: 'p', status: 'draft', version: 1, final_snapshot_id: null, finalized_at: null, handed_off_at: null, handoff_note: null, handoff_reference: null, snapshots: [{ id: 's', snapshot_no: 1, snapshot_type: 'preview', created_at: '2026-01-01T00:00:00Z', manifest }] }, live: { manifest: [], source_fingerprint: 'x' }, drift: false }), { status: 200 }));
+    renderWithProviders(<AnnualClosing canView canViewPackage onUnauthorized={vi.fn()} />);
+    fireEvent.click(await s2.findByRole('tab', { name: /closing package/i }));
+    const note = await s2.findByRole('note', { name: 'Cutover disclosure' });
+    expect(note).toHaveTextContent('Approved historical supplement version — Pre-cutover cash flows3');
+    expect(note).toHaveTextContent('Approved historical supplement version — Pre-cutover equity movements4');
+    expect(note).toHaveTextContent('2025-06-30');
+  });
+});
