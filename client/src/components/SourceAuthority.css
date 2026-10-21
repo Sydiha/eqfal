@@ -70,6 +70,15 @@
 .source-authority .ca-table-wrap table{min-width:640px}
 .source-authority .sa-table .sa-num{text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums}
 .source-authority .ca-totals dd.sa-date{unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+/* Activation details (read-only audit): six cards of unequal width. `.sa-date` is nowrap for table dates; here long UUIDs and timestamps must wrap
+   inside their card instead of running into the neighbour (RTL cards overlapped). Fewer, wider columns instead of six compressed ones. */
+.source-authority .ca-audit{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:64em){.source-authority .ca-audit{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.source-authority .ca-audit>div{min-width:0;overflow:hidden}
+.source-authority .ca-audit dt{margin-bottom:2px;line-height:1.6}
+.source-authority .ca-audit dd{min-width:0;line-height:1.7;overflow-wrap:anywhere;word-break:break-word}
+.source-authority .ca-audit dd.sa-date{white-space:normal;direction:ltr;text-align:start;overflow-wrap:anywhere;word-break:break-all}
+.source-authority[dir=rtl] .ca-audit dd.sa-date{text-align:right}
 .source-authority .ca-file select{max-width:100%}
 
 .source-authority .sa-table td:last-child:not(.sa-reason){white-space:nowrap}
@@ -79,5 +88,5 @@
 .source-authority .ca-file .sa-warning{margin:0}
 .source-authority .ca-file .sa-warning li,.source-authority .ca-file ul.sa-error li{margin-inline-start:0}
 @media(max-width:48em){
- .source-authority .ca-totals{grid-template-columns:1fr}
+ .source-authority .ca-totals,.source-authority .ca-audit{grid-template-columns:minmax(0,1fr)}
 }

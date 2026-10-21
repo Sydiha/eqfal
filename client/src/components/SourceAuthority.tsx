@@ -141,7 +141,7 @@ export function SourceAuthority({ canManage, canActivate = false, canManageSuppl
           <div><dt>{tx('وقت التفعيل', 'Activated at')}</dt><dd className="sa-date">{r.activated_at ?? '—'}</dd></div>
           <div><dt>{tx('مرجع الميزان', 'Trial balance reference')}</dt><dd>{r.tb_reference ?? '—'}</dd></div>
           <div><dt>{tx('أعدّه', 'Prepared by')}</dt><dd>{r.tb_prepared_by ?? '—'}</dd></div>
-          <div><dt>{tx('الإقرارات', 'Acknowledgements')}</dt><dd>{Object.keys(a).length ? Object.keys(a).filter((k) => a[k]).length + '/4' : '—'}</dd></div>
+          <div><dt>{tx('الإقرارات', 'Acknowledgements')}</dt><dd>{Object.keys(a).length ? Object.keys(a).filter((k) => a[k]).length + '/' + Object.keys(a).length : '—'}</dd></div>
         </dl>; })()}
       {detail && ranges.find((x) => x.id === detail)?.status === 'active' && <CutoverSupplements key={detail} rangeId={detail} call={call} tx={tx} canManage={canManageSupplements} canApprove={canApproveSupplements} />}
       {voiding && <form onSubmit={submitVoid} className="sa-form sa-void">
