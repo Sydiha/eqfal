@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import pool from '../../db/pool';
-import { LedgerCutoverService, parseCutoverInput } from '../accounting/ledger-cutover';
+import { LedgerCutoverService, parseCutoverInput, parseLegacyReplayInput } from '../accounting/ledger-cutover';
 import { LedgerSourceAuthorityError, LedgerSourceAuthorityNotFoundError, LedgerSourceAuthorityService } from '../accounting/ledger-source-authority';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
@@ -15,7 +15,7 @@ const route = (handler: (req: Request, res: Response) => Promise<void>): Request
   void handler(req, res).catch((error) => {
     if (error instanceof LedgerSourceAuthorityNotFoundError) { res.status(404).json({ error: 'Not found' }); return; }
     if (error instanceof LedgerSourceAuthorityError) {
-      res.status(error.code === 'AUTHORITY_RANGE_INVALID' || error.code === 'CUTOVER_LINES_INVALID' ? 400 : 409).json({ error: error.message, code: error.code, ...('detail' in error && (error as { detail?: unknown }).detail !== undefined ? { detail: (error as { detail?: unknown }).detail } : {}) });
+      res.status(error.code === 'AUTHORITY_RANGE_INVALID' || error.code === 'CUTOVER_LINES_INVALID' || error.code === 'CUTOVER_EVIDENCE_REQUIRED' ? 400 : 409).json({ error: error.message, code: error.code, ...('detail' in error && (error as { detail?: unknown }).detail !== undefined ? { detail: (error as { detail?: unknown }).detail } : {}) });
       return;
     }
     next(error);
@@ -69,8 +69,14 @@ ledgerSourceAuthorityRouter.post('/ledger-source-authority/:id/activate', requir
   if (!uuid(id)) { res.status(404).json({ error: 'Not found' }); return; }
   if (typeof req.body !== 'object' || req.body === null || req.body['confirm'] !== true) { res.status(400).json({ error: 'Explicit confirmation is required', code: 'CONFIRMATION_REQUIRED' }); return; }
   const input = parseCutoverInput(req.body, true);
-  if (!input) { res.status(400).json({ error: 'Invalid request', code: 'CUTOVER_LINES_INVALID' }); return; }
   const ctx = getAuthenticatedContext(req)!;
+  if (!input) {
+    // A pre-S1 body can only replay an activation that already completed; it never activates anything.
+    const legacy = parseLegacyReplayInput(req.body);
+    if (!legacy) { res.status(400).json({ error: 'Invalid request', code: 'CUTOVER_LINES_INVALID' }); return; }
+    res.status(200).json(await new LedgerCutoverService(pool).replayLegacy(ctx.activeCompanyId!, id, legacy));
+    return;
+  }
   const result = await new LedgerCutoverService(pool).activate(ctx.activeCompanyId!, ctx.user.id, id, input);
   res.status(result.replayed ? 200 : 201).json(result);
 }));

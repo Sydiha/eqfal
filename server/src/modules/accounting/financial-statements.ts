@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
 import { assertStatementRange, CUTOVER_BOUNDS_SQL, CutoverBounds } from './external-period-guard';
+import { CutoverDisclosure, loadCutoverDisclosure, preCutover } from './cutover-disclosure';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
 
@@ -14,7 +15,7 @@ export type StatementAccount={
   account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;account_type:string;
   statement_category:StatementCategory;is_contra:boolean;amount:string;
 };
-type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string};
+type Movement=Omit<StatementAccount,'amount'>&{debit:string;credit:string;opening_debit:string;opening_credit:string;cutover_debit:string;cutover_credit:string};
 type QueryRunner=Pick<Pool|PoolClient,'query'>;
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -47,7 +48,9 @@ export class FinancialStatementsService{
       `SELECT a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.account_type,a.statement_category,a.is_contra,
               COALESCE(SUM(l.debit),0)::text debit,COALESCE(SUM(l.credit),0)::text credit,
               COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.statement_category='equity') THEN l.debit ELSE 0 END),0)::text opening_debit,
-              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.statement_category='equity') THEN l.credit ELSE 0 END),0)::text opening_credit
+              COALESCE(SUM(CASE WHEN j.entry_type='opening_balance' OR (j.entry_type='cutover_balance' AND a.statement_category='equity') THEN l.credit ELSE 0 END),0)::text opening_credit,
+              COALESCE(SUM(CASE WHEN j.entry_type='cutover_balance' THEN l.debit ELSE 0 END),0)::text cutover_debit,
+              COALESCE(SUM(CASE WHEN j.entry_type='cutover_balance' THEN l.credit ELSE 0 END),0)::text cutover_credit
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
        JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
@@ -57,11 +60,15 @@ export class FinancialStatementsService{
        ORDER BY a.code,a.id`,
       [companyId,fiscalYearId,from,to],
     )).rows;
-    const accounts=rows.map(({opening_debit:openingDebit,opening_credit:openingCredit,...row})=>({...row,amount:accountAmount(row).toFixed(2)}));
-    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
+    const accounts=rows.map(({opening_debit:_od,opening_credit:_oc,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,amount:accountAmount(row).toFixed(2)}));
+    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
+    // S1: the part of each amount that comes from the cut-over journal (imported, dates up to D); zero when the range starts after D.
+    const importedAmounts=rows.map(row=>accountAmount({...row,debit:row.cutover_debit,credit:row.cutover_credit}));
+    // Only years with an active cut-over range disclose anything; January-1 companies get no extra query or field.
+    const disclosure:CutoverDisclosure|null=cutoverDate?await loadCutoverDisclosure(db,companyId,fiscalYearId):null;
     const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(Number(rows[index]!.debit)!==0||Number(rows[index]!.credit)!==0));
     if(unmapped.length)throw new FinancialStatementUnmappedError(unmapped);
-    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,cutover_date:cutoverDate,accounts,openingAccounts};
+    return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,cutover_date:cutoverDate,accounts,openingAccounts,importedAmounts,disclosure};
   }
 
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
@@ -80,16 +87,33 @@ export class FinancialStatementsService{
     const liabilities=total(['current_liability','non_current_liability']);
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
-    const{openingAccounts:_,...publicReport}=report;
-    return{...publicReport,as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    const{openingAccounts:_,importedAmounts:_i,disclosure,...publicReport}=report;
+    return{...publicReport,...preCutover(disclosure,'financial_position'),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
     const report=await this.movements(companyId,fiscalYearId,start,end);
     const sections=this.sections(report.accounts,profitOrLossCategories);
     const profit=this.earnings(report.accounts);
-    const{openingAccounts:_,...publicReport}=report;
-    return{...publicReport,statement:'profit_or_loss',sections,profit_or_loss:profit.toFixed(2)};
+    const{openingAccounts:_,importedAmounts,disclosure,...publicReport}=report;
+    const base={...publicReport,statement:'profit_or_loss' as const,sections,profit_or_loss:profit.toFixed(2)};
+    if(!disclosure)return base;
+    // Imported (cut-over journal, dates up to D) vs native (after D) columns. Both come from the same posted ledger, so imported + native = amount.
+    const imported=report.accounts.map((account,index)=>({...account,amount:(Math.abs(importedAmounts[index]!)<0.005?0:importedAmounts[index]!).toFixed(2)}));
+    const money=(value:number)=>(Math.abs(value)<0.005?0:value).toFixed(2); // never "-0.00" from a float difference
+    const native=report.accounts.map((account,index)=>({...account,amount:money(Number(account.amount)-importedAmounts[index]!)}));
+    const importedById=new Map(imported.map(account=>[account.account_id,account.amount]));
+    const nativeById=new Map(native.map(account=>[account.account_id,account.amount]));
+    const importedSections=this.sections(imported,profitOrLossCategories),nativeSections=this.sections(native,profitOrLossCategories);
+    const importedProfit=this.earnings(imported);
+    return{
+      ...base,...preCutover(disclosure,'income_statement'),
+      sections:sections.map((section,index)=>({
+        ...section,imported_total:importedSections[index]!.total,native_total:nativeSections[index]!.total,
+        accounts:section.accounts.map(account=>({...account,imported_amount:importedById.get(account.account_id)!,native_amount:nativeById.get(account.account_id)!})),
+      })),
+      profit_or_loss_split:{imported:money(importedProfit),native:money(profit-importedProfit)},
+    };
   }
 
   async changesInEquity(companyId:string,fiscalYearId:string,start?:string,end?:string){
@@ -116,6 +140,7 @@ export class FinancialStatementsService{
       await client.query('COMMIT');
       return{
         fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
+        ...preCutover(period.disclosure,'changes_in_equity'),
         statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
         direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
         current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),

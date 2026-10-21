@@ -172,6 +172,11 @@ export async function getFiscalYearCloseReadiness(
       ['external_draft_fixed_assets', d.assets!.summary.external_draft_assets],
     ];
     for (const [code, count] of external) if (num(count) > 0) warn(code, num(count), cutover.to_date);
+    // S1: missing pre-cut-over history and trial-balance evidence are disclosed, never blockers of the ledger close (Owner decision 2026-10-21).
+    const history = d.pre_cutover_history?.summary;
+    if (history?.historical_supplements === 'missing') warn('cutover_historical_supplements_missing', 1, cutover.to_date);
+    const evidence = String(history?.evidence_missing ?? '').split(',').filter(Boolean);
+    if (evidence.length) warn('cutover_tb_evidence_missing', evidence.length, evidence.join(','));
   }
   const pkg = (await client.query<{ status: string }>(
     'SELECT status FROM annual_closing_packages WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, year.id],

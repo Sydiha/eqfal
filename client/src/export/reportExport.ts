@@ -30,8 +30,32 @@ const doc = (fileStem: string, title: string, x: Labels, metaRows: ExportRows, b
 type T = (key: string) => string;
 export type TrialRow = { id?: string; account_id?: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; debit_movement: string; credit_movement: string; debit_balance: string; credit_balance: string };
 export type LedgerRow = { accounting_date: string; journal_id: string; reference: string | null; description: string; debit: string; credit: string; running_balance: string };
-export type StatementSection = { category: string; accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string }>; total: string };
-export type StatementData = { statement: string; sections?: StatementSection[]; equity_accounts?: StatementSection['accounts']; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; accounting_equation?: { balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+export type StatementSection = { category: string; accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string; imported_amount?: string; native_amount?: string }>; total: string; imported_total?: string; native_total?: string };
+/** Server `pre_cutover` block: present only for a fiscal year with an active cut-over range. */
+export type PreCutover = {
+  cutover_date: string; tb_reference: string | null; tb_prepared_by: string | null; tb_source_system: string | null;
+  tb_basis: 'pre_closing_acknowledged' | 'not_recorded'; evidence_missing: string[]; limitations: string[];
+  completeness: { availability: 'ledger_calculated' | 'post_cutover_only'; full_year_complete: boolean; status: string; reasons: string[] };
+};
+/** Label/value lines disclosing the cut-over; shared by the on-screen note and every export so they always say the same thing. */
+export function preCutoverLines(t: T, d: PreCutover): Array<[string, string]> {
+  const k = (key: string) => t(`accounting.statements.preCutover.${key}`);
+  const none = k('notRecorded');
+  return [
+    [k('title'), k('intro')],
+    [k('cutoverDate'), d.cutover_date],
+    [k('tbReference'), d.tb_reference ?? none],
+    [k('preparedBy'), d.tb_prepared_by ?? none],
+    [k('sourceSystem'), d.tb_source_system ?? none],
+    [k('basis'), k(d.tb_basis === 'pre_closing_acknowledged' ? 'basisAcknowledged' : 'basisNotRecorded')],
+    [k('availability'), k(d.completeness.availability === 'ledger_calculated' ? 'ledgerCalculated' : 'postCutoverOnly')],
+    [k('completeness'), d.completeness.full_year_complete ? '✓' : k('unverified')],
+    ...d.completeness.reasons.map((r): [string, string] => ['', k(`reasons.${r}`)]),
+    [k('limitations.title'), ''],
+    ...d.limitations.map((l): [string, string] => ['', k(`limitations.${l}`)]),
+  ];
+}
+export type StatementData = { statement: string; pre_cutover?: PreCutover; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection['accounts']; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; accounting_equation?: { balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
 type Sum = (values: string[]) => string;
 
 export function trialBalanceExport(p: Labels & { t: T; accountName: (a: TrialRow) => string; sum: Sum; yearName: string; rows: TrialRow[] }): ExportDocument {
@@ -62,16 +86,22 @@ const statementSlug: Record<StatementKind, string> = { financialPosition: 'finan
 export function statementExport(p: Labels & { t: T; kind: StatementKind; accountName: (a: StatementSection['accounts'][number]) => string; yearName: string; startDate?: string; endDate?: string; asOfDate?: string; data: StatementData }): ExportDocument {
   const { t, data: s, kind } = p;
   const two = (a: ExportCell, b: ExportCell = null): ExportRows => [[a, b]];
-  const rows: ExportRows = [[t('accounting.account'), L(p.ar, 'Amount', 'المبلغ')]];
+  // A cut-over year's P&L carries imported (to D) and native (after D) columns; every other statement keeps the two-column layout.
+  const split = kind === 'profitOrLoss' && s.profit_or_loss_split ? s.profit_or_loss_split : null;
+  const pc = (key: string) => t(`accounting.statements.preCutover.${key}`);
+  const rows: ExportRows = [split ? [t('accounting.account'), pc('imported'), pc('native'), pc('amount')] : [t('accounting.account'), L(p.ar, 'Amount', 'المبلغ')]];
   const sectionIdx: number[] = []; const totalIdx: number[] = [];
   for (const sec of s.sections ?? []) {
     sectionIdx.push(rows.length); rows.push([t(`accounting.statements.categories.${sec.category}`)]);
-    for (const a of sec.accounts) rows.push([`${a.code} — ${p.accountName(a)}`, n(a.amount)]);
-    totalIdx.push(rows.length); rows.push([t('accounting.statements.total'), n(sec.total)]);
+    for (const a of sec.accounts) rows.push(split ? [`${a.code} — ${p.accountName(a)}`, n(a.imported_amount), n(a.native_amount), n(a.amount)] : [`${a.code} — ${p.accountName(a)}`, n(a.amount)]);
+    totalIdx.push(rows.length); rows.push(split ? [t('accounting.statements.total'), n(sec.imported_total), n(sec.native_total), n(sec.total)] : [t('accounting.statements.total'), n(sec.total)]);
   }
   const line = (key: string, v: string | undefined, strong = false) => { if (strong) totalIdx.push(rows.length); rows.push(...two(t(`accounting.statements.${key}`), n(v))); };
   const recon = () => rows.push([t(kind === 'cashFlow' ? 'accounting.statements.cashReconciliation' : 'accounting.statements.reconciliation'), s.reconciliation ? `${s.reconciliation.expected} / ${s.reconciliation.actual} (${s.reconciliation.difference}) — ${t(s.reconciliation.balanced ? 'accounting.balanced' : 'accounting.unbalanced')}` : null]);
-  if (kind === 'profitOrLoss') line('profitOrLoss', s.profit_or_loss, true);
+  if (kind === 'profitOrLoss') {
+    if (split) { totalIdx.push(rows.length); rows.push([t('accounting.statements.profitOrLoss'), n(split.imported), n(split.native), n(s.profit_or_loss)]); }
+    else line('profitOrLoss', s.profit_or_loss, true);
+  }
   if (kind === 'financialPosition') { line('currentPeriodEarnings', s.current_period_earnings); rows.push([t('accounting.statements.equation'), t(s.accounting_equation?.balanced ? 'accounting.balanced' : 'accounting.unbalanced')]); }
   if (kind === 'changesInEquity') {
     line('openingEquity', s.opening_equity); line('directEquityMovements', s.direct_equity_movements);
@@ -79,6 +109,7 @@ export function statementExport(p: Labels & { t: T; kind: StatementKind; account
     line('currentPeriodEarnings', s.current_period_earnings); line('closingEquity', s.closing_equity, true); recon();
   }
   if (kind === 'cashFlow') { line('openingCash', s.opening_cash_and_cash_equivalents); line('netCashChange', s.net_change_in_cash_and_cash_equivalents); line('closingCash', s.closing_cash_and_cash_equivalents, true); recon(); }
+  if (s.pre_cutover) { rows.push([]); sectionIdx.push(rows.length); rows.push(...preCutoverLines(t, s.pre_cutover).map(([a, b]): ExportCell[] => [a, b])); }
   const title = t(`accounting.tabs.${kind}`);
   const scope: Array<[string, string]> = [[t('accounting.fiscalYear'), p.yearName]];
   if (kind === 'financialPosition') scope.push([t('accounting.statements.asOf'), p.asOfDate ?? '']);

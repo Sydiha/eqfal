@@ -114,6 +114,7 @@ describe('SourceAuthority cutover activation', () => {
     await screen.findByText('Activate cutover', { selector: 'h3' });
     fireEvent.change(screen.getByLabelText(/Approved trial balance reference/), { target: { value: 'TB-1' } });
     fireEvent.change(screen.getByLabelText('Prepared by'), { target: { value: 'Accountant' } });
+    fireEvent.change(screen.getByLabelText('Trial balance source system'), { target: { value: 'Legacy ERP' } });
     fireEvent.change(screen.getByLabelText('Retained earnings account'), { target: { value: 'a2' } });
     fireEvent.change(screen.getByLabelText(/Trial balance \(account code/), { target: { value: '1010, 100.00, 0\n3100, 0, 100.00' } });
   };
@@ -132,6 +133,11 @@ describe('SourceAuthority cutover activation', () => {
     expect(screen.getByText('Balanced')).toBeInTheDocument();
     const check = screen.getByRole('button', { name: 'Check and review' });
     expect(check).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Trial balance source system'), { target: { value: ' ' } });
+    screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
+    expect(check).toBeDisabled();
+    screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
+    fireEvent.change(screen.getByLabelText('Trial balance source system'), { target: { value: 'Legacy ERP' } });
     screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
     expect(check).toBeEnabled();
     fireEvent.click(check);
@@ -144,6 +150,8 @@ describe('SourceAuthority cutover activation', () => {
     const sent = JSON.parse(String((fetchMock.mock.calls.find(([u]) => String(u).endsWith('/activate'))![1] as RequestInit).body));
     expect(sent.confirm).toBe(true);
     expect(sent.idempotency_key).toMatch(/^cutover-/);
+    expect(sent.tb_source_system).toBe('Legacy ERP');
+    expect(sent.acknowledgements.pre_closing_trial_balance).toBe(true);
   });
 
   it('flags an unbalanced trial balance and shows server errors', async () => {
