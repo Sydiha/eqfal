@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
@@ -166,5 +168,30 @@ describe('SourceAuthority cutover activation', () => {
     fireEvent.click(await screen.findByLabelText(/final confirmation/));
     fireEvent.click(screen.getByRole('button', { name: 'Activate cutover' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('inactive');
+  });
+});
+
+describe('SourceAuthority active cutover details layout', () => {
+  const active = { ...draft, id: 'r-2', status: 'active', cutover_journal_id: 'd93ebf8e-3bb2-4aa9-8505-3b26e5948f06', activated_at: '2026-10-21T09:19:53.600Z', tb_reference: 'S2-UAT-TB-2026-09-30', tb_prepared_by: 'S2 Test Accountant', acknowledgements: { a: true, b: true, c: true, d: true, e: true } };
+
+  it('renders the six read-only cards inside the audit grid, UUID and timestamp in wrap-safe value cells', async () => {
+    await i18n.changeLanguage('ar');
+    stub([active]);
+    render(<SourceAuthority canManage={false} onUnauthorized={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'تفاصيل' }));
+    const grid = document.querySelector('dl.ca-audit')!;
+    expect(grid.querySelectorAll(':scope > div')).toHaveLength(6);
+    const long = [...grid.querySelectorAll('dd.sa-date')].map((d) => d.textContent);
+    expect(long).toEqual(expect.arrayContaining(['d93ebf8e-3bb2-4aa9-8505-3b26e5948f06', '2026-10-21T09:19:53.600Z']));
+  });
+
+  it('CSS: 3 columns, 2 on tablet, 1 on mobile; no nowrap on the long values, RTL value alignment, cards clip nothing outside themselves', () => {
+    const css = readFileSync(resolve(__dirname, '../components/SourceAuthority.css'), 'utf8');
+    expect(css).toMatch(/\.ca-audit\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+    expect(css).toMatch(/@media\(max-width:64em\)\{\.source-authority \.ca-audit\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/);
+    expect(css).toMatch(/@media\(max-width:48em\)\{\s*\.source-authority \.ca-totals,\.source-authority \.ca-audit\{grid-template-columns:minmax\(0,1fr\)\}/);
+    expect(css).toMatch(/\.ca-audit>div\{min-width:0;overflow:hidden\}/);
+    expect(css).toMatch(/\.ca-audit dd\.sa-date\{white-space:normal;[^}]*overflow-wrap:anywhere;word-break:break-all\}/);
+    expect(css).toMatch(/\[dir=rtl\] \.ca-audit dd\.sa-date\{text-align:right\}/);
   });
 });
