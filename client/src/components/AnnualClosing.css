@@ -79,3 +79,7 @@
 
 /* Wave 3: label/value pairs (dt/dd) must stay on the same row; an odd auto-fit column count split them */
 @media(max-width:64em){.annual-closing-view .ac-card dl{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.annual-closing-view .ac-link{background:none;border:0;padding:0;color:var(--color-primary,#00b894);font:inherit;text-decoration:underline;cursor:pointer}
+.annual-closing-view .ac-link:focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:4px}
+.annual-closing-view .ac-cutover dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 20px;margin:8px 0 0}
+.annual-closing-view .ac-cutover dd{margin:0;font-weight:600}

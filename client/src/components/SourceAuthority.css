@@ -111,3 +111,10 @@
 @media(max-width:48em){
  .source-authority .ca-totals,.source-authority .ca-audit{grid-template-columns:minmax(0,1fr)}
 }
+/* S2 UAT: equity entry shows only its six columns, so it fits without long horizontal scrolling. */
+.source-authority .sa-lines--equity table{min-width:980px}
+/* S2 UAT: readable supplement totals (label above value). */
+.source-authority .sa-totals{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0}
+.source-authority .sa-totals>div{display:flex;flex-direction:column;min-width:96px}
+.source-authority .sa-totals dt{font-size:11px;color:#64748b}
+.source-authority .sa-totals dd{margin:0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}

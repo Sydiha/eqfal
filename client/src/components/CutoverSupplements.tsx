@@ -45,13 +45,26 @@ const ERRORS: Record<string, { ar: string; en: string }> = {
 };
 
 const blank = (line_type: LineType): SupplementLineDraft => ({ line_type, account_id: '', section: line_type === 'cash_flow' ? 'operating' : '', movement_type: line_type === 'equity_movement' ? 'contribution' : '', label: '', amount: '', opening_amount: '', closing_amount: '', classification_override_reason: '' });
+/**
+ * Accepts thousands separators only in their well-formed position ("100,000.00" -> "100000.00"); anything else is returned trimmed and
+ * unchanged so the server's strict two-decimal validation still rejects it ("1,00", "1,,000", "12,34.5"). Digits are never altered.
+ */
+export function normalizeAmount(value: string) {
+  const v = value.trim();
+  return /^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(v) ? v.replace(/,/g, '') : v;
+}
+const TOTALS: Record<string, { ar: string; en: string }> = {
+  opening: { ar: 'الافتتاحي 1/1', en: 'Opening 1 Jan' }, operating: { ar: 'التشغيلية', en: 'Operating' }, investing: { ar: 'الاستثمارية', en: 'Investing' },
+  financing: { ar: 'التمويلية', en: 'Financing' }, fx_effect: { ar: 'أثر الصرف', en: 'FX effect' }, net_change: { ar: 'صافي التغير', en: 'Net change' },
+  closing: { ar: 'في تاريخ القطع', en: 'At cutover date' }, movements: { ar: 'الحركات', en: 'Movements' }, retained_earnings_difference: { ar: 'فرق الأرباح المبقاة', en: 'Retained earnings difference' },
+};
 /** Builds the strict request lines (only the keys the server accepts for each line type). Exported for unit tests. */
 export function toRequestLines(lines: SupplementLineDraft[]) {
   return lines.map((l) => {
-    if (l.line_type === 'cash_balance') return { line_type: l.line_type, account_id: l.account_id, opening_amount: l.opening_amount.trim(), closing_amount: l.closing_amount.trim() };
-    if (l.line_type === 'equity_opening') return { line_type: l.line_type, account_id: l.account_id, opening_amount: l.opening_amount.trim() };
-    if (l.line_type === 'equity_movement') return { line_type: l.line_type, account_id: l.account_id, movement_type: l.movement_type, label: l.label.trim(), amount: l.amount.trim() };
-    return { line_type: l.line_type, section: l.section, label: l.label.trim(), amount: l.amount.trim(), ...(l.account_id ? { account_id: l.account_id } : {}), ...(l.classification_override_reason.trim() ? { classification_override_reason: l.classification_override_reason.trim() } : {}) };
+    if (l.line_type === 'cash_balance') return { line_type: l.line_type, account_id: l.account_id, opening_amount: normalizeAmount(l.opening_amount), closing_amount: normalizeAmount(l.closing_amount) };
+    if (l.line_type === 'equity_opening') return { line_type: l.line_type, account_id: l.account_id, opening_amount: normalizeAmount(l.opening_amount) };
+    if (l.line_type === 'equity_movement') return { line_type: l.line_type, account_id: l.account_id, movement_type: l.movement_type, label: l.label.trim(), amount: normalizeAmount(l.amount) };
+    return { line_type: l.line_type, section: l.section, label: l.label.trim(), amount: normalizeAmount(l.amount), ...(l.account_id ? { account_id: l.account_id } : {}), ...(l.classification_override_reason.trim() ? { classification_override_reason: l.classification_override_reason.trim() } : {}) };
   });
 }
 
@@ -92,6 +105,7 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
   const set = (i: number, patch: Partial<SupplementLineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const name = (id: string | null | undefined) => { const a = accounts.find((x) => x.id === id); return a ? `${a.code} — ${tx(a.name_ar ?? a.name, a.name_en ?? a.name)}` : id ?? '—'; };
   const status = (s: Version['status']) => ({ draft: tx('مسودة', 'Draft'), approved: tx('معتمد', 'Approved'), superseded: tx('مُستبدل', 'Superseded'), voided: tx('ملغى', 'Voided') })[s];
+  const cash = editing?.kind === 'cash_flow';
   const kindLabel = (k: Kind) => (k === 'cash_flow' ? tx('التدفقات النقدية قبل القطع', 'Pre-cutover cash flows') : tx('حركات حقوق الملكية قبل القطع', 'Pre-cutover equity movements'));
 
   return <section className="sa-card" aria-label={tx('البيانات التاريخية قبل القطع', 'Pre-cutover historical supplements')}>
@@ -107,7 +121,7 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
           <div className="sa-table"><table><thead><tr><th>{tx('الإصدار', 'Version')}</th><th>{tx('الحالة', 'Status')}</th><th>{tx('الدليل', 'Evidence')}</th><th>{tx('المجاميع', 'Totals')}</th><th /></tr></thead>
             <tbody>{list.map((v) => <tr key={v.id}><td>{v.version_no}</td><td><span className={`sa-badge is-${v.status === 'approved' ? 'active' : v.status === 'draft' ? 'draft' : 'voided'}`}>{status(v.status)}</span></td>
               <td className="sa-reason">{v.source_system} · {v.evidence_reference}</td>
-              <td className="sa-reason"><bdi dir="ltr">{v.evaluation ? Object.entries(v.evaluation.totals).map(([k, x]) => `${k}: ${x}`).join(' · ') : '—'}</bdi></td>
+              <td>{v.evaluation ? <dl className="sa-totals">{Object.entries(v.evaluation.totals).map(([k, x]) => <div key={k}><dt>{TOTALS[k] ? tx(TOTALS[k]!.ar, TOTALS[k]!.en) : k}</dt><dd><bdi dir="ltr">{x}</bdi></dd></div>)}</dl> : '—'}</td>
               <td>{v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => open(kind, v)}>{tx('تعديل', 'Edit')}</button>}
                 {v.status === 'draft' && canApprove && <button type="button" className="sa-primary" disabled={busy || !v.evaluation?.valid} onClick={() => void run(() => post(`${base}/${v.id}/approve`, { confirm: true, expected_row_version: v.row_version }))}>{tx('اعتماد', 'Approve')}</button>}
                 {v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => { const reason = window.prompt(tx('سبب إلغاء المسودة', 'Reason for voiding the draft')); if (reason?.trim()) void run(() => post(`${base}/${v.id}/void`, { confirm: true, expected_row_version: v.row_version, reason })); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table></div>}
@@ -121,7 +135,7 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
         <label>{tx('مرجع الدليل', 'Evidence reference')}<input value={form.evidence_reference} maxLength={200} onChange={(e) => setForm({ ...form, evidence_reference: e.target.value })} required /></label>
         {editing.kind === 'cash_flow' && <label>{tx('دليل ترجمة العملة (لأثر الصرف فقط)', 'FX translation evidence (FX effect only)')}<input value={form.fx_translation_evidence} maxLength={500} onChange={(e) => setForm({ ...form, fx_translation_evidence: e.target.value })} /></label>}
       </div>
-      <div className="sa-table sa-lines"><table><thead><tr><th>{tx('النوع', 'Type')}</th><th>{tx('الحساب', 'Account')}</th><th>{tx('القسم/الحركة', 'Section/movement')}</th><th>{tx('البيان', 'Label')}</th><th>{tx('المبلغ', 'Amount')}</th><th>{tx('افتتاحي 1/1', 'Opening 1 Jan')}</th><th>{tx('في تاريخ القطع', 'At cutover date')}</th><th>{tx('مبرر التصنيف', 'Classification justification')}</th><th /></tr></thead>
+      <div className={`sa-table sa-lines${cash ? '' : ' sa-lines--equity'}`}><table><thead><tr><th>{tx('النوع', 'Type')}</th><th>{tx('الحساب', 'Account')}</th><th>{cash ? tx('القسم', 'Section') : tx('نوع الحركة', 'Movement type')}</th><th>{tx('البيان', 'Label')}</th><th>{tx('المبلغ', 'Amount')}</th><th>{tx('افتتاحي 1/1', 'Opening 1 Jan')}</th>{cash && <><th>{tx('في تاريخ القطع', 'At cutover date')}</th><th>{tx('مبرر التصنيف', 'Classification justification')}</th></>}<th /></tr></thead>
         <tbody>{lines.map((l, i) => <tr key={i}>
           <td><select aria-label={tx('النوع', 'Type')} value={l.line_type} onChange={(e) => set(i, blank(e.target.value as LineType))}>{(editing.kind === 'cash_flow' ? ['cash_balance', 'cash_flow'] : ['equity_opening', 'equity_movement']).map((x) => <option key={x} value={x}>{({ cash_balance: tx('رصيد حساب نقدي', 'Cash account balance'), cash_flow: tx('تدفق نقدي', 'Cash flow'), equity_opening: tx('رصيد ملكية افتتاحي', 'Equity opening'), equity_movement: tx('حركة ملكية', 'Equity movement') } as Record<string, string>)[x]}</option>)}</select></td>
           <td><select aria-label={tx('الحساب', 'Account')} value={l.account_id} onChange={(e) => set(i, { account_id: e.target.value })} required={l.line_type !== 'cash_flow'}><option value="">{l.line_type === 'cash_flow' ? tx('بدون', 'None') : tx('اختر', 'Choose')}</option>{accounts.map((a) => <option key={a.id} value={a.id}>{name(a.id)}</option>)}</select></td>
@@ -130,11 +144,11 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
           <td>{(l.line_type === 'cash_flow' || l.line_type === 'equity_movement') && <input aria-label={tx('البيان', 'Label')} value={l.label} maxLength={200} onChange={(e) => set(i, { label: e.target.value })} required />}</td>
           <td>{(l.line_type === 'cash_flow' || l.line_type === 'equity_movement') && <input aria-label={tx('المبلغ', 'Amount')} dir="ltr" inputMode="decimal" value={l.amount} onChange={(e) => set(i, { amount: e.target.value })} required />}</td>
           <td>{(l.line_type === 'cash_balance' || l.line_type === 'equity_opening') && <input aria-label={tx('افتتاحي 1/1', 'Opening 1 Jan')} dir="ltr" inputMode="decimal" value={l.opening_amount} onChange={(e) => set(i, { opening_amount: e.target.value })} required />}</td>
-          <td>{l.line_type === 'cash_balance' && <input aria-label={tx('في تاريخ القطع', 'At cutover date')} dir="ltr" inputMode="decimal" value={l.closing_amount} onChange={(e) => set(i, { closing_amount: e.target.value })} required />}</td>
-          <td>{l.line_type === 'cash_flow' && l.account_id && <input aria-label={tx('مبرر التصنيف', 'Classification justification')} value={l.classification_override_reason} maxLength={500} onChange={(e) => set(i, { classification_override_reason: e.target.value })} />}</td>
+          {cash && <td>{l.line_type === 'cash_balance' && <input aria-label={tx('في تاريخ القطع', 'At cutover date')} dir="ltr" inputMode="decimal" value={l.closing_amount} onChange={(e) => set(i, { closing_amount: e.target.value })} required />}</td>}
+          {cash && <td>{l.line_type === 'cash_flow' && l.account_id && <input aria-label={tx('مبرر التصنيف', 'Classification justification')} value={l.classification_override_reason} maxLength={500} onChange={(e) => set(i, { classification_override_reason: e.target.value })} />}</td>}
           <td><button type="button" className="sa-ghost" onClick={() => setLines(lines.filter((_, j) => j !== i))}>{tx('حذف السطر', 'Remove line')}</button></td></tr>)}</tbody></table></div>
       <div className="sa-actions"><button type="button" className="sa-ghost" onClick={() => setLines([...lines, blank(editing.kind === 'cash_flow' ? 'cash_flow' : 'equity_movement')])}>{tx('إضافة سطر', 'Add line')}</button></div>
-      <p className="sa-muted">{tx('المبالغ بالعملة الوظيفية بخانتين عشريتين. التدفق الداخل موجب. المساهمة موجبة والتوزيع سالب. لا تُدخل ربح السنة كحركة ملكية.', 'Amounts in the functional currency, two decimals. Cash inflow positive. Contribution positive, distribution negative. Do not enter the year\'s profit as an equity movement.')}</p>
+      <p className="sa-muted">{tx('المبالغ بالعملة الوظيفية بخانتين عشريتين (تُقبل فواصل الآلاف مثل 100,000.00). التدفق الداخل موجب. المساهمة موجبة والتوزيع سالب. لا تُدخل ربح السنة كحركة ملكية.', 'Amounts in the functional currency, two decimals (thousands separators such as 100,000.00 are accepted). Cash inflow positive. Contribution positive, distribution negative. Do not enter the year\'s profit as an equity movement.')}</p>
       <label className="sa-check"><input type="checkbox" checked={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.checked })} /><span>{tx('أؤكد أن هذه البيانات مأخوذة من الأدلة المذكورة، وأنها تُحفظ مسودة حتى تُعتمد.', 'I confirm these figures come from the stated evidence and are saved as a draft until approved.')}</span></label>
       <div className="sa-actions"><button type="button" className="sa-ghost" onClick={() => setEditing(null)}>{tx('رجوع', 'Back')}</button>
         <button type="submit" className="sa-primary" disabled={busy || !form.confirm}>{busy ? tx('جارٍ الحفظ…', 'Saving…') : tx('حفظ المسودة', 'Save draft')}</button></div>

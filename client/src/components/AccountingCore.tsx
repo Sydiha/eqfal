@@ -1696,7 +1696,16 @@ export function Accounting({
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
             <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
             {exportButtons(statementExportDoc, false)}
-            {statement.pre_cutover && <div role="note" aria-label={t("accounting.statements.preCutover.title")}>{preCutoverLines(t, statement.pre_cutover).map(([label, value], index) => <p key={index} className="ac-tab__context" dir="auto">{label ? <strong>{label}: </strong> : "• "}{value}</p>)}</div>}
+            {statement.pre_cutover && (() => {
+              // Same lines (and text) as the export; only grouped: heading + intro, labelled facts, then limitation bullets.
+              const [[title, intro], ...rest] = preCutoverLines(t, statement.pre_cutover);
+              const facts = rest.filter(([label]) => label), notes = rest.filter(([label]) => !label);
+              return <div role="note" aria-label={t("accounting.statements.preCutover.title")} className="ac-cutover-note" dir="auto">
+                <p className="ac-cutover-note__title"><strong>{title}: </strong>{intro}</p>
+                <dl className="ac-cutover-note__facts">{facts.map(([label, value], index) => <div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+                {notes.length > 0 && <ul className="ac-cutover-note__limits">{notes.map(([, value], index) => <li key={index}>{value}</li>)}</ul>}
+              </div>;
+            })()}
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
             {split && <tr className="is-section"><th>{t("accounting.account")}</th><th>{t("accounting.statements.preCutover.imported")}</th><th>{t("accounting.statements.preCutover.native")}</th><th>{t("accounting.statements.preCutover.amount")}</th></tr>}
             {statement.sections?.map((section) => <Fragment key={section.category}>

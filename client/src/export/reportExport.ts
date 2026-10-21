@@ -280,12 +280,29 @@ export function annualClosingExport(p: Labels & { fiscalYear: string; startDate:
   return doc(`eqfal-annual-closing-${slug(p.fiscalYear) || 'year'}`, X.title, p, meta(X.title, scope, p), body, { header, section, total });
 }
 
+/**
+ * Spec v2 H: the annual package export carries the cutover disclosure. Built only from the package manifest's pre_cutover_history
+ * summary (what the snapshot froze), with the statement disclosure's wording; the export stays a readiness/manifest document.
+ */
+export function packageCutoverLines(t: T, summary: Record<string, string | number | boolean> | undefined, kindLabels: { cash_flow: string; equity: string }): Array<[string, string]> {
+  if (!summary) return [];
+  const k = (key: string) => t(`accounting.statements.preCutover.${key}`);
+  const version = (kind: 'cash_flow' | 'equity') => { const v = summary[`${kind}_supplement_version`]; return v === '' || v === undefined || v === null ? k('notRecorded') : `${v}${summary[`${kind}_revision_pending`] === true ? ` — ${k('revisionPending')}` : ''}`; };
+  return [
+    [k('title'), k('intro')],
+    [k('cutoverDate'), String(summary.cutover_date ?? k('notRecorded'))],
+    [k('basis'), k(summary.tb_basis === 'pre_closing_acknowledged' ? 'basisAcknowledged' : 'basisNotRecorded')],
+    [`${k('supplementVersion')} — ${kindLabels.cash_flow}`, version('cash_flow')],
+    [`${k('supplementVersion')} — ${kindLabels.equity}`, version('equity')],
+  ];
+}
 export type AnnualPackageRow = { name: string; state: string; source: string; blockers: string };
 
-export function annualPackageExport(p: Labels & { fiscalYear: string; startDate: string; endDate: string; title: string; labels: { fiscalYear: string; range: string; packageState: string; section: string; state: string; source: string; blockers: string; snapshot: string }; packageState: string; snapshotLines: string[]; rows: AnnualPackageRow[] }): ExportDocument {
+export function annualPackageExport(p: Labels & { fiscalYear: string; startDate: string; endDate: string; title: string; labels: { fiscalYear: string; range: string; packageState: string; section: string; state: string; source: string; blockers: string; snapshot: string }; packageState: string; snapshotLines: string[]; rows: AnnualPackageRow[]; cutover?: Array<[string, string]> }): ExportDocument {
   const { labels: X } = p;
   const body: ExportRows = [[X.section, X.state, X.source, X.blockers], ...p.rows.map((r): ExportCell[] => [r.name, r.state, r.source, r.blockers || '—'])];
   for (const line of p.snapshotLines) body.push([line]);
+  if (p.cutover?.length) { body.push([]); for (const [label, value] of p.cutover) body.push([label, value]); }
   const scope: Array<[string, string]> = [[X.fiscalYear, p.fiscalYear], [X.range, `${p.startDate} — ${p.endDate}`], [X.packageState, p.packageState]];
   return doc(`eqfal-annual-closing-package-${slug(p.fiscalYear) || 'year'}`, p.title, p, meta(p.title, scope, p), body, { header: [0] });
 }
