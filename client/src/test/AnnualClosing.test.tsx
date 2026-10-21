@@ -16,6 +16,16 @@ describe('Annual Closing Center', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/annual-closing/fy-1'));
     expect(await screen.findByText('Not ready')).toBeInTheDocument(); expect(screen.getByText('Monthly close')).toBeInTheDocument(); expect(screen.getByText('Annual Closing Package manifest')).toBeInTheDocument();
   });
+  it('UI-05: the monthly-close next action navigates when a handler is given', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ready: false, blocker_count: 1, financial_statements_readiness: { status: 'blocked', label: 'x', label_ar: 'x' }, zakat_readiness: { status: 'blocked' },
+      domains: { monthly_close: { ready: false, blocker_count: 1, status: 'blocked', summary: {} } }, package_manifest: [] }), { status: 200 }));
+    const onNavigate = vi.fn();
+    render(<AnnualClosing canView onUnauthorized={vi.fn()} onNavigate={onNavigate}/>);
+    fireEvent.click(await screen.findByRole('button', { name: 'View monthly close' }));
+    expect(onNavigate).toHaveBeenCalledWith('monthlyClose');
+  });
   it.each([
     ['en', 'Withholding Tax', 'Withholding Tax Readiness'],
     ['ar', 'ضريبة الاستقطاع', 'جاهزية ضريبة الاستقطاع'],

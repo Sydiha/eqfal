@@ -135,3 +135,10 @@
   .ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{width:auto}
   .ac-tabview .ac-tab__table--trial td:nth-child(4){padding-inline-end:12px}
 }
+/* S2 UAT: cutover disclosure grouped for reading; text unchanged. */
+.ac-tabview .ac-cutover-note{margin:0 0 16px;padding:14px 16px;border:1px solid #d7e3ec;border-radius:12px;background:#f8fbfc;font-size:13px;line-height:1.6}
+.ac-tabview .ac-cutover-note__title{margin:0 0 10px}
+.ac-tabview .ac-cutover-note__facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 20px;margin:0}
+.ac-tabview .ac-cutover-note__facts dt{font-size:12px;color:#64748b}
+.ac-tabview .ac-cutover-note__facts dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.ac-tabview .ac-cutover-note__limits{margin:10px 0 0;padding-inline-start:18px}
