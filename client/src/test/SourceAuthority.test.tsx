@@ -194,4 +194,15 @@ describe('SourceAuthority active cutover details layout', () => {
     expect(css).toMatch(/\.ca-audit dd\.sa-date\{white-space:normal;[^}]*overflow-wrap:anywhere;word-break:break-all\}/);
     expect(css).toMatch(/\[dir=rtl\] \.ca-audit dd\.sa-date\{text-align:right\}/);
   });
+
+  it('acknowledgements card derives the denominator from the recorded acknowledgements (5/5 new, 4/4 legacy), never a hardcoded 4', async () => {
+    await i18n.changeLanguage('en');
+    for (const [acks, expected] of [[active.acknowledgements, '5/5'], [{ a: true, b: true, c: true, d: true }, '4/4']] as const) {
+      stub([{ ...active, acknowledgements: acks }]);
+      const { unmount } = render(<SourceAuthority canManage={false} onUnauthorized={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: /details/i }));
+      expect(screen.getByText('Acknowledgements').nextElementSibling!.textContent).toBe(expected);
+      unmount();
+    }
+  });
 });
