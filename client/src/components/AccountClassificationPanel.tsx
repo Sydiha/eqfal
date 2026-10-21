@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AccountResponse, CashFlowCategory, CashRole, StatementCategory } from './accounting-contracts';
 
 interface Props{
@@ -8,21 +9,7 @@ interface Props{
   autoOpen?:boolean;
 }
 
-const CATEGORY_LABELS:Record<StatementCategory,string>={
-  unmapped:'Unmapped / غير مصنف',
-  current_asset:'Current asset / أصل متداول',
-  non_current_asset:'Non-current asset / أصل غير متداول',
-  current_liability:'Current liability / التزام متداول',
-  non_current_liability:'Non-current liability / التزام غير متداول',
-  equity:'Equity / حقوق الملكية',
-  revenue:'Revenue / الإيرادات',
-  cost_of_sales:'Cost of sales / تكلفة المبيعات',
-  operating_expense:'Operating expense / مصروف تشغيلي',
-  finance_income:'Finance income / دخل تمويلي',
-  finance_expense:'Finance expense / مصروف تمويلي',
-  other_income:'Other income / دخل آخر',
-  other_expense:'Other expense / مصروف آخر',
-};
+const ALL_CATEGORIES:readonly StatementCategory[]=['unmapped','current_asset','non_current_asset','current_liability','non_current_liability','equity','revenue','cost_of_sales','operating_expense','finance_income','finance_expense','other_income','other_expense'];
 const COMPATIBLE:Record<AccountResponse['account_type'],readonly StatementCategory[]>={
   asset:['unmapped','current_asset','non_current_asset'],
   liability:['unmapped','current_liability','non_current_liability'],
@@ -30,21 +17,8 @@ const COMPATIBLE:Record<AccountResponse['account_type'],readonly StatementCatego
   revenue:['unmapped','revenue','finance_income','other_income'],
   expense:['unmapped','cost_of_sales','operating_expense','finance_expense','other_expense'],
 };
-const ALL_CATEGORIES=Object.keys(CATEGORY_LABELS) as StatementCategory[];
-const shortLabel=(label:string)=>label.split(' / ')[0]!;
-const TYPE_LABELS:Record<AccountResponse['account_type'],string>={asset:'أصل',liability:'التزام',equity:'حقوق ملكية',revenue:'إيراد',expense:'مصروف'};
-const CASH_ROLE_LABELS:Record<CashRole,string>={
-  non_cash:'Non-cash / غير نقدي',
-  cash:'Cash / نقد',
-  cash_equivalent:'Cash equivalent / ما يعادل النقد',
-};
-const CASH_FLOW_LABELS:Record<CashFlowCategory,string>={
-  unmapped:'Unmapped / غير مصنف',
-  operating:'Operating / تشغيلي',
-  investing:'Investing / استثماري',
-  financing:'Financing / تمويلي',
-};
-const CASH_FLOW_CATEGORIES=Object.keys(CASH_FLOW_LABELS) as CashFlowCategory[];
+const CASH_ROLES:readonly CashRole[]=['non_cash','cash','cash_equivalent'];
+const CASH_FLOW_CATEGORIES:readonly CashFlowCategory[]=['unmapped','operating','investing','financing'];
 type Draft={statement_category:StatementCategory;is_contra:boolean;cash_role:CashRole;cash_flow_category:CashFlowCategory};
 
 async function request(url:string,options:RequestInit,onUnauthorized:()=>void){
@@ -55,6 +29,8 @@ async function request(url:string,options:RequestInit,onUnauthorized:()=>void){
 }
 
 export function AccountClassificationPanel({canView,canManage,onUnauthorized,autoOpen=false}:Props){
+  const {t}=useTranslation();
+  const label=(group:string,key:string)=>t(`accountMapping.${group}.${key}`);
   const [opened,setOpened]=useState(autoOpen);
   const [filter,setFilter]=useState<StatementCategory|'all'>(autoOpen?'all':'unmapped');
   const [accounts,setAccounts]=useState<AccountResponse[]>([]);
@@ -178,17 +154,17 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized,aut
   if(!canView)return null;
   if(!opened){
     return <section className="panel">
-      <button type="button" onClick={open}>Financial statement mapping / تصنيف القوائم المالية</button>
+      <button type="button" onClick={open}>{t('accountMapping.open')}</button>
     </section>;
   }
 
-  return <section className="panel ac-mapping" aria-label="Financial statement mapping">
+  return <section className="panel ac-mapping" aria-label={t('accountMapping.title')}>
     <div className="ac-mapping__header">
-      <h2>تصنيف القوائم المالية <small lang="en" dir="ltr">Financial statement mapping</small></h2>
+      <h2>{t('accountMapping.title')}</h2>
       <label className="ac-mapping__filter">
-        <span className="ac-mapping__prefix">التصنيف</span>
+        <span className="ac-mapping__prefix">{t('accountMapping.filterPrefix')}</span>
         <select
-          aria-label="Classification filter"
+          aria-label={t('accountMapping.filterLabel')}
           value={filter}
           onChange={event=>{
             const value=event.target.value as StatementCategory|'all';
@@ -196,26 +172,26 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized,aut
             void load(value);
           }}
         >
-          <option value="all">All / الكل</option>
-          {ALL_CATEGORIES.map(category=><option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}
+          <option value="all">{t('accountMapping.all')}</option>
+          {ALL_CATEGORIES.map(category=><option key={category} value={category}>{label('category',category)}</option>)}
         </select>
       </label>
     </div>
-    <p className="ac-mapping__note"><span aria-hidden="true">ⓘ</span> التصنيف للعرض والتقارير فقط ولا يغيّر نوع الحساب أو القيود المرحّلة. <span className="ac-mapping__sr">Presentation/reporting mapping only. Account type and posted ledger entries are unchanged.</span></p>
-    {loading&&<p role="status">Loading / جاري التحميل</p>}
-    {error&&<p role="alert">Unable to load or update classification. / تعذر تحميل أو تحديث التصنيف.</p>}
-    {!loading&&!error&&accounts.length===0&&<p role="status">No accounts in this classification. / لا توجد حسابات ضمن هذا التصنيف.</p>}
+    <p className="ac-mapping__note"><span aria-hidden="true">ⓘ</span> {t('accountMapping.note')}</p>
+    {loading&&<p role="status">{t('accountMapping.loading')}</p>}
+    {error&&<p role="alert">{t('accountMapping.error')}</p>}
+    {!loading&&!error&&accounts.length===0&&<p role="status">{t('accountMapping.empty')}</p>}
     {!loading&&accounts.length>0&&<div className="table-wrap ac-mapping__table">
       <table>
         <thead><tr>
-          <th>الرمز</th>
-          <th>اسم الحساب</th>
-          <th>نوع الحساب<small lang="en">Account type</small></th>
-          <th>فئة القائمة المالية<small lang="en">Statement category</small></th>
-          <th>دور النقد<small lang="en">Cash role</small></th>
-          <th>نشاط التدفقات النقدية<small lang="en">Cash-flow activity</small></th>
-          <th>حساب مقابل<small lang="en">Contra</small></th>
-          {canManage&&<th>الإجراء</th>}
+          <th>{t('accountMapping.cols.code')}</th>
+          <th>{t('accountMapping.cols.name')}</th>
+          <th>{t('accountMapping.cols.type')}</th>
+          <th>{t('accountMapping.cols.category')}</th>
+          <th>{t('accountMapping.cols.cashRole')}</th>
+          <th>{t('accountMapping.cols.cashFlow')}</th>
+          <th>{t('accountMapping.cols.contra')}</th>
+          {canManage&&<th>{t('accountMapping.cols.action')}</th>}
         </tr></thead>
         <tbody>
           {accounts.map(account=>{
@@ -228,47 +204,47 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized,aut
             return <tr key={account.id}>
               <td className="ac-mapping__code">{account.code}</td>
               <td className="ac-mapping__name">{account.name}</td>
-              <td>{TYPE_LABELS[account.account_type]}</td>
+              <td>{label('types',account.account_type)}</td>
               <td>
                 {canManage?
                   <select
-                    aria-label={`Statement category ${account.code}`}
+                    aria-label={t('accountMapping.aria.category',{code:account.code})}
                     value={draft.statement_category}
                     onChange={event=>changeCategory(account,event.target.value as StatementCategory)}
                   >
                     {COMPATIBLE[account.account_type].map(category=>
-                      <option key={category} value={category} title={CATEGORY_LABELS[category]}>{shortLabel(CATEGORY_LABELS[category])}</option>
+                      <option key={category} value={category}>{label('category',category)}</option>
                     )}
                   </select>:
-                  CATEGORY_LABELS[draft.statement_category]}
+                  label('category',draft.statement_category)}
               </td>
               <td>
-                {canManage?<select aria-label={`Cash role ${account.code}`} value={draft.cash_role}
+                {canManage?<select aria-label={t('accountMapping.aria.cashRole',{code:account.code})} value={draft.cash_role}
                   onChange={event=>changeCashRole(account,event.target.value as CashRole)}>
-                  {(account.account_type==='asset'?Object.keys(CASH_ROLE_LABELS):['non_cash']).map(role=>
-                    <option key={role} value={role} title={CASH_ROLE_LABELS[role as CashRole]}>{shortLabel(CASH_ROLE_LABELS[role as CashRole])}</option>)}
-                </select>:CASH_ROLE_LABELS[draft.cash_role]}
+                  {(account.account_type==='asset'?CASH_ROLES:['non_cash'] as readonly CashRole[]).map(role=>
+                    <option key={role} value={role}>{label('cashRole',role)}</option>)}
+                </select>:label('cashRole',draft.cash_role)}
               </td>
               <td>
-                {canManage?<select aria-label={`Cash-flow activity ${account.code}`} value={draft.cash_flow_category}
+                {canManage?<select aria-label={t('accountMapping.aria.cashFlow',{code:account.code})} value={draft.cash_flow_category}
                   onChange={event=>changeCashFlowCategory(account,event.target.value as CashFlowCategory)}>
-                  {CASH_FLOW_CATEGORIES.map(category=><option key={category} value={category} title={CASH_FLOW_LABELS[category]}>{shortLabel(CASH_FLOW_LABELS[category])}</option>)}
-                </select>:CASH_FLOW_LABELS[draft.cash_flow_category]}
+                  {CASH_FLOW_CATEGORIES.map(category=><option key={category} value={category}>{label('cashFlow',category)}</option>)}
+                </select>:label('cashFlow',draft.cash_flow_category)}
               </td>
               <td>
                 {canManage?
                   <input
                     type="checkbox"
-                    aria-label={`Contra account ${account.code}`}
+                    aria-label={t('accountMapping.aria.contra',{code:account.code})}
                     checked={draft.is_contra}
                     disabled={account.account_type!=='asset'}
                     onChange={event=>changeContra(account,event.target.checked)}
                   />:
-                  draft.is_contra?'Yes / نعم':'No / لا'}
+                  draft.is_contra?t('accountMapping.yes'):t('accountMapping.no')}
               </td>
               {canManage&&<td>
-                <button type="button" className="ac-mapping__save" aria-label={`Save / حفظ ${account.code}`} disabled={saving===account.id} onClick={()=>void save(account)}>
-                  حفظ
+                <button type="button" className="ac-mapping__save" aria-label={t('accountMapping.aria.save',{code:account.code})} disabled={saving===account.id} onClick={()=>void save(account)}>
+                  {t('accountMapping.save')}
                 </button>
               </td>}
             </tr>;
@@ -277,8 +253,8 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized,aut
       </table>
     </div>}
     {!loading&&accounts.length>0&&<div className="ac-mapping__footer">
-      <span>عرض 1–{accounts.length} من {accounts.length} حسابات</span>
-      <span>نوع الحساب للقراءة فقط • حفظ التصنيف لكل صف</span>
+      <span>{t('accountMapping.footerCount',{count:accounts.length})}</span>
+      <span>{t('accountMapping.footerNote')}</span>
     </div>}
   </section>;
 }
