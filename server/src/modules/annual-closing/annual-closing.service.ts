@@ -73,6 +73,12 @@ export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<st
     const status = section === 'fiscal_year' ? 'ready' as const : section === 'financial_statements_readiness' ? (financialBlockers ? 'blocked' as const : 'ready' as const) : item!.status;
     return { section, status, ...(item ? { blocker_count: section === 'financial_statements_readiness' ? financialBlockers : item.blocker_count } : {}), source: manifestSource[section]! };
   });
+  // S2 (spec v2 G): one manifest section per supplement kind, carrying the approved version number (a new approval changes the manifest).
+  const history = domains.pre_cutover_history?.summary;
+  if (history) for (const kind of ['cash_flow', 'equity'] as const) {
+    const complete = history[`${kind}_supplement`] === 'complete';
+    package_manifest.push({ section: `pre_cutover_${kind}`, status: complete ? 'ready' : 'blocked', blocker_count: complete ? 0 : 1, source: 'ledger-source-authority', version_no: Number(history[`${kind}_supplement_version`]) || null } as typeof package_manifest[number]);
+  }
   return {
     fiscal_year: fiscalYear, ready: blockerCount === 0, blocker_count: blockerCount, domains,
     financial_statements_readiness: { status: financialBlockers ? 'needs_review' : 'ready', label: 'Ready for financial statement preparation', label_ar: 'جاهز لإعداد القوائم المالية' },
@@ -190,9 +196,24 @@ export class AnnualClosingService {
     };
     // S1: EQFAL holds no verified pre-cut-over history (cash flows, equity movements) yet, so a cut-over year's full-year statements package is
     // blocked. The fiscal-year ledger close reads only warnings from this domain (fiscal-year-close-readiness.ts).
+    // S2: the package is unblocked only when both supplements are approved and still reconcile (computed now, never stored) and the
+    // trial-balance evidence is recorded. Missing, invalid or unapproved history stays a visible blocker.
     if (cut) {
       const disclosure = await loadCutoverDisclosure(this.db, companyId, fiscalYearId);
-      domains.pre_cutover_history = domain(1, { cutover_date: cut.to_date, historical_supplements: 'missing', tb_basis: disclosure?.tb_basis ?? 'not_recorded', evidence_missing: (disclosure?.evidence_missing ?? []).join(','), blockers: 'historical_supplements_missing' });
+      const sup = disclosure?.supplements ?? null;
+      const state = (kind: 'cash_flow' | 'equity') => sup?.[kind]?.state ?? 'missing';
+      const blockers = [
+        ...(['cash_flow', 'equity'] as const).filter((kind) => state(kind) !== 'complete').map((kind) => `${kind}_supplement_${state(kind)}`),
+        ...((disclosure?.evidence_missing ?? []).length ? ['tb_evidence_missing'] : []),
+      ];
+      const states = [state('cash_flow'), state('equity')];
+      domains.pre_cutover_history = domain(blockers.length, {
+        cutover_date: cut.to_date,
+        historical_supplements: states.every((x) => x === 'complete') ? 'complete' : states.every((x) => x === 'missing') ? 'missing' : 'incomplete',
+        cash_flow_supplement: state('cash_flow'), cash_flow_supplement_version: sup?.cash_flow.version_no ?? '', cash_flow_revision_pending: Boolean(sup?.cash_flow.revision_pending),
+        equity_supplement: state('equity'), equity_supplement_version: sup?.equity.version_no ?? '', equity_revision_pending: Boolean(sup?.equity.revision_pending),
+        tb_basis: disclosure?.tb_basis ?? 'not_recorded', evidence_missing: (disclosure?.evidence_missing ?? []).join(','), blockers: blockers.join(','),
+      });
     }
     return assembleAnnualClosing(fiscalYear, domains);
   }

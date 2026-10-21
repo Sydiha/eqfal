@@ -308,7 +308,7 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     expect([ext.status, ext.json.code]).toEqual([409, 'EXTERNAL_PERIOD_REPORT_UNAVAILABLE']);
   });
 
-  it('S1: statements disclose the cut-over, split imported/native P&L and never claim full-year completeness', async () => {
+  it('S1: statements disclose the cut-over, split imported/native P&L; cash flow and equity are never full-year without S2 supplements', async () => {
     const co = await setup('s1');
     const id = await draft(co);
     expect((await activate(co, id)).status).toBe(201);
@@ -324,13 +324,18 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     expect([revenue.total, revenue.imported_total, revenue.native_total]).toEqual(['350.00', '300.00', '50.00']);
     expect([revenue.accounts[0].imported_amount, revenue.accounts[0].native_amount]).toEqual(['300.00', '50.00']);
     expect(pl.pre_cutover).toMatchObject({ cutover_date: '2026-06-30', tb_reference: 'TB-2026-06', tb_source_system: 'Legacy ERP', tb_basis: 'pre_closing_acknowledged', evidence_missing: [] });
-    expect(pl.pre_cutover.completeness).toMatchObject({ availability: 'ledger_calculated', full_year_complete: false, status: 'unverified' });
-    expect(pl.pre_cutover.completeness.reasons).toContain('HISTORICAL_SUPPLEMENTS_NOT_AVAILABLE');
+    // Spec v2 F (S2): the income statement and financial position come from the ledger, so they are full-year once the range is active and
+    // the trial-balance evidence is recorded; cash flow and changes in equity need approved supplements (asserted false below).
+    // Three separate ideas stay separate: ledger-calculated figures, TB evidence that is recorded (not verified: status 'evidence_recorded',
+    // never 'reconciled'), and independently supported history (supplements, none here). The limitations keep saying EQFAL verifies nothing.
+    expect(pl.pre_cutover.completeness).toEqual({ availability: 'ledger_calculated', full_year_complete: true, status: 'evidence_recorded', reasons: [] });
+    expect(pl.pre_cutover.limitations).toEqual(['PRE_CUTOVER_ACCOUNT_LEVEL_ONLY', 'PRE_CUTOVER_PNL_AGGREGATED_AT_CUTOVER_DATE', 'HISTORICAL_DATA_NOT_VERIFIED_BY_EQFAL']);
+    expect(pl.pre_cutover.full_year_complete).toEqual({ income_statement: true, financial_position: true, changes_in_equity: false, cash_flow: false });
 
     const q4 = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
     expect([q4.profit_or_loss, q4.profit_or_loss_split.imported, q4.profit_or_loss_split.native]).toEqual(['50.00', '0.00', '50.00']);
     const pos = (await co.owner.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}&as_of_date=2026-12-31`)).json;
-    expect([pos.accounting_equation.balanced, pos.pre_cutover.completeness.full_year_complete]).toEqual([true, false]);
+    expect([pos.accounting_equation.balanced, pos.pre_cutover.completeness.full_year_complete]).toEqual([true, true]);
     const soce = (await co.owner.client.req('GET', `/financial-statements/changes-in-equity?fiscal_year_id=${co.fy}&start_date=2026-01-01&end_date=2026-12-31`)).json;
     expect(soce.pre_cutover.completeness.reasons).toContain('PRE_CUTOVER_EQUITY_MOVEMENTS_NOT_RECORDED');
     const cf = (await co.owner.client.req('GET', `/financial-statements/cash-flow?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
@@ -339,7 +344,10 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
 
     // Annual package: blocked by the missing history. Ledger close: warnings only, no new blocker.
     const annual = (await co.owner.client.req('GET', `/annual-closing/${co.fy}`)).json;
-    expect(annual.domains.pre_cutover_history.blocker_count).toBe(1);
+    expect(annual.domains.pre_cutover_history.blocker_count).toBe(2); // S2: one blocker per missing supplement kind
+    expect(annual.domains.pre_cutover_history.summary).toMatchObject({ historical_supplements: 'missing', blockers: 'cash_flow_supplement_missing,equity_supplement_missing' });
+    expect(soce.pre_cutover.completeness).toMatchObject({ full_year_complete: false, status: 'unverified' });
+    expect(cf.pre_cutover.completeness.status).toBe('unverified');
     expect(annual.financial_statements_readiness.status).toBe('needs_review');
     const client = await h.db.connect();
     try {

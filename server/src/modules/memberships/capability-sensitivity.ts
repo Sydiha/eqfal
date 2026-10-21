@@ -31,6 +31,8 @@ const CRITICAL = new Set([
   'periodic_adjustment.post',
   'source_authority.activate',
   'source_authority.manage',
+  'source_authority.supplement_approve',
+  'source_authority.supplement_manage',
   'source_authority.view',
   'vat.close',
   'vat.reopen',

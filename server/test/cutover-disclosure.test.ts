@@ -27,8 +27,8 @@ describe('S1 cut-over disclosure', () => {
   });
 
   it('adds nothing for a year without an active cut-over range', () => {
-    expect(preCutover(null, 'income_statement')).toEqual({});
+    expect(preCutover(null, 'income_statement', true)).toEqual({});
     const d = buildCutoverDisclosure(row({ ...ACK, pre_closing_trial_balance: true }, { tb_source_system: 'X' }));
-    expect(preCutover(d, 'cash_flow')).toEqual({ pre_cutover: expect.objectContaining({ cutover_date: '2025-09-30', completeness: d.completeness.cash_flow }) });
+    expect(preCutover(d, 'cash_flow', true)).toEqual({ pre_cutover: expect.objectContaining({ cutover_date: '2025-09-30', completeness: d.completeness.cash_flow }) });
   });
 });

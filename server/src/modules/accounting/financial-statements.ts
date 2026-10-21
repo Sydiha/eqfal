@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg';
 import type { StatementCategory } from './account-classification.router';
 import { assertStatementRange, CUTOVER_BOUNDS_SQL, CutoverBounds } from './external-period-guard';
 import { CutoverDisclosure, loadCutoverDisclosure, preCutover } from './cutover-disclosure';
+import { cents, money as exactMoney, SupplementLine } from './cutover-supplements';
 
 export const FINANCIAL_STATEMENT_UNMAPPED_CODE='FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS';
 
@@ -88,7 +89,7 @@ export class FinancialStatementsService{
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
     const{openingAccounts:_,importedAmounts:_i,disclosure,...publicReport}=report;
-    return{...publicReport,...preCutover(disclosure,'financial_position'),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    return{...publicReport,...preCutover(disclosure,'financial_position',report.start_date===disclosure?.cutover_from),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
@@ -107,7 +108,7 @@ export class FinancialStatementsService{
     const importedSections=this.sections(imported,profitOrLossCategories),nativeSections=this.sections(native,profitOrLossCategories);
     const importedProfit=this.earnings(imported);
     return{
-      ...base,...preCutover(disclosure,'income_statement'),
+      ...base,...preCutover(disclosure,'income_statement',report.start_date===disclosure.cutover_from),
       sections:sections.map((section,index)=>({
         ...section,imported_total:importedSections[index]!.total,native_total:nativeSections[index]!.total,
         accounts:section.accounts.map(account=>({...account,imported_amount:importedById.get(account.account_id)!,native_amount:nativeById.get(account.account_id)!})),
@@ -131,6 +132,12 @@ export class FinancialStatementsService{
       const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
       const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
       const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
+      const fullYearRange=Boolean(period.disclosure)&&period.start_date===period.disclosure!.cutover_from;
+      const supplement=fullYearRange&&period.disclosure!.completeness.changes_in_equity.full_year_complete?period.disclosure!.supplements!.equity:null;
+      if(supplement){
+        await client.query('COMMIT');
+        return this.fullYearEquity(fiscalYearId,period,periodAccounts,equityAccounts,closing.accounts,supplement.lines);
+      }
       const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
       const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
       const currentPeriodEarnings=this.earnings(periodAccounts);
@@ -140,7 +147,7 @@ export class FinancialStatementsService{
       await client.query('COMMIT');
       return{
         fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
-        ...preCutover(period.disclosure,'changes_in_equity'),
+        ...preCutover(period.disclosure,'changes_in_equity',fullYearRange),
         statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
         direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
         current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
@@ -152,6 +159,39 @@ export class FinancialStatementsService{
     }finally{
       client.release();
     }
+  }
+
+  /**
+   * S2 full-year changes in equity (spec v2 E): opening = the supplement's 1 Jan balances; movements = supplement movements (1 Jan -> D) +
+   * native direct equity movements after D; result = the year's profit (cut-over journal P&L + native). The cut-over journal's equity lines are
+   * NOT movements: they are the D balances the supplement rolls forward to (E1), so nothing is counted twice. Exact halalas; the closing equity
+   * must equal the financial position's equity exactly.
+   */
+  private fullYearEquity(fiscalYearId:string,period:Awaited<ReturnType<FinancialStatementsService['movements']>>,periodAccounts:StatementAccount[],equityAccounts:StatementAccount[],closingAccounts:StatementAccount[],lines:SupplementLine[]){
+    const exact=(value:number)=>cents(value.toFixed(2));
+    const openings=lines.filter(line=>line.line_type==='equity_opening'),movements=lines.filter(line=>line.line_type==='equity_movement');
+    const openingEquity=openings.reduce((sum,line)=>sum+cents(line.opening_amount!),0n);
+    const supplementMovements=movements.reduce((sum,line)=>sum+cents(line.amount!),0n);
+    const nativeMovements=equityAccounts.reduce((sum,account)=>sum+cents(account.amount),0n);
+    const earnings=exact(this.earnings(periodAccounts));
+    const closingEquity=openingEquity+supplementMovements+nativeMovements+earnings;
+    const financialPositionEquity=exact(this.equityWithEarnings(closingAccounts));
+    const difference=closingEquity-financialPositionEquity;
+    const byType=(type:string)=>exactMoney(movements.filter(line=>line.movement_type===type).reduce((sum,line)=>sum+cents(line.amount!),0n));
+    return{
+      fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
+      ...preCutover(period.disclosure,'changes_in_equity',true),
+      statement:'changes_in_equity',opening_equity:exactMoney(openingEquity),
+      direct_equity_movements:exactMoney(supplementMovements+nativeMovements),equity_accounts:equityAccounts,
+      current_period_earnings:exactMoney(earnings),closing_equity:exactMoney(closingEquity),
+      pre_cutover_equity:{
+        opening_equity:exactMoney(openingEquity),movements:exactMoney(supplementMovements),native_movements:exactMoney(nativeMovements),
+        movements_by_type:{contribution:byType('contribution'),distribution:byType('distribution'),transfer:byType('transfer'),other:byType('other')},
+        accounts:openings.map(line=>({account_id:line.account_id!,opening_amount:line.opening_amount!,movements:movements.filter(m=>m.account_id===line.account_id).map(m=>({movement_type:m.movement_type!,label:m.label!,amount:m.amount!}))})),
+        source:'pre_cutover_supplement' as const,
+      },
+      reconciliation:{expected:exactMoney(closingEquity),actual:exactMoney(financialPositionEquity),difference:exactMoney(difference),balanced:difference===0n},
+    };
   }
 
   private earnings(accounts:StatementAccount[]){

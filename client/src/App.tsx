@@ -214,7 +214,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canDeletePartner={c.includes('partner.delete')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} capabilities={c} onUnauthorized={handleUnauthorized}/>}
-    {page === 'sourceAuthority' && <SourceAuthority canManage={c.includes('source_authority.manage')} canActivate={c.includes('source_authority.activate')} onUnauthorized={handleUnauthorized}/>}
+    {page === 'sourceAuthority' && <SourceAuthority canManage={c.includes('source_authority.manage')} canActivate={c.includes('source_authority.activate')} canManageSupplements={c.includes('source_authority.supplement_manage')} canApproveSupplements={c.includes('source_authority.supplement_approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'access' && <AccessAdministration capabilities={c} currentUserId={session.user.id} isSystemAdmin={session.user.isSystemAdmin === true} companyName={activeCompany?.name ?? ''} onUnauthorized={handleUnauthorized}/>}
     {page === 'companies' && <CompaniesManagement capabilities={c} onUnauthorized={handleUnauthorized} onChanged={refreshSession}/>}
     {page === 'auditLog' && <AuditLog canView={c.includes('audit.view')} onUnauthorized={handleUnauthorized}/>}
