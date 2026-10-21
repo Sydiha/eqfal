@@ -69,9 +69,10 @@ export function CutoverActivation({ range, accounts, accountsFailed, call, tx, a
   const [text, setText] = useState('');
   const [reference, setReference] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
+  const [sourceSystem, setSourceSystem] = useState('');
   const [reId, setReId] = useState('');
   const [cashIds, setCashIds] = useState<string[]>([]);
-  const [acks, setAcks] = useState({ retained_earnings: false, current_year_pnl: false, cash_balances: false, account_level_limitations: false });
+  const [acks, setAcks] = useState({ retained_earnings: false, current_year_pnl: false, cash_balances: false, account_level_limitations: false, pre_closing_trial_balance: false });
   const [preview, setPreview] = useState<{ valid: boolean; blockers: Blocker[]; summary: Summary | null } | null>(null);
   const [finalConfirm, setFinalConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -84,10 +85,10 @@ export function CutoverActivation({ range, accounts, accountsFailed, call, tx, a
   const equity = accounts.filter((a) => a.account_type === 'equity' && a.is_active);
   const name = (a: CutoverAccount) => (ar ? a.name_ar ?? a.name : a.name_en ?? a.name);
   const allAcked = Object.values(acks).every(Boolean);
-  const inputsReady = tb.balanced && tb.problems.length === 0 && reference.trim() && preparedBy.trim() && reId && allAcked;
+  const inputsReady = tb.balanced && tb.problems.length === 0 && reference.trim() && preparedBy.trim() && sourceSystem.trim() && reId && allAcked;
   const body = () => ({
     lines: tb.lines.map(({ account_id, debit, credit }) => ({ account_id, debit, credit })), retained_earnings_account_id: reId,
-    tb_reference: reference.trim(), tb_prepared_by: preparedBy.trim(), acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true },
+    tb_reference: reference.trim(), tb_prepared_by: preparedBy.trim(), tb_source_system: sourceSystem.trim(), acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true, pre_closing_trial_balance: true },
     cash_non_cash_confirmed_account_ids: cashIds,
   });
   const reset = () => { setPreview(null); setFinalConfirm(false); setError(null); };
@@ -130,6 +131,7 @@ export function CutoverActivation({ range, accounts, accountsFailed, call, tx, a
       <label>{tx('تاريخ القطع', 'Cutover date')}<input value={range.to_date} readOnly dir="ltr" /></label>
       <label>{tx('مرجع ميزان المراجعة المعتمد', 'Approved trial balance reference')}<input value={reference} maxLength={200} onChange={(e) => { setReference(e.target.value); reset(); }} /></label>
       <label>{tx('أعدّه', 'Prepared by')}<input value={preparedBy} maxLength={200} onChange={(e) => { setPreparedBy(e.target.value); reset(); }} /></label>
+      <label>{tx('النظام المصدر لميزان المراجعة', 'Trial balance source system')}<input value={sourceSystem} maxLength={200} onChange={(e) => { setSourceSystem(e.target.value); reset(); }} /></label>
       <label>{tx('حساب الأرباح المبقاة', 'Retained earnings account')}
         <select value={reId} onChange={(e) => { setReId(e.target.value); reset(); }}><option value="">{tx('اختر', 'Choose')}</option>{equity.map((a) => <option key={a.id} value={a.id}>{a.code} — {name(a)}</option>)}</select></label>
     </div>
@@ -142,12 +144,13 @@ export function CutoverActivation({ range, accounts, accountsFailed, call, tx, a
       <div><dt>{tx('إجمالي الدائن', 'Total credit')}</dt><dd className="sa-date">{tb.totalCredit}</dd></div>
       <div><dt>{tx('التوازن', 'Balance')}</dt><dd><span className={`sa-badge ${tb.balanced ? 'is-active' : ''}`}>{tb.lines.length === 0 ? tx('لا توجد سطور', 'No lines') : tb.balanced ? tx('متوازن', 'Balanced') : tx('غير متوازن', 'Not balanced')}</span></dd></div>
     </dl>
-    <fieldset className="ca-acks"><legend>{tx('إقرارات المحاسب (الأربعة إلزامية)', 'Accountant acknowledgements (all four required)')}</legend>
+    <fieldset className="ca-acks"><legend>{tx('إقرارات المحاسب (الخمسة إلزامية)', 'Accountant acknowledgements (all five required)')}</legend>
       {([
         ['retained_earnings', 'أُقرّ بأن رصيد الأرباح المبقاة صحيح.', 'I acknowledge the retained earnings balance is correct.'],
         ['current_year_pnl', 'أُقرّ بأن أرباح/خسائر السنة حتى تاريخ القطع صحيحة ومشمولة.', 'I acknowledge the year-to-date profit or loss is correct and included.'],
         ['cash_balances', 'أُقرّ بصحة الأرصدة النقدية والبنكية.', 'I acknowledge the cash and bank balances are correct.'],
         ['account_level_limitations', 'أفهم أن الأرصدة على مستوى الحساب فقط دون تفاصيل الفواتير أو الأطراف.', 'I understand balances are account-level only, without invoice or party detail.'],
+        ['pre_closing_trial_balance', 'أُقرّ بأن الميزان قبل الإقفال: حسابات الإيرادات والمصروفات تحمل أرصدة من بداية السنة حتى تاريخ القطع، والأرباح المبقاة هي رصيد بداية السنة. هذا إقرار مسجّل وليس تحققاً.', 'I acknowledge this is a pre-closing trial balance: revenue and expense accounts carry year-start to cutover-date balances, and retained earnings is the year-start balance. This is recorded, not verified.'],
       ] as const).map(([k, a, e]) => <label key={k} className="sa-check"><input type="checkbox" checked={acks[k]} onChange={(ev) => { setAcks({ ...acks, [k]: ev.target.checked }); reset(); }} /><span>{tx(a, e)}</span></label>)}
     </fieldset>
     {cashAccounts.length > 0 && <fieldset className="ca-acks"><legend>{tx('تأكيد تصنيف النقد/البنك', 'Cash / bank classification confirmation')}</legend>

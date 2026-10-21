@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import type { CashFlowCategory, CashRole } from './account-classification.router';
 import { assertCashFlowRange, CUTOVER_BOUNDS_SQL, CutoverBounds } from './external-period-guard';
+import { loadCutoverDisclosure, preCutover } from './cutover-disclosure';
 
 export const CASH_FLOW_CLASSIFICATION_CODE='CASH_FLOW_CLASSIFICATION_BLOCKED';
 
@@ -60,9 +61,11 @@ export class CashFlowStatementService{
       const operating=Number(sections[0]!.total),investing=Number(sections[1]!.total),financing=Number(sections[2]!.total);
       const net=round(operating+investing+financing),difference=round(opening+net-closing);
       if(material(difference))throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reason:'ambiguous',account_ids:[]}]);
+      // S1: a year with an active cut-over range discloses it (only periods after D reach this point); January-1 companies are unchanged.
+      const disclosure=year.cutover_to?await loadCutoverDisclosure(client,companyId,fiscalYearId):null;
       await client.query('COMMIT');
       return{
-        statement:'cash_flow',fiscal_year_id:fiscalYearId,start_date:from,end_date:to,sections,
+        statement:'cash_flow',fiscal_year_id:fiscalYearId,start_date:from,end_date:to,...preCutover(disclosure,'cash_flow'),sections,
         operating_cash_flow:money(operating),investing_cash_flow:money(investing),financing_cash_flow:money(financing),
         net_change_in_cash_and_cash_equivalents:money(net),opening_cash_and_cash_equivalents:money(opening),closing_cash_and_cash_equivalents:money(closing),
         reconciliation:{expected:money(opening+net),actual:money(closing),difference:money(difference),balanced:!material(difference)},

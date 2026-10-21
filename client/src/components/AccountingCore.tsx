@@ -5,7 +5,7 @@ import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } 
 import { useTranslation } from "react-i18next";
 import { ExportButtons } from "./ExportButtons";
 import { useActiveCompanyName } from "../context/CompanyContext";
-import { generalLedgerExport, generatedStamp, statementExport, trialBalanceExport, type StatementKind } from "../export/reportExport";
+import { generalLedgerExport, generatedStamp, preCutoverLines, statementExport, trialBalanceExport, type PreCutover, type StatementKind } from "../export/reportExport";
 import "./AccountingApproved.css";
 import "./AccountEdit.css";
 import "./AccountingTabs.css";
@@ -58,10 +58,12 @@ type LedgerRow = {
 };
 type StatementSection = {
   category: string;
-  accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string }>;
+  accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string; imported_amount?: string; native_amount?: string }>;
   total: string;
+  imported_total?: string;
+  native_total?: string;
 };
-type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; pre_cutover?: PreCutover; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -743,6 +745,8 @@ export function Accounting({
   const trialExport = reportScope.trial && exportMeta.trial && trial.length > 0 ? trialBalanceExport({ ...exportBase, t, accountName, sum: sumAmounts, rows: trial, yearName: exportMeta.trial.yearName }) : null;
   const ledgerExport = reportScope.ledger && exportMeta.ledger && ledger.length > 0 ? generalLedgerExport({ ...exportBase, t, sum: sumAmounts, rows: ledger, ...exportMeta.ledger }) : null;
   const statementMeta = exportMeta.statement;
+  // Cut-over years only: imported (to D) / native (after D) profit-or-loss columns.
+  const split = tab === "profitOrLoss" && statement?.profit_or_loss_split ? statement.profit_or_loss_split : null;
   const statementExportDoc = statement && !statementBlocked && statementMeta && statementMeta.kind === tab && statement.statement === ({ financialPosition: "financial_position", profitOrLoss: "profit_or_loss", changesInEquity: "changes_in_equity", cashFlow: "cash_flow" } as Record<string, string>)[tab]
     ? statementExport({ ...exportBase, t, accountName, kind: statementMeta.kind, yearName: statementMeta.yearName, startDate: statementMeta.start, endDate: statementMeta.end, asOfDate: statementMeta.asOf, data: statement }) : null;
   const exportButtons = (doc: ReturnType<typeof trialBalanceExport> | null, landscape: boolean) => <ExportButtons language={i18n.language} document={doc} landscape={landscape} />;
@@ -1690,13 +1694,15 @@ export function Accounting({
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
             <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
             {exportButtons(statementExportDoc, false)}
+            {statement.pre_cutover && <div role="note" aria-label={t("accounting.statements.preCutover.title")}>{preCutoverLines(t, statement.pre_cutover).map(([label, value], index) => <p key={index} className="ac-tab__context" dir="auto">{label ? <strong>{label}: </strong> : "• "}{value}</p>)}</div>}
             <div className={`table-wrap ac-tab__table ac-tab__statement${tab === "changesInEquity" || tab === "cashFlow" ? " is-roomy" : ""}`}><table><tbody>
+            {split && <tr className="is-section"><th>{t("accounting.account")}</th><th>{t("accounting.statements.preCutover.imported")}</th><th>{t("accounting.statements.preCutover.native")}</th><th>{t("accounting.statements.preCutover.amount")}</th></tr>}
             {statement.sections?.map((section) => <Fragment key={section.category}>
-              <tr className="is-section"><th colSpan={2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
-              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td><td>{account.amount}</td></tr>)}
-              <tr className="is-total"><th>{t("accounting.statements.total")}</th><th>{section.total}</th></tr>
+              <tr className="is-section"><th colSpan={split ? 4 : 2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
+              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td>{split && <><td>{account.imported_amount}</td><td>{account.native_amount}</td></>}<td>{account.amount}</td></tr>)}
+              <tr className="is-total"><th>{t("accounting.statements.total")}</th>{split && <><th>{section.imported_total}</th><th>{section.native_total}</th></>}<th>{section.total}</th></tr>
             </Fragment>)}
-            {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th><th>{statement.profit_or_loss}</th></tr>}
+            {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th>{split && <><th>{split.imported}</th><th>{split.native}</th></>}<th>{statement.profit_or_loss}</th></tr>}
             {tab === "financialPosition" && <>
               <tr className="is-strong"><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
               <tr className="is-strong"><th>{t("accounting.statements.equation")}</th><td><span className={`ac-tab__pill ${statement.accounting_equation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.accounting_equation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></td></tr>

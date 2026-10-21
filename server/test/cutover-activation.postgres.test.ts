@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
+import { getFiscalYearCloseReadiness } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
 
 // C1B-3b cut-over activation over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
@@ -9,7 +10,7 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
   beforeAll(async () => { h = await startHarness(); });
   afterAll(() => h.close());
 
-  const ACKS = { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true };
+  const ACKS = { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true, pre_closing_trial_balance: true };
 
   async function profile(co: string, userId: string, o: { from?: string; to?: string | null; vat?: 'registered' | 'not_registered'; freq?: string; review?: boolean; version?: number } = {}) {
     const reg = (o.vat ?? 'not_registered') === 'registered';
@@ -46,7 +47,7 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     { account_id: co.cap, debit: '0', credit: '700.00' }, { account_id: co.re, debit: '0', credit: '100.00' }, { account_id: co.rev, debit: '0', credit: '300.00' },
   ];
   const cut = (co: Co, extra: Record<string, unknown> = {}) => ({
-    lines: lines(co), retained_earnings_account_id: co.re, tb_reference: 'TB-2026-06', tb_prepared_by: 'Accountant A', acknowledgements: ACKS, idempotency_key: `key-${Math.random().toString(36).slice(2, 10)}`, confirm: true, ...extra,
+    lines: lines(co), retained_earnings_account_id: co.re, tb_reference: 'TB-2026-06', tb_prepared_by: 'Accountant A', tb_source_system: 'Legacy ERP', acknowledgements: ACKS, idempotency_key: `key-${Math.random().toString(36).slice(2, 10)}`, confirm: true, ...extra,
   });
   const draft = async (co: Co, to = '2026-06-30', from = '2026-01-01') =>
     (await co.owner.client.req('POST', '/ledger-source-authority/drafts', { from_date: from, to_date: to, reason: 'Excel until June', confirm: true })).json.range.id as string;
@@ -303,6 +304,61 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     expect(pos.status).toBe(200);
     const ext = await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-03-01&end_date=2026-03-31`);
     expect([ext.status, ext.json.code]).toEqual([409, 'EXTERNAL_PERIOD_REPORT_UNAVAILABLE']);
+  });
+
+  it('S1: statements disclose the cut-over, split imported/native P&L and never claim full-year completeness', async () => {
+    const co = await setup('s1');
+    const id = await draft(co);
+    expect((await activate(co, id)).status).toBe(201);
+    const snap = (await h.q<{ activation_snapshot: Record<string, unknown>; acknowledgements: Record<string, unknown> }>('SELECT activation_snapshot,acknowledgements FROM ledger_source_authority WHERE id=$1', [id]))[0]!;
+    expect([snap.activation_snapshot['tb_basis'], snap.activation_snapshot['tb_source_system'], snap.acknowledgements['pre_closing_trial_balance']]).toEqual(['pre_closing', 'Legacy ERP', true]);
+    await h.q("UPDATE accounts SET cash_flow_category='operating' WHERE id=$1", [co.rev]);
+    await h.postedJournal(co.id, co.fy, '2026-07-15', co.owner.id, [[co.bank, '50', '0'], [co.rev, '0', '50']]);
+
+    const pl = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-01-01&end_date=2026-12-31`)).json;
+    expect(pl.profit_or_loss).toBe('250.00');
+    expect(pl.profit_or_loss_split).toEqual({ imported: '200.00', native: '50.00' });
+    const revenue = pl.sections.find((s: { category: string }) => s.category === 'revenue');
+    expect([revenue.total, revenue.imported_total, revenue.native_total]).toEqual(['350.00', '300.00', '50.00']);
+    expect([revenue.accounts[0].imported_amount, revenue.accounts[0].native_amount]).toEqual(['300.00', '50.00']);
+    expect(pl.pre_cutover).toMatchObject({ cutover_date: '2026-06-30', tb_reference: 'TB-2026-06', tb_source_system: 'Legacy ERP', tb_basis: 'pre_closing_acknowledged', evidence_missing: [] });
+    expect(pl.pre_cutover.completeness).toMatchObject({ availability: 'ledger_calculated', full_year_complete: false, status: 'unverified' });
+    expect(pl.pre_cutover.completeness.reasons).toContain('HISTORICAL_SUPPLEMENTS_NOT_AVAILABLE');
+
+    const q4 = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
+    expect([q4.profit_or_loss, q4.profit_or_loss_split.imported, q4.profit_or_loss_split.native]).toEqual(['50.00', '0.00', '50.00']);
+    const pos = (await co.owner.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}&as_of_date=2026-12-31`)).json;
+    expect([pos.accounting_equation.balanced, pos.pre_cutover.completeness.full_year_complete]).toEqual([true, false]);
+    const soce = (await co.owner.client.req('GET', `/financial-statements/changes-in-equity?fiscal_year_id=${co.fy}&start_date=2026-01-01&end_date=2026-12-31`)).json;
+    expect(soce.pre_cutover.completeness.reasons).toContain('PRE_CUTOVER_EQUITY_MOVEMENTS_NOT_RECORDED');
+    const cf = (await co.owner.client.req('GET', `/financial-statements/cash-flow?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
+    expect([cf.net_change_in_cash_and_cash_equivalents, cf.opening_cash_and_cash_equivalents]).toEqual(['50.00', '600.00']);
+    expect([cf.pre_cutover.completeness.availability, cf.pre_cutover.completeness.full_year_complete]).toEqual(['post_cutover_only', false]);
+
+    // Annual package: blocked by the missing history. Ledger close: warnings only, no new blocker.
+    const annual = (await co.owner.client.req('GET', `/annual-closing/${co.fy}`)).json;
+    expect(annual.domains.pre_cutover_history.blocker_count).toBe(1);
+    expect(annual.financial_statements_readiness.status).toBe('needs_review');
+    const client = await h.db.connect();
+    try {
+      const close = await getFiscalYearCloseReadiness(client, co.id, { id: co.fy, start_date: '2026-01-01', end_date: '2026-12-31' });
+      expect(close.warnings.map((w) => w.code)).toContain('cutover_historical_supplements_missing');
+      expect(close.warnings.map((w) => w.code)).not.toContain('cutover_tb_evidence_missing');
+      expect(close.blockers.map((b) => b.code).filter((c) => /cutover|history|supplement/.test(c))).toEqual([]);
+    } finally { client.release(); }
+  });
+
+  it('S1: a January-1 company gets no disclosure, no split columns and no history domain', async () => {
+    const co = await setup('s1plain');
+    await h.postedJournal(co.id, co.fy, '2026-03-10', co.owner.id, [[co.bank, '50', '0'], [co.rev, '0', '50']]);
+    const pl = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-01-01&end_date=2026-12-31`)).json;
+    expect(pl.profit_or_loss).toBe('50.00');
+    expect('pre_cutover' in pl || 'profit_or_loss_split' in pl).toBe(false);
+    expect(Object.keys(pl.sections[0]).sort()).toEqual(['accounts', 'category', 'total']);
+    expect(Object.keys(pl.sections.find((s: { category: string }) => s.category === 'revenue').accounts[0])).not.toContain('imported_amount');
+    const annual = (await co.owner.client.req('GET', `/annual-closing/${co.fy}`)).json;
+    expect(annual.domains.pre_cutover_history).toBeUndefined();
+    expect(annual.package_manifest.map((m: { section: string }) => m.section)).not.toContain('pre_cutover_history');
   });
 
   it('monthly close: months through D are external and cannot be closed; D+1 month is native', async () => {

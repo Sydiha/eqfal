@@ -24,7 +24,11 @@ export type CutoverInput = {
   retained_earnings_account_id: string;
   tb_reference: string;
   tb_prepared_by: string;
-  acknowledgements: { retained_earnings: true; current_year_pnl: true; cash_balances: true; account_level_limitations: true };
+  /** S1: the system the trial balance was taken from (evidence reference only; never verified). Stored in the activation snapshot. */
+  tb_source_system: string;
+  /** `pre_closing_trial_balance` (S1): the accountant attests revenue/expense accounts still carry 1 Jan -> D and retained earnings is the
+   *  1 Jan balance. It is recorded, not proven: no balance pattern (including a zero net P&L) can show that a trial balance is pre-closing. */
+  acknowledgements: { retained_earnings: true; current_year_pnl: true; cash_balances: true; account_level_limitations: true; pre_closing_trial_balance: true };
   idempotency_key?: string;
   /** Accounts that look like cash/bank but are classified non_cash, each individually confirmed by the accountant. Never changes a classification. */
   cash_non_cash_confirmed_account_ids: string[];
@@ -42,7 +46,7 @@ const MONEY = /^\d{1,16}(\.\d{1,2})?$/;
 const KEY = /^[A-Za-z0-9._:-]{8,128}$/;
 const MAX_LINES = 2000;
 const PNL = new Set(['revenue', 'cost_of_sales', 'operating_expense', 'finance_income', 'finance_expense', 'other_income', 'other_expense']);
-const REQUIRED_ACKS = ['retained_earnings', 'current_year_pnl', 'cash_balances', 'account_level_limitations'] as const;
+const REQUIRED_ACKS = ['retained_earnings', 'current_year_pnl', 'cash_balances', 'account_level_limitations', 'pre_closing_trial_balance'] as const;
 
 const cents = (value: string): bigint => { const [w, f = ''] = value.split('.'); return BigInt(w!) * 100n + BigInt((f + '00').slice(0, 2)); };
 const money = (value: bigint): string => { const neg = value < 0n; const a = neg ? -value : value; return `${neg ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}`; };
@@ -51,7 +55,7 @@ const money = (value: bigint): string => { const neg = value < 0n; const a = neg
 export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverInput | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const x = body as Record<string, unknown>;
-  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', 'acknowledgements', 'idempotency_key', 'cash_non_cash_confirmed_account_ids', 'confirm'];
+  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', 'tb_source_system', 'acknowledgements', 'idempotency_key', 'cash_non_cash_confirmed_account_ids', 'confirm'];
   if (Object.keys(x).some((k) => !allowed.includes(k))) return null;
   if (!Array.isArray(x['lines']) || x['lines'].length === 0 || x['lines'].length > MAX_LINES) return null;
   const lines: CutoverLine[] = [];
@@ -65,9 +69,9 @@ export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverIn
   }
   const text = (v: unknown) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 200 ? v.trim() : null);
   const re = x['retained_earnings_account_id'];
-  const ref = text(x['tb_reference']), by = text(x['tb_prepared_by']);
+  const ref = text(x['tb_reference']), by = text(x['tb_prepared_by']), src = text(x['tb_source_system']);
   const ack = x['acknowledgements'];
-  if (typeof re !== 'string' || !UUID.test(re) || !ref || !by) return null;
+  if (typeof re !== 'string' || !UUID.test(re) || !ref || !by || !src) return null;
   if (typeof ack !== 'object' || ack === null || Array.isArray(ack)) return null;
   const a = ack as Record<string, unknown>;
   if (Object.keys(a).some((k) => !(REQUIRED_ACKS as readonly string[]).includes(k)) || REQUIRED_ACKS.some((k) => a[k] !== true)) return null;
@@ -78,8 +82,8 @@ export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverIn
   if (key !== undefined && (typeof key !== 'string' || !KEY.test(key))) return null;
   if (requireKey && key === undefined) return null;
   return {
-    lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by,
-    acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true },
+    lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by, tb_source_system: src,
+    acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true, pre_closing_trial_balance: true },
     cash_non_cash_confirmed_account_ids: confirmed,
     ...(key === undefined ? {} : { idempotency_key: key as string }),
   };
@@ -87,7 +91,7 @@ export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverIn
 
 function payloadHash(input: CutoverInput): string {
   const lines = [...input.lines].map((l) => ({ a: l.account_id, d: money(cents(l.debit)), c: money(cents(l.credit)) })).sort((p, q) => p.a.localeCompare(q.a));
-  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, ack: input.acknowledgements, cash: [...input.cash_non_cash_confirmed_account_ids].sort() })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, src: input.tb_source_system, ack: input.acknowledgements, cash: [...input.cash_non_cash_confirmed_account_ids].sort() })).digest('hex');
 }
 
 const CASH_NAME = /(bank|cash|petty|safe|treasury|صندوق|نقد|بنك|مصرف|خزينة|خزنة)/i;
@@ -229,7 +233,7 @@ export class LedgerCutoverService {
       }
       await postJournalInTransaction(client, companyId, actor, journal.id, { cutoverAuthorityId: range.id });
 
-      const snapshot = { summary, vat_profile: profile[0] ? { id: profile[0].id, version_no: profile[0].version_no, vat_status: profile[0].vat_status, vat_filing_frequency: profile[0].vat_filing_frequency } : null, retained_earnings_account_id: input.retained_earnings_account_id, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids };
+      const snapshot = { summary, tb_basis: 'pre_closing' as const, tb_source_system: input.tb_source_system, vat_profile: profile[0] ? { id: profile[0].id, version_no: profile[0].version_no, vat_status: profile[0].vat_status, vat_filing_frequency: profile[0].vat_filing_frequency } : null, retained_earnings_account_id: input.retained_earnings_account_id, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids };
       const key = input.idempotency_key ?? `preview-${range.id}`;
       const active = (await client.query<AuthorityRange>(
         `UPDATE ledger_source_authority SET status='active',cutover_journal_id=$3,activated_by=$4,activated_at=NOW(),tb_reference=$5,tb_prepared_by=$6,
@@ -241,7 +245,7 @@ export class LedgerCutoverService {
       await this.audit.logEvent({
         company_id: companyId, actor_user_id: actor, action: 'ledger_source_authority.activate', entity_type: 'ledger_source_authority', entity_id: range.id,
         before_data: { status: 'draft' },
-        after_data: { status: 'active', from_date: range.from_date, to_date: range.to_date, cutover_journal_id: journal.id, tb_reference: input.tb_reference, tb_prepared_by: input.tb_prepared_by, acknowledgements: input.acknowledgements, totals: { total_debit: summary.total_debit, total_credit: summary.total_credit, line_count: summary.line_count }, warnings: summary.warnings.map((w) => w.code), vat_profile: snapshot.vat_profile, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids },
+        after_data: { status: 'active', from_date: range.from_date, to_date: range.to_date, cutover_journal_id: journal.id, tb_reference: input.tb_reference, tb_prepared_by: input.tb_prepared_by, tb_source_system: input.tb_source_system, acknowledgements: input.acknowledgements, totals: { total_debit: summary.total_debit, total_credit: summary.total_credit, line_count: summary.line_count }, warnings: summary.warnings.map((w) => w.code), vat_profile: snapshot.vat_profile, cash_non_cash_confirmed_account_ids: input.cash_non_cash_confirmed_account_ids },
         reason: range.reason,
       }, client);
       if (dryRun) await client.query('ROLLBACK'); else await client.query('COMMIT');

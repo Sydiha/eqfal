@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { loadOperationalSources } from '../accounting/operational-sources';
 import { CUTOVER_BOUNDS_SQL } from '../accounting/external-period-guard';
+import { loadCutoverDisclosure } from '../accounting/cutover-disclosure';
 import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './annual-closing.types';
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { CompanyReconciliation, UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
@@ -52,21 +53,22 @@ export function whtReadiness(start:string,end:string,profiles:WhtProfile[],revie
 
 export function assembleAnnualClosing(fiscalYear: FiscalYear, domains: Record<string, AnnualClosingDomain>): AnnualClosingResponse {
   const blockerCount = Object.values(domains).reduce((total, item) => total + item.blocker_count, 0);
-  const financialBlockers = ['monthly_close', 'ledger', 'documents', 'assets', 'adjustments', 'opening_balances']
-    .reduce((total, key) => total + domains[key]!.blocker_count, 0);
+  // `pre_cutover_history` exists only for a year with an active cut-over range (S1): it blocks the financial statements package, never the ledger close.
+  const financialBlockers = ['monthly_close', 'ledger', 'documents', 'assets', 'adjustments', 'opening_balances', 'pre_cutover_history']
+    .reduce((total, key) => total + (domains[key]?.blocker_count ?? 0), 0);
   const manifestSource: Record<string, string> = {
     fiscal_year: 'fiscal-years', trial_balance: 'accounting', general_ledger: 'accounting', financial_statements_readiness: 'annual-closing',
     vat: 'vat', bank_reconciliation: 'banking', receivables_payables: 'obligations', document_exceptions: 'documents',
     partners_ownership: 'partners', fixed_assets_depreciation: 'fixed-assets', periodic_adjustments: 'periodic-adjustments',
-    opening_balances: 'opening-balances', zakat_readiness: 'annual-closing', wht_readiness:'wht-reviews',
+    opening_balances: 'opening-balances', zakat_readiness: 'annual-closing', wht_readiness:'wht-reviews', pre_cutover_history: 'ledger-source-authority',
   };
   const manifestDomain: Record<string, string | undefined> = {
     trial_balance: 'ledger', general_ledger: 'ledger', financial_statements_readiness: 'ledger', vat: 'vat',
     bank_reconciliation: 'banking', receivables_payables: 'receivables_payables', document_exceptions: 'documents',
     partners_ownership: 'partners', fixed_assets_depreciation: 'assets', periodic_adjustments: 'adjustments',
-    opening_balances: 'opening_balances', zakat_readiness: 'zakat', wht_readiness:'wht',
+    opening_balances: 'opening_balances', zakat_readiness: 'zakat', wht_readiness:'wht', pre_cutover_history: 'pre_cutover_history',
   };
-  const package_manifest = Object.keys(manifestSource).filter(section=>section!=='wht_readiness'||Boolean(domains.wht)).map(section => {
+  const package_manifest = Object.keys(manifestSource).filter(section=>(section!=='wht_readiness'||Boolean(domains.wht))&&(section!=='pre_cutover_history'||Boolean(domains.pre_cutover_history))).map(section => {
     const item = manifestDomain[section] ? domains[manifestDomain[section]!] : undefined;
     const status = section === 'fiscal_year' ? 'ready' as const : section === 'financial_statements_readiness' ? (financialBlockers ? 'blocked' as const : 'ready' as const) : item!.status;
     return { section, status, ...(item ? { blocker_count: section === 'financial_statements_readiness' ? financialBlockers : item.blocker_count } : {}), source: manifestSource[section]! };
@@ -186,6 +188,12 @@ export class AnnualClosingService {
       zakat: taxReadiness(taxPath,profile?.id??null,workpaper?{...workpaper,unresolved:Number(workpaper.unresolved),source_drift:Boolean(liveTaxWorkpaper?.source_drift)}:null,financialBlockers),
       wht: whtReadiness(start,end,whtProfiles,whtReviews),
     };
+    // S1: EQFAL holds no verified pre-cut-over history (cash flows, equity movements) yet, so a cut-over year's full-year statements package is
+    // blocked. The fiscal-year ledger close reads only warnings from this domain (fiscal-year-close-readiness.ts).
+    if (cut) {
+      const disclosure = await loadCutoverDisclosure(this.db, companyId, fiscalYearId);
+      domains.pre_cutover_history = domain(1, { cutover_date: cut.to_date, historical_supplements: 'missing', tb_basis: disclosure?.tb_basis ?? 'not_recorded', evidence_missing: (disclosure?.evidence_missing ?? []).join(','), blockers: 'historical_supplements_missing' });
+    }
     return assembleAnnualClosing(fiscalYear, domains);
   }
 }
