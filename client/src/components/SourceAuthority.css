@@ -83,6 +83,27 @@
 
 .source-authority .sa-table td:last-child:not(.sa-reason){white-space:nowrap}
 .source-authority .sa-table td .sa-ghost+.sa-primary,.source-authority .sa-table td .sa-primary+.sa-ghost{margin-inline-start:6px}
+/* S2 supplement entry rows: roomy columns, readable selects, visible focus and selected option */
+.source-authority .sa-lines table{min-width:1370px;table-layout:auto}
+.source-authority .sa-lines :is(th,td){box-sizing:border-box}
+.source-authority .sa-lines th{padding:12px 12px;font-size:12px}
+.source-authority .sa-lines td{padding:14px 12px;vertical-align:middle}
+.source-authority .sa-lines tbody tr:nth-child(even) td{background:#fafcfd}
+.source-authority .sa-lines tbody tr:hover td{background:#f1f8f6}
+.source-authority .sa-lines :is(th,td):nth-child(1){min-width:220px}
+.source-authority .sa-lines :is(th,td):nth-child(2){min-width:190px}
+.source-authority .sa-lines :is(th,td):nth-child(3){min-width:160px}
+.source-authority .sa-lines :is(th,td):nth-child(4){min-width:150px}
+.source-authority .sa-lines :is(th,td):nth-child(5),.source-authority .sa-lines :is(th,td):nth-child(6),.source-authority .sa-lines :is(th,td):nth-child(7){min-width:120px}
+.source-authority .sa-lines :is(th,td):nth-child(8){min-width:190px}
+.source-authority .sa-lines select,.source-authority .sa-lines input:not([type=checkbox]){height:40px;padding-inline:12px;font-size:13px;line-height:1.4;text-overflow:ellipsis}
+.source-authority .sa-lines select{padding-inline-end:28px;color:#0f172a;border-color:#b8c4d0;cursor:pointer}
+.source-authority .sa-lines input[inputmode=decimal]{text-align:end;font-variant-numeric:tabular-nums}
+.source-authority .sa-lines select:hover,.source-authority .sa-lines input:not([type=checkbox]):hover{border-color:#7f93a8}
+.source-authority .sa-lines select:focus-visible,.source-authority .sa-lines input:not([type=checkbox]):focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary);box-shadow:0 0 0 4px rgba(0,184,148,.18)}
+.source-authority .sa-lines option{padding:8px 12px;background:#fff;color:#0f172a;font-size:13px}
+.source-authority .sa-lines option:checked{background:#c8f0e3;color:#064e3b;font-weight:700}
+.source-authority .sa-lines td:last-child{min-width:100px}
 .source-authority .ca-file>input[type=file]{width:100%;box-sizing:border-box;height:auto;padding:8px 10px}
 .source-authority .ca-file .sa-muted{line-height:1.7}
 .source-authority .ca-file .sa-warning{margin:0}

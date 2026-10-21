@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { CutoverSupplements, toRequestLines } from '../components/CutoverSupplements';
@@ -44,5 +46,30 @@ describe('CutoverSupplements', () => {
     render(<CutoverSupplements rangeId="r-1" call={call} tx={tx} canManage={false} canApprove />);
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(call).toHaveBeenCalledWith('/api/ledger-source-authority/r-1/supplements/v-1/approve', expect.objectContaining({ method: 'POST', body: JSON.stringify({ confirm: true, expected_row_version: 3 }) })));
+  });
+
+  it('entry rows live in the roomy .sa-lines table with a labelled control in every cell (no wrong-field guessing)', async () => {
+    const call = vi.fn(async (url: string) => (url.endsWith('/supplements') ? { versions: [] } : { accounts: [] }));
+    render(<CutoverSupplements rangeId="r-1" call={call} tx={tx} canManage canApprove={false} />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Enter data' }))[0]!);
+    const form = await screen.findByRole('form');
+    const table = form.querySelector('.sa-lines table')!;
+    expect(table).not.toBeNull();
+    const row = table.querySelector('tbody tr')!;
+    const controls = [...row.querySelectorAll('select,input')];
+    expect(controls.length).toBeGreaterThanOrEqual(4);
+    for (const c of controls) expect(c.getAttribute('aria-label')).toBeTruthy();
+    expect(table.querySelectorAll('thead th').length).toBe(row.querySelectorAll('td').length);
+  });
+
+  it('CSS: wide columns so labels are not clipped, strong select/option contrast, visible selected option and focus ring', () => {
+    const css = readFileSync(resolve(__dirname, '../components/SourceAuthority.css'), 'utf8');
+    expect(css).toMatch(/\.sa-lines table\{min-width:1370px/);
+    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(1\)\{min-width:220px\}/);
+    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(2\)\{min-width:190px\}/);
+    expect(css).toMatch(/\.sa-lines select,\.source-authority \.sa-lines input:not\(\[type=checkbox\]\)\{height:40px/);
+    expect(css).toMatch(/\.sa-lines option\{[^}]*background:#fff;color:#0f172a/);
+    expect(css).toMatch(/\.sa-lines option:checked\{background:#c8f0e3;color:#064e3b;font-weight:700\}/);
+    expect(css).toMatch(/\.sa-lines select:focus-visible,[^{]*\{outline:2px solid var\(--sa-primary\)/);
   });
 });
