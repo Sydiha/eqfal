@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n';
 import { AccountClassificationPanel } from '../components/AccountClassificationPanel';
 
 const account={
@@ -16,6 +17,7 @@ const account={
 };
 
 describe('AccountClassificationPanel',()=>{
+  beforeEach(async()=>{await i18n.changeLanguage('en');});
   it('discovers unmapped accounts and sends only governed classification fields',async()=>{
     const writes:Record<string,unknown>[]=[];
     const fetchMock=vi.fn(async(url:string,options?:RequestInit)=>{
