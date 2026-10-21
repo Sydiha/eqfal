@@ -89,7 +89,7 @@ export class FinancialStatementsService{
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
     const{openingAccounts:_,importedAmounts:_i,disclosure,...publicReport}=report;
-    return{...publicReport,...preCutover(disclosure,'financial_position'),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    return{...publicReport,...preCutover(disclosure,'financial_position',report.start_date===disclosure?.cutover_from),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
@@ -180,7 +180,7 @@ export class FinancialStatementsService{
     const byType=(type:string)=>exactMoney(movements.filter(line=>line.movement_type===type).reduce((sum,line)=>sum+cents(line.amount!),0n));
     return{
       fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
-      ...preCutover(period.disclosure,'changes_in_equity'),
+      ...preCutover(period.disclosure,'changes_in_equity',true),
       statement:'changes_in_equity',opening_equity:exactMoney(openingEquity),
       direct_equity_movements:exactMoney(supplementMovements+nativeMovements),equity_accounts:equityAccounts,
       current_period_earnings:exactMoney(earnings),closing_equity:exactMoney(closingEquity),

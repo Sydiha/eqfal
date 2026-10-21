@@ -13,7 +13,9 @@ describeDatabase('cut-over historical supplements (PostgreSQL)', () => {
   const ACKS = { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true, pre_closing_trial_balance: true };
 
   // SYNTHETIC acceptance case (spec v2 J): D = 2026-06-30. Cut-over journal: bank 270,000 | capital 150,000, retained earnings 20,000, YTD profit 120,000.
-  // The spec's figures alone do not balance (270,000 vs 290,000), so a non-cash asset of 20,000 completes the trial balance; it touches no cash or equity figure.
+  // TEST-FIXTURE BALANCING CORRECTION (not an accounting rule, not a spec change): the spec's figures alone do not balance (debit 270,000 vs
+  // credit 290,000), and activation correctly refuses an unbalanced trial balance. A non-cash, non-equity asset of 20,000 (S-PPE) is added only
+  // to balance the fixture; it is not a cash account (C1/C2) or an equity account (E1-E4), so every figure the spec asserts is unchanged.
   async function setup(label: string) {
     const owner = await h.user(`${label}-own`);
     const id = await h.company(label, owner.id);
@@ -100,6 +102,16 @@ describeDatabase('cut-over historical supplements (PostgreSQL)', () => {
     expect(e.pre_cutover_equity.movements_by_type.contribution).toBe('15000.00');
     expect(e.pre_cutover.full_year_complete).toEqual({ income_statement: true, financial_position: true, changes_in_equity: true, cash_flow: true });
 
+    // Financial position at a partial-year as-of date (spec F, condition 5: the range starts on 1 Jan): the 1 Jan -> as-of span is supported by
+    // the cut-over journal + native ledger, so it is complete with status 'evidence_recorded'; an as-of date before D is refused.
+    const fpSep = (await co.owner.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}&as_of_date=2026-09-30`)).json;
+    expect([fpSep.as_of_date, fpSep.pre_cutover.completeness.full_year_complete, fpSep.pre_cutover.completeness.status, fpSep.accounting_equation.balanced]).toEqual(['2026-09-30', true, 'evidence_recorded', true]);
+    const fpEarly = await co.owner.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}&as_of_date=2026-05-31`);
+    expect([fpEarly.status, fpEarly.json.code]).toEqual([409, 'EXTERNAL_PERIOD_REPORT_UNAVAILABLE']);
+    // A sub-period P&L (not from 1 Jan) is never full-year.
+    const plQ4 = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
+    expect([plQ4.pre_cutover.completeness.full_year_complete, plQ4.pre_cutover.completeness.reasons]).toEqual([false, ['REPORT_RANGE_NOT_FULL_YEAR']]);
+
     // A period starting inside (1 Jan, D] stays refused; a sub-period after D is unchanged and not full-year.
     const inside = await co.owner.client.req('GET', `/financial-statements/cash-flow?fiscal_year_id=${co.fy}&start_date=2026-03-01&end_date=2026-12-31`);
     expect(inside.json.code).toBe('CASH_FLOW_EXTERNAL_PERIOD');
@@ -183,6 +195,9 @@ describeDatabase('cut-over historical supplements (PostgreSQL)', () => {
     const replace = (rv: number) => co.owner.client.req('PUT', `${base(co)}/${d2.json.version.id}`, { ...cashBody(co, { evidence_reference: 'Corrected v2' }), expected_row_version: rv });
     const ok = await replace(1);
     expect([ok.status, ok.json.version.row_version]).toEqual([200, 2]);
+    const upd = (await h.q<{ before_data: { lines: Array<{ amount: string | null }>; evidence_reference: string }; after_data: { lines: unknown[]; evidence_reference: string } }>("SELECT before_data,after_data FROM audit_log WHERE entity_id=$1 AND action='cutover_supplement.draft_update'", [d2.json.version.id]))[0]!;
+    expect([upd.before_data.evidence_reference, upd.after_data.evidence_reference, upd.before_data.lines.length, upd.after_data.lines.length]).toEqual(['Corrected bank statements', 'Corrected v2', 3, 3]);
+    expect(upd.before_data.lines.map((l) => l.amount)).toEqual([null, '235000.00', '15000.00']);
     expect((await replace(1)).json.code).toBe('SUPPLEMENT_STALE_WRITE');
     expect((await approve(co, d2.json.version.id, 1)).json.code).toBe('SUPPLEMENT_STALE_WRITE');
     const a2 = await approve(co, d2.json.version.id, 2);
@@ -251,6 +266,32 @@ describeDatabase('cut-over historical supplements (PostgreSQL)', () => {
     const x = await createDraft(other, 'equity', equityBody(other, { lines: [{ line_type: 'equity_opening', account_id: co.cap, opening_amount: '1.00' }] }));
     expect([x.status, x.json.code]).toEqual([409, 'SUPPLEMENT_ACCOUNT_NOT_FOUND']);
     expect(await h.count('SELECT COUNT(*) n FROM cutover_supplement_versions WHERE company_id=$1', [other.id])).toBe(0);
+  });
+
+  it('a failure after the predecessor was superseded rolls back both version transitions and every audit row', async () => {
+    const co = await setup('rollback');
+    const v1 = await approved(co, 'equity', equityBody(co));
+    const d2 = await createDraft(co, 'equity', equityBody(co, { evidence_reference: 'Corrected resolutions' }));
+    const auditBefore = await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id]);
+    // TEST-ONLY fault injection, scoped to this company: the approval's own audit insert (written AFTER the predecessor became superseded
+    // and its supersession audit was written) fails, so the whole transaction must roll back.
+    const fn = `test_fail_supplement_approve_${co.id.replace(/-/g, '')}`;
+    await h.q(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST_INJECTED_FAILURE'; END $$`);
+    await h.q(`CREATE TRIGGER ${fn} BEFORE INSERT ON audit_log FOR EACH ROW WHEN (NEW.company_id = '${co.id}'::uuid AND NEW.action = 'cutover_supplement.approve') EXECUTE FUNCTION ${fn}()`);
+    try {
+      expect((await approve(co, d2.json.version.id, d2.json.version.row_version)).status).toBe(500);
+    } finally {
+      await h.q(`DROP TRIGGER ${fn} ON audit_log`); await h.q(`DROP FUNCTION ${fn}()`);
+    }
+    const rows = await h.q<{ id: string; status: string; row_version: number; superseded_by_id: string | null; approved_by: string | null }>('SELECT id,status,row_version,superseded_by_id,approved_by FROM cutover_supplement_versions WHERE authority_id=$1 ORDER BY version_no', [co.range]);
+    expect(rows).toEqual([
+      { id: v1.id, status: 'approved', row_version: v1.row_version, superseded_by_id: null, approved_by: co.owner.id },
+      { id: d2.json.version.id, status: 'draft', row_version: 1, superseded_by_id: null, approved_by: null },
+    ]);
+    expect(await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id])).toBe(auditBefore);
+    expect((await soce(co)).json.pre_cutover.completeness.supplement).toEqual({ version_no: 1, state: 'complete', revision_pending: true });
+    // The same draft can still be approved afterwards (nothing half-applied blocks it).
+    expect((await approve(co, d2.json.version.id, 1)).status).toBe(200);
   });
 
   it('January-1 company: statements, annual closing and close readiness are unchanged (no pre_cutover, no supplement query effect)', async () => {

@@ -18,7 +18,9 @@ export type StatementKey = 'income_statement' | 'financial_position' | 'changes_
 export type Completeness = {
   availability: 'ledger_calculated' | 'post_cutover_only';
   full_year_complete: boolean;
-  status: 'unverified' | 'reconciled';
+  /** unverified: not full-year; evidence_recorded: ledger figures with recorded (not verified) TB evidence; reconciled: an approved
+   *  supplement reconciles to the cut-over journal. None of them means EQFAL verified the external history. */
+  status: 'unverified' | 'evidence_recorded' | 'reconciled';
   reasons: string[];
   /** S2: the supplement behind cash flow / changes in equity (absent for the ledger-only statements). */
   supplement?: { version_no: number | null; state: SupplementStatus['state']; revision_pending: boolean };
@@ -56,7 +58,7 @@ export function buildCutoverDisclosure(row: Row, supplements: Record<SupplementK
   const yearStart = row.fy_start === undefined || row.from_date === row.fy_start;
   const ledgerOk = supplements !== null && evidence.length === 0 && yearStart;
   const ledger = (): Completeness => ledgerOk
-    ? { availability: 'ledger_calculated', full_year_complete: true, status: 'reconciled', reasons: [] }
+    ? { availability: 'ledger_calculated', full_year_complete: true, status: 'evidence_recorded', reasons: [] }
     : { availability: 'ledger_calculated', full_year_complete: false, status: 'unverified', reasons: [...(supplements ? [] : ['HISTORICAL_SUPPLEMENTS_NOT_AVAILABLE']), ...evidence, ...(yearStart ? [] : ['CUTOVER_RANGE_NOT_FROM_YEAR_START'])] };
   const supplemented = (kind: SupplementKind, availability: Completeness['availability'], missingReason: string): Completeness => {
     const s = supplements?.[kind];
@@ -82,9 +84,11 @@ export function buildCutoverDisclosure(row: Row, supplements: Record<SupplementK
 
 /**
  * Adds `pre_cutover` (the disclosure plus this statement's own completeness) only when the year has an active cut-over range.
- * Spec F condition 5: completeness applies only to a report that starts on the fiscal year's first day (`fullYearRange`).
+ * Spec F condition 5: completeness applies only to a report that starts on the fiscal year's first day (`fullYearRange`). Every caller passes it
+ * explicitly. The financial position is always reported from the year start (as-of), so its range condition always holds; an as-of date on or
+ * before D is refused earlier by assertStatementRange, and `full_year_complete` then means "1 Jan -> as-of is supported", not "year end".
  */
-export function preCutover(disclosure: CutoverDisclosure | null, key: StatementKey, fullYearRange = true) {
+export function preCutover(disclosure: CutoverDisclosure | null, key: StatementKey, fullYearRange: boolean) {
   if (!disclosure) return {};
   const { completeness, supplements: _s, ...rest } = disclosure;
   const own = completeness[key];

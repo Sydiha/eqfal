@@ -102,7 +102,7 @@ export class CashFlowStatementService{
     if(difference!==0n)throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reason:'ambiguous',account_ids:[]}]);
     await client.query('COMMIT');
     return{
-      statement:'cash_flow',fiscal_year_id:fiscalYearId,start_date:from,end_date:to,...preCutover(disclosure,'cash_flow'),sections,
+      statement:'cash_flow',fiscal_year_id:fiscalYearId,start_date:from,end_date:to,...preCutover(disclosure,'cash_flow',true),sections,
       operating_cash_flow:exactMoney(operating),investing_cash_flow:exactMoney(investing),financing_cash_flow:exactMoney(financing),
       fx_effect:exactMoney(fx),fx_effect_lines:flows.filter(line=>line.section==='fx_effect').map(line=>({label:line.label!,amount:line.amount!,source:'pre_cutover_supplement' as const})),
       net_change_in_cash_and_cash_equivalents:exactMoney(net),opening_cash_and_cash_equivalents:exactMoney(opening),closing_cash_and_cash_equivalents:exactMoney(closing),

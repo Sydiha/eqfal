@@ -326,7 +326,10 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     expect(pl.pre_cutover).toMatchObject({ cutover_date: '2026-06-30', tb_reference: 'TB-2026-06', tb_source_system: 'Legacy ERP', tb_basis: 'pre_closing_acknowledged', evidence_missing: [] });
     // Spec v2 F (S2): the income statement and financial position come from the ledger, so they are full-year once the range is active and
     // the trial-balance evidence is recorded; cash flow and changes in equity need approved supplements (asserted false below).
-    expect(pl.pre_cutover.completeness).toMatchObject({ availability: 'ledger_calculated', full_year_complete: true, status: 'reconciled' });
+    // Three separate ideas stay separate: ledger-calculated figures, TB evidence that is recorded (not verified: status 'evidence_recorded',
+    // never 'reconciled'), and independently supported history (supplements, none here). The limitations keep saying EQFAL verifies nothing.
+    expect(pl.pre_cutover.completeness).toEqual({ availability: 'ledger_calculated', full_year_complete: true, status: 'evidence_recorded', reasons: [] });
+    expect(pl.pre_cutover.limitations).toEqual(['PRE_CUTOVER_ACCOUNT_LEVEL_ONLY', 'PRE_CUTOVER_PNL_AGGREGATED_AT_CUTOVER_DATE', 'HISTORICAL_DATA_NOT_VERIFIED_BY_EQFAL']);
     expect(pl.pre_cutover.full_year_complete).toEqual({ income_statement: true, financial_position: true, changes_in_equity: false, cash_flow: false });
 
     const q4 = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-07-01&end_date=2026-12-31`)).json;
@@ -342,6 +345,9 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     // Annual package: blocked by the missing history. Ledger close: warnings only, no new blocker.
     const annual = (await co.owner.client.req('GET', `/annual-closing/${co.fy}`)).json;
     expect(annual.domains.pre_cutover_history.blocker_count).toBe(2); // S2: one blocker per missing supplement kind
+    expect(annual.domains.pre_cutover_history.summary).toMatchObject({ historical_supplements: 'missing', blockers: 'cash_flow_supplement_missing,equity_supplement_missing' });
+    expect(soce.pre_cutover.completeness).toMatchObject({ full_year_complete: false, status: 'unverified' });
+    expect(cf.pre_cutover.completeness.status).toBe('unverified');
     expect(annual.financial_statements_readiness.status).toBe('needs_review');
     const client = await h.db.connect();
     try {

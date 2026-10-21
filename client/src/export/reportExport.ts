@@ -52,7 +52,8 @@ export function preCutoverLines(t: T, d: PreCutover): Array<[string, string]> {
     [k('sourceSystem'), d.tb_source_system ?? none],
     [k('basis'), k(d.tb_basis === 'pre_closing_acknowledged' ? 'basisAcknowledged' : 'basisNotRecorded')],
     [k('availability'), k(d.completeness.availability === 'ledger_calculated' ? 'ledgerCalculated' : 'postCutoverOnly')],
-    [k('completeness'), d.completeness.full_year_complete ? k('reconciled') : k('unverified')],
+    // 'evidence_recorded' (ledger figures + recorded TB evidence) and 'reconciled' (approved supplement) are worded differently; neither claims verification.
+    [k('completeness'), !d.completeness.full_year_complete ? k('unverified') : d.completeness.status === 'reconciled' ? k('reconciled') : k('evidenceRecorded')],
     ...(d.completeness.supplement ? [[k('supplementVersion'), d.completeness.supplement.version_no === null ? k('notRecorded') : `${d.completeness.supplement.version_no}${d.completeness.supplement.revision_pending ? ` — ${k('revisionPending')}` : ''}`] as [string, string]] : []),
     // Unknown codes (a broken invariant) are shown with their stable code, never hidden.
     ...d.completeness.reasons.map((r): [string, string] => ['', KNOWN_REASONS.has(r) ? k(`reasons.${r}`) : `${k('reasons.SUPPLEMENT_INVALID')} (${r})`]),

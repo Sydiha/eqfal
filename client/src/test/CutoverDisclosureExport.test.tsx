@@ -64,6 +64,12 @@ describe('S2 historical supplements in exports', () => {
     expect(csv).toContain('accounting.statements.preCutover.supplementVersion,2 — accounting.statements.preCutover.revisionPending');
   });
 
+  it('ledger figures with recorded TB evidence are never labelled as reconciled', () => {
+    const lines = preCutoverLines(t, disclosure({ completeness: { availability: 'ledger_calculated', full_year_complete: true, status: 'evidence_recorded', reasons: [] } }));
+    expect(lines).toContainEqual(['accounting.statements.preCutover.completeness', 'accounting.statements.preCutover.evidenceRecorded']);
+    expect(lines).toContainEqual(['', 'accounting.statements.preCutover.limitations.PRE_CUTOVER_ACCOUNT_LEVEL_ONLY']);
+  });
+
   it('an invariant failure is disclosed with its stable code, never hidden', () => {
     const lines = preCutoverLines(t, disclosure({ completeness: { availability: 'post_cutover_only', full_year_complete: false, status: 'unverified', reasons: ['SUPPLEMENT_CASH_ROLLFORWARD_MISMATCH'] } }));
     expect(lines).toContainEqual(['', 'accounting.statements.preCutover.reasons.SUPPLEMENT_INVALID (SUPPLEMENT_CASH_ROLLFORWARD_MISMATCH)']);
@@ -78,7 +84,7 @@ describe('S2 historical supplements in exports', () => {
   });
 
   it('every S2 key is translated in Arabic and English', () => {
-    const keys = ['reconciled', 'supplementVersion', 'revisionPending', 'supplementLine', 'fxEffect', 'movement.contribution', 'movement.distribution', 'movement.transfer', 'movement.other',
+    const keys = ['reconciled', 'evidenceRecorded', 'supplementVersion', 'revisionPending', 'supplementLine', 'fxEffect', 'movement.contribution', 'movement.distribution', 'movement.transfer', 'movement.other',
       'reasons.REPORT_RANGE_NOT_FULL_YEAR', 'reasons.CUTOVER_RANGE_NOT_FROM_YEAR_START', 'reasons.SUPPLEMENT_LEDGER_FINGERPRINT_CHANGED', 'reasons.SUPPLEMENT_INVALID'].map((k) => `accounting.statements.preCutover.${k}`);
     keys.push('errors.warnings.cutover_cash_flow_supplement_missing', 'errors.warnings.cutover_equity_supplement_missing', 'annualClosing.manifestNames.pre_cutover_cash_flow', 'annualClosing.manifestNames.pre_cutover_equity');
     for (const lng of ['ar', 'en']) for (const k of keys) expect(i18n.exists(k, { lng }), `${lng}:${k}`).toBe(true);

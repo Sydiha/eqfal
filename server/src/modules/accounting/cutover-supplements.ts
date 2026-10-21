@@ -388,8 +388,9 @@ export class CutoverSupplementService {
       const evaluation = evaluateSupplement(v.kind, v, input.lines, ctx);
       await this.audit.logEvent({
         company_id: companyId, actor_user_id: actor, action: 'cutover_supplement.draft_update', entity_type: 'cutover_supplement_version', entity_id: v.id,
-        before_data: { row_version: old.row_version, source_system: old.source_system, evidence_reference: old.evidence_reference, fx_translation_evidence: old.fx_translation_evidence, line_count: before.length, totals: beforeEval.totals, overrides: overrides(before) },
-        after_data: { row_version: v.row_version, source_system: v.source_system, evidence_reference: v.evidence_reference, fx_translation_evidence: v.fx_translation_evidence, line_count: input.lines.length, totals: evaluation.totals, overrides: overrides(input.lines) },
+        // The draft's lines are replaced as a whole, so the audit keeps both complete line sets (the only record of the previous draft content).
+        before_data: { row_version: old.row_version, source_system: old.source_system, evidence_reference: old.evidence_reference, fx_translation_evidence: old.fx_translation_evidence, line_count: before.length, totals: beforeEval.totals, overrides: overrides(before), lines: before },
+        after_data: { row_version: v.row_version, source_system: v.source_system, evidence_reference: v.evidence_reference, fx_translation_evidence: v.fx_translation_evidence, line_count: input.lines.length, totals: evaluation.totals, overrides: overrides(input.lines), lines: input.lines },
       }, c);
       return { version: { ...v, lines: input.lines }, evaluation };
     });
