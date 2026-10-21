@@ -30,13 +30,16 @@ const doc = (fileStem: string, title: string, x: Labels, metaRows: ExportRows, b
 type T = (key: string) => string;
 export type TrialRow = { id?: string; account_id?: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; debit_movement: string; credit_movement: string; debit_balance: string; credit_balance: string };
 export type LedgerRow = { accounting_date: string; journal_id: string; reference: string | null; description: string; debit: string; credit: string; running_balance: string };
-export type StatementSection = { category: string; accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string; imported_amount?: string; native_amount?: string }>; total: string; imported_total?: string; native_total?: string };
+export type StatementSection = { category: string; accounts: Array<{ account_id: string; code: string; name: string; name_ar?: string | null; name_en?: string | null; amount: string; imported_amount?: string; native_amount?: string }>; total: string; imported_total?: string; native_total?: string;
+  /** S2 full-year cash flow: supplement lines (1 Jan -> cutover date) beside the native accounts; `total` includes both. */
+  pre_cutover_total?: string; pre_cutover_lines?: Array<{ label: string; amount: string }> };
 /** Server `pre_cutover` block: present only for a fiscal year with an active cut-over range. */
 export type PreCutover = {
   cutover_date: string; tb_reference: string | null; tb_prepared_by: string | null; tb_source_system: string | null;
   tb_basis: 'pre_closing_acknowledged' | 'not_recorded'; evidence_missing: string[]; limitations: string[];
-  completeness: { availability: 'ledger_calculated' | 'post_cutover_only'; full_year_complete: boolean; status: string; reasons: string[] };
+  completeness: { availability: 'ledger_calculated' | 'post_cutover_only'; full_year_complete: boolean; status: string; reasons: string[]; supplement?: { version_no: number | null; state: string; revision_pending: boolean } };
 };
+const KNOWN_REASONS = new Set(['HISTORICAL_SUPPLEMENTS_NOT_AVAILABLE', 'TB_BASIS_NOT_RECORDED', 'TB_SOURCE_SYSTEM_NOT_RECORDED', 'PRE_CUTOVER_EQUITY_MOVEMENTS_NOT_RECORDED', 'PRE_CUTOVER_CASH_FLOWS_NOT_RECORDED', 'REPORT_RANGE_NOT_FULL_YEAR', 'CUTOVER_RANGE_NOT_FROM_YEAR_START', 'SUPPLEMENT_LEDGER_FINGERPRINT_CHANGED']);
 /** Label/value lines disclosing the cut-over; shared by the on-screen note and every export so they always say the same thing. */
 export function preCutoverLines(t: T, d: PreCutover): Array<[string, string]> {
   const k = (key: string) => t(`accounting.statements.preCutover.${key}`);
@@ -49,13 +52,15 @@ export function preCutoverLines(t: T, d: PreCutover): Array<[string, string]> {
     [k('sourceSystem'), d.tb_source_system ?? none],
     [k('basis'), k(d.tb_basis === 'pre_closing_acknowledged' ? 'basisAcknowledged' : 'basisNotRecorded')],
     [k('availability'), k(d.completeness.availability === 'ledger_calculated' ? 'ledgerCalculated' : 'postCutoverOnly')],
-    [k('completeness'), d.completeness.full_year_complete ? '✓' : k('unverified')],
-    ...d.completeness.reasons.map((r): [string, string] => ['', k(`reasons.${r}`)]),
+    [k('completeness'), d.completeness.full_year_complete ? k('reconciled') : k('unverified')],
+    ...(d.completeness.supplement ? [[k('supplementVersion'), d.completeness.supplement.version_no === null ? k('notRecorded') : `${d.completeness.supplement.version_no}${d.completeness.supplement.revision_pending ? ` — ${k('revisionPending')}` : ''}`] as [string, string]] : []),
+    // Unknown codes (a broken invariant) are shown with their stable code, never hidden.
+    ...d.completeness.reasons.map((r): [string, string] => ['', KNOWN_REASONS.has(r) ? k(`reasons.${r}`) : `${k('reasons.SUPPLEMENT_INVALID')} (${r})`]),
     [k('limitations.title'), ''],
     ...d.limitations.map((l): [string, string] => ['', k(`limitations.${l}`)]),
   ];
 }
-export type StatementData = { statement: string; pre_cutover?: PreCutover; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection['accounts']; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; accounting_equation?: { balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+export type StatementData = { statement: string; pre_cutover?: PreCutover; fx_effect?: string; pre_cutover_equity?: { movements_by_type: Record<string, string> }; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection['accounts']; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; accounting_equation?: { balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
 type Sum = (values: string[]) => string;
 
 export function trialBalanceExport(p: Labels & { t: T; accountName: (a: TrialRow) => string; sum: Sum; yearName: string; rows: TrialRow[] }): ExportDocument {
@@ -94,6 +99,7 @@ export function statementExport(p: Labels & { t: T; kind: StatementKind; account
   for (const sec of s.sections ?? []) {
     sectionIdx.push(rows.length); rows.push([t(`accounting.statements.categories.${sec.category}`)]);
     for (const a of sec.accounts) rows.push(split ? [`${a.code} — ${p.accountName(a)}`, n(a.imported_amount), n(a.native_amount), n(a.amount)] : [`${a.code} — ${p.accountName(a)}`, n(a.amount)]);
+    for (const x of sec.pre_cutover_lines ?? []) rows.push([`${pc('supplementLine')}: ${x.label}`, n(x.amount)]);
     totalIdx.push(rows.length); rows.push(split ? [t('accounting.statements.total'), n(sec.imported_total), n(sec.native_total), n(sec.total)] : [t('accounting.statements.total'), n(sec.total)]);
   }
   const line = (key: string, v: string | undefined, strong = false) => { if (strong) totalIdx.push(rows.length); rows.push(...two(t(`accounting.statements.${key}`), n(v))); };
@@ -105,10 +111,11 @@ export function statementExport(p: Labels & { t: T; kind: StatementKind; account
   if (kind === 'financialPosition') { line('currentPeriodEarnings', s.current_period_earnings); rows.push([t('accounting.statements.equation'), t(s.accounting_equation?.balanced ? 'accounting.balanced' : 'accounting.unbalanced')]); }
   if (kind === 'changesInEquity') {
     line('openingEquity', s.opening_equity); line('directEquityMovements', s.direct_equity_movements);
+    if (s.pre_cutover_equity) for (const type of ['contribution', 'distribution', 'transfer', 'other']) if (s.pre_cutover_equity.movements_by_type[type] !== '0.00') rows.push([`${pc('supplementLine')}: ${pc(`movement.${type}`)}`, n(s.pre_cutover_equity.movements_by_type[type])]);
     for (const a of s.equity_accounts ?? []) rows.push([`${a.code} — ${p.accountName(a)}`, n(a.amount)]);
     line('currentPeriodEarnings', s.current_period_earnings); line('closingEquity', s.closing_equity, true); recon();
   }
-  if (kind === 'cashFlow') { line('openingCash', s.opening_cash_and_cash_equivalents); line('netCashChange', s.net_change_in_cash_and_cash_equivalents); line('closingCash', s.closing_cash_and_cash_equivalents, true); recon(); }
+  if (kind === 'cashFlow') { if (s.fx_effect !== undefined) rows.push(...two(pc('fxEffect'), n(s.fx_effect))); line('openingCash', s.opening_cash_and_cash_equivalents); line('netCashChange', s.net_change_in_cash_and_cash_equivalents); line('closingCash', s.closing_cash_and_cash_equivalents, true); recon(); }
   if (s.pre_cutover) { rows.push([]); sectionIdx.push(rows.length); rows.push(...preCutoverLines(t, s.pre_cutover).map(([a, b]): ExportCell[] => [a, b])); }
   const title = t(`accounting.tabs.${kind}`);
   const scope: Array<[string, string]> = [[t('accounting.fiscalYear'), p.yearName]];

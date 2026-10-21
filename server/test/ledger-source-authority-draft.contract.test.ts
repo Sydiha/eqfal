@@ -33,10 +33,10 @@ describe('no production caller can activate authority', () => {
 
 describe('draft routes', () => {
   it('requires manage (drafts) or activate (cut-over) + same origin on writes, and enforces confirmation', () => {
-    expect(router.match(/router\.post|ledgerSourceAuthorityRouter\.post/g)).toHaveLength(5);
+    expect(router.match(/router\.post|ledgerSourceAuthorityRouter\.post/g)).toHaveLength(8); // 5 + S2 supplement draft/void/approve
     expect(router.match(/requireSameOrigin, requireAuth, requireActiveCompany, requireCapability\(MANAGE\[0\]\)/g)).toHaveLength(2);
     expect(router.match(/requireSameOrigin, requireAuth, requireActiveCompany, requireCapability\(ACTIVATE\)/g)).toHaveLength(3);
-    expect(router.match(/CONFIRMATION_REQUIRED/g)).toHaveLength(3);
+    expect(router.match(/CONFIRMATION_REQUIRED/g)).toHaveLength(7); // 3 + S2 supplement draft/replace/void/approve
   });
   it('rejects malformed draft input before touching the database', async () => {
     const db = { connect: vi.fn() };

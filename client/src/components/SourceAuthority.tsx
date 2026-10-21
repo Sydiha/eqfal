@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CUTOVER_MESSAGES, CutoverAccount, CutoverActivation } from './CutoverActivation';
+import { CutoverSupplements } from './CutoverSupplements';
 import './SourceAuthority.css';
 
 interface Range { id: string; from_date: string; to_date: string; status: 'draft' | 'active' | 'voided'; reason: string; void_reason: string | null; created_at: string;
@@ -16,7 +17,7 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
   LEDGER_SOURCE_AUTHORITY_IMMUTABLE: { ar: 'لا يمكن تغيير هذا الإعداد بهذه الطريقة.', en: 'This configuration cannot be changed this way.' },
 };
 
-export function SourceAuthority({ canManage, canActivate = false, onUnauthorized }: { canManage: boolean; canActivate?: boolean; onUnauthorized: () => void }) {
+export function SourceAuthority({ canManage, canActivate = false, canManageSupplements = false, canApproveSupplements = false, onUnauthorized }: { canManage: boolean; canActivate?: boolean; canManageSupplements?: boolean; canApproveSupplements?: boolean; onUnauthorized: () => void }) {
   const { i18n } = useTranslation();
   const ar = i18n.language === 'ar';
   const tx = (a: string, e: string) => (ar ? a : e);
@@ -142,6 +143,7 @@ export function SourceAuthority({ canManage, canActivate = false, onUnauthorized
           <div><dt>{tx('أعدّه', 'Prepared by')}</dt><dd>{r.tb_prepared_by ?? '—'}</dd></div>
           <div><dt>{tx('الإقرارات', 'Acknowledgements')}</dt><dd>{Object.keys(a).length ? Object.keys(a).filter((k) => a[k]).length + '/4' : '—'}</dd></div>
         </dl>; })()}
+      {detail && ranges.find((x) => x.id === detail)?.status === 'active' && <CutoverSupplements key={detail} rangeId={detail} call={call} tx={tx} canManage={canManageSupplements} canApprove={canApproveSupplements} />}
       {voiding && <form onSubmit={submitVoid} className="sa-form sa-void">
         <label>{tx('سبب الإلغاء (إلزامي)', 'Void reason (required)')}<textarea value={voidReason} maxLength={500} onChange={(e) => setVoidReason(e.target.value)} required /></label>
         <label className="sa-check"><input type="checkbox" checked={voidConfirm} onChange={(e) => setVoidConfirm(e.target.checked)} /><span>{tx('أؤكد إلغاء هذا الإعداد. يبقى في السجل ولا يُحذف.', 'I confirm voiding this configuration. It stays in the history and is not deleted.')}</span></label>

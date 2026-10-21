@@ -174,7 +174,10 @@ export async function getFiscalYearCloseReadiness(
     for (const [code, count] of external) if (num(count) > 0) warn(code, num(count), cutover.to_date);
     // S1: missing pre-cut-over history and trial-balance evidence are disclosed, never blockers of the ledger close (Owner decision 2026-10-21).
     const history = d.pre_cutover_history?.summary;
-    if (history?.historical_supplements === 'missing') warn('cutover_historical_supplements_missing', 1, cutover.to_date);
+    if (history && history.historical_supplements !== 'complete') warn('cutover_historical_supplements_missing', 1, cutover.to_date);
+    // S2 (spec v2 G): one warning per supplement kind that is not approved and reconciled. Warnings only: the ledger close is never blocked.
+    if (history && history.cash_flow_supplement !== 'complete') warn('cutover_cash_flow_supplement_missing', 1, String(history.cash_flow_supplement ?? 'missing'));
+    if (history && history.equity_supplement !== 'complete') warn('cutover_equity_supplement_missing', 1, String(history.equity_supplement ?? 'missing'));
     const evidence = String(history?.evidence_missing ?? '').split(',').filter(Boolean);
     if (evidence.length) warn('cutover_tb_evidence_missing', evidence.length, evidence.join(','));
   }

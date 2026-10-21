@@ -50,3 +50,37 @@ describe('S1 cut-over disclosure in exports', () => {
     for (const lng of ['ar', 'en']) for (const k of keys) expect(i18n.exists(k, { lng }), `${lng}:${k}`).toBe(true);
   });
 });
+
+describe('S2 historical supplements in exports', () => {
+  it('full-year cash flow export shows the supplement lines, fx effect and approved version', () => {
+    const cf = statementExport({ ...base, kind: 'cashFlow', accountName: (a) => a.name, yearName: '2026', startDate: '2026-01-01', endDate: '2026-12-31',
+      data: { statement: 'cash_flow', fx_effect: '5.00', opening_cash_and_cash_equivalents: '20000.00', net_change_in_cash_and_cash_equivalents: '315000.00', closing_cash_and_cash_equivalents: '335000.00',
+        sections: [{ category: 'operating', total: '300000.00', native_total: '65000.00', pre_cutover_total: '235000.00', pre_cutover_lines: [{ label: 'Customer receipts', amount: '235000.00' }], accounts: [{ account_id: '1', code: '4000', name: 'Sales', amount: '65000.00' }] }],
+        pre_cutover: disclosure({ completeness: { availability: 'ledger_calculated', full_year_complete: true, status: 'reconciled', reasons: [], supplement: { version_no: 2, state: 'complete', revision_pending: true } } }) } });
+    const csv = toCsv(cf.rows);
+    expect(csv).toContain('accounting.statements.preCutover.supplementLine: Customer receipts,235000.00');
+    expect(csv).toContain('accounting.statements.preCutover.fxEffect,5.00');
+    expect(csv).toContain('accounting.statements.preCutover.completeness,accounting.statements.preCutover.reconciled');
+    expect(csv).toContain('accounting.statements.preCutover.supplementVersion,2 — accounting.statements.preCutover.revisionPending');
+  });
+
+  it('an invariant failure is disclosed with its stable code, never hidden', () => {
+    const lines = preCutoverLines(t, disclosure({ completeness: { availability: 'post_cutover_only', full_year_complete: false, status: 'unverified', reasons: ['SUPPLEMENT_CASH_ROLLFORWARD_MISMATCH'] } }));
+    expect(lines).toContainEqual(['', 'accounting.statements.preCutover.reasons.SUPPLEMENT_INVALID (SUPPLEMENT_CASH_ROLLFORWARD_MISMATCH)']);
+  });
+
+  it('changes in equity export lists pre-cutover movements by type', () => {
+    const e = statementExport({ ...base, kind: 'changesInEquity', accountName: (a) => a.name, yearName: '2026', startDate: '2026-01-01', endDate: '2026-12-31',
+      data: { statement: 'changes_in_equity', opening_equity: '155000.00', direct_equity_movements: '15000.00', current_period_earnings: '180000.00', closing_equity: '350000.00', pre_cutover_equity: { movements_by_type: { contribution: '15000.00', distribution: '0.00', transfer: '0.00', other: '0.00' } } } });
+    const csv = toCsv(e.rows);
+    expect(csv).toContain('accounting.statements.preCutover.supplementLine: accounting.statements.preCutover.movement.contribution,15000.00');
+    expect(csv).not.toContain('movement.distribution');
+  });
+
+  it('every S2 key is translated in Arabic and English', () => {
+    const keys = ['reconciled', 'supplementVersion', 'revisionPending', 'supplementLine', 'fxEffect', 'movement.contribution', 'movement.distribution', 'movement.transfer', 'movement.other',
+      'reasons.REPORT_RANGE_NOT_FULL_YEAR', 'reasons.CUTOVER_RANGE_NOT_FROM_YEAR_START', 'reasons.SUPPLEMENT_LEDGER_FINGERPRINT_CHANGED', 'reasons.SUPPLEMENT_INVALID'].map((k) => `accounting.statements.preCutover.${k}`);
+    keys.push('errors.warnings.cutover_cash_flow_supplement_missing', 'errors.warnings.cutover_equity_supplement_missing', 'annualClosing.manifestNames.pre_cutover_cash_flow', 'annualClosing.manifestNames.pre_cutover_equity');
+    for (const lng of ['ar', 'en']) for (const k of keys) expect(i18n.exists(k, { lng }), `${lng}:${k}`).toBe(true);
+  });
+});

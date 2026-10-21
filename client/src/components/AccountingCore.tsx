@@ -62,8 +62,10 @@ type StatementSection = {
   total: string;
   imported_total?: string;
   native_total?: string;
+  pre_cutover_total?: string;
+  pre_cutover_lines?: Array<{ label: string; amount: string }>;
 };
-type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; pre_cutover?: PreCutover; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; pre_cutover?: PreCutover; fx_effect?: string; pre_cutover_equity?: { movements_by_type: Record<string, string> }; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -1700,6 +1702,7 @@ export function Accounting({
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={split ? 4 : 2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
               {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td>{split && <><td>{account.imported_amount}</td><td>{account.native_amount}</td></>}<td>{account.amount}</td></tr>)}
+              {section.pre_cutover_lines?.map((line, index) => <tr key={`pre-${index}`} className="is-detail"><td dir="auto">{t("accounting.statements.preCutover.supplementLine")}: {line.label}</td><td>{line.amount}</td></tr>)}
               <tr className="is-total"><th>{t("accounting.statements.total")}</th>{split && <><th>{section.imported_total}</th><th>{section.native_total}</th></>}<th>{section.total}</th></tr>
             </Fragment>)}
             {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th>{split && <><th>{split.imported}</th><th>{split.native}</th></>}<th>{statement.profit_or_loss}</th></tr>}
@@ -1710,12 +1713,14 @@ export function Accounting({
             {tab === "changesInEquity" && <>
               <tr><td>{t("accounting.statements.openingEquity")}</td><td>{statement.opening_equity}</td></tr>
               <tr><td>{t("accounting.statements.directEquityMovements")}</td><td>{statement.direct_equity_movements}</td></tr>
+              {statement.pre_cutover_equity && Object.entries(statement.pre_cutover_equity.movements_by_type).filter(([, amount]) => amount !== "0.00").map(([type, amount]) => <tr key={`pre-${type}`} className="is-detail"><td>{t("accounting.statements.preCutover.supplementLine")}: {t(`accounting.statements.preCutover.movement.${type}`)}</td><td>{amount}</td></tr>)}
               {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {accountName(account)}</td><td>{account.amount}</td></tr>)}
               <tr><td>{t("accounting.statements.currentPeriodEarnings")}</td><td>{statement.current_period_earnings}</td></tr>
               <tr className="is-strong"><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
               <tr className="is-strong is-recon"><th>{t("accounting.statements.reconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
             </>}
             {tab === "cashFlow" && <>
+              {statement.fx_effect !== undefined && <tr><td>{t("accounting.statements.preCutover.fxEffect")}</td><td>{statement.fx_effect}</td></tr>}
               <tr><td>{t("accounting.statements.openingCash")}</td><td>{statement.opening_cash_and_cash_equivalents}</td></tr>
               <tr><td>{t("accounting.statements.netCashChange")}</td><td>{statement.net_change_in_cash_and_cash_equivalents}</td></tr>
               <tr className="is-strong"><th>{t("accounting.statements.closingCash")}</th><th>{statement.closing_cash_and_cash_equivalents}</th></tr>
