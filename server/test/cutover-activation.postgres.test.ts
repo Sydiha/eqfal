@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
+import { createHash } from 'node:crypto';
 import { getFiscalYearCloseReadiness } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
+import { rewriteAsPreS1Activation } from './helpers/authority-fixture';
 
 // C1B-3b cut-over activation over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
@@ -346,6 +348,50 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
       expect(close.warnings.map((w) => w.code)).not.toContain('cutover_tb_evidence_missing');
       expect(close.blockers.map((b) => b.code).filter((c) => /cutover|history|supplement/.test(c))).toEqual([]);
     } finally { client.release(); }
+  });
+
+  it('S1 compatibility: a retry of a completed pre-S1 activation replays the stored outcome and changes nothing', async () => {
+    const co = await setup('legacy');
+    const id = await draft(co);
+    const key = 'legacy-key-0001';
+    const legacyAcks = { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true };
+    // The original pre-S1 request body and the hash the pre-S1 code stored for it (independent re-implementation of that formula).
+    const legacyBody = { lines: lines(co), retained_earnings_account_id: co.re, tb_reference: 'TB-2026-06', tb_prepared_by: 'Accountant A', acknowledgements: legacyAcks, idempotency_key: key, confirm: true };
+    const sorted = [...legacyBody.lines].map((l) => ({ a: l.account_id, d: Number(l.debit).toFixed(2), c: Number(l.credit).toFixed(2) })).sort((p, q) => p.a.localeCompare(q.a));
+    const oldHash = createHash('sha256').update(JSON.stringify({ lines: sorted, re: co.re, ref: 'TB-2026-06', by: 'Accountant A', ack: legacyAcks, cash: [] })).digest('hex');
+    expect((await activate(co, id, { idempotency_key: key })).status).toBe(201);
+    await rewriteAsPreS1Activation(h.db, id, oldHash);
+    const before = await h.q('SELECT * FROM ledger_source_authority WHERE id=$1', [id]);
+    const audits = await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id]);
+
+    const replay = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, legacyBody);
+    expect(replay.status).toBe(200);
+    expect([replay.json.replayed, replay.json.range.status, !!replay.json.journal_id]).toEqual([true, 'active', true]);
+    expect(replay.json.journal_id).toBe(before[0]!['cutover_journal_id']);
+    // Nothing created or rewritten: one journal, same row, no audit event.
+    expect(await cutJournals(co)).toBe(1);
+    expect(await h.q('SELECT * FROM ledger_source_authority WHERE id=$1', [id])).toEqual(before);
+    expect(await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id])).toBe(audits);
+    // The legacy record is disclosed as missing evidence, not upgraded.
+    const pl = (await co.owner.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy}&start_date=2026-01-01&end_date=2026-12-31`)).json;
+    expect([pl.pre_cutover.tb_basis, pl.pre_cutover.tb_source_system]).toEqual(['not_recorded', null]);
+
+    // A pre-S1 body with a different key or payload never replays; it conflicts and changes nothing.
+    expect((await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, { ...legacyBody, idempotency_key: 'legacy-key-0002' })).json.code).toBe('AUTHORITY_ALREADY_ACTIVE');
+    expect((await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, { ...legacyBody, tb_reference: 'TB-OTHER' })).json.code).toBe('AUTHORITY_ALREADY_ACTIVE');
+    expect(await cutJournals(co)).toBe(1);
+  });
+
+  it('S1 evidence stays required: a pre-S1 body cannot activate a draft', async () => {
+    const co = await setup('legacy2');
+    const id = await draft(co);
+    const legacyAcks = { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true };
+    const res = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, { lines: lines(co), retained_earnings_account_id: co.re, tb_reference: 'TB-1', tb_prepared_by: 'A', acknowledgements: legacyAcks, idempotency_key: 'legacy-key-0003', confirm: true });
+    expect([res.status, res.json.code]).toEqual([400, 'CUTOVER_EVIDENCE_REQUIRED']);
+    expect([await status(id), await cutJournals(co)]).toEqual(['draft', 0]);
+    const noKey = await co.owner.client.req('POST', `/ledger-source-authority/${id}/activate`, { lines: lines(co), retained_earnings_account_id: co.re, tb_reference: 'TB-1', tb_prepared_by: 'A', acknowledgements: legacyAcks, confirm: true });
+    expect(noKey.status).toBe(400);
+    expect((await preview(co, id, { acknowledgements: legacyAcks, tb_source_system: undefined })).status).toBe(400);
   });
 
   it('S1: a January-1 company gets no disclosure, no split columns and no history domain', async () => {

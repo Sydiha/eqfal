@@ -51,11 +51,26 @@ const REQUIRED_ACKS = ['retained_earnings', 'current_year_pnl', 'cash_balances',
 const cents = (value: string): bigint => { const [w, f = ''] = value.split('.'); return BigInt(w!) * 100n + BigInt((f + '00').slice(0, 2)); };
 const money = (value: bigint): string => { const neg = value < 0n; const a = neg ? -value : value; return `${neg ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}`; };
 
+/** A pre-S1 activation request (four acknowledgements, no tb_source_system). Accepted ONLY to replay an activation that already completed. */
+export type LegacyReplayInput = Omit<CutoverInput, 'tb_source_system' | 'acknowledgements' | 'idempotency_key'> & {
+  idempotency_key: string; acknowledgements: { retained_earnings: true; current_year_pnl: true; cash_balances: true; account_level_limitations: true };
+};
+const LEGACY_ACKS = ['retained_earnings', 'current_year_pnl', 'cash_balances', 'account_level_limitations'] as const;
+
 /** Strict request-body parser: unknown keys, malformed amounts or missing acknowledgements -> null (400). */
 export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverInput | null {
+  return parseBody(body, requireKey, false) as CutoverInput | null;
+}
+
+/** The exact pre-S1 body shape (idempotency key required). Anything else, including a body carrying any S1 field, -> null. */
+export function parseLegacyReplayInput(body: unknown): LegacyReplayInput | null {
+  return parseBody(body, true, true) as LegacyReplayInput | null;
+}
+
+function parseBody(body: unknown, requireKey: boolean, legacy: boolean): CutoverInput | LegacyReplayInput | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const x = body as Record<string, unknown>;
-  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', 'tb_source_system', 'acknowledgements', 'idempotency_key', 'cash_non_cash_confirmed_account_ids', 'confirm'];
+  const allowed = ['lines', 'retained_earnings_account_id', 'tb_reference', 'tb_prepared_by', ...(legacy ? [] : ['tb_source_system']), 'acknowledgements', 'idempotency_key', 'cash_non_cash_confirmed_account_ids', 'confirm'];
   if (Object.keys(x).some((k) => !allowed.includes(k))) return null;
   if (!Array.isArray(x['lines']) || x['lines'].length === 0 || x['lines'].length > MAX_LINES) return null;
   const lines: CutoverLine[] = [];
@@ -71,27 +86,37 @@ export function parseCutoverInput(body: unknown, requireKey: boolean): CutoverIn
   const re = x['retained_earnings_account_id'];
   const ref = text(x['tb_reference']), by = text(x['tb_prepared_by']), src = text(x['tb_source_system']);
   const ack = x['acknowledgements'];
-  if (typeof re !== 'string' || !UUID.test(re) || !ref || !by || !src) return null;
+  if (typeof re !== 'string' || !UUID.test(re) || !ref || !by || (!legacy && !src)) return null;
   if (typeof ack !== 'object' || ack === null || Array.isArray(ack)) return null;
   const a = ack as Record<string, unknown>;
-  if (Object.keys(a).some((k) => !(REQUIRED_ACKS as readonly string[]).includes(k)) || REQUIRED_ACKS.some((k) => a[k] !== true)) return null;
+  const acks: readonly string[] = legacy ? LEGACY_ACKS : REQUIRED_ACKS;
+  if (Object.keys(a).some((k) => !acks.includes(k)) || acks.some((k) => a[k] !== true)) return null;
   const rawConfirmed = x['cash_non_cash_confirmed_account_ids'] ?? [];
   if (!Array.isArray(rawConfirmed) || rawConfirmed.length > MAX_LINES || rawConfirmed.some((id) => typeof id !== 'string' || !UUID.test(id))) return null;
   const confirmed = [...new Set((rawConfirmed as string[]).map((id) => id.toLowerCase()))].sort();
   const key = x['idempotency_key'];
   if (key !== undefined && (typeof key !== 'string' || !KEY.test(key))) return null;
   if (requireKey && key === undefined) return null;
+  if (legacy) {
+    // Same field and acknowledgement order as the pre-S1 parser, so payloadHash reproduces the stored activation hash.
+    return {
+      lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by,
+      acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true },
+      cash_non_cash_confirmed_account_ids: confirmed, idempotency_key: key as string,
+    };
+  }
   return {
-    lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by, tb_source_system: src,
+    lines, retained_earnings_account_id: re.toLowerCase(), tb_reference: ref, tb_prepared_by: by, tb_source_system: src!,
     acknowledgements: { retained_earnings: true, current_year_pnl: true, cash_balances: true, account_level_limitations: true, pre_closing_trial_balance: true },
     cash_non_cash_confirmed_account_ids: confirmed,
     ...(key === undefined ? {} : { idempotency_key: key as string }),
   };
 }
 
-function payloadHash(input: CutoverInput): string {
+/** Pre-S1 bodies hash without `src`, exactly as they were hashed when activated. */
+function payloadHash(input: CutoverInput | LegacyReplayInput): string {
   const lines = [...input.lines].map((l) => ({ a: l.account_id, d: money(cents(l.debit)), c: money(cents(l.credit)) })).sort((p, q) => p.a.localeCompare(q.a));
-  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, src: input.tb_source_system, ack: input.acknowledgements, cash: [...input.cash_non_cash_confirmed_account_ids].sort() })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ lines, re: input.retained_earnings_account_id, ref: input.tb_reference, by: input.tb_prepared_by, ...('tb_source_system' in input ? { src: input.tb_source_system } : {}), ack: input.acknowledgements, cash: [...input.cash_non_cash_confirmed_account_ids].sort() })).digest('hex');
 }
 
 const CASH_NAME = /(bank|cash|petty|safe|treasury|صندوق|نقد|بنك|مصرف|خزينة|خزنة)/i;
@@ -178,6 +203,21 @@ export class LedgerCutoverService {
 
   async activate(companyId: string, actor: string, rangeId: string, input: CutoverInput): Promise<CutoverResult> {
     return this.run(companyId, actor, rangeId, input, false);
+  }
+
+  /**
+   * Backward compatibility: a retry of an activation that completed before S1 (same idempotency key, same payload) returns the stored
+   * outcome. Read-only: no lock, no journal, no audit, nothing rewritten. Any other pre-S1 body is refused: new activations need S1 evidence.
+   */
+  async replayLegacy(companyId: string, rangeId: string, input: LegacyReplayInput): Promise<CutoverResult> {
+    const range = (await this.db.query<AuthorityRange & { cutover_journal_id: string | null; activation_idempotency_key: string | null; activation_payload_hash: string | null; activation_snapshot: { summary?: CutoverSummary } | null }>(
+      `SELECT ${RANGE_COLUMNS},cutover_journal_id,activation_idempotency_key,activation_payload_hash,activation_snapshot FROM ledger_source_authority WHERE id=$1 AND company_id=$2`, [rangeId, companyId],
+    )).rows[0];
+    if (!range) throw new LedgerSourceAuthorityNotFoundError();
+    if (range.status === 'active' && range.activation_idempotency_key === input.idempotency_key && range.activation_payload_hash === payloadHash(input) && range.activation_snapshot?.summary) {
+      return { valid: true, replayed: true, dry_run: false, range: this.publicRange(range), journal_id: range.cutover_journal_id, summary: range.activation_snapshot.summary };
+    }
+    throw new CutoverValidationError(range.status === 'active' ? 'AUTHORITY_ALREADY_ACTIVE' : 'CUTOVER_EVIDENCE_REQUIRED');
   }
 
   private async run(companyId: string, actor: string, rangeId: string, input: CutoverInput, dryRun: boolean): Promise<CutoverResult> {

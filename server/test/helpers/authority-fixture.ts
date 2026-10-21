@@ -50,3 +50,29 @@ export async function seedActiveAuthorityRange(db: Pool, companyId: string, acto
     client.release();
   }
 }
+
+/**
+ * TEST-ONLY fixture: turns a range activated by the current code into what a PRE-S1 activation stored (four acknowledgements, no
+ * tb_source_system / tb_basis in the snapshot, the pre-S1 payload hash), so backward-compatible replay can be tested. The update guard is
+ * disabled only inside this one transaction, under the same disposable-database checks as seedActiveAuthorityRange.
+ */
+export async function rewriteAsPreS1Activation(db: Pool, rangeId: string, legacyPayloadHash: string) {
+  const client = await db.connect();
+  try {
+    await assertDisposableTestDatabase(client);
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE ledger_source_authority DISABLE TRIGGER ledger_source_authority_guard_update');
+    await client.query(
+      `UPDATE ledger_source_authority SET acknowledgements=acknowledgements - 'pre_closing_trial_balance',
+         activation_snapshot=activation_snapshot - 'tb_basis' - 'tb_source_system', activation_payload_hash=$2 WHERE id=$1`,
+      [rangeId, legacyPayloadHash],
+    );
+    await client.query('ALTER TABLE ledger_source_authority ENABLE TRIGGER ledger_source_authority_guard_update');
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
