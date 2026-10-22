@@ -110,6 +110,19 @@ describe('I1 trial balance parsing', () => {
     const blank = parse(rows(['Code', 'Debit', 'Credit'], ['1000', 10, null], ['2000', null, 10], ['3000', null, null]));
     if (blank.status !== 'parsed') throw new Error('x'); expect(blank.errors.map((e) => e.code)).toContain('TB_AMOUNT_MISSING');
   });
+  it('T7.2: Arabic-Indic digits in codes match exactly on both sides; folded duplicates are caught; no prefix or name match', () => {
+    const ar = parse(rows(['رقم الحساب', 'مدين', 'دائن'], ['١٠٠٠', '٥٠', ''], ['2000', '', '50']));
+    expect(ar.status === 'parsed' && ar.lines.map((l) => [l.code, l.account_id, l.status])).toEqual([['1000', 'a1', 'ok'], ['2000', 'a2', 'ok']]);
+    const chartAr = parse(rows(['Code', 'Debit', 'Credit'], ['1000', 5, ''], ['2000', '', 5]), [{ id: 'x1', code: '١٠٠٠', is_active: true }, { id: 'x2', code: '2000', is_active: true }]);
+    expect(chartAr.status === 'parsed' && chartAr.lines.map((l) => l.account_id)).toEqual(['x1', 'x2']);
+    const dup = parse(rows(['Code', 'Debit', 'Credit'], ['١٠٠٠', 5, ''], ['1000', 5, ''], ['2000', '', 10]));
+    expect(dup.status === 'parsed' && dup.lines.filter((l) => l.status === 'duplicate').map((l) => l.row)).toEqual([2, 3]);
+    const near = parse(rows(['Code', 'Name', 'Debit', 'Credit'], ['100', 'Cash', 5, ''], ['10000', 'x', '', 3], ['٢٠٠٠٠', 'y', '', 2]));
+    expect(near.status === 'parsed' && near.lines.map((l) => l.status)).toEqual(['unmatched', 'unmatched', 'unmatched']);
+    const mapped = parse(rows(['Ref', 'L', 'R'], ['١٠٠٠', 7, ''], ['2000', '', 7]), ACC, { mapping: { header_row: 1, code: 0, debit: 1, credit: 2 }, functionalCurrency: 'SAR' });
+    expect(mapped.status === 'parsed' && mapped.balanced && mapped.lines[0]!.account_id).toBe('a1');
+    expect(parse(rows(['Ref', 'L', 'R'], ['1000', 7, ''])).status).toBe('needs_mapping');
+  });
   it('parseAmount is exact and never rounds', () => {
     expect(parseAmount('1,234.56')).toBe(123456n); expect(parseAmount('٣٫٥٠')).toBe(350n); expect(parseAmount('12-')).toBe(-1200n);
     expect(() => parseAmount('1.005')).toThrow(); expect(() => parseAmount(0.125)).toThrow(); expect(() => parseAmount('1e5')).toThrow();
