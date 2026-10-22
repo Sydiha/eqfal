@@ -171,14 +171,22 @@ function toLines(items: TextItem[]): string[] {
 }
 
 let running = 0;
+/** Number of extractions still holding a concurrency slot, including timed-out ones whose cancellation has not finished. */
+export const activeExtractions = () => running;
 
-/** Extracts text from a digital PDF within page, size, time and concurrency limits, then derives suggestions. Never throws. */
+/**
+ * Extracts text from a digital PDF within page, size, time and concurrency limits, then derives suggestions. Never throws.
+ * On timeout the caller gets 'timeout' at once, the pdf.js task is destroyed and the work stops at its next page boundary; the concurrency
+ * slot is released only when that work has actually settled, so timed-out parses can never push the number of parses above the limit.
+ */
 export async function extractInvoiceSuggestions(data: Buffer, limits = EXTRACTION_LIMITS): Promise<ExtractionResult> {
   if (data.subarray(0, 5).toString('ascii') !== '%PDF-') return { status: 'unsupported', fields: null };
   if (running >= limits.maxConcurrent) return { status: 'busy', fields: null };
   running++;
   let task: LoadingTask | null = null;
   let timer: NodeJS.Timeout | undefined;
+  let cancelled = false;
+  const release = () => { if (timer) clearTimeout(timer); running--; if (task) void task.destroy().catch(() => undefined); };
   try {
     const lib = await loadPdfjs();
     task = lib.getDocument({
@@ -186,29 +194,33 @@ export async function extractInvoiceSuggestions(data: Buffer, limits = EXTRACTIO
       isEvalSupported: false, enableXfa: false, disableFontFace: true, useSystemFonts: false, disableAutoFetch: true,
       stopAtErrors: false, verbosity: lib.VerbosityLevel.ERRORS,
     });
-    const deadline = Date.now() + limits.timeoutMs;
-    const work = (async (): Promise<ExtractionResult> => {
-      const doc = await task!.promise;
-      const lines: string[] = []; let chars = 0;
-      for (let n = 1; n <= Math.min(doc.numPages, limits.maxPages) && chars < limits.maxTextChars; n++) {
-        if (Date.now() >= deadline) return { status: 'timeout', fields: null };
-        const page = await doc.getPage(n);
-        const content = await page.getTextContent();
-        page.cleanup();
-        for (const line of toLines(content.items)) { chars += line.length; if (chars > limits.maxTextChars) break; lines.push(line); }
-      }
-      if (!lines.some((l) => /[\p{L}\p{N}]/u.test(l))) return { status: 'no_text', fields: null };
-      return { status: 'ok', fields: suggestInvoiceFields(lines) };
-    })();
-    const timeout = new Promise<ExtractionResult>((resolve) => { timer = setTimeout(() => resolve({ status: 'timeout', fields: null }), limits.timeoutMs); });
-    return await Promise.race([work.catch((err: unknown) => failure(err)), timeout]);
   } catch (err) {
+    release();
     return failure(err);
-  } finally {
-    if (timer) clearTimeout(timer);
-    running--;
-    if (task) void task.destroy().catch(() => undefined);
   }
+  const deadline = Date.now() + limits.timeoutMs;
+  const stop = () => cancelled || Date.now() >= deadline;
+  const work = (async (): Promise<ExtractionResult> => {
+    const doc = await task!.promise;
+    const lines: string[] = []; let chars = 0;
+    for (let n = 1; n <= Math.min(doc.numPages, limits.maxPages) && chars < limits.maxTextChars; n++) {
+      if (stop()) return { status: 'timeout', fields: null };
+      const page = await doc.getPage(n);
+      if (stop()) return { status: 'timeout', fields: null };
+      const content = await page.getTextContent();
+      page.cleanup();
+      for (const line of toLines(content.items)) { chars += line.length; if (chars > limits.maxTextChars) break; lines.push(line); }
+    }
+    if (stop()) return { status: 'timeout', fields: null };
+    if (!lines.some((l) => /[\p{L}\p{N}]/u.test(l))) return { status: 'no_text', fields: null };
+    return { status: 'ok', fields: suggestInvoiceFields(lines) };
+  })().catch((err: unknown) => failure(err));
+  // The slot is freed only after the work itself settles, never when the timeout answers first.
+  void work.finally(release);
+  const timeout = new Promise<ExtractionResult>((resolve) => {
+    timer = setTimeout(() => { cancelled = true; if (task) void task.destroy().catch(() => undefined); resolve({ status: 'timeout', fields: null }); }, limits.timeoutMs);
+  });
+  return Promise.race([work, timeout]);
 }
 
 function failure(err: unknown): ExtractionResult {

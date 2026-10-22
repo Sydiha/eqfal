@@ -64,6 +64,15 @@ describe('GET /documents/:id/suggestions', () => {
     expect(mocks.poolQuery).not.toHaveBeenCalled();
   });
 
+  it('denies users with document.edit but without document.view, before reading anything', async () => {
+    setContext(['document.edit', 'document.upload']);
+    const res = await request(app).get(`/api/documents/${ID}/suggestions`);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('fields');
+    expect(mocks.findById).not.toHaveBeenCalled();
+    expect(mocks.readVerified).not.toHaveBeenCalled();
+  });
+
   it('denies users without document.edit', async () => {
     setContext(['document.view']);
     expect((await request(app).get(`/api/documents/${ID}/suggestions`)).status).toBe(403);

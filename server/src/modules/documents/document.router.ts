@@ -368,11 +368,12 @@ documentRouter.get(
 
 
 // T7.1: editable field suggestions from a digital PDF's embedded text. Read-only: nothing is stored, audited as a change, posted or approved.
-// Needs document.edit because suggestions only matter to someone who can change the intake. The response never carries raw PDF text.
+// Needs document.view (the values disclose the file's content) and document.edit (suggestions only matter to someone who can change the intake). The response never carries raw PDF text.
 documentRouter.get(
   '/documents/:id/suggestions',
   requireAuth,
   requireActiveCompany,
+  requireCapability(VIEW_CAPABILITY),
   requireCapability(EDIT_CAPABILITY),
   asyncRoute(async (req, res) => {
     const context = activeContext(req, res);
