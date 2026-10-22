@@ -16,6 +16,8 @@ import { DocumentRepository } from './document.repository';
 import { DocumentDeleteBlockedError, DocumentNotFoundError, DocumentReviewConflictError, DocumentService } from './document.service';
 import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
+import crypto from 'crypto';
+import { extractInvoiceSuggestions } from './document-extraction';
 
 export const documentRouter = Router();
 
@@ -188,6 +190,21 @@ documentRouter.post(
       return;
     }
 
+    // T7.1: a client that asks for it (header x-duplicate-check: warn) gets a 409 warning before an exact duplicate of a file already in
+    // this company is stored; it may resend with x-duplicate-check: allow. Other callers keep the previous behaviour.
+    const duplicateCheck = String(req.headers['x-duplicate-check'] ?? '').toLowerCase();
+    if (duplicateCheck === 'warn') {
+      const repository = repositoryOr503(res);
+      if (!repository) return;
+      const sha256 = crypto.createHash('sha256').update(data).digest('hex');
+      const duplicates = await repository.findDuplicatesBySha256(context.activeCompanyId, sha256);
+      // Existing documents' names and status are shown only to users who may view documents.
+      if (duplicates.length) {
+        res.status(409).json({ error: 'Duplicate document', code: 'DOCUMENT_DUPLICATE', duplicate_count: duplicates.length, duplicates: context.capabilities.includes(VIEW_CAPABILITY) ? duplicates : [] });
+        return;
+      }
+    }
+
     const service = serviceOr503(res);
     if (!service) return;
     const document = await service.upload({
@@ -349,6 +366,34 @@ documentRouter.get(
   }),
 );
 
+
+// T7.1: editable field suggestions from a digital PDF's embedded text. Read-only: nothing is stored, audited as a change, posted or approved.
+// Needs document.edit because suggestions only matter to someone who can change the intake. The response never carries raw PDF text.
+documentRouter.get(
+  '/documents/:id/suggestions',
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(EDIT_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) { res.status(404).json({ error: 'Document not found' }); return; }
+    const repository = repositoryOr503(res);
+    if (!repository) return;
+    const document = await repository.findById(req.params.id, context.activeCompanyId);
+    if (!document) { res.status(404).json({ error: 'Document not found' }); return; }
+    if (document.mime_type !== 'application/pdf') { res.status(200).json({ status: 'unsupported', fields: null }); return; }
+    let data: Buffer;
+    try {
+      data = await readVerified(storage, document.storage_key, document.sha256);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') { res.status(404).json({ error: 'Document file not found' }); return; }
+      throw err;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json(await extractInvoiceSuggestions(data));
+  }),
+);
 
 // Phase 2 delete: permanent removal of an unprocessed document and its file. document.delete is its own capability (Full Access holds it through the wildcard; no role gets it by default).
 documentRouter.delete(

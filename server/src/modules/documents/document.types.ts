@@ -30,6 +30,8 @@ export interface DocumentRecord extends DocumentIntake {
   updated_at: Date;
 }
 
+export interface DocumentDuplicate { id: string; original_filename: string; status: DocumentStatus; created_at: Date; }
+
 export interface DocumentCounterparty {
   id: string;
   name: string;

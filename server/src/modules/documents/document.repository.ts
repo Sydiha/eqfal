@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { CreateDocumentInput, DocumentCounterparty, DocumentIntakeUpdate, DocumentRecord, DocumentStatus } from './document.types';
+import { CreateDocumentInput, DocumentCounterparty, DocumentDuplicate, DocumentIntakeUpdate, DocumentRecord, DocumentStatus } from './document.types';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -44,6 +44,17 @@ export class DocumentRepository {
        WHERE company_id = $1
        ORDER BY is_active DESC, name`,
       [companyId],
+    );
+    return rows;
+  }
+
+  /** T7.1: exact-file duplicates inside one company only, by the server-computed SHA-256. Returns minimal metadata. */
+  async findDuplicatesBySha256(companyId: string, sha256: string): Promise<DocumentDuplicate[]> {
+    const { rows } = await this.pool.query<DocumentDuplicate>(
+      `SELECT id, original_filename, status, created_at FROM documents
+       WHERE company_id = $1 AND sha256 = $2
+       ORDER BY created_at DESC LIMIT 5`,
+      [companyId, sha256],
     );
     return rows;
   }

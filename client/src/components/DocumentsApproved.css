@@ -94,3 +94,14 @@
 .documents-approved .documents-approved__advanced-fields input{height:32px;min-height:32px;padding-block:0}
 .documents-approved .document-intake>button.primary{min-height:34px;height:auto;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;line-height:1.4}
 .documents-approved .documents-approved__actions button{min-height:34px;padding:7px 14px;font-size:12px;line-height:1.4}
+/* T7.1 PDF suggestions and duplicate warning: existing document tokens only. */
+.documents-approved .document-suggestions{display:grid;gap:8px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--d-border);border-radius:8px;background:var(--d-primary-soft)}
+.documents-approved .document-suggestions__head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--d-ink)}
+.documents-approved .document-suggestions__head button,.documents-approved .document-suggestions__list button{min-height:30px;font-size:12px}
+.documents-approved .document-suggestions__hint{margin:0;font-size:11px;color:var(--d-muted)}
+.documents-approved .document-suggestions__list{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.documents-approved .document-suggestions__list li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;align-items:center;gap:4px 8px;font-size:12px;color:var(--d-ink)}
+.documents-approved .document-suggestions__list li>span{color:var(--d-muted)}
+.documents-approved .document-suggestions__list bdi{overflow-wrap:anywhere}
+.documents-approved .document-suggestions__list small{grid-column:1/-1;color:var(--d-muted)}
+.document-duplicates{margin:6px 0 0;padding-inline-start:18px}
