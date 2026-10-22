@@ -7,7 +7,7 @@ import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
 import { isMonthOnlyPeriodId, MONTH_PERIOD_PREFIX, useDateContext } from "../context/DateContext";
-import { formatMoney } from '../money-format';
+import { formatMoney, sumMoney } from '../money-format';
 
 // Figma Home KPI and status icons (presentation only).
 const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -492,8 +492,8 @@ export function Home({
       if (kpi.key === "bank_balances" && metric.accounts) {
         const total = metric.accounts
           .filter((acc: any) => acc.balance.state === "available")
-          .reduce((sum: number, acc: any) => sum + Number(acc.balance.amount), 0);
-        return formatFinancialAmount(String(total));
+          .map((acc: any) => acc.balance.amount as string);
+        return formatFinancialAmount(sumMoney(total));
       }
       return formatFinancialAmount(metric.amount);
     }

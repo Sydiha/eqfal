@@ -59,6 +59,14 @@ describe('MonthlyClose month grid (UI-08/UI-09)',()=>{
   expect(await screen.findByRole('note')).toHaveTextContent(/Before the cutover date/);
   expect(screen.queryByText('Not ready to close')).toBeNull();
   expect(screen.queryByText(/Closing is unavailable/)).toBeNull();
-  expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Recorded status: Open').length).toBeGreaterThan(0);
+ });
+ it('shows the historical month in the card and in the details, with its real status',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({periods:[historical,ready]}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(years),{status:200})));
+  render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate={false} canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('note');
+  expect(document.querySelectorAll('.mc-period--historical .mc-period__recorded')).toHaveLength(1);
+  expect(document.querySelectorAll('.mc-summary .mc-badge--historical')).toHaveLength(1);
+  expect(document.querySelector('.mc-period--open')?.textContent).not.toMatch(/Historical/);
  });
 });

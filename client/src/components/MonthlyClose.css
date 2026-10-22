@@ -122,3 +122,7 @@
 .mc-readiness__foot:first-child{padding-top:0;border-top:0}
 .mc-summary__identity{flex-wrap:wrap}
 .mc-summary__identity h3{white-space:nowrap}
+
+.mc-view .mc-badge--historical{background:#f1f5f9;color:var(--mc-muted);border:1px dashed var(--mc-border)}
+.mc-view .mc-period__recorded{color:var(--mc-muted);font-size:10px}
+.mc-view .mc-period--historical{background:#f8fafc;border-style:dashed}

@@ -1,4 +1,4 @@
-import { formatMoney } from "../money-format";
+import { formatMoney, sumMoney } from "../money-format";
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
 import { DeleteRecordAction } from "./DeleteRecordAction";
 import { ReverseJournalAction } from "./ReverseJournalAction";
@@ -43,10 +43,7 @@ type TrialRow = Account & {
   credit_balance: string;
 };
 // Sums server-provided decimal strings in integer cents so report totals never drift.
-const sumAmounts = (values: string[]) => {
-  const cents = values.reduce((total, value) => total + Math.round(Number(value) * 100), 0);
-  return (cents / 100).toFixed(2);
-};
+const sumAmounts = (values: string[]) => sumMoney(values);
 type LedgerRow = {
   accounting_date: string;
   journal_id: string;

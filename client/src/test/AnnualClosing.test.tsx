@@ -250,3 +250,43 @@ describe('Annual Closing next actions (UI-07)', () => {
   });
   it('has no underline styling', () => { expect(readFileSync(resolve(__dirname, '../components/AnnualClosing.css'), 'utf8')).not.toMatch(/\.ac-link\{[^}]*underline/); });
 });
+
+describe('Annual Closing next actions across domains (review fix)', () => {
+  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
+  const load = async (domains: Record<string, string>, props: Record<string, unknown>) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ready: false, blocker_count: 1, financial_statements_readiness: { status: 'blocked', label: 'x', label_ar: 'x' }, zakat_readiness: { status: 'ready' },
+      domains: Object.fromEntries(Object.entries(domains).map(([k, status]) => [k, { ready: status === 'ready', blocker_count: 1, status, summary: {} }])), package_manifest: [] }), { status: 200 }));
+    const onNavigate = vi.fn();
+    render(<AnnualClosing canView onUnauthorized={vi.fn()} onNavigate={onNavigate} {...props}/>);
+    await screen.findByText('Annual Closing Package manifest');
+    return onNavigate;
+  };
+  it('links every domain that has a permitted route, and only when actionable', async () => {
+    const onNavigate = await load({ ledger: 'blocked', vat: 'needs_review', banking: 'not_started', documents: 'ready', partners: 'not_applicable', assets: 'blocked' },
+      { canNavigate: { accounting: true, vat: true, banks: true, documents: true, partners: true, assets: false } });
+    fireEvent.click(screen.getByRole('button', { name: 'View ledger' })); expect(onNavigate).toHaveBeenLastCalledWith('accounting');
+    fireEvent.click(screen.getByRole('button', { name: 'Review tax period' })); expect(onNavigate).toHaveBeenLastCalledWith('vat');
+    fireEvent.click(screen.getByRole('button', { name: 'View bank reconciliation' })); expect(onNavigate).toHaveBeenLastCalledWith('banks');
+    expect(screen.queryByRole('button', { name: 'View document exceptions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review partners' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View fixed assets' })).toBeNull();
+    expect(screen.getByText('View fixed assets')).toBeInTheDocument();
+  });
+  it('shows no links without the permission map for non-monthly-close domains', async () => {
+    await load({ ledger: 'blocked' }, {});
+    expect(screen.queryByRole('button', { name: 'View ledger' })).toBeNull();
+  });
+  it('opens the package / WHT tabs for in-page destinations only with their permission', async () => {
+    await load({ zakat: 'blocked', wht: 'blocked', pre_cutover_history: 'needs_review' }, { canViewWht: true, canViewPackage: true });
+    expect(screen.getByRole('button', { name: 'Review WHT' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View workpaper in package' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review cutover disclosure' })).toBeInTheDocument();
+  });
+  it('hides in-page links without permission', async () => {
+    await load({ zakat: 'blocked', wht: 'blocked' }, {});
+    expect(screen.queryByRole('button', { name: 'Review WHT' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View workpaper in package' })).toBeNull();
+  });
+});
