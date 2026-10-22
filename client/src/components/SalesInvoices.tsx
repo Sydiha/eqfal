@@ -8,6 +8,7 @@ import {InvoiceNotes} from './InvoiceNotes';
 import {RecurringInvoices} from './RecurringInvoices';
 import {UUID_PATTERN} from './obligationSettlementLogic';
 import './SalesInvoices.css';
+import { formatMoney } from '../money-format';
 
 /**
  * One invoice workspace for both directions (sales and purchase). Amounts, numbering, VAT, obligations and journals are
@@ -53,7 +54,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const filtersActive=Object.values(filters).some(Boolean);
  const rateDate=form&&!isPurchase?(form.values.tax_point_date||form.values.issue_date):'';
  const formOpen=!!form;
- const money=(value:string|null|undefined)=>(parseFloat(value??'')||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const money=(value:string|null|undefined)=>formatMoney(value,'0.00');
  const errorText=(code:string|undefined)=>{const key=`${ns}.errors.${code}`;const text=t(key);if(code&&text!==key)return text;const shared=t(`salesInvoice.errors.${code}`);return code&&shared!==`salesInvoice.errors.${code}`?shared:t('salesInvoice.errors.generic')};
 
  const load=useCallback(async()=>{

@@ -1,6 +1,7 @@
 import {FormEvent,useCallback,useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
+import { formatMoney } from '../money-format';
 
 /**
  * External credit / debit notes registered against one approved invoice. EQFAL registers notes issued elsewhere; it never issues them.
@@ -17,7 +18,7 @@ const toPayload=(f:Form,purchase:boolean)=>({adjustment_type:f.adjustment_type,e
 export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,onChanged,onUnauthorized}:{invoiceId:string;purchase:boolean;currency:string;canAdjust:boolean;canApprove:boolean;onChanged:()=>void;onUnauthorized:()=>void}){
  const{t}=useTranslation();
  const[notes,setNotes]=useState<Note[]|null>(null),[loadError,setLoadError]=useState(false),[form,setForm]=useState<Form|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[cancelling,setCancelling]=useState<{id:string;reason:string}|null>(null);
- const money=(v:string)=>(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const money=(v:string)=>formatMoney(v,'0.00');
  const errorText=(code?:string)=>{const key=`invoiceNotes.errors.${code}`;const text=t(key);return code&&text!==key?text:t('invoiceNotes.errors.generic')};
  const load=useCallback(async()=>{
   try{const response=await fetch(`/api/invoices/${invoiceId}/adjustments`);if(response.status===401){onUnauthorized();return;}if(!response.ok)throw new Error();const payload=await response.json() as {adjustments:Note[]};setNotes(payload.adjustments);setLoadError(false);}catch{setLoadError(true);}

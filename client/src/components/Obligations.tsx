@@ -9,6 +9,7 @@ import {ObligationsAging} from './ObligationsAging';
 import {PersonalPayments} from './PersonalPayments';
 import {clearQueryParameters,readQueryParameter,writeQueryParameters} from '../navigation/queryState';
 import {UUID_PATTERN,classifyBankTransactions,sanitizeReturnQuery,type IneligibleReason} from './obligationSettlementLogic';
+import { formatMoney } from '../money-format';
 
 type Counterparty={id:string;name:string;type:string;is_active:boolean;version:number};
 type Settlement={id:string;bank_transaction_id:string;amount:string;note:string|null;transaction_date:string;description:string|null};
@@ -46,7 +47,7 @@ export function Obligations({canView,canCreateObligation=false,canEditObligation
  useEffect(()=>{if(filters.dueFrom||filters.dueTo)setDateType('due');else if(filters.recognizedFrom||filters.recognizedTo)setDateType('recognized')},[filters]);
  if(!canView)return <WorkspacePage><WorkspaceState>{t('obligations.noAccess')}</WorkspaceState></WorkspacePage>;
  const locale=isAr?'ar-SA-u-ca-gregory-nu-latn':'en-GB';const currency=isAr?'ر.س':'SAR';
- const fmt=(value:string)=>{const n=Number(value);return value.trim()!==''&&Number.isFinite(n)?n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):value};
+ const fmt=(value:string)=>value.trim()===''?value:formatMoney(value);
  const money=(value:string)=>`${fmt(value)} ${currency}`;
  const fmtDate=(value:string)=>isAr?value.slice(0,10).replace(/-/g,'/'):value;
  const now=new Date();const pad=(n:number)=>String(n).padStart(2,'0');const todayIso=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;

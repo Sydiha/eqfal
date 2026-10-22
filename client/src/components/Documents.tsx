@@ -14,6 +14,7 @@ import {
   WorkspaceToolbar,
 } from './SharedUI';
 import './DocumentsApproved.css';
+import { formatMoney } from '../money-format';
 
 type DocumentItem={id:string;original_filename:string;mime_type:string;size_bytes:number;status:string;review_note:string|null;reviewed_at:string|null;created_at:string;document_type:'purchase'|'expense'|'sale'|'other'|null;counterparty_id:string|null;counterparty_name:string|null;relational_counterparty_name?:string|null;document_date:string|null;reference_number:string|null;total_amount:string|null;intake_note:string|null};
 type CounterpartyType='customer'|'supplier'|'government'|'other';
@@ -74,7 +75,7 @@ export function Documents({canCapitalise=false,onCapitalise,canView,canUpload,ca
  const pageCount=Math.max(1,Math.ceil(filteredDocuments.length/PAGE_SIZE));const currentPage=Math.min(page,pageCount);
  const pagedDocuments=entryDocumentType||entryDocumentId?filteredDocuments:filteredDocuments.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
  const numberFormat=(value:number)=>value.toLocaleString(i18n.language==='ar'?'ar-SA-u-nu-latn':'en-US');
- const money=(value:string|null)=>value==null||value===''?'—':Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const money=(value:string|null)=>formatMoney(value);
  const missingFields=selected&&['uploaded','needs_review','incomplete'].includes(selected.status)?([['document_type',selected.document_type],['counterparty_name',selected.relational_counterparty_name??selected.counterparty_name],['document_date',selected.document_date],['reference_number',selected.reference_number],['total_amount',selected.total_amount]] as const).filter(([,value])=>value==null||value==='').map(([field])=>field):[];
  const railItem=(key:string,label:string,count:number,icon:ReactNode,active:boolean,onClick:()=>void,tone?:string)=><button key={key} type="button" className={`documents-approved__rail-item${active?' is-active':''}${tone?` is-${tone}`:''}`} aria-pressed={active} onClick={onClick}><span className="documents-approved__rail-label"><span className="documents-approved__icon">{icon}</span>{label}</span><span className="documents-approved__rail-count">{numberFormat(count)}</span></button>;
  const pickBucket=(next:Bucket)=>{setBucket(next);setPage(1)};

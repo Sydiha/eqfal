@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import type { CutoverAccount } from './CutoverActivation';
+import { formatMoney } from '../money-format';
 
 // Cutover S2: pre-cut-over historical supplements (cash flows, equity movements) for one ACTIVE range. Report data with external evidence only:
 // nothing here posts to the ledger. Drafts need source_authority.supplement_manage; approval needs source_authority.supplement_approve.
@@ -121,11 +122,11 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
           <div className="sa-table"><table><thead><tr><th>{tx('الإصدار', 'Version')}</th><th>{tx('الحالة', 'Status')}</th><th>{tx('الدليل', 'Evidence')}</th><th>{tx('المجاميع', 'Totals')}</th><th /></tr></thead>
             <tbody>{list.map((v) => <tr key={v.id}><td>{v.version_no}</td><td><span className={`sa-badge is-${v.status === 'approved' ? 'active' : v.status === 'draft' ? 'draft' : 'voided'}`}>{status(v.status)}</span></td>
               <td className="sa-reason">{v.source_system} · {v.evidence_reference}</td>
-              <td>{v.evaluation ? <dl className="sa-totals">{Object.entries(v.evaluation.totals).map(([k, x]) => <div key={k}><dt>{TOTALS[k] ? tx(TOTALS[k]!.ar, TOTALS[k]!.en) : k}</dt><dd><bdi dir="ltr">{x}</bdi></dd></div>)}</dl> : '—'}</td>
+              <td>{v.evaluation ? <dl className="sa-totals">{Object.entries(v.evaluation.totals).map(([k, x]) => <div key={k}><dt>{TOTALS[k] ? tx(TOTALS[k]!.ar, TOTALS[k]!.en) : k}</dt><dd><bdi dir="ltr">{formatMoney(x)}</bdi></dd></div>)}</dl> : '—'}</td>
               <td>{v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => open(kind, v)}>{tx('تعديل', 'Edit')}</button>}
                 {v.status === 'draft' && canApprove && <button type="button" className="sa-primary" disabled={busy || !v.evaluation?.valid} onClick={() => void run(() => post(`${base}/${v.id}/approve`, { confirm: true, expected_row_version: v.row_version }))}>{tx('اعتماد', 'Approve')}</button>}
                 {v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => { const reason = window.prompt(tx('سبب إلغاء المسودة', 'Reason for voiding the draft')); if (reason?.trim()) void run(() => post(`${base}/${v.id}/void`, { confirm: true, expected_row_version: v.row_version, reason })); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table></div>}
-        {draft?.evaluation && !draft.evaluation.valid && <ul className="sa-issues" aria-label={tx('فروقات المسودة', 'Draft differences')}>{draft.evaluation.issues.map((i, n) => <li key={n}>{ISSUES[i.code] ? tx(ISSUES[i.code]!.ar, ISSUES[i.code]!.en) : i.code}{i.account_id ? ` — ${name(i.account_id)}` : ''}{i.detail?.['difference'] ? <bdi dir="ltr"> ({i.detail['difference']})</bdi> : null}</li>)}</ul>}
+        {draft?.evaluation && !draft.evaluation.valid && <ul className="sa-issues" aria-label={tx('فروقات المسودة', 'Draft differences')}>{draft.evaluation.issues.map((i, n) => <li key={n}>{ISSUES[i.code] ? tx(ISSUES[i.code]!.ar, ISSUES[i.code]!.en) : i.code}{i.account_id ? ` — ${name(i.account_id)}` : ''}{i.detail?.['difference'] ? <bdi dir="ltr"> ({formatMoney(i.detail['difference'])})</bdi> : null}</li>)}</ul>}
         {canManage && !draft && <button type="button" className="sa-ghost" disabled={busy} onClick={() => open(kind, null)}>{list.some((v) => v.status === 'approved') ? tx('إصدار تصحيحي جديد', 'New correcting version') : tx('إدخال البيانات', 'Enter data')}</button>}
       </div>;
     })}
@@ -147,6 +148,7 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
           {cash && <td>{l.line_type === 'cash_balance' && <input aria-label={tx('في تاريخ القطع', 'At cutover date')} dir="ltr" inputMode="decimal" value={l.closing_amount} onChange={(e) => set(i, { closing_amount: e.target.value })} required />}</td>}
           {cash && <td>{l.line_type === 'cash_flow' && l.account_id && <input aria-label={tx('مبرر التصنيف', 'Classification justification')} value={l.classification_override_reason} maxLength={500} onChange={(e) => set(i, { classification_override_reason: e.target.value })} />}</td>}
           <td><button type="button" className="sa-ghost" onClick={() => setLines(lines.filter((_, j) => j !== i))}>{tx('حذف السطر', 'Remove line')}</button></td></tr>)}</tbody></table></div>
+      <p className="sa-scroll-hint">{tx('مرّر الجدول أفقياً لعرض كل الأعمدة.', 'Scroll the table sideways to see all columns.')}</p>
       <div className="sa-actions"><button type="button" className="sa-ghost" onClick={() => setLines([...lines, blank(editing.kind === 'cash_flow' ? 'cash_flow' : 'equity_movement')])}>{tx('إضافة سطر', 'Add line')}</button></div>
       <p className="sa-muted">{tx('المبالغ بالعملة الوظيفية بخانتين عشريتين (تُقبل فواصل الآلاف مثل 100,000.00). التدفق الداخل موجب. المساهمة موجبة والتوزيع سالب. لا تُدخل ربح السنة كحركة ملكية.', 'Amounts in the functional currency, two decimals (thousands separators such as 100,000.00 are accepted). Cash inflow positive. Contribution positive, distribution negative. Do not enter the year\'s profit as an equity movement.')}</p>
       <label className="sa-check"><input type="checkbox" checked={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.checked })} /><span>{tx('أؤكد أن هذه البيانات مأخوذة من الأدلة المذكورة، وأنها تُحفظ مسودة حتى تُعتمد.', 'I confirm these figures come from the stated evidence and are saved as a draft until approved.')}</span></label>

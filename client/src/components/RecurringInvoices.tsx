@@ -3,6 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
 import './RecurringInvoices.css';
+import { formatMoney } from '../money-format';
 
 /**
  * Recurring invoice schedules inside the invoice workspace. A schedule only ever produces DRAFT invoices: nothing here submits, approves,
@@ -64,7 +65,7 @@ export function RecurringInvoices({direction,canManage,canGenerate,onChanged,onU
   if(created>0)onChanged();
  };
  const setLine=(i:number,patch:Partial<Line>)=>setForm(f=>f&&{...f,lines:f.lines.map((l,x)=>x===i?{...l,...patch}:l)});
- const money=(v:string|null|undefined)=>(parseFloat(v??'')||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const money=(v:string|null|undefined)=>formatMoney(v,'0.00');
  const status=(s:string)=><span className={`recurring-invoices__status recurring-invoices__status--${s}`}>{t(`recurringInvoice.statuses.${s}`)}</span>;
  return <section className="recurring-invoices" aria-labelledby={`recurring-${direction}-title`} data-testid="recurring-invoices">
   <div className="recurring-invoices__head"><div><h3 id={`recurring-${direction}-title`}>{t('recurringInvoice.title')}</h3><p className="recurring-invoices__hint">{t('recurringInvoice.draftOnly')}</p></div>

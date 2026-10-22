@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { formatMoney, subtractMoney, sumMoney } from '../money-format';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { Dialog } from './Dialog';
@@ -39,7 +40,7 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  useEffect(()=>{setSide('');if(selectedId)void loadDetail(selectedId);else setDocuments([]);// eslint-disable-next-line react-hooks/exhaustive-deps
  },[selectedId]);
  useEffect(()=>{if(selectedPeriodId&&periods.length>0){const globalPeriod=periods.find(p=>p.id===selectedPeriodId);if(globalPeriod&&selectedId!==globalPeriod.id){setSelectedId(globalPeriod.id);}}},[selectedPeriodId,periods]);
- const totals=useMemo(()=>documents.reduce((acc,d)=>{if(d.review_status!=='reviewed'||!d.vat_amount)return acc;const amount=Number(d.vat_amount);if(d.document_type==='sale')acc.output+=amount;else acc.input+=amount;return acc},{input:0,output:0}),[documents]);
+ const totals=useMemo(()=>documents.reduce((acc,d)=>{if(d.review_status!=='reviewed'||!d.vat_amount)return acc;if(d.document_type==='sale')acc.output.push(d.vat_amount);else acc.input.push(d.vat_amount);return acc},{input:[] as string[],output:[] as string[]}),[documents]);
  const visibleDocuments=useMemo(()=>{const query=search.trim().toLocaleLowerCase();return documents.filter(d=>(!query||[d.original_filename,d.counterparty_name,d.review_note].some(value=>value?.toLocaleLowerCase().includes(query)))&&(!reviewFilter||(reviewFilter==='not_reviewed'?!d.review_status:reviewFilter==='recoverability'?needsRecoverability(d):d.review_status===reviewFilter))&&(!typeFilter||d.document_type===typeFilter)&&(!treatmentFilter||d.treatment===treatmentFilter)&&(!side||(contributes(d)&&(side==='net'||(side==='output')===(d.document_type==='sale')))))},[documents,search,reviewFilter,typeFilter,treatmentFilter,side]);
  const ar=i18n.language.startsWith('ar');
  if(!canView)return <WorkspacePage><WorkspaceState>{t('vat.noAccess')}</WorkspaceState></WorkspacePage>;
@@ -83,7 +84,7 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  // A figure is drillable only when a reviewed document with VAT > 0 actually contributes to it; otherwise it stays plain text.
  const hasOutput=documents.some(d=>contributes(d)&&d.document_type==='sale'),hasInput=documents.some(d=>contributes(d)&&d.document_type!=='sale');
  const drillable={output:hasOutput,input:hasInput,net:hasOutput||hasInput};
- const drillValue=(key:'output'|'input'|'net',value:number)=>drillable[key]?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{value.toFixed(2)}</bdi></button>:<bdi dir="ltr">{value.toFixed(2)}</bdi>;
+ const drillValue=(key:'output'|'input'|'net',value:string)=>drillable[key]?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{formatMoney(value)}</bdi></button>:<bdi dir="ltr">{formatMoney(value)}</bdi>;
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
   <header className="vat-header"><h2 id="vat-title">{t('vat.title')}</h2><p>{t('vat.description')}</p></header>
@@ -107,9 +108,9 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
    </section>}
    <section className="vat-card vat-summary" aria-label={t('vat.summaryTitle')}>
     <dl className="vat-summary__values">
-     <div><dt>{t('vat.outputVat')}</dt><dd>{drillValue('output',totals.output)}<small>{currency}</small></dd></div>
-     <div><dt>{t('vat.inputVat')}</dt><dd>{drillValue('input',totals.input)}<small>{currency}</small></dd></div>
-     <div><dt>{t('vat.netVat')}</dt><dd>{drillValue('net',totals.output-totals.input)}<small>{currency}</small></dd></div>
+     <div><dt>{t('vat.outputVat')}</dt><dd>{drillValue('output',sumMoney(totals.output))}<small>{currency}</small></dd></div>
+     <div><dt>{t('vat.inputVat')}</dt><dd>{drillValue('input',sumMoney(totals.input))}<small>{currency}</small></dd></div>
+     <div><dt>{t('vat.netVat')}</dt><dd>{drillValue('net',subtractMoney(sumMoney(totals.output),sumMoney(totals.input)))}<small>{currency}</small></dd></div>
     </dl>
     <p className="vat-summary__note">{t('vat.summaryNote')}</p>
    </section>

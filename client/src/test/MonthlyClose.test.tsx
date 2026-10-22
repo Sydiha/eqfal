@@ -34,3 +34,39 @@ describe('MonthlyClose',()=>{
  ] as const)('shows the translated %s message (%s) when closing fails, never the raw backend text',async(code,lang,message)=>{await i18n.changeLanguage(lang);const fetchMock=vi.fn(async(url:string,options?:RequestInit)=>{if(options?.method==='POST')return new Response(JSON.stringify({error:'Monthly close has blockers',code}),{status:409});if(url==='/api/fiscal-years')return new Response(JSON.stringify(years));return new Response(JSON.stringify({periods:[{...open,ready:true,disclosed_total:0,blockers:closed.blockers}]}));});vi.stubGlobal('fetch',fetchMock);render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate canClose canReopen onUnauthorized={vi.fn()}/>);const button=await screen.findByRole('button',{name:i18n.t('monthlyClose.close')});fireEvent.click(button);expect(await screen.findByText(message)).toBeInTheDocument();expect(screen.queryByText('Monthly close has blockers')).toBeNull();});
  it('falls back to the generic message for an unknown 500 and shows the network message for connection failures',async()=>{vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:'internal detail'}),{status:500})));const first=render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate canClose canReopen onUnauthorized={vi.fn()}/>);expect(await screen.findByText(i18n.t('monthlyClose.error'))).toBeInTheDocument();expect(screen.queryByText('internal detail')).toBeNull();first.unmount();vi.stubGlobal('fetch',vi.fn(async()=>{throw new TypeError('Failed to fetch');}));render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate canClose canReopen onUnauthorized={vi.fn()}/>);expect(await screen.findByText('Could not connect to the server. Check your connection and try again.')).toBeInTheDocument();});
 });
+
+describe('MonthlyClose month grid (UI-08/UI-09)',()=>{
+ const historical={...closed,id:'period-hist',period_start:'2025-11-01',period_end:'2025-11-30',status:'open',ready:false,external_period:true,disclosed_total:0,blockers:{documents:0,obligations:0,bank_transactions:0,vat:0,assets:0,opening_balances:0,periodic_adjustments:0,ledger:0}} as const;
+ const ready={...closed,id:'period-ready',period_start:'2026-02-01',period_end:'2026-02-28',status:'open',ready:true} as const;
+ it('shows each month actual state as text, separate from the selected marker',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({periods:[open,closed,historical,ready]}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(years),{status:200})));
+  render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate={false} canClose canReopen onUnauthorized={vi.fn()}/>);
+  const grid=await screen.findByRole('list',{name:'Select period'});
+  const cells=Array.from(grid.querySelectorAll('li button'));
+  expect(cells).toHaveLength(4);
+  const state=(id:string)=>cells.find(b=>b.textContent&&b.className.includes('mc-period--'+id))!;
+  expect(state('blocked').textContent).toMatch(/Blocked/);
+  expect(state('closed').textContent).toMatch(/Closed/);
+  expect(state('historical').textContent).toMatch(/Historical \(external\)/);
+  expect(state('open').textContent).toMatch(/Open/);
+  expect(cells.filter(b=>b.getAttribute('aria-pressed')==='true')).toHaveLength(1);
+  expect(grid.querySelectorAll('.mc-period__selected')).toHaveLength(1);
+  expect(grid.querySelectorAll('.mc-state svg')).toHaveLength(4);
+ });
+ it('labels a pre-cutover month historical without calling it not ready, keeping its real status',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({periods:[historical]}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(years),{status:200})));
+  render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate={false} canClose canReopen onUnauthorized={vi.fn()}/>);
+  expect(await screen.findByRole('note')).toHaveTextContent(/Before the cutover date/);
+  expect(screen.queryByText('Not ready to close')).toBeNull();
+  expect(screen.queryByText(/Closing is unavailable/)).toBeNull();
+  expect(screen.getAllByText('Recorded status: Open').length).toBeGreaterThan(0);
+ });
+ it('shows the historical month in the card and in the details, with its real status',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({periods:[historical,ready]}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify(years),{status:200})));
+  render(<MonthlyClose viewCapabilities={allViews} canView canViewFiscalYears canCreate={false} canClose canReopen onUnauthorized={vi.fn()}/>);
+  await screen.findByRole('note');
+  expect(document.querySelectorAll('.mc-period--historical .mc-period__recorded')).toHaveLength(1);
+  expect(document.querySelectorAll('.mc-summary .mc-badge--historical')).toHaveLength(1);
+  expect(document.querySelector('.mc-period--open')?.textContent).not.toMatch(/Historical/);
+ });
+});

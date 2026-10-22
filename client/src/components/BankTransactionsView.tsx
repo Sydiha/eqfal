@@ -7,6 +7,7 @@ import { ExportButtons } from './ExportButtons';
 import { useActiveCompanyName } from '../context/CompanyContext';
 import { bankReconciliationExport, generatedStamp } from '../export/reportExport';
 import { DataWorkspace, DetailPane, WorkspaceState, WorkspaceToolbar } from './SharedUI';
+import { formatMoney as formatDecimal } from '../money-format';
 
 type ReconciliationStatus = 'unmatched' | 'matched' | 'reconciled';
 type Transaction = {
@@ -59,15 +60,11 @@ function displayDate(value: string) {
 }
 
 function formatMoney(amount: string, currency: string) {
-  const numeric = Number(amount);
-  if (!Number.isFinite(numeric)) return `${amount} ${currency}`;
-  return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numeric)} ${currency}`;
+  return `${formatDecimal(amount)} ${currency}`;
 }
 
 function formatAmount(amount: string, currency: string) {
-  const numeric = Number(amount);
-  if (!Number.isFinite(numeric)) return `${amount} ${currency}`;
-  const value = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numeric);
+  const value = formatDecimal(amount);
   return currency === 'SAR' ? value : `${value} ${currency}`;
 }
 

@@ -6,6 +6,7 @@ import {ExportButtons} from './ExportButtons';
 import {useActiveCompanyName} from '../context/CompanyContext';
 import {fixedAssetsExport,generatedStamp} from '../export/reportExport';
 import './FixedAssets.css';
+import { formatMoney } from '../money-format';
 
 type Category={id:string;name_ar:string;name_en:string;default_useful_life_months:number|null;asset_account_id:string|null;accumulated_depreciation_account_id:string|null;depreciation_expense_account_id:string|null};
 type Account={id:string;code:string;name:string;account_type:'asset'|'expense'|string;is_active:boolean};
@@ -44,7 +45,7 @@ export function FixedAssets({canView,canCreate,canEdit,canCancel,canManagePolicy
  const categoryName=(c:Category)=>i18n.language==='ar'?c.name_ar:c.name_en,accountName=(a:Account)=>`${a.code} — ${a.name}`,activeAccounts=(type:string)=>accounts.filter(a=>a.is_active&&a.account_type===type),approvedSales=sales.filter(s=>s.status==='approved');
  const accountSelect=(name:string,value:string|null,type:string)=><select name={name} defaultValue={value??''}><option value="">—</option>{activeAccounts(type).map(a=><option key={a.id} value={a.id}>{accountName(a)}</option>)}</select>;
  const ar=i18n.language==='ar',currency=ar?'ر.س':'SAR';
- const fmt=(v:string|number|null|undefined)=>{if(v===null||v===undefined||v==='')return '—';const n=Number(v);return Number.isFinite(n)?n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):String(v)};
+ const fmt=(v:string|number|null|undefined)=>formatMoney(v===''?null:v);
  const sum=(values:string[])=>values.reduce((total,v)=>total+Math.round(Number(v)*100),0)/100;
  const accumulatedOf=(a:Asset)=>Number(a.opening_accumulated_depreciation)+Number(a.posted_depreciation);
  const kpis={count:visibleAssets.length,active:visibleAssets.filter(a=>a.status==='active').length,cost:sum(visibleAssets.map(a=>a.acquisition_cost)),accumulated:Math.round(visibleAssets.reduce((total,a)=>total+accumulatedOf(a)*100,0))/100,nbv:sum(visibleAssets.map(a=>a.net_book_value))};

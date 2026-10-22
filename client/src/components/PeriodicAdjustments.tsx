@@ -10,6 +10,7 @@ import {ExportButtons} from './ExportButtons';
 import {useActiveCompanyName} from '../context/CompanyContext';
 import {accrualsExport,generatedStamp} from '../export/reportExport';
 import './PeriodicAdjustments.css';
+import { formatMoney } from '../money-format';
 
 type AdjustmentType='accrued_expense'|'prepaid_expense'|'accrued_income'|'deferred_income';
 type Status='draft'|'in_review'|'approved'|'completed';
@@ -82,7 +83,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const resetFilters=()=>{setQuick('all');setTypeFilter('');setStatusFilter('');setSelectedId(null)};
  const inScope=(date:string)=>!!scopeRange&&date>=scopeRange.from&&date<=scopeRange.to;
  const selected=visibleItems.find(a=>a.id===selectedId)??null;
- const money=(value:string)=>`${(parseFloat(value)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+ const money=(value:string)=>formatMoney(value,'0.00');
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
  const showForm=(canCreate&&formOpen)||(!!editing&&canEdit);
  const scheduleRows=selected?(quick==='all'?selected.schedule:entriesInScope(selected).filter(e=>e.status===quick)):[];

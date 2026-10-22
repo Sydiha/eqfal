@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../money-format';
 
 type Report={
   company:{name:string};
@@ -9,7 +10,7 @@ type Report={
 };
 interface Props{periodId:string;language:string;onError:()=>void}
 const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-const money=(v:number|string|null)=>Number(v??0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money=(v:number|string|null)=>formatMoney(v??0);
 
 export function VatReportActions({periodId,language,onError}:Props){
  const [busy,setBusy]=useState(false); const ar=language.startsWith('ar');
