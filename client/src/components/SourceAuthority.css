@@ -84,18 +84,18 @@
 .source-authority .sa-table td:last-child:not(.sa-reason){white-space:nowrap}
 .source-authority .sa-table td .sa-ghost+.sa-primary,.source-authority .sa-table td .sa-primary+.sa-ghost{margin-inline-start:6px}
 /* S2 supplement entry rows: roomy columns, readable selects, visible focus and selected option */
-.source-authority .sa-lines table{min-width:1370px;table-layout:auto}
+.source-authority .sa-lines table{min-width:1180px;table-layout:auto}
 .source-authority .sa-lines :is(th,td){box-sizing:border-box}
-.source-authority .sa-lines th{padding:12px 12px;font-size:12px}
-.source-authority .sa-lines td{padding:14px 12px;vertical-align:middle}
+.source-authority .sa-lines th{padding:12px 8px;font-size:12px}
+.source-authority .sa-lines td{padding:12px 8px;vertical-align:middle}
 .source-authority .sa-lines tbody tr:nth-child(even) td{background:#fafcfd}
 .source-authority .sa-lines tbody tr:hover td{background:#f1f8f6}
-.source-authority .sa-lines :is(th,td):nth-child(1){min-width:220px}
-.source-authority .sa-lines :is(th,td):nth-child(2){min-width:190px}
-.source-authority .sa-lines :is(th,td):nth-child(3){min-width:160px}
-.source-authority .sa-lines :is(th,td):nth-child(4){min-width:150px}
-.source-authority .sa-lines :is(th,td):nth-child(5),.source-authority .sa-lines :is(th,td):nth-child(6),.source-authority .sa-lines :is(th,td):nth-child(7){min-width:120px}
-.source-authority .sa-lines :is(th,td):nth-child(8){min-width:190px}
+.source-authority .sa-lines :is(th,td):nth-child(1){min-width:190px}
+.source-authority .sa-lines :is(th,td):nth-child(2){min-width:180px}
+.source-authority .sa-lines :is(th,td):nth-child(3){min-width:120px}
+.source-authority .sa-lines :is(th,td):nth-child(4){min-width:170px}
+.source-authority .sa-lines :is(th,td):nth-child(5),.source-authority .sa-lines :is(th,td):nth-child(6),.source-authority .sa-lines :is(th,td):nth-child(7){min-width:140px}
+.source-authority .sa-lines :is(th,td):nth-child(8){min-width:170px}
 .source-authority .sa-lines select,.source-authority .sa-lines input:not([type=checkbox]){height:40px;padding-inline:12px;font-size:13px;line-height:1.4;text-overflow:ellipsis}
 .source-authority .sa-lines select{padding-inline-end:28px;color:#0f172a;border-color:#b8c4d0;cursor:pointer}
 .source-authority .sa-lines input[inputmode=decimal]{text-align:end;font-variant-numeric:tabular-nums}
@@ -103,7 +103,7 @@
 .source-authority .sa-lines select:focus-visible,.source-authority .sa-lines input:not([type=checkbox]):focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary);box-shadow:0 0 0 4px rgba(0,184,148,.18)}
 .source-authority .sa-lines option{padding:8px 12px;background:#fff;color:#0f172a;font-size:13px}
 .source-authority .sa-lines option:checked{background:#c8f0e3;color:#064e3b;font-weight:700}
-.source-authority .sa-lines td:last-child{min-width:100px}
+.source-authority .sa-lines td:last-child{min-width:88px}
 .source-authority .ca-file>input[type=file]{width:100%;box-sizing:border-box;height:auto;padding:8px 10px}
 .source-authority .ca-file .sa-muted{line-height:1.7}
 .source-authority .ca-file .sa-warning{margin:0}
@@ -120,10 +120,14 @@
 .source-authority .sa-totals dd{margin:0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 /* UI-10: amounts and descriptions are never clipped; the wrapper shows edge shadows where more columns are off-screen. */
 .source-authority .sa-lines{background:linear-gradient(to right,#fff 30%,rgba(255,255,255,0)) left center/40px 100% no-repeat local,linear-gradient(to left,#fff 30%,rgba(255,255,255,0)) right center/40px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(15,23,42,.22),rgba(15,23,42,0)) left center/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(15,23,42,.22),rgba(15,23,42,0)) right center/12px 100% no-repeat scroll,#fff}
-.source-authority .sa-lines input[inputmode=decimal]{min-width:150px;text-overflow:clip}
+.source-authority .sa-lines input[inputmode=decimal]{min-width:124px;text-overflow:clip}
 .source-authority .sa-lines td select[aria-label]{min-width:100%;text-overflow:clip}
-.source-authority .sa-lines td input[aria-label]:not([inputmode=decimal]){min-width:200px}
+.source-authority .sa-lines td input[aria-label]:not([inputmode=decimal]){min-width:150px}
 .source-authority .sa-lines tbody tr:nth-child(even) td{background:#f4f8fa}
 .source-authority .sa-scroll-hint{margin:6px 0 0;color:var(--sa-muted);font-size:11.5px}
 .source-authority .sa-totals dd{white-space:nowrap}
 @media(min-width:900px){.source-authority .sa-scroll-hint{display:none}}
+/* UI-13: the remove-row action stays pinned at the inline end (left in RTL), so it never needs sideways scrolling. */
+.source-authority .sa-lines :is(th,td):last-child{position:sticky;inset-inline-end:0;z-index:1;background:#fff;box-shadow:inset 1px 0 0 #e2e8f0}
+.source-authority .sa-lines tbody tr:nth-child(even) td:last-child{background:#fafcfd}
+.source-authority .sa-lines tbody tr:hover td:last-child{background:#f1f8f6}
