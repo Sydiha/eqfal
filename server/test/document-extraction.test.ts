@@ -22,6 +22,44 @@ const arabicInvoice = [[
   { text: 'الإجمالي شامل الضريبة', x: 400, y: 740 }, { text: '٢٣٠٫٥١', x: 100, y: 740 },
 ]];
 
+// Regression (owner UAT): a real Arabic simplified tax invoice whose text layer uses Arabic presentation forms (U+FE70–FEFF) mixed with base
+// letters, a "#" after the invoice number, a dash date with a time, an unlabeled supplier heading, a line-item table whose rows repeat the
+// final amount, and a totals block with subtotal, VAT and the final total. All values below are synthetic.
+const shapedInvoice = [[
+  { text: 'ﻓﺎﺗﻮرة ﺿﺮﻳﺒﻴﺔ ﻣﺒﺴﻄﺔ', x: 479, y: 801 },
+  { text: 'ﻣﺆﺳﺴﺔ اﻟﻨﻤﻮذج اﻟﺘﺠﺎرﻳﺔ', x: 239, y: 757 },
+  { text: 'رﻗﻢ اﻟﻔﺎﺗﻮرة: 700000123#', x: 475, y: 729 },
+  { text: 'ﺗﺎرﻳﺦ إﺻﺪار اﻟﻔﺎﺗﻮرة : 21-10-2026 | 12:36 م GMT+03:00', x: 384, y: 716 },
+  { text: 'رﻗﻢ اﻟﻬﺎﺗﻒ: 966500000000+', x: 465, y: 665 },
+  { text: 'اﻹﺟﻤﺎﻟﻲ', x: 57, y: 604 }, { text: 'اﻟﻀﺮﻳﺒﺔ', x: 244, y: 604 }, { text: 'اﺳﻢ اﻟﻤﻨﺘﺞ', x: 456, y: 604 },
+  { text: 'SAR 619.00', x: 48, y: 521 }, { text: 'SAR 80.73', x: 236, y: 521 }, { text: 'SAR 538.26', x: 300, y: 521 },
+  { text: '619.00', x: 107, y: 441 }, { text: 'إﺟﻤﺎﻟﻲ اﻟﻤﻨﺘﺠﺎت', x: 212, y: 436 },
+  { text: 'SAR 538.26', x: 270, y: 373 }, { text: 'اﻟﻤﺠﻤﻮع ﻏﻴﺮ ﺷﺎﻣﻞ اﻟﻀﺮﻳﺒﺔ', x: 445, y: 373 },
+  { text: 'SAR 80.74', x: 270, y: 319 }, { text: 'ﺿﺮﻳﺒﺔ اﻟﻘﻴﻤﺔ اﻟﻤﻀﺎﻓﺔ )%15(', x: 438, y: 319 },
+  { text: 'SAR 619.00', x: 270, y: 263 }, { text: 'اﻟﻤﺠﻤﻮع اﻟﻜﻠﻲ', x: 488, y: 263 },
+  { text: 'اﻟﺮﻗﻢ اﻟﻀﺮﻳﺒﻲ :', x: 117, y: 164 }, { text: '300000000000003', x: 117, y: 154 },
+]];
+
+describe('T7.1 Arabic presentation-form invoice (UAT regression)', () => {
+  it('reads number, date and final total, and leaves an unlabeled supplier as not_found', async () => {
+    const result = await extractInvoiceSuggestions(buildTextPdf(shapedInvoice));
+    expect(result).toEqual({ status: 'ok', fields: {
+      supplier_name: { value: null, state: 'not_found' },
+      invoice_number: { value: '700000123', state: 'found' },
+      invoice_date: { value: '2026-10-21', state: 'found' },
+      total_amount: { value: '619.00', state: 'found' },
+    } });
+  });
+
+  it('matches a labeled supplier written in presentation forms', () => {
+    expect(suggestInvoiceFields(['اﻟﻤﻮرد: ﻣﺆﺳﺴﺔ اﻟﻨﻤﻮذج']).supplier_name).toEqual({ value: 'مؤسسة النموذج', state: 'found' });
+  });
+
+  it('keeps ambiguity when two final totals disagree', () => {
+    expect(suggestInvoiceFields(['اﻟﻤﺠﻤﻮع اﻟﻜﻠﻲ SAR 619.00', 'اﻟﻤﺠﻤﻮع اﻟﻜﻠﻲ SAR 600.00']).total_amount).toEqual({ value: null, state: 'ambiguous' });
+  });
+});
+
 describe('T7.1 digital PDF extraction', () => {
   it('suggests all four fields from an English digital PDF with exact decimals', async () => {
     const result = await extractInvoiceSuggestions(buildTextPdf(englishInvoice));

@@ -16,7 +16,11 @@ const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 
 export function normalizeLine(line: string): string {
+  // NFKC folds Arabic presentation forms (U+FB50–FDFF, U+FE70–FEFF), which many invoice generators emit instead of base letters,
+  // back to the letters the labels are written in. Diacritics are dropped so labels match with or without tashkeel.
   return line
+    .normalize('NFKC')
+    .replace(/[\u064b-\u065f\u0670]/g, '')
     .replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)))
     .replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)))
     .replace(/٫/g, '.').replace(/٬/g, ',')
@@ -47,7 +51,7 @@ function invoiceNumber(lines: string[]): FieldSuggestion {
   return pick(found);
 }
 
-const DATE_LABEL_STRONG = /(invoice\s*date|issue\s*date|date\s*of\s*issue|تاريخ\s*الفاتورة|تاريخ\s*الإصدار|تاريخ\s*الاصدار)/i;
+const DATE_LABEL_STRONG = /(invoice\s*date|issue\s*date|date\s*of\s*issue|تاريخ\s*الفاتورة|تاريخ\s*(ال)?[إا]صدار)/i;
 const DATE_LABEL_WEAK = /(^|\s)(date|التاريخ)(\s|:|$)/i;
 const DATE_EXCLUDE = /(due|supply|delivery|استحقاق|الاستحقاق|التوريد|التسليم)/i;
 const DATE_TOKEN = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$|^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/;
