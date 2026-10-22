@@ -2,6 +2,8 @@ import { fireEvent, screen, waitFor, within } from './test-utils';
 import { render } from './test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AnnualClosing } from '../components/AnnualClosing';
 
 const openPackageTab=async()=>fireEvent.click(await screen.findByRole('tab',{name:/closing package|حزمة الإقفال/i}));
@@ -228,4 +230,23 @@ describe('Annual Closing Center', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     await waitFor(()=>expect(packageGets()).toBe(2));
   });
+});
+
+describe('Annual Closing next actions (UI-07)', () => {
+  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
+  const load = async (status: string) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ready: status === 'ready', blocker_count: 1, financial_statements_readiness: { status, label: 'x', label_ar: 'x' }, zakat_readiness: { status },
+      domains: { monthly_close: { ready: status === 'ready', blocker_count: 1, status, summary: {} } }, package_manifest: [] }), { status: 200 }));
+    render(<AnnualClosing canView onUnauthorized={vi.fn()} onNavigate={vi.fn()}/>);
+    await screen.findByText('Annual Closing Package manifest');
+  };
+  it.each(['blocked', 'needs_review', 'not_started'])('is a link while %s', async (status) => {
+    await load(status); expect(screen.getByRole('button', { name: 'View monthly close' })).toBeInTheDocument();
+  });
+  it.each(['ready', 'not_applicable'])('is plain text while %s', async (status) => {
+    await load(status); expect(screen.queryByRole('button', { name: 'View monthly close' })).toBeNull(); expect(screen.getByText('View monthly close')).toBeInTheDocument();
+  });
+  it('has no underline styling', () => { expect(readFileSync(resolve(__dirname, '../components/AnnualClosing.css'), 'utf8')).not.toMatch(/\.ac-link\{[^}]*underline/); });
 });

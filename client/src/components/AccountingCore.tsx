@@ -1,3 +1,4 @@
+import { formatMoney } from "../money-format";
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from "../api/apiError";
 import { DeleteRecordAction } from "./DeleteRecordAction";
 import { ReverseJournalAction } from "./ReverseJournalAction";
@@ -1172,7 +1173,7 @@ export function Accounting({
                         <td className="ac-tab__num">{source.accounting_date}</td>
                         <td>{source.source_type}</td>
                         <td className="ac-tab__wide">{source.description}</td>
-                        <td className="ac-tab__num">{source.amount}</td>
+                        <td className="ac-tab__num">{formatMoney(source.amount)}</td>
                         <td className="ac-tab__num">{source.reference ?? "—"}</td>
                         <td>
                           {canCreateJournal && (
@@ -1448,8 +1449,8 @@ export function Accounting({
                       : "unbalanced"
                   }`}
                 >
-                  <div><span>{t("accounting.totalDebit")}</span><strong>{totals.debit.toFixed(2)}</strong></div>
-                  <div><span>{t("accounting.totalCredit")}</span><strong>{totals.credit.toFixed(2)}</strong></div>
+                  <div><span>{t("accounting.totalDebit")}</span><strong>{formatMoney(totals.debit)}</strong></div>
+                  <div><span>{t("accounting.totalCredit")}</span><strong>{formatMoney(totals.credit)}</strong></div>
                   <span className={`ac-tab__pill ${totals.debit === totals.credit && totals.debit > 0 ? "is-balanced" : "is-unbalanced"}`}>
                     {t(
                       totals.debit === totals.credit && totals.debit > 0
@@ -1561,13 +1562,13 @@ export function Accounting({
                       <td className="ac-tab__wide">
                         {r.code} — {accountName(r)}
                       </td>
-                      <td className="ac-tab__num">{r.debit_movement}</td>
-                      <td className="ac-tab__num">{r.credit_movement}</td>
+                      <td className="ac-tab__num">{formatMoney(r.debit_movement)}</td>
+                      <td className="ac-tab__num">{formatMoney(r.credit_movement)}</td>
                       <td className="ac-tab__balance-cell">
                         <span className="ac-tab__balance">
                           {Number(r.debit_balance) > 0
-                            ? <><span>{r.debit_balance}</span> <span className="ac-tab__side">{t("accounting.debit")}</span></>
-                            : <><span>{r.credit_balance}</span> <span className="ac-tab__side">{t("accounting.credit")}</span></>}
+                            ? <><span>{formatMoney(r.debit_balance)}</span> <span className="ac-tab__side">{t("accounting.debit")}</span></>
+                            : <><span>{formatMoney(r.credit_balance)}</span> <span className="ac-tab__side">{t("accounting.credit")}</span></>}
                         </span>
                       </td>
                     </tr>
@@ -1584,12 +1585,12 @@ export function Accounting({
                     <tfoot>
                       <tr className="is-strong">
                         <th scope="row">{t("accounting.statements.total")}</th>
-                        <th className="ac-tab__num">{sumAmounts(trial.map((r) => r.debit_movement))}</th>
-                        <th className="ac-tab__num">{sumAmounts(trial.map((r) => r.credit_movement))}</th>
+                        <th className="ac-tab__num">{formatMoney(sumAmounts(trial.map((r) => r.debit_movement)))}</th>
+                        <th className="ac-tab__num">{formatMoney(sumAmounts(trial.map((r) => r.credit_movement)))}</th>
                         <th className="ac-tab__balance-cell">
                           <span className="ac-tab__balance">
-                            <span>{t("accounting.debit")} {debitBalance}</span>{" "}
-                            <span>{t("accounting.credit")} {creditBalance}</span>{" "}
+                            <span>{t("accounting.debit")} {formatMoney(debitBalance)}</span>{" "}
+                            <span>{t("accounting.credit")} {formatMoney(creditBalance)}</span>{" "}
                             <span className={`ac-tab__pill ${balanced ? "is-balanced" : "is-unbalanced"}`}>
                               {t(balanced ? "accounting.balanced" : "accounting.unbalanced")}
                             </span>
@@ -1658,9 +1659,9 @@ export function Accounting({
                       <td className="ac-tab__num">{r.accounting_date}</td>
                       <td className="ac-tab__num">{r.reference ?? r.journal_id.slice(0, 8)}</td>
                       <td className="ac-tab__wide">{r.description}</td>
-                      <td className="ac-tab__num">{r.debit}</td>
-                      <td className="ac-tab__num">{r.credit}</td>
-                      <td className="ac-tab__num">{r.running_balance}</td>
+                      <td className="ac-tab__num">{formatMoney(r.debit)}</td>
+                      <td className="ac-tab__num">{formatMoney(r.credit)}</td>
+                      <td className="ac-tab__num">{formatMoney(r.running_balance)}</td>
                     </tr>
                   ))}
                   {reportScope.ledger && ledger.length === 0 && (
@@ -1710,30 +1711,30 @@ export function Accounting({
             {split && <tr className="is-section"><th>{t("accounting.account")}</th><th>{t("accounting.statements.preCutover.imported")}</th><th>{t("accounting.statements.preCutover.native")}</th><th>{t("accounting.statements.preCutover.amount")}</th></tr>}
             {statement.sections?.map((section) => <Fragment key={section.category}>
               <tr className="is-section"><th colSpan={split ? 4 : 2}>{t(`accounting.statements.categories.${section.category}`)}</th></tr>
-              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td>{split && <><td>{account.imported_amount}</td><td>{account.native_amount}</td></>}<td>{account.amount}</td></tr>)}
-              {section.pre_cutover_lines?.map((line, index) => <tr key={`pre-${index}`} className="is-detail"><td dir="auto">{t("accounting.statements.preCutover.supplementLine")}: {line.label}</td><td>{line.amount}</td></tr>)}
-              <tr className="is-total"><th>{t("accounting.statements.total")}</th>{split && <><th>{section.imported_total}</th><th>{section.native_total}</th></>}<th>{section.total}</th></tr>
+              {section.accounts.map((account) => <tr key={account.account_id}><td>{account.code} — {accountName(account)}</td>{split && <><td>{formatMoney(account.imported_amount)}</td><td>{formatMoney(account.native_amount)}</td></>}<td>{formatMoney(account.amount)}</td></tr>)}
+              {section.pre_cutover_lines?.map((line, index) => <tr key={`pre-${index}`} className="is-detail"><td dir="auto">{t("accounting.statements.preCutover.supplementLine")}: {line.label}</td><td>{formatMoney(line.amount)}</td></tr>)}
+              <tr className="is-total"><th>{t("accounting.statements.total")}</th>{split && <><th>{formatMoney(section.imported_total)}</th><th>{formatMoney(section.native_total)}</th></>}<th>{formatMoney(section.total)}</th></tr>
             </Fragment>)}
-            {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th>{split && <><th>{split.imported}</th><th>{split.native}</th></>}<th>{statement.profit_or_loss}</th></tr>}
+            {tab === "profitOrLoss" && <tr className="is-strong"><th>{t("accounting.statements.profitOrLoss")}</th>{split && <><th>{formatMoney(split.imported)}</th><th>{formatMoney(split.native)}</th></>}<th>{formatMoney(statement.profit_or_loss)}</th></tr>}
             {tab === "financialPosition" && <>
-              <tr className="is-strong"><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{statement.current_period_earnings}</th></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.currentPeriodEarnings")}</th><th>{formatMoney(statement.current_period_earnings)}</th></tr>
               <tr className="is-strong"><th>{t("accounting.statements.equation")}</th><td><span className={`ac-tab__pill ${statement.accounting_equation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.accounting_equation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></td></tr>
             </>}
             {tab === "changesInEquity" && <>
-              <tr><td>{t("accounting.statements.openingEquity")}</td><td>{statement.opening_equity}</td></tr>
-              <tr><td>{t("accounting.statements.directEquityMovements")}</td><td>{statement.direct_equity_movements}</td></tr>
-              {statement.pre_cutover_equity && Object.entries(statement.pre_cutover_equity.movements_by_type).filter(([, amount]) => amount !== "0.00").map(([type, amount]) => <tr key={`pre-${type}`} className="is-detail"><td>{t("accounting.statements.preCutover.supplementLine")}: {t(`accounting.statements.preCutover.movement.${type}`)}</td><td>{amount}</td></tr>)}
-              {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {accountName(account)}</td><td>{account.amount}</td></tr>)}
-              <tr><td>{t("accounting.statements.currentPeriodEarnings")}</td><td>{statement.current_period_earnings}</td></tr>
-              <tr className="is-strong"><th>{t("accounting.statements.closingEquity")}</th><th>{statement.closing_equity}</th></tr>
-              <tr className="is-strong is-recon"><th>{t("accounting.statements.reconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
+              <tr><td>{t("accounting.statements.openingEquity")}</td><td>{formatMoney(statement.opening_equity)}</td></tr>
+              <tr><td>{t("accounting.statements.directEquityMovements")}</td><td>{formatMoney(statement.direct_equity_movements)}</td></tr>
+              {statement.pre_cutover_equity && Object.entries(statement.pre_cutover_equity.movements_by_type).filter(([, amount]) => amount !== "0.00").map(([type, amount]) => <tr key={`pre-${type}`} className="is-detail"><td>{t("accounting.statements.preCutover.supplementLine")}: {t(`accounting.statements.preCutover.movement.${type}`)}</td><td>{formatMoney(amount)}</td></tr>)}
+              {statement.equity_accounts?.map((account) => <tr key={account.account_id} className="is-detail"><td>{account.code} — {accountName(account)}</td><td>{formatMoney(account.amount)}</td></tr>)}
+              <tr><td>{t("accounting.statements.currentPeriodEarnings")}</td><td>{formatMoney(statement.current_period_earnings)}</td></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.closingEquity")}</th><th>{formatMoney(statement.closing_equity)}</th></tr>
+              <tr className="is-strong is-recon"><th>{t("accounting.statements.reconciliation")}</th><td><span className="ac-tab__recon"><span><bdi dir="ltr">{formatMoney(statement.reconciliation?.expected)} / {formatMoney(statement.reconciliation?.actual)} ({formatMoney(statement.reconciliation?.difference)})</bdi></span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
             </>}
             {tab === "cashFlow" && <>
-              {statement.fx_effect !== undefined && <tr><td>{t("accounting.statements.preCutover.fxEffect")}</td><td>{statement.fx_effect}</td></tr>}
-              <tr><td>{t("accounting.statements.openingCash")}</td><td>{statement.opening_cash_and_cash_equivalents}</td></tr>
-              <tr><td>{t("accounting.statements.netCashChange")}</td><td>{statement.net_change_in_cash_and_cash_equivalents}</td></tr>
-              <tr className="is-strong"><th>{t("accounting.statements.closingCash")}</th><th>{statement.closing_cash_and_cash_equivalents}</th></tr>
-              <tr className="is-strong is-recon"><th>{t("accounting.statements.cashReconciliation")}</th><td><span className="ac-tab__recon"><span>{statement.reconciliation?.expected} / {statement.reconciliation?.actual} ({statement.reconciliation?.difference})</span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
+              {statement.fx_effect !== undefined && <tr><td>{t("accounting.statements.preCutover.fxEffect")}</td><td>{formatMoney(statement.fx_effect)}</td></tr>}
+              <tr><td>{t("accounting.statements.openingCash")}</td><td>{formatMoney(statement.opening_cash_and_cash_equivalents)}</td></tr>
+              <tr><td>{t("accounting.statements.netCashChange")}</td><td>{formatMoney(statement.net_change_in_cash_and_cash_equivalents)}</td></tr>
+              <tr className="is-strong"><th>{t("accounting.statements.closingCash")}</th><th>{formatMoney(statement.closing_cash_and_cash_equivalents)}</th></tr>
+              <tr className="is-strong is-recon"><th>{t("accounting.statements.cashReconciliation")}</th><td><span className="ac-tab__recon"><span><bdi dir="ltr">{formatMoney(statement.reconciliation?.expected)} / {formatMoney(statement.reconciliation?.actual)} ({formatMoney(statement.reconciliation?.difference)})</bdi></span><span className="ac-tab__sr"> — </span><span className={`ac-tab__pill ${statement.reconciliation?.balanced ? "is-balanced" : "is-unbalanced"}`}>{statement.reconciliation?.balanced ? t("accounting.balanced") : t("accounting.unbalanced")}</span></span></td></tr>
             </>}
           </tbody></table></div></section>}
         </div>

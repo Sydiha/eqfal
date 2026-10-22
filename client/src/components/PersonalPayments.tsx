@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import './PersonalPayments.css';
+import { formatMoney } from '../money-format';
 
 // Personal expense payments made on behalf of the company: draft -> submit -> approve/reject -> reimbursement.
 // Presentation only: payer mapping, balanced journals, closed periods, duplicate prevention and permissions are all enforced by the server.
@@ -106,7 +107,7 @@ async function api<T>(url: string, options: RequestInit, onUnauthorized: () => v
   return json as T;
 }
 const send = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-const money = (v: string | undefined) => Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (v: string | undefined) => formatMoney(v ?? '', '0.00');
 const emptyForm = { payer_id: '', treatment: 'new_expense' as Treatment, payment_date: '', amount: '', purpose: '', document_id: '', obligation_id: '', expense_account_id: '' };
 
 export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPaymentsProps) {

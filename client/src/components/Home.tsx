@@ -7,6 +7,7 @@ import "./HomeApproved.css";
 import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
 import { isMonthOnlyPeriodId, MONTH_PERIOD_PREFIX, useDateContext } from "../context/DateContext";
+import { formatMoney } from '../money-format';
 
 // Figma Home KPI and status icons (presentation only).
 const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -112,14 +113,7 @@ type Props = {
 const stripDirectionalMarks = (value: string) =>
   value.replace(/[؜‎‏]/g, "");
 
-const formatFinancialAmount = (value: string) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return value;
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numeric);
-};
+const formatFinancialAmount = (value: string) => formatMoney(value);
 
 export function Home({
   capabilities,

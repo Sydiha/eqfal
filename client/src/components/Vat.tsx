@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { formatMoney } from '../money-format';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
 import { Dialog } from './Dialog';
@@ -83,7 +84,7 @@ export function Vat({canView,canReview,canClose,canReopen,canViewDocuments=false
  // A figure is drillable only when a reviewed document with VAT > 0 actually contributes to it; otherwise it stays plain text.
  const hasOutput=documents.some(d=>contributes(d)&&d.document_type==='sale'),hasInput=documents.some(d=>contributes(d)&&d.document_type!=='sale');
  const drillable={output:hasOutput,input:hasInput,net:hasOutput||hasInput};
- const drillValue=(key:'output'|'input'|'net',value:number)=>drillable[key]?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{value.toFixed(2)}</bdi></button>:<bdi dir="ltr">{value.toFixed(2)}</bdi>;
+ const drillValue=(key:'output'|'input'|'net',value:number)=>drillable[key]?<button type="button" className={`vat-drill${side===key?' is-active':''}`} aria-pressed={side===key} aria-label={`${t(key==='output'?'vat.outputVat':key==='input'?'vat.inputVat':'vat.netVat')}: ${t('vat.drillAction')}`} onClick={drill(key)}><bdi dir="ltr">{formatMoney(value)}</bdi></button>:<bdi dir="ltr">{formatMoney(value)}</bdi>;
  const currency=t('vat.currency');
  return <section className="panel vat-view" aria-labelledby="vat-title">
   <header className="vat-header"><h2 id="vat-title">{t('vat.title')}</h2><p>{t('vat.description')}</p></header>

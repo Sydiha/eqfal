@@ -5,6 +5,7 @@ import { ExportButtons } from './ExportButtons';
 import { useActiveCompanyName } from '../context/CompanyContext';
 import { agingExport, generatedStamp } from '../export/reportExport';
 import './ObligationsAging.css';
+import { formatMoney } from '../money-format';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
 type AgingItem = { obligation_id: string; counterparty_name: string; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
@@ -29,7 +30,7 @@ const labels = {
     buckets: { current: 'Current / not due', days_1_30: '1–30 days', days_31_60: '31–60 days', days_61_90: '61–90 days', days_over_90: '90+ days' } as Record<Bucket, string>,
   },
 };
-const fmt = (value: string) => Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (value: string) => formatMoney(value);
 
 export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => void }) {
   const { i18n } = useTranslation();

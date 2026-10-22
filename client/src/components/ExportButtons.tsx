@@ -6,6 +6,7 @@ import { loadReportBranding, type ReportBranding } from '../export/branding';
 import { useOptionalCompany } from '../context/CompanyContext';
 import { EqfalBrandMark } from './EqfalBrand';
 import '../export/export.css';
+import { formatMoney } from '../money-format';
 
 interface Props {
   language: string;
@@ -14,7 +15,7 @@ interface Props {
   landscape?: boolean;
 }
 
-const money = (v: string) => { const x = Number(v); return Number.isFinite(x) ? x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v; };
+const money = (v: string) => formatMoney(v, '0.00');
 const show = (c: ExportCell) => (c === null ? '' : typeof c === 'object' ? (c.int ? c.num : money(c.num)) : c);
 
 /** Print-only report: a compact table generated from the same rows as the exports. Hidden on screen. */

@@ -31,8 +31,17 @@
 .mc-view .mc-periods__filter label{display:flex;align-items:center;gap:12px;color:var(--mc-muted);font-size:11px}
 .mc-view .mc-periods__filter select{width:184px;min-height:0;height:30px;margin:0;padding:0 10px;border:1px solid var(--mc-border);border-radius:6px;background-color:#fff;color:var(--mc-ink);font-size:11px;font-weight:400}
 .mc-view .mc-periods__filter label span{order:-1}
-.mc-view .mc-period-list{display:flex;gap:8px;overflow-x:auto}
-.mc-view .mc-period{display:flex;flex:1 0 0;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:5px;min-width:130px;min-height:0;height:auto;margin:0;padding:10px;border:1px solid var(--mc-border);border-radius:6px;background:#fff;color:var(--mc-ink);font-weight:400;text-align:start}
+.mc-view .mc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.mc-view .mc-grid>li{display:flex;min-width:0}
+.mc-view .mc-state{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;line-height:1.5;background:#f1f5f9;color:var(--mc-muted)}
+.mc-view .mc-state--closed{background:#e2e8f0;color:#475569}
+.mc-view .mc-state--blocked{background:#fef3c7;color:#b45309}
+.mc-view .mc-state--open{background:#d1fae5;color:var(--mc-green)}
+.mc-view .mc-state--historical{background:#f1f5f9;color:var(--mc-muted);border:1px dashed var(--mc-border)}
+.mc-view .mc-period__selected{display:inline-flex;align-items:center;gap:3px;color:var(--mc-primary);font-weight:600}
+.mc-view .mc-historical-note{margin:8px 0 0;color:var(--mc-muted);font-size:11px}
+.mc-view .mc-period:focus-visible{outline:2px solid var(--mc-primary);outline-offset:2px}
+.mc-view .mc-period{display:flex;flex:1 1 auto;width:100%;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:5px;min-width:0;min-height:0;height:auto;margin:0;padding:10px;border:1px solid var(--mc-border);border-radius:6px;background:#fff;color:var(--mc-ink);font-weight:400;text-align:start}
 .mc-view .mc-period:hover{background:var(--mc-soft);border-color:#cbd5e1}
 .mc-view .mc-period.is-selected{border-color:var(--mc-primary);background:rgba(0,184,148,.1)}
 .mc-view .mc-period__top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5}

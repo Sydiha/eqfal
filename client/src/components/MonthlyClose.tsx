@@ -12,7 +12,7 @@ import { generatedStamp, monthlyCloseExport } from '../export/reportExport';
 import './MonthlyClose.css';
 
 type Blockers={documents:number;obligations:number;bank_transactions:number;vat:number;ledger:number;assets:number;opening_balances:number;periodic_adjustments:number;bank_reconciliation:number};
-type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;blockers:Partial<Blockers>;disclosed_total:number;has_hidden_blockers:boolean};
+type Period={id:string;fiscal_year_id:string;period_start:string;period_end:string;status:'open'|'closed';ready:boolean;external_period?:boolean;blockers:Partial<Blockers>;disclosed_total:number;has_hidden_blockers:boolean};
 type FiscalYear={id:string;name:string;start_date:string;end_date:string};
 type DestinationPage='documents'|'banks'|'obligations'|'vat'|'accounting'|'assets'|'openingBalances'|'periodicAdjustments';
 interface Props{canView:boolean;canViewFiscalYears:boolean;canCreate:boolean;canClose:boolean;canReopen:boolean;viewCapabilities:{documents:boolean;obligations:boolean;bank:boolean;vat:boolean;accounting:boolean;assets:boolean;openingBalances:boolean;periodicAdjustments:boolean};onNavigate?:(page:DestinationPage,parameters:Record<string,string>)=>void;onUnauthorized:()=>void;selectedPeriodId?:string|null}
@@ -30,6 +30,15 @@ const IcPercent=()=><Ic><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/
 const IcDatabase=()=><Ic><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/></Ic>;
 const IcKey=()=><Ic><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></Ic>;
 const IcCalendar=()=><Ic><path d="M8 2v4M16 2v4M3 10h18"/><rect width="18" height="18" x="3" y="4" rx="2"/></Ic>;
+const IcCheck=()=><Ic size={12}><path d="M20 6 9 17l-5-5"/></Ic>;
+const IcAlert=()=><Ic size={12}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></Ic>;
+const IcArchive=()=><Ic size={12}><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></Ic>;
+const IcCircle=()=><Ic size={12}><circle cx="12" cy="12" r="9"/></Ic>;
+const IcLockSmall=()=><Ic size={12}><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></Ic>;
+// Pre-cutover months are maintained externally; the server flags them and keeps their real status and restrictions.
+type GridState='historical'|'closed'|'blocked'|'open';
+const gridState=(period:Period):GridState=>period.external_period?'historical':period.status==='closed'?'closed':period.ready?'open':'blocked';
+const gridIcon={historical:<IcArchive/>,closed:<IcLockSmall/>,blocked:<IcAlert/>,open:<IcCircle/>};
 const IcBook=()=><Ic><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></Ic>;
 
 export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canReopen,viewCapabilities,onNavigate=()=>undefined,onUnauthorized,selectedPeriodId: _unused}:Props){
@@ -68,8 +77,9 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
   {key:'periodicAdjustments',allowed:viewCapabilities.periodicAdjustments,label:t('monthlyClose.periodicAdjustments'),count:selected.blockers.periodic_adjustments,icon:<IcCalendar/>,go:()=>drill('periodicAdjustments',{adjustmentFrom:selected.period_start,adjustmentTo:selected.period_end})},
   {key:'ledger',allowed:viewCapabilities.accounting,label:`${t('accounting.title')} / ${t('accounting.tabs.ledger')}`,count:selected.blockers.ledger,icon:<IcBook/>,go:()=>drill('accounting',{accountingTab:'sources',sourceFrom:selected.period_start,sourceTo:selected.period_end})},
  ].filter(domain=>domain.allowed&&domain.count!==undefined):[];
+ const selectedHistorical=!!selected?.external_period;
  const arabic=i18n.language.startsWith('ar');
- const exportDoc=selected&&!loading&&!error?monthlyCloseExport({ar:arabic,company,generatedAt:generatedStamp(),fiscalYear:years.find(y=>y.id===selected.fiscal_year_id)?.name??'—',periodStart:selected.period_start.slice(0,10),periodEnd:selected.period_end.slice(0,10),statusLabel:t(`monthlyClose.${selected.status}`),readinessLabel:selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady'),hiddenBlockers:selected.has_hidden_blockers,domains:domains.map(d=>({label:d.label,count:d.count as number})),labels:{domain:t('monthlyClose.colDomain'),status:t('monthlyClose.colStatus'),count:t('monthlyClose.colCount'),needsAction:t('monthlyClose.needsAction'),clear:t('monthlyClose.noBlockers'),total:arabic?'الإجمالي':'Total',hidden:t('monthlyClose.blockedHidden'),empty:arabic?'لا توجد مجالات متاحة للعرض':'No close areas available to view',title:t('monthlyClose.title'),fiscalYear:t('monthlyClose.fiscalYear'),period:arabic?'الفترة':'Period',periodStatus:t('monthlyClose.colStatus'),readiness:t('monthlyClose.readinessTitle')}}):null;
+ const exportDoc=selected&&!loading&&!error?monthlyCloseExport({ar:arabic,company,generatedAt:generatedStamp(),fiscalYear:years.find(y=>y.id===selected.fiscal_year_id)?.name??'—',periodStart:selected.period_start.slice(0,10),periodEnd:selected.period_end.slice(0,10),statusLabel:t(`monthlyClose.${selected.status}`),readinessLabel:selectedHistorical?t('monthlyClose.gridState.historical'):selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady'),hiddenBlockers:selected.has_hidden_blockers,domains:domains.map(d=>({label:d.label,count:d.count as number})),labels:{domain:t('monthlyClose.colDomain'),status:t('monthlyClose.colStatus'),count:t('monthlyClose.colCount'),needsAction:t('monthlyClose.needsAction'),clear:t('monthlyClose.noBlockers'),total:arabic?'الإجمالي':'Total',hidden:t('monthlyClose.blockedHidden'),empty:arabic?'لا توجد مجالات متاحة للعرض':'No close areas available to view',title:t('monthlyClose.title'),fiscalYear:t('monthlyClose.fiscalYear'),period:arabic?'الفترة':'Period',periodStatus:t('monthlyClose.colStatus'),readiness:t('monthlyClose.readinessTitle')}}):null;
  const clearDomains=domains.filter(domain=>domain.count===0).length,actionDomains=domains.length-clearDomains;
  const showClose=!!selected&&canClose&&selected.status==='open',showReopen=!!selected&&canReopen&&selected.status==='closed';
  return <section className="panel mc-view" aria-labelledby="monthly-close-title">
@@ -81,16 +91,17 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
      <div className="mc-periods__filter"><h3>{t('monthlyClose.periods')}</h3>{canViewFiscalYears&&<label><span>{t('monthlyClose.fiscalYear')}</span><select value={yearFilter} onChange={e=>selectYear(e.target.value)}><option value="">{t('monthlyClose.allYears')}</option>{years.map(year=><option key={year.id} value={year.id}>{year.name}</option>)}</select></label>}</div>
      {canCreate&&<button className="mc-primary" onClick={()=>setCreating(true)}><IcPlus/>{t('monthlyClose.create')}</button>}
     </div>
-    {periods.length===0?<p className="mc-empty">{t('monthlyClose.empty')}</p>:<div className="mc-period-list" aria-label={t('monthlyClose.selectPeriod')}>{availablePeriods.map(period=>{const isSelected=selectedId===period.id;return <button key={period.id} type="button" className={`mc-period${isSelected?' is-selected':''}`} aria-pressed={isSelected} onClick={()=>selectPeriod(period.id)}><span className="mc-period__top">{isSelected?<span className="mc-badge mc-badge--neutral">{t(`monthlyClose.${period.status}`)}</span>:<span className="mc-period__dash" aria-hidden="true">—</span>}<span className="mc-period__month">{monthLabel(period.period_start)}</span></span><span className="mc-period__dates">{rangeLabel(period)}</span></button>})}</div>}
+    {periods.length===0?<p className="mc-empty">{t('monthlyClose.empty')}</p>:<ul className="mc-grid" aria-label={t('monthlyClose.selectPeriod')}>{availablePeriods.map(period=>{const isSelected=selectedId===period.id,state=gridState(period);return <li key={period.id}><button type="button" className={`mc-period mc-period--${state}${isSelected?' is-selected':''}`} aria-pressed={isSelected} onClick={()=>selectPeriod(period.id)}><span className="mc-period__top"><span className="mc-period__month">{monthLabel(period.period_start)}</span>{isSelected&&<span className="mc-period__selected"><IcCheck/>{t('monthlyClose.selectedMonth')}</span>}</span><span className="mc-period__dates">{rangeLabel(period)}</span><span className={`mc-state mc-state--${state}`}>{gridIcon[state]}<span>{t(`monthlyClose.gridState.${state}`)}</span></span></button></li>})}</ul>}
    </section>
    {selected&&<>
     <section className={`mc-card mc-summary ${selected.status}`} aria-label={monthLabel(selected.period_start)}>
      <div className="mc-summary__head">
       <div className="mc-summary__identity"><h3>{monthLabel(selected.period_start)}</h3><span className={`mc-badge mc-badge--${selected.status==='open'?'neutral':'closed'}`}>{t(`monthlyClose.${selected.status}`)}</span><span className="mc-summary__dates">{rangeLabel(selected)}</span></div>
-      <span className={`mc-badge ${selected.ready?'mc-badge--ok':'mc-badge--warn'}`}>{selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady')}</span>
+      <span className={`mc-badge ${selectedHistorical?'mc-badge--neutral':selected.ready?'mc-badge--ok':'mc-badge--warn'}`}>{selectedHistorical?t('monthlyClose.gridState.historical'):selected.ready?t('monthlyClose.ready'):t('monthlyClose.notReady')}</span>
      </div>
+     {selectedHistorical&&<p className="mc-historical-note" role="note">{t('monthlyClose.historicalNote')}</p>}
      <ExportButtons language={i18n.language} document={exportDoc} landscape={false}/>
-     {!selected.ready&&<div className="mc-summary__metrics">
+     {!selected.ready&&!selectedHistorical&&<div className="mc-summary__metrics">
       <div className="mc-metric mc-metric--blockers"><strong>{selected.has_hidden_blockers?t('monthlyClose.blockedHidden'):t('monthlyClose.blocked',{count:selected.disclosed_total})}</strong>{!selected.has_hidden_blockers&&<span>{t('monthlyClose.domainsNeedAction',{count:actionDomains})}</span>}</div>
       {!selected.has_hidden_blockers&&<div className="mc-metric mc-metric--clear"><strong>{t('monthlyClose.domainsClear',{clear:clearDomains,total:domains.length})}</strong><span>{t('monthlyClose.domainsClearNote')}</span></div>}
       <div className="mc-metric mc-metric--next"><span>{t('monthlyClose.nextStep')}</span><strong>{t('monthlyClose.nextStepText')}</strong></div>
@@ -108,7 +119,7 @@ export function MonthlyClose({canView,canViewFiscalYears,canCreate,canClose,canR
        </tr>})}</tbody></table></div>
      </>}
      {(showClose||showReopen)&&<div className="mc-readiness__foot">
-      {showClose&&!selected.ready&&<div className="mc-readiness__reason"><span>{selected.has_hidden_blockers?t('monthlyClose.closeUnavailableGeneric'):t('monthlyClose.closeUnavailable',{count:selected.disclosed_total})}</span><span>{t('monthlyClose.openNotClosed')}</span></div>}
+      {showClose&&!selected.ready&&!selectedHistorical&&<div className="mc-readiness__reason"><span>{selected.has_hidden_blockers?t('monthlyClose.closeUnavailableGeneric'):t('monthlyClose.closeUnavailable',{count:selected.disclosed_total})}</span><span>{t('monthlyClose.openNotClosed')}</span></div>}
       {showClose&&<button className={selected.ready?'mc-dark':'mc-disabled'} disabled={!selected.ready||saving} onClick={()=>void close(selected)}>{t('monthlyClose.close')}<IcLock/></button>}
       {showReopen&&<button className="mc-ghost" disabled={saving} onClick={()=>setReopen(selected)}>{t('monthlyClose.reopen')}</button>}
      </div>}

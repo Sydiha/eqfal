@@ -118,3 +118,12 @@
 .source-authority .sa-totals>div{display:flex;flex-direction:column;min-width:96px}
 .source-authority .sa-totals dt{font-size:11px;color:#64748b}
 .source-authority .sa-totals dd{margin:0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+/* UI-10: amounts and descriptions are never clipped; the wrapper shows edge shadows where more columns are off-screen. */
+.source-authority .sa-lines{background:linear-gradient(to right,#fff 30%,rgba(255,255,255,0)) left center/40px 100% no-repeat local,linear-gradient(to left,#fff 30%,rgba(255,255,255,0)) right center/40px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(15,23,42,.22),rgba(15,23,42,0)) left center/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(15,23,42,.22),rgba(15,23,42,0)) right center/12px 100% no-repeat scroll,#fff}
+.source-authority .sa-lines input[inputmode=decimal]{min-width:150px;text-overflow:clip}
+.source-authority .sa-lines td select[aria-label]{min-width:100%;text-overflow:clip}
+.source-authority .sa-lines td input[aria-label]:not([inputmode=decimal]){min-width:200px}
+.source-authority .sa-lines tbody tr:nth-child(even) td{background:#f4f8fa}
+.source-authority .sa-scroll-hint{margin:6px 0 0;color:var(--sa-muted);font-size:11.5px}
+.source-authority .sa-totals dd{white-space:nowrap}
+@media(min-width:900px){.source-authority .sa-scroll-hint{display:none}}
