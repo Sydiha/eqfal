@@ -168,19 +168,24 @@ export class FinancialStatementsService{
    * must equal the financial position's equity exactly.
    */
   private fullYearEquity(fiscalYearId:string,period:Awaited<ReturnType<FinancialStatementsService['movements']>>,periodAccounts:StatementAccount[],equityAccounts:StatementAccount[],closingAccounts:StatementAccount[],lines:SupplementLine[]){
-    const exact=(value:number)=>cents(value.toFixed(2));
     const openings=lines.filter(line=>line.line_type==='equity_opening'),movements=lines.filter(line=>line.line_type==='equity_movement');
     const openingEquity=openings.reduce((sum,line)=>sum+cents(line.opening_amount!),0n);
     const supplementMovements=movements.reduce((sum,line)=>sum+cents(line.amount!),0n);
     const nativeMovements=equityAccounts.reduce((sum,account)=>sum+cents(account.amount),0n);
-    const earnings=exact(this.earnings(periodAccounts));
+    const earnings=this.earningsExact(periodAccounts);
     const closingEquity=openingEquity+supplementMovements+nativeMovements+earnings;
-    const financialPositionEquity=exact(this.equityWithEarnings(closingAccounts));
+    const financialPositionEquity=closingAccounts.filter(account=>account.statement_category==='equity').reduce((sum,account)=>sum+cents(account.amount),0n)+this.earningsExact(closingAccounts);
     const difference=closingEquity-financialPositionEquity;
     const byType=(type:string)=>exactMoney(movements.filter(line=>line.movement_type===type).reduce((sum,line)=>sum+cents(line.amount!),0n));
+    const balanced=difference===0n;
+    const disclosure=preCutover(period.disclosure,'changes_in_equity',true);
+    // An unbalanced reconciliation is never presented as a complete full-year statement; the figures and the difference stay visible.
+    const flagged=balanced||!disclosure.pre_cutover?disclosure:{pre_cutover:{...disclosure.pre_cutover,
+      completeness:{...disclosure.pre_cutover.completeness,full_year_complete:false,status:'unverified' as const,reasons:[...disclosure.pre_cutover.completeness.reasons,'EQUITY_RECONCILIATION_UNBALANCED']},
+      full_year_complete:{...disclosure.pre_cutover.full_year_complete,changes_in_equity:false}}};
     return{
       fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
-      ...preCutover(period.disclosure,'changes_in_equity',true),
+      ...flagged,
       statement:'changes_in_equity',opening_equity:exactMoney(openingEquity),
       direct_equity_movements:exactMoney(supplementMovements+nativeMovements),equity_accounts:equityAccounts,
       current_period_earnings:exactMoney(earnings),closing_equity:exactMoney(closingEquity),
@@ -190,12 +195,17 @@ export class FinancialStatementsService{
         accounts:openings.map(line=>({account_id:line.account_id!,opening_amount:line.opening_amount!,movements:movements.filter(m=>m.account_id===line.account_id).map(m=>({movement_type:m.movement_type!,label:m.label!,amount:m.amount!}))})),
         source:'pre_cutover_supplement' as const,
       },
-      reconciliation:{expected:exactMoney(closingEquity),actual:exactMoney(financialPositionEquity),difference:exactMoney(difference),balanced:difference===0n},
+      reconciliation:{expected:exactMoney(closingEquity),actual:exactMoney(financialPositionEquity),difference:exactMoney(difference),balanced},
     };
   }
 
   private earnings(accounts:StatementAccount[]){
     return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+  }
+
+  /** Exact halalas, summed per account (never through the float section totals). */
+  private earningsExact(accounts:StatementAccount[]){
+    return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+section.accounts.reduce((inner,account)=>inner+cents(account.amount),0n)*(section.category.includes('expense')||section.category==='cost_of_sales'?-1n:1n),0n);
   }
 
   private equityWithEarnings(accounts:StatementAccount[]){

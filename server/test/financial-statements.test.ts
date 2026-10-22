@@ -104,3 +104,32 @@ describe('Phase 5C statement of changes in equity',()=>{
     await expect(new FinancialStatementsService(db as never).changesInEquity('company','year','2026-02-01','2026-02-28')).rejects.toBeInstanceOf(FinancialStatementUnmappedError);
   });
 });
+
+describe('S2 full-year changes in equity precision',()=>{
+  const acct=(statement_category:string,amount:string,id='a')=>({account_id:id,code:id,name:id,account_type:'x',statement_category,is_contra:false,amount}) as never;
+  const disclosure={cutover_from:'2026-01-01',cutover_date:'2026-06-30',completeness:{changes_in_equity:{availability:'ledger_calculated',full_year_complete:true,status:'reconciled',reasons:[]}}} as never;
+  const run=(openingCents:string,closingEquity:string,closingRevenues:string[])=>{
+    const lines=[{line_type:'equity_opening',account_id:'e',opening_amount:openingCents}] as never;
+    const period={start_date:'2026-01-01',end_date:'2026-12-31',cutover_date:'2026-06-30',disclosure} as never;
+    const closing=[acct('equity',closingEquity,'e'),...closingRevenues.map((r,i)=>acct('revenue',r,`r${i}`))];
+    return (new FinancialStatementsService({} as never) as never as {fullYearEquity:(...a:unknown[])=>Record<string,any>}).fullYearEquity('fy',period,closingRevenues.map((r,i)=>acct('revenue',r,`r${i}`)),[],closing,lines);
+  };
+  it('reconciles exactly and stays complete',()=>{
+    const r=run('100.00','100.00',['50.00']);
+    expect(r.reconciliation).toEqual({expected:'150.00',actual:'150.00',difference:'0.00',balanced:true});
+    expect(r.pre_cutover.completeness.full_year_complete).toBe(true);
+  });
+  it('sums fractional profit exactly (0.10 x 3 + 0.20 = 0.50)',()=>{
+    const r=run('0.00','0.00',['0.10','0.10','0.10','0.20']);
+    expect(r.current_period_earnings).toBe('0.50');
+    expect(r.reconciliation).toMatchObject({difference:'0.00',balanced:true});
+  });
+  it('flags a one-halalah difference as not complete but keeps diagnostics',()=>{
+    const r=run('100.00','100.01',['50.00']);
+    expect(r.reconciliation).toEqual({expected:'150.00',actual:'150.01',difference:'-0.01',balanced:false});
+    expect(r.closing_equity).toBe('150.00');
+    expect(r.pre_cutover.completeness).toMatchObject({full_year_complete:false,status:'unverified'});
+    expect(r.pre_cutover.completeness.reasons).toContain('EQUITY_RECONCILIATION_UNBALANCED');
+    expect(r.pre_cutover.full_year_complete.changes_in_equity).toBe(false);
+  });
+});
