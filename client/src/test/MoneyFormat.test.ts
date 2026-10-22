@@ -44,3 +44,24 @@ describe('formatMoney never silently rounds or reinterprets (review fixes)', () 
     expect(subtractMoney('1.00', '-0.50')).toBe('1.50');
   });
 });
+
+describe('formatMoney numeric inputs keep representable precision', () => {
+  it('does not round numbers with 3+ decimals', () => {
+    expect(formatMoney(0.125)).toBe('0.125');
+    expect(formatMoney(1.005)).toBe('1.005');
+    expect(formatMoney(1234.56789)).toBe('1,234.56789');
+    expect(formatMoney(2.5)).toBe('2.50');
+  });
+  it('handles negatives and tiny values without exponent notation or negative zero', () => {
+    expect(formatMoney(-1500.125)).toBe('-1,500.125');
+    expect(formatMoney(-0.001)).toBe('-0.001');
+    expect(formatMoney(1e-7)).toBe('0.0000001');
+    expect(formatMoney(-0)).toBe('0.00');
+  });
+  it('formats large safe values and refuses to pretend unsafe numbers are exact', () => {
+    expect(formatMoney(9007199254740991)).toBe('9,007,199,254,740,991.00');
+    expect(formatMoney(1e21)).toBe('1e+21');
+    expect(formatMoney(Number.NaN)).toBe('NaN');
+    expect(formatMoney(Infinity)).toBe('Infinity');
+  });
+});
