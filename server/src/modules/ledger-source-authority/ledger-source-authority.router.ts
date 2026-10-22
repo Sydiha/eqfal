@@ -5,7 +5,7 @@ import { LedgerSourceAuthorityError, LedgerSourceAuthorityNotFoundError, LedgerS
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { decodeUploadFilename, detectUploadFormat, readRawSheet } from '../banking/bank.router';
-import { parseTrialBalanceTable, TbMapping, TB_MAX_LINES } from '../accounting/cutover-file-import';
+import { parseTrialBalanceTable, parseTbMapping, TB_MAX_LINES } from '../accounting/cutover-file-import';
 import { CutoverSupplementService, parseSupplementInput } from '../accounting/cutover-supplements';
 
 // C1B-2: read plus DRAFT create/void. A draft has no accounting effect.
@@ -84,17 +84,6 @@ ledgerSourceAuthorityRouter.post('/ledger-source-authority/:id/activate', requir
 
 // I1: read-only trial balance file parser for the cut-over form. Writes nothing; the result only fills the form, which still goes through preview/activate.
 const tbUpload = express.raw({ type: () => true, limit: 2 * 1024 * 1024 });
-const parseTbMapping = (v: unknown): TbMapping | null | undefined => {
-  if (v === undefined) return undefined;
-  try {
-    const x = JSON.parse(decodeURIComponent(String(v))) as Record<string, unknown>;
-    const keys = ['header_row', 'code', 'name', 'debit', 'credit', 'balance', 'currency'];
-    if (!x || typeof x !== 'object' || Array.isArray(x) || Object.keys(x).some((k) => !keys.includes(k))) return null;
-    for (const k of keys) if (x[k] !== undefined && !(Number.isInteger(x[k]) && (x[k] as number) >= (k === 'header_row' ? 1 : 0) && (x[k] as number) <= 1000)) return null;
-    if (x['header_row'] === undefined || x['code'] === undefined) return null;
-    return x as unknown as TbMapping;
-  } catch { return null; }
-};
 
 ledgerSourceAuthorityRouter.post('/ledger-source-authority/:id/cutover/parse-file', requireSameOrigin, requireAuth, requireActiveCompany, requireCapability(ACTIVATE), tbUpload, route(async (req, res) => {
   if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }

@@ -23,6 +23,8 @@ const ALIASES: Record<'code' | 'name' | 'debit' | 'credit' | 'balance' | 'curren
 const TOTAL_ROW = /^(total|totals|grand\s*total|الإجمالي|اجمالي|الاجمالي|المجموع|إجمالي)/i;
 const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
+// Account codes compare with Arabic-Indic digits folded to ASCII on both sides (file and chart), still as an exact string match.
+const codeKey = (v: string): string => v.trim().replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
 const text = (v: RawCell | undefined): string => (v === null || v === undefined ? '' : String(v).trim());
 const isBlank = (r: RawRow) => r.cells.every((c) => text(c) === '');
 const fmt = (c: bigint) => { const neg = c < 0n; const a = neg ? -c : c; return `${neg ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}`; };
@@ -83,7 +85,7 @@ export function parseTrialBalanceTable(
     return { status: 'needs_mapping', headers: rows.find((r) => r.sourceRowNumber === m.header_row)?.cells.map(text) ?? [], header_row: m.header_row, issues: [{ code: 'TB_COLUMNS_AMBIGUOUS' }] };
   }
   const byCode = new Map<string, TbAccount[]>();
-  for (const a of accounts) { const k = a.code.trim(); byCode.set(k, [...(byCode.get(k) ?? []), a]); }
+  for (const a of accounts) { const k = codeKey(a.code); byCode.set(k, [...(byCode.get(k) ?? []), a]); }
 
   const lines: TbLine[] = [];
   const data = rows.filter((r) => r.sourceRowNumber > m.header_row && !isBlank(r));
@@ -102,7 +104,7 @@ export function parseTrialBalanceTable(
     const bad = cols.some((c) => formulaCells.has(`${row}:${c}`));
     if (bad) { errors.push({ code: 'TB_FORMULA_NOT_ALLOWED', row }); continue; }
     const rawCode = r.cells[m.code];
-    const code = typeof rawCode === 'number' ? String(rawCode) : text(rawCode);
+    const code = codeKey(typeof rawCode === 'number' ? String(rawCode) : text(rawCode));
     const label = text(m.name !== undefined ? r.cells[m.name] : null);
     const anyAmount = [m.debit, m.credit, m.balance].some((c) => c !== undefined && text(r.cells[c]) !== '');
     if (!code) {
@@ -147,3 +149,16 @@ export function parseTrialBalanceTable(
   if (m.currency === undefined) warnings.push({ code: 'TB_CURRENCY_ASSUMED_FUNCTIONAL' });
   return { status: 'parsed', mapping: m, lines, total_debit: fmt(dr), total_credit: fmt(cr), balanced, errors, warnings };
 }
+
+/** Explicit column mapping sent by the client in the `x-tb-mapping` header: undefined = auto-detect, null = invalid. */
+export const parseTbMapping = (v: unknown): TbMapping | null | undefined => {
+  if (v === undefined) return undefined;
+  try {
+    const x = JSON.parse(decodeURIComponent(String(v))) as Record<string, unknown>;
+    const keys = ['header_row', 'code', 'name', 'debit', 'credit', 'balance', 'currency'];
+    if (!x || typeof x !== 'object' || Array.isArray(x) || Object.keys(x).some((k) => !keys.includes(k))) return null;
+    for (const k of keys) if (x[k] !== undefined && !(Number.isInteger(x[k]) && (x[k] as number) >= (k === 'header_row' ? 1 : 0) && (x[k] as number) <= 1000)) return null;
+    if (x['header_row'] === undefined || x['code'] === undefined) return null;
+    return x as unknown as TbMapping;
+  } catch { return null; }
+};
