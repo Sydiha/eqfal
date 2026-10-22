@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,12 +64,24 @@ describe('CutoverSupplements', () => {
 
   it('CSS: wide columns so labels are not clipped, strong select/option contrast, visible selected option and focus ring', () => {
     const css = readFileSync(resolve(__dirname, '../components/SourceAuthority.css'), 'utf8');
-    expect(css).toMatch(/\.sa-lines table\{min-width:1370px/);
-    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(1\)\{min-width:220px\}/);
-    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(2\)\{min-width:190px\}/);
+    expect(css).toMatch(/\.sa-lines table\{min-width:1180px/);
+    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(1\)\{min-width:190px\}/);
+    expect(css).toMatch(/\.sa-lines :is\(th,td\):nth-child\(2\)\{min-width:180px\}/);
     expect(css).toMatch(/\.sa-lines select,\.source-authority \.sa-lines input:not\(\[type=checkbox\]\)\{height:40px/);
     expect(css).toMatch(/\.sa-lines option\{[^}]*background:#fff;color:#0f172a/);
     expect(css).toMatch(/\.sa-lines option:checked\{background:#c8f0e3;color:#064e3b;font-weight:700\}/);
     expect(css).toMatch(/\.sa-lines select:focus-visible,[^{]*\{outline:2px solid var\(--sa-primary\)/);
+  });
+
+  it('UI-13: remove-row action is in the last column, labelled, and pinned at the inline end by CSS (works in RTL)', async () => {
+    const call = vi.fn(async (url: string) => (url.endsWith('/supplements') ? { versions: [] } : { accounts: [] }));
+    render(<CutoverSupplements rangeId="r-1" call={call} tx={tx} canManage canApprove={false} />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Enter data' }))[0]!);
+    const form = await screen.findByRole('form');
+    const cells = form.querySelectorAll('.sa-lines tbody tr:first-child td');
+    expect(within(cells[cells.length - 1] as HTMLElement).getByRole('button', { name: 'Remove line' })).toBeTruthy();
+    const css = readFileSync(resolve(__dirname, '../components/SourceAuthority.css'), 'utf8');
+    expect(css).toMatch(/\.sa-lines :is\(th,td\):last-child\{position:sticky;inset-inline-end:0/);
+    expect(css).toMatch(/\.sa-lines input\[inputmode=decimal\]\{min-width:124px;text-overflow:clip\}/);
   });
 });
