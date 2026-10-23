@@ -8,7 +8,7 @@ type Issue = { code: string; row?: number; detail?: string };
 type Parsed = { status: 'parsed'; mapping: Mapping; lines: Line[]; total_debit: string; total_credit: string; balanced: boolean; errors: Issue[]; warnings: Issue[]; functional_currency: string | null };
 type NeedsMapping = { status: 'needs_mapping'; headers: string[]; header_row: number; issues: Issue[] };
 
-const TB_MESSAGES: Record<string, { ar: string; en: string }> = {
+export const TB_MESSAGES: Record<string, { ar: string; en: string }> = {
   TB_FILE_INVALID: { ar: 'الملف غير صالح أو غير آمن أو يتجاوز الحد المسموح (CSV أو XLSX حتى 2 ميغابايت).', en: 'The file is invalid, unsafe or too large (CSV or XLSX up to 2 MB).' },
   AUTHORITY_NOT_DRAFT: { ar: 'هذا الإعداد ليس مسودة.', en: 'This configuration is not a draft.' },
   FORBIDDEN: { ar: 'لا تملك صلاحية تفعيل القطع.', en: 'You do not have permission to activate a cutover.' },
@@ -35,7 +35,7 @@ const TB_MESSAGES: Record<string, { ar: string; en: string }> = {
   TB_TOTAL_ROW_MISMATCH: { ar: 'سطر إجماليات لا يطابق السطور المستوردة؛ قد يكون حساب فعلي أُسقط. أصلح الملف.', en: 'A totals row does not match the imported lines; a real account may have been dropped. Fix the file.' },
   TB_AMOUNT_MISSING: { ar: 'سطر بحساب لكن بلا أي مبلغ (اكتب 0 صراحةً إن كان الرصيد صفراً).', en: 'A row has an account but no amount (write 0 explicitly if the balance is zero).' },
 };
-const ROLES: Array<[keyof Omit<Mapping, 'header_row'>, string, string]> = [
+export const ROLES: Array<[keyof Omit<Mapping, 'header_row'>, string, string]> = [
   ['code', 'رمز الحساب', 'Account code'], ['name', 'اسم الحساب (اختياري)', 'Account name (optional)'], ['debit', 'مدين', 'Debit'],
   ['credit', 'دائن', 'Credit'], ['balance', 'رصيد موقّع (موجب = مدين، سالب = دائن)', 'Signed balance (positive = debit, negative = credit)'], ['currency', 'العملة (اختياري)', 'Currency (optional)'],
 ];

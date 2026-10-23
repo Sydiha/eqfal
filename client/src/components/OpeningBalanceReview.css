@@ -82,3 +82,9 @@
  .opening-balance-view .ob-form .form-grid{grid-template-columns:1fr}
  .opening-balance-view .ob-form .form-grid>button{justify-self:stretch}
 }
+
+/* T7.2 file import */
+.opening-balance-view .ob-import { display: grid; gap: 12px; }
+.opening-balance-view .ob-import__error { color: var(--danger, #b42318); }
+.opening-balance-view .ob-import__totals { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; }
+.opening-balance-view .ob-import__totals dd { margin: 0; font-weight: 600; }
