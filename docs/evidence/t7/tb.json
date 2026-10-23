@@ -1,0 +1,43 @@
+{
+ "fiscal_year_id": "43c7328b-3810-48f2-9456-dfed73ed4901",
+ "start_date": "2026-01-01",
+ "end_date": "2026-12-31",
+ "accounts": [
+  {
+   "account_id": "22330250-a2cf-4f25-933b-edaf8e40e68c",
+   "code": "1101",
+   "name": "Bank",
+   "name_ar": "Bank",
+   "name_en": "Bank",
+   "account_type": "asset",
+   "debit_movement": "150000.50",
+   "credit_movement": "0.00",
+   "debit_balance": "150000.50",
+   "credit_balance": "0"
+  },
+  {
+   "account_id": "a7b36b4d-dcb8-4245-aee2-d3f5f4fcd3d5",
+   "code": "2101",
+   "name": "Payables",
+   "name_ar": "Payables",
+   "name_en": "Payables",
+   "account_type": "liability",
+   "debit_movement": "0.00",
+   "credit_movement": "25000.25",
+   "debit_balance": "0",
+   "credit_balance": "25000.25"
+  },
+  {
+   "account_id": "3ce4f21a-73ec-4373-b328-d4357d3509f3",
+   "code": "3101",
+   "name": "Capital",
+   "name_ar": "Capital",
+   "name_en": "Capital",
+   "account_type": "equity",
+   "debit_movement": "0.00",
+   "credit_movement": "125000.25",
+   "debit_balance": "0",
+   "credit_balance": "125000.25"
+  }
+ ]
+}

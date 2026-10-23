@@ -1,6 +1,6 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-12
+**Last updated:** 2026-10-23
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
@@ -23,6 +23,12 @@
 - **Status:** idle
 - **Branch:** —
 - **PR:** —
+
+## T7 Opening Balances Import (T7.1–T7.4)
+- T7.1 PDF suggestions (#484, `a767b1a`), T7.2 Excel/CSV opening-balance import (#485), merged; main at `d2c32d4425fcc74b5483552578bd4c7d5435ab6e` when T7.3/T7.4 ran. No migration for T7.2.
+- T7.3 (backend, PG): 68 existing tests + 5 temporary PG tests passed (as reported). T7.4 (UI+API): CSV/XLSX imports in AR RTL and EN LTR passed; opening journal 150,000.50 Dr = 150,000.50 Cr; Trial Balance reconciled; duplicate approval and stale item version rejected 409; audit verified.
+- Limits: isolated synthetic local PostgreSQL; Replit TEST not exercised; submit/approve via HTTP API, not button clicks; mobile not tested.
+- Phase 14 Row 4 stays `PARTIAL` (missing items in matrix §9). Evidence: `docs/evidence/t7/`.
 
 ## Invoice VAT V1 (PR #426)
 - **Status:** code-complete and merged to main; NOT deployed and NOT activated.
