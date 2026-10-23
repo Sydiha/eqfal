@@ -115,4 +115,35 @@ describe('credit / debit note routes: authorization and input', () => {
     expect(res.body).toEqual({ adjustment: { id: ID }, journal_id: 'j1' });
     expect(approve).toHaveBeenCalledWith('company-a', 'user', expect.arrayContaining(['obligation.confirm', 'accounting.journal.create']), ID, 3);
   });
+  it('void needs invoice.adjust_void: invoice.adjust, invoice.adjust_approve and the invoice capabilities do not suffice', async () => {
+    login(['invoice.adjust', 'invoice.adjust_approve', 'invoice.view', 'invoice.cancel', 'invoice.approve', 'obligation.confirm', 'accounting.journal.create']);
+    const spy = vi.spyOn(InvoiceAdjustmentService.prototype, 'voidApproved');
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 1, reason: 'x' })).status).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('void requires a version, a 1-500 character reason and a valid id; a cross-origin write is refused', async () => {
+    login(['invoice.adjust_void']);
+    const spy = vi.spyOn(InvoiceAdjustmentService.prototype, 'voidApproved');
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { reason: 'x' })).status).toBe(400);
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 1 })).status).toBe(400);
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 1, reason: '   ' })).status).toBe(400);
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 1, reason: 'x'.repeat(501) })).status).toBe(400);
+    expect((await call('post', '/api/invoice-adjustments/not-a-uuid/void', { version: 1, reason: 'x' })).status).toBe(404);
+    expect((await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 1, reason: 'x' }, 'https://evil.example')).status).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('void forwards company, actor, capabilities, version and the trimmed reason, and maps service errors', async () => {
+    login(['invoice.adjust_void']);
+    const voided = vi.spyOn(InvoiceAdjustmentService.prototype, 'voidApproved').mockResolvedValue({ id: ID, status: 'cancelled' } as never);
+    const res = await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 4, reason: '  wrong amount  ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ adjustment: { id: ID, status: 'cancelled' } });
+    expect(voided).toHaveBeenCalledWith('company-a', 'user', ['invoice.adjust_void'], ID, 4, 'wrong amount');
+    voided.mockRejectedValue(new InvoiceError(409, 'INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT', 'posted'));
+    const blocked = await call('post', `/api/invoice-adjustments/${ID}/void`, { version: 4, reason: 'x' });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.code).toBe('INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT');
+  });
 });

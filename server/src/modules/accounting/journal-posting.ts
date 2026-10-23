@@ -24,7 +24,7 @@ type Journal = {
   source_type: string | null;
   source_id: string | null;
   entry_type: 'standard' | 'opening_balance' | 'cutover_balance';
-  status: 'draft' | 'posted';
+  status: 'draft' | 'posted' | 'voided';
   created_by: string;
   posted_by: string | null;
   posted_at: Date | null;
@@ -97,6 +97,7 @@ export async function postJournalInTransaction(
     )
   ).rows[0];
   if (!journal) throw new JournalPostingNotFoundError();
+  if (journal.status === 'voided') throw new JournalPostingConflictError('Journal is voided and cannot be posted');
   if (journal.status !== 'draft') throw new JournalPostingConflictError('Journal is already posted');
 
   const year = await assertFiscalYearOpen(companyId, journal.fiscal_year_id, journal.accounting_date, client);

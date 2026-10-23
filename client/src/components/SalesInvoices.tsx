@@ -35,7 +35,7 @@ const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.c
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
- const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canRecurring=false,canViewDocuments=false}=caps;
+ const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canAdjustVoid=false,canRecurring=false,canViewDocuments=false}=caps;
  const{t}=useTranslation();
  const ns=direction==='purchase'?'purchaseInvoice':'salesInvoice';
  const d=(key:string,options?:Record<string,unknown>)=>t(`${ns}.${key}`,options);
@@ -252,7 +252,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
    {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
    {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
-   {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
+   {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} canVoid={canAdjustVoid} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
    {(detail.cancellation||(detail.adjustments?.length??0)>0)&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>
     {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
     {(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}

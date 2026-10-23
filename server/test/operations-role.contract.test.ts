@@ -46,7 +46,7 @@ describe('Operations default role (migration 081)', () => {
       expect(id, id).not.toMatch(/^accounting\.journal\.|^fiscal_year\.(?!view)|^monthly_close\.(?!view)|^vat\.(close|reopen|review)|\.reopen$|\.close$|\.post$|\.reverse$|^access\./);
       expect(isAdministrativeCapability(id), id).toBe(false);
     }
-    for (const id of ['invoice.cancel', 'invoice.delete', 'invoice.adjust', 'invoice.adjust_approve', 'invoice.recurring', 'document.approve', 'document.delete', 'access.full_access.grant']) {
+    for (const id of ['invoice.cancel', 'invoice.delete', 'invoice.adjust', 'invoice.adjust_approve', 'invoice.adjust_void', 'invoice.recurring', 'document.approve', 'document.delete', 'access.full_access.grant']) {
       expect(OPERATIONS_CAPABILITIES, id).not.toContain(id);
     }
   });

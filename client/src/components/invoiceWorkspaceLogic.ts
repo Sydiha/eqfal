@@ -6,7 +6,7 @@ export type InvoiceCaps = {
   /** invoice.delete: physically delete a DRAFT invoice. Never offered as an action on any other status. */
   canDelete?: boolean;
   /** invoice.adjust: register / edit / cancel a draft external credit or debit note. invoice.adjust_approve alone approves it (the generated obligation effect and DRAFT journal need no manual journal permission). */
-  canAdjust?: boolean; canAdjustApprove?: boolean;
+  canAdjust?: boolean; canAdjustApprove?: boolean; canAdjustVoid?: boolean;
   /** invoice.recurring: create / edit / pause / resume / end recurring schedules and run due ones. Generated invoices are drafts only. */
   canRecurring?: boolean;
   /** invoice.approve alone authorizes approval (the creator included); the obligation and DRAFT journal are system-generated. */

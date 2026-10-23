@@ -26,6 +26,8 @@ import { InvoiceError } from './invoice.service';
  */
 /** invoice.adjust_approve alone authorizes approval; the obligation effect and the DRAFT journal are system-generated (owner decision 2026-10-15). */
 export const ADJUSTMENT_APPROVAL_CAPABILITIES = ['invoice.adjust_approve'] as const;
+/** invoice.adjust_void alone authorizes cancelling an APPROVED note whose own journal is still a draft (V3.3). */
+export const ADJUSTMENT_VOID_CAPABILITIES = ['invoice.adjust_void'] as const;
 
 type Direction = 'sales' | 'purchase';
 type NoteType = 'credit' | 'debit';
@@ -173,6 +175,8 @@ export class InvoiceAdjustmentService {
       if (pg.code === '23505' && pg.constraint === 'invoice_adjustments_external_number_uidx') throw conflict('INVOICE_ADJUSTMENT_DUPLICATE', 'This external note number is already registered for this counterparty');
       if (pg.code === '23505' && pg.constraint === 'invoice_adjustment_source_links_document_id_key') throw conflict('INVOICE_SOURCE_ALREADY_LINKED', 'The document is already linked to another note');
       if (pg.code === '23514' && /already linked/i.test(pg.message ?? '')) throw conflict('INVOICE_SOURCE_ALREADY_LINKED', 'The document is already linked to an invoice or note');
+      if (pg.code === '40P01' || pg.code === '55P03') throw conflict('INVOICE_CONCURRENT_MODIFICATION', 'A concurrent change was in progress; nothing was saved, try again');
+      if (pg.code === '23514' && /settlements above|voiding its draft journal/i.test(pg.message ?? '')) throw conflict('INVOICE_ADJUSTMENT_VOID_BLOCKED', 'The note cannot be cancelled: it would leave the invoice settlements above the adjusted amount');
       if (pg.code === '23514' && /immutable|draft/i.test(pg.message ?? '')) throw conflict('INVOICE_ADJUSTMENT_NOT_DRAFT', 'Only draft notes can be changed');
       throw error;
     } finally {
@@ -246,6 +250,26 @@ export class InvoiceAdjustmentService {
     if (input.adjustment_date < original.issue_date) throw invalid('adjustment_date cannot be before the issue date of the original invoice');
 
     // Per-group caps against what EXISTS on the original VAT snapshot. No group on the original = unsupported (no new rate or treatment is invented).
+    const { originalGroups, remaining } = await this.remainingByGroup(client, companyId, invoiceId, excludeId);
+    const buckets = noteBuckets(original.direction, input.lines);
+    for (const [k, b] of buckets) {
+      const left = remaining.get(k);
+      if (!originalGroups.has(k) || !left) throw conflict('INVOICE_ADJUSTMENT_GROUP_UNSUPPORTED', `The original invoice has no VAT group ${k.replace('|', ' at ')}%; a note cannot introduce a new treatment or rate`);
+      if (type === 'credit' && (b.net > left.net || b.vat > left.vat || (original.direction === 'purchase' && b.rec > left.rec))) {
+        throw conflict('INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL', `The credit exceeds what remains of the original invoice for VAT group ${k.replace('|', ' at ')}%`);
+      }
+    }
+    // Over-crediting would create a credit balance (customer/supplier credit, refund): unsupported. Debit notes only increase the balance.
+    const outstanding = toHalalas(obligation.original_amount) + toHalalas(obligation.net) - toHalalas(obligation.paid);
+    if (type === 'credit' && toHalalas(input.totals.total_amount) > outstanding) {
+      throw conflict('INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING', `The credit (${input.totals.total_amount}) exceeds the outstanding balance (${fromHalalas(outstanding > 0n ? outstanding : 0n)}); credit balances and refunds are not supported`);
+    }
+    await this.assertSameOpenVatPeriod(client, companyId, original.tax_point_date, input.adjustment_date);
+    return { original, obligation };
+  }
+
+  /** Original VAT groups of an invoice and what remains of each after the other APPROVED notes (debit +, credit -). Reads only; the caller owns the locks. */
+  private async remainingByGroup(client: PoolClient, companyId: string, invoiceId: string, excludeId: string | null) {
     const originalGroups = new Map<string, Bucket>();
     for (const g of (await client.query<{ vat_treatment: string; vat_rate: string; taxable_amount: string; vat_amount: string; recoverable_vat_amount: string | null }>(
       `SELECT g.vat_treatment, g.vat_rate::text, g.taxable_amount::text, g.vat_amount::text, g.recoverable_vat_amount::text
@@ -266,31 +290,22 @@ export class InvoiceAdjustmentService {
       bucket.net += sign * toHalalas(row.net); bucket.vat += sign * toHalalas(row.vat); bucket.rec += sign * toHalalas(row.rec);
       remaining.set(key(row.vat_treatment, row.vat_rate), bucket);
     }
-    const buckets = noteBuckets(original.direction, input.lines);
-    for (const [k, b] of buckets) {
-      const left = remaining.get(k);
-      if (!originalGroups.has(k) || !left) throw conflict('INVOICE_ADJUSTMENT_GROUP_UNSUPPORTED', `The original invoice has no VAT group ${k.replace('|', ' at ')}%; a note cannot introduce a new treatment or rate`);
-      if (type === 'credit' && (b.net > left.net || b.vat > left.vat || (original.direction === 'purchase' && b.rec > left.rec))) {
-        throw conflict('INVOICE_ADJUSTMENT_EXCEEDS_ORIGINAL', `The credit exceeds what remains of the original invoice for VAT group ${k.replace('|', ' at ')}%`);
-      }
-    }
-    // Over-crediting would create a credit balance (customer/supplier credit, refund): unsupported. Debit notes only increase the balance.
-    const outstanding = toHalalas(obligation.original_amount) + toHalalas(obligation.net) - toHalalas(obligation.paid);
-    if (type === 'credit' && toHalalas(input.totals.total_amount) > outstanding) {
-      throw conflict('INVOICE_ADJUSTMENT_EXCEEDS_OUTSTANDING', `The credit (${input.totals.total_amount}) exceeds the outstanding balance (${fromHalalas(outstanding > 0n ? outstanding : 0n)}); credit balances and refunds are not supported`);
-    }
-    // VAT period: note date and original tax point date must share ONE existing open VAT period.
+    return { originalGroups, remaining };
+  }
+
+  /** VAT period: the note date and the original tax point date must share ONE existing OPEN VAT period (no amended return, no cross-period correction). */
+  private async assertSameOpenVatPeriod(client: PoolClient, companyId: string, taxPointDate: string, noteDate: string) {
     const periods = (await client.query<{ id: string; status: string }>(
-      `SELECT id, status FROM vat_periods WHERE company_id = $1 AND $2::date BETWEEN period_start AND period_end`, [companyId, original.tax_point_date])).rows.concat(
-      (await client.query<{ id: string; status: string }>(`SELECT id, status FROM vat_periods WHERE company_id = $1 AND $2::date BETWEEN period_start AND period_end`, [companyId, input.adjustment_date])).rows);
+      `SELECT id, status FROM vat_periods WHERE company_id = $1 AND $2::date BETWEEN period_start AND period_end`, [companyId, taxPointDate])).rows.concat(
+      (await client.query<{ id: string; status: string }>(`SELECT id, status FROM vat_periods WHERE company_id = $1 AND $2::date BETWEEN period_start AND period_end`, [companyId, noteDate])).rows);
     if (periods.some((p) => p.status === 'closed')) {
       throw conflict('INVOICE_VAT_PERIOD_CLOSED', 'A VAT period involved is closed; this correction would need an amended VAT return and is not supported');
     }
     if (periods.length !== 2 || periods[0]!.id !== periods[1]!.id) {
       throw conflict('INVOICE_ADJUSTMENT_VAT_PERIOD_UNSUPPORTED', 'The note date and the original tax point date must fall in the same existing open VAT period; any other VAT-period treatment needs an owner decision');
     }
-    return { original, obligation };
   }
+
 
   private async checkReferences(client: PoolClient, companyId: string, input: AdjustmentInput, selfId: string | null) {
     if (!input.source_document_id) return;
@@ -335,6 +350,74 @@ export class InvoiceAdjustmentService {
       await this.writeChildren(client, companyId, id, actorUserId, input);
       const after = await this.read(client, companyId, id);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.adjustment.create', entity_type: 'invoice_adjustment', entity_id: id, before_data: null, after_data: after as never }, client);
+      return after!;
+    });
+  }
+
+  /**
+   * approved -> cancelled while the note's OWN journal is still a draft (V3.3). The note, its numbers, lines, approval data, the original invoice, VAT snapshots
+   * and settlements are kept; the draft journal and its lines are kept and only marked 'voided' (never posted, never deleted). One transaction.
+   * Lock order (checked against posting, settlement, approval and VAT paths): note -> invoice -> obligation -> note journal -> fiscal year (share) -> VAT
+   * month -> accounting month. Posting takes journal -> fiscal year -> accounting month and settlement takes obligation -> accounting month, so neither can
+   * cycle with this order; approval of another note on the same invoice is serialized by the invoice row, which every note operation takes before anything else.
+   */
+  async voidApproved(companyId: string, actorUserId: string, caps: readonly string[], id: string, expectedVersion: number, reason: string) {
+    return this.tx(async (client) => {
+      const missingCaps = ADJUSTMENT_VOID_CAPABILITIES.filter((c) => !caps.includes(c));
+      if (missingCaps.length) throw new InvoiceError(403, 'INVOICE_FORBIDDEN', `Cancelling an approved note requires: ${missingCaps.join(', ')}`);
+      const note = (await client.query<Header & { fiscal_year_id: string | null }>(`SELECT ${HEADER_SQL}, fiscal_year_id FROM invoice_adjustments WHERE id = $1 AND company_id = $2 FOR UPDATE`, [id, companyId])).rows[0];
+      if (!note) throw new InvoiceError(404, 'INVOICE_ADJUSTMENT_NOT_FOUND', 'Credit/debit note not found');
+      if (note.status !== 'approved') throw conflict('INVOICE_ADJUSTMENT_NOT_APPROVED', 'Only an approved note can be cancelled here (drafts use the draft cancellation)');
+      if (note.version !== expectedVersion) throw conflict('INVOICE_VERSION_CONFLICT', 'The note was changed by someone else; reload and try again');
+      if (!note.fiscal_year_id) throw conflict('INVOICE_FISCAL_YEAR_UNRESOLVED', 'The approved note has no fiscal year');
+      const invoice = (await client.query<{ status: string; tax_point_date: string | null }>(
+        'SELECT status, tax_point_date::text FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE', [note.original_invoice_id, companyId])).rows[0];
+      if (!invoice) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
+      if (invoice.status !== 'approved' || !invoice.tax_point_date) throw conflict('INVOICE_ADJUSTMENT_ORIGINAL_UNSUPPORTED', 'The original invoice is no longer an approved invoice with a tax point date');
+      const obligation = (await client.query<{ id: string; original_amount: string; is_cancelled: boolean }>(
+        "SELECT id, original_amount::text, is_cancelled FROM obligations WHERE invoice_id = $1 AND company_id = $2 AND source_type = 'invoice' FOR UPDATE", [note.original_invoice_id, companyId])).rows[0];
+      if (!obligation || obligation.is_cancelled) throw conflict('INVOICE_ADJUSTMENT_ORIGINAL_UNSUPPORTED', 'The original invoice has no active receivable/payable');
+      const journal = (await client.query<{ id: string; status: string }>(
+        "SELECT id, status FROM journal_entries WHERE company_id = $1 AND source_type = 'invoice_adjustment' AND source_id = $2 FOR UPDATE", [companyId, id])).rows[0];
+      if (!journal) throw conflict('INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT', 'The approved note has no journal');
+      if (journal.status !== 'draft') throw conflict('INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT', 'The note journal is already posted (or voided); a posted note cannot be cancelled here');
+
+      await assertFiscalYearOpen(companyId, note.fiscal_year_id, note.adjustment_date, client);
+      await lockCompanyProfileShared(client, companyId);
+      await lockVatDates(companyId, [note.adjustment_date, invoice.tax_point_date], client);
+      await assertAccountingDateWritable(companyId, note.adjustment_date, client);
+      await this.assertSameOpenVatPeriod(client, companyId, invoice.tax_point_date, note.adjustment_date);
+
+      // Remaining credit limits: without this note, no VAT group of the original invoice may be credited beyond what the debit notes and the invoice allow.
+      const { remaining } = await this.remainingByGroup(client, companyId, note.original_invoice_id, id);
+      for (const [k, left] of remaining) {
+        if (left.net < 0n || left.vat < 0n || (note.direction === 'purchase' && left.rec < 0n)) {
+          throw conflict('INVOICE_ADJUSTMENT_VOID_BLOCKED', `Cancelling this note would leave approved credits above the original invoice for VAT group ${k.replace('|', ' at ')}%`);
+        }
+      }
+      // Settlements (and approved personal payments, which obligation_adjustment_net already subtracts) must still fit the adjusted amount.
+      const settled = toHalalas((await client.query<{ x: string }>(
+        'SELECT COALESCE(SUM(amount), 0)::text AS x FROM obligation_settlements WHERE obligation_id = $1 AND company_id = $2', [obligation.id, companyId])).rows[0]!.x);
+      const netNow = toHalalas((await client.query<{ x: string }>('SELECT obligation_adjustment_net($1, $2)::text AS x', [obligation.id, companyId])).rows[0]!.x);
+      const noteEffect = (note.adjustment_type === 'debit' ? 1n : -1n) * toHalalas(note.total_amount);
+      if (settled > toHalalas(obligation.original_amount) + netNow - noteEffect) {
+        throw conflict('INVOICE_ADJUSTMENT_VOID_BLOCKED', 'Cancelling this note would leave the invoice settlements above the adjusted amount');
+      }
+
+      const before = await this.read(client, companyId, id);
+      await client.query("SELECT set_config('eqfal.adjustment_void', $1, true)", [id]);
+      await client.query(
+        `UPDATE invoice_adjustments SET status='cancelled', cancelled_by_user_id=$3, cancelled_at=NOW(), cancellation_reason=$4, version=version+1, updated_at=NOW()
+         WHERE id=$1 AND company_id=$2 AND status='approved'`, [id, companyId, actorUserId, reason]);
+      const voided = (await client.query(
+        `UPDATE journal_entries SET status='voided', voided_at=NOW(), voided_by=$3, void_reason=$4, updated_at=NOW()
+         WHERE id=$1 AND company_id=$2 AND status='draft' RETURNING *, accounting_date::text`, [journal.id, companyId, actorUserId, reason])).rows[0];
+      if (!voided) throw conflict('INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT', 'The note journal changed while cancelling; nothing was saved');
+      const after = await this.read(client, companyId, id);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'invoice.adjustment.void', entity_type: 'invoice_adjustment', entity_id: id,
+        before_data: before as never, after_data: after as never, reason }, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'journal.void', entity_type: 'journal_entry', entity_id: journal.id,
+        before_data: { status: 'draft' } as never, after_data: { status: 'voided', source_type: 'invoice_adjustment', source_id: id } as never, reason }, client);
       return after!;
     });
   }

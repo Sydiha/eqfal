@@ -13,7 +13,7 @@ function mock(notes:unknown[],post?:(url:string,body:Record<string,unknown>)=>Re
   if(init?.method==='POST'||init?.method==='PUT')return Promise.resolve(post?post(url,JSON.parse(String(init.body))):json({}));
   return Promise.resolve(json({adjustments:notes}))});
  vi.stubGlobal('fetch',f);return f}
-beforeEach(async()=>{vi.restoreAllMocks();props.onChanged.mockReset();await i18n.changeLanguage('en')});
+beforeEach(async()=>{vi.restoreAllMocks();props.onChanged.mockReset();props.onUnauthorized.mockReset();await i18n.changeLanguage('en')});
 
 describe('InvoiceNotes',()=>{
  it('lists the registered notes with type, external number, status and server total',async()=>{
@@ -98,5 +98,82 @@ describe('InvoiceNotes',()=>{
   await i18n.changeLanguage('ar');mock([]);
   render(<InvoiceNotes {...props}/>);
   expect(await screen.findByRole('button',{name:'تسجيل إشعار'})).toBeInTheDocument();
+ });
+ const approved=(over:Record<string,unknown>={})=>note({status:'approved',journal_status:'draft',version:4,internal_number:'2',...over});
+ const voidCall=(f:ReturnType<typeof vi.fn>)=>f.mock.calls.find(c=>String(c[0]).endsWith('/void'))!;
+ it('offers "Cancel approved note" only for an approved note with a draft journal and the invoice.adjust_void capability',async()=>{
+  mock([approved({id:'a'}),approved({id:'b',external_number:'CN-P',journal_status:'posted'}),note({id:'c',external_number:'CN-D'}),approved({id:'d',external_number:'CN-X',status:'cancelled',journal_status:'voided'})]);
+  const view=render(<InvoiceNotes {...props} canVoid/>);
+  await screen.findByText(/CN-P/);
+  expect(screen.getAllByRole('button',{name:'Cancel approved note'})).toHaveLength(1);
+  expect(screen.getByText(/CN-X/).parentElement).toHaveTextContent('Voided');
+  view.unmount();
+  mock([approved()]);
+  render(<InvoiceNotes {...props} canAdjust canApprove/>);
+  await screen.findByText(/CN-7/);
+  expect(screen.queryByRole('button',{name:'Cancel approved note'})).not.toBeInTheDocument();
+ });
+ it('needs a reason and a confirmation, then posts the current version and reason and refreshes',async()=>{
+  const f=mock([approved()],()=>json({adjustment:{}}));
+  render(<InvoiceNotes {...props} canVoid/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel approved note'}));
+  expect(screen.getByRole('group',{name:'Cancel this approved note?'})).toBeInTheDocument();
+  const confirm=screen.getAllByRole('button',{name:'Cancel approved note'}).find(b=>b.className==='primary')!;
+  expect(confirm).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Cancellation reason'),{target:{value:'  Registered twice  '}});
+  expect(confirm).toBeEnabled();
+  fireEvent.click(confirm);
+  await waitFor(()=>expect(props.onChanged).toHaveBeenCalled());
+  const call=voidCall(f);
+  expect(call[0]).toBe(`/api/invoice-adjustments/${N1}/void`);
+  expect((call[1] as RequestInit).method).toBe('POST');
+  expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({version:4,reason:'Registered twice'});
+  // details were reloaded after success and the confirmation closed
+  expect(f.mock.calls.filter(c=>String(c[0]).endsWith('/adjustments')&&!(c[1] as RequestInit|undefined)?.method).length).toBeGreaterThanOrEqual(2);
+  await waitFor(()=>expect(screen.queryByRole('group',{name:'Cancel this approved note?'})).not.toBeInTheDocument());
+ });
+ it('"Keep note" closes the confirmation without calling the server',async()=>{
+  const f=mock([approved()]);
+  render(<InvoiceNotes {...props} canVoid/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel approved note'}));
+  fireEvent.click(screen.getByRole('button',{name:'Keep note'}));
+  expect(screen.queryByRole('group',{name:'Cancel this approved note?'})).not.toBeInTheDocument();
+  expect(f.mock.calls.some(c=>(c[1] as RequestInit|undefined)?.method==='POST')).toBe(false);
+ });
+ it.each([
+  [403,undefined,/permission|not allowed|Forbidden|could not be saved/i],
+  [409,'INVOICE_ADJUSTMENT_JOURNAL_NOT_DRAFT',/already posted/],
+  [409,'INVOICE_ADJUSTMENT_VOID_BLOCKED',/settlements or other approved notes/],
+  [409,'INVOICE_VAT_PERIOD_CLOSED',/VAT period/i],
+  [409,'INVOICE_VERSION_CONFLICT',/changed|reload/i],
+  [400,'INVOICE_VALIDATION',/could not be saved/],
+ ] as const)('shows a clear error and keeps the dialog open on %s %s',async(status,code,pattern)=>{
+  mock([approved()],()=>json(code?{error:'x',code}:{error:'Forbidden'},status));
+  render(<InvoiceNotes {...props} canVoid/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel approved note'}));
+  fireEvent.change(screen.getByLabelText('Cancellation reason'),{target:{value:'why'}});
+  fireEvent.click(screen.getAllByRole('button',{name:'Cancel approved note'}).find(b=>b.className==='primary')!);
+  expect(await screen.findByRole('alert')).toHaveTextContent(pattern);
+  expect(props.onChanged).not.toHaveBeenCalled();
+  expect(screen.getByRole('group',{name:'Cancel this approved note?'})).toBeInTheDocument();
+ });
+ it('signs out on 401',async()=>{
+  mock([approved()],()=>json({},401));
+  render(<InvoiceNotes {...props} canVoid/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Cancel approved note'}));
+  fireEvent.change(screen.getByLabelText('Cancellation reason'),{target:{value:'why'}});
+  fireEvent.click(screen.getAllByRole('button',{name:'Cancel approved note'}).find(b=>b.className==='primary')!);
+  await waitFor(()=>expect(props.onUnauthorized).toHaveBeenCalled());
+ });
+ it('renders the action and confirmation in Arabic (RTL)',async()=>{
+  await i18n.changeLanguage('ar');
+  const f=mock([approved()],()=>json({adjustment:{}}));
+  render(<InvoiceNotes {...props} canVoid/>);
+  fireEvent.click(await screen.findByRole('button',{name:'إلغاء الإشعار المعتمد'}));
+  expect(screen.getByRole('group',{name:'إلغاء هذا الإشعار المعتمد؟'})).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('سبب الإلغاء'),{target:{value:'تسجيل مكرر'}});
+  fireEvent.click(screen.getAllByRole('button',{name:'إلغاء الإشعار المعتمد'}).find(b=>b.className==='primary')!);
+  await waitFor(()=>expect(props.onChanged).toHaveBeenCalled());
+  expect(JSON.parse(String((voidCall(f)[1] as RequestInit).body))).toEqual({version:4,reason:'تسجيل مكرر'});
  });
 });

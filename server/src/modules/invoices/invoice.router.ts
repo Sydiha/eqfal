@@ -212,6 +212,17 @@ invoiceRouter.post('/invoice-adjustments/:id/cancel', ...write, requireCapabilit
   res.json({ adjustment: await svc.cancel(companyId, actorUserId, req.params.id!, version, reason) });
 })));
 
+// V3.3: cancel an APPROVED note while its own journal is still a draft (invoice.adjust_void; mandatory reason; the journal is voided, never deleted).
+invoiceRouter.post('/invoice-adjustments/:id/void', ...write, requireCapability('invoice.adjust_void'), route((req, res) => adjustmentWork(res, async (svc) => {
+  if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
+  const version = parseVersion(req);
+  const raw = (req.body as Record<string, unknown>).reason;
+  const reason = typeof raw === 'string' ? raw.trim() : '';
+  if (reason.length < 1 || reason.length > 500) throw new InvoiceError(400, 'INVOICE_VALIDATION', 'reason is required (1 to 500 characters)');
+  const ctx = getAuthenticatedContext(req)!;
+  res.json({ adjustment: await svc.voidApproved(ctx.activeCompanyId!, ctx.user.id, ctx.capabilities, req.params.id!, version, reason) });
+})));
+
 invoiceRouter.post('/invoice-adjustments/:id/approve', ...write, requireCapability('invoice.adjust_approve'), route((req, res) => adjustmentWork(res, async (svc) => {
   if (!UUID.test(req.params.id!)) { noteNotFound(res); return; }
   const version = parseVersion(req);

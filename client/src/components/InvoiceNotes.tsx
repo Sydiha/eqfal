@@ -15,11 +15,11 @@ const emptyLine=():FormLine=>({description:'',vat_treatment:'standard',vat_rate:
 const emptyForm=():Form=>({adjustment_type:'credit',external_number:'',adjustment_date:'',reason:'',lines:[emptyLine()]});
 const toPayload=(f:Form,purchase:boolean)=>({adjustment_type:f.adjustment_type,external_number:f.external_number.trim(),adjustment_date:f.adjustment_date,reason:f.reason.trim(),lines:f.lines.map(l=>({description:l.description.trim(),vat_treatment:l.vat_treatment,vat_rate:l.vat_treatment==='standard'?l.vat_rate:'0',net_amount:l.net_amount,...(purchase&&l.vat_treatment==='standard'?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
 
-export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,onChanged,onUnauthorized}:{invoiceId:string;purchase:boolean;currency:string;canAdjust:boolean;canApprove:boolean;onChanged:()=>void;onUnauthorized:()=>void}){
+export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,canVoid=false,onChanged,onUnauthorized}:{invoiceId:string;purchase:boolean;currency:string;canAdjust:boolean;canApprove:boolean;canVoid?:boolean;onChanged:()=>void;onUnauthorized:()=>void}){
  const{t}=useTranslation();
- const[notes,setNotes]=useState<Note[]|null>(null),[loadError,setLoadError]=useState(false),[form,setForm]=useState<Form|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[cancelling,setCancelling]=useState<{id:string;reason:string}|null>(null);
+ const[notes,setNotes]=useState<Note[]|null>(null),[loadError,setLoadError]=useState(false),[form,setForm]=useState<Form|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[cancelling,setCancelling]=useState<{id:string;reason:string}|null>(null),[voiding,setVoiding]=useState<{id:string;reason:string}|null>(null);
  const money=(v:string)=>formatMoney(v,'0.00');
- const errorText=(code?:string)=>{const key=`invoiceNotes.errors.${code}`;const text=t(key);return code&&text!==key?text:t('invoiceNotes.errors.generic')};
+ const errorText=(code?:string,status?:number)=>{if(!code&&status===403)code='INVOICE_FORBIDDEN';const key=`invoiceNotes.errors.${code}`;const text=t(key);return code&&text!==key?text:t('invoiceNotes.errors.generic')};
  const load=useCallback(async()=>{
   try{const response=await fetch(`/api/invoices/${invoiceId}/adjustments`);if(response.status===401){onUnauthorized();return;}if(!response.ok)throw new Error();const payload=await response.json() as {adjustments:Note[]};setNotes(payload.adjustments);setLoadError(false);}catch{setLoadError(true);}
  },[invoiceId,onUnauthorized]);
@@ -29,7 +29,7 @@ export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,o
   try{
    const response=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
    if(response.status===401){onUnauthorized();return false;}
-   if(!response.ok){const payload=await response.json().catch(()=>({})) as {code?:string};setError(errorText(payload.code));return false;}
+   if(!response.ok){const payload=await response.json().catch(()=>({})) as {code?:string};setError(errorText(payload.code,response.status));return false;}
    await load();onChanged();return true;
   }catch{setError(errorText(undefined));return false;}finally{setBusy(false);}
  };
@@ -47,9 +47,14 @@ export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,o
     {canApprove&&<button type="button" disabled={busy} onClick={()=>void send(`/api/invoice-adjustments/${n.id}/approve`,'POST',{version:n.version})}>{t('invoiceNotes.approve')}</button>}
     {canAdjust&&<button type="button" disabled={busy} onClick={()=>setCancelling({id:n.id,reason:''})}>{t('invoiceNotes.cancel')}</button>}
    </span>}
-   {n.status==='approved'&&n.journal_status&&<span>{t('invoiceNotes.journal',{status:t(`invoiceWorkspace.journalStatuses.${n.journal_status}`)})}</span>}
+   {n.status==='approved'&&n.journal_status==='draft'&&canVoid&&<span className="modal-actions"><button type="button" disabled={busy} onClick={()=>{setError(null);setVoiding({id:n.id,reason:''})}}>{t('invoiceNotes.voidAction')}</button></span>}
+   {(n.status==='approved'||n.status==='cancelled')&&n.journal_status&&<span>{t('invoiceNotes.journal',{status:t(`invoiceWorkspace.journalStatuses.${n.journal_status}`)})}</span>}
   </li>)}</ul>}
   {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
+  {voiding&&<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceNotes.voidTitle')}><p><strong>{t('invoiceNotes.voidTitle')}</strong></p><p className="sales-invoices__hint">{t('invoiceNotes.voidBody')}</p>
+   <label>{t('invoiceNotes.voidReason')}<textarea value={voiding.reason} maxLength={500} onChange={e=>setVoiding({...voiding,reason:e.target.value})}/></label>
+   <div className="modal-actions"><button type="button" disabled={busy} onClick={()=>setVoiding(null)}>{t('invoiceNotes.voidKeep')}</button>
+    <button type="button" className="primary" disabled={busy||voiding.reason.trim()===''} onClick={()=>{const n=notes?.find(x=>x.id===voiding.id);if(n)void send(`/api/invoice-adjustments/${n.id}/void`,'POST',{version:n.version,reason:voiding.reason.trim()}).then(ok=>{if(ok)setVoiding(null)})}}>{t('invoiceNotes.voidConfirm')}</button></div></div>}
   {cancelling&&<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceNotes.cancelTitle')}><p><strong>{t('invoiceNotes.cancelTitle')}</strong></p>
    <label>{t('invoiceNotes.cancelReason')}<textarea value={cancelling.reason} maxLength={500} onChange={e=>setCancelling({...cancelling,reason:e.target.value})}/></label>
    <div className="modal-actions"><button type="button" disabled={busy} onClick={()=>setCancelling(null)}>{t('common.cancel')}</button>
