@@ -23,6 +23,17 @@ describe('InvoiceNotes',()=>{
   expect(screen.getByText(/Debit note CN-8 \| Approved/)).toBeInTheDocument();
   expect(screen.getAllByText('115.00 SAR')).toHaveLength(2);
  });
+ it('shows the internal number beside the external number in English and Arabic, and none for historical notes',async()=>{
+  mock([note({id:'a',status:'approved',internal_number:'3',journal_status:'draft'}),note({id:'b',status:'approved',external_number:'CN-OLD',internal_number:null})]);
+  const view=render(<InvoiceNotes {...props}/>);
+  expect(await screen.findByText(/Credit note CN-7/)).toHaveTextContent('CN-7 | Internal number: 3 | Approved');
+  expect(screen.getByText(/CN-OLD/)).not.toHaveTextContent('Internal number');
+  expect(screen.getAllByTestId('note-internal-number')).toHaveLength(1);
+  await i18n.changeLanguage('ar');
+  view.rerender(<InvoiceNotes {...props}/>);
+  expect(await screen.findByText(/الرقم الداخلي/)).toHaveTextContent('CN-7');
+  expect(screen.getByTestId('note-internal-number')).toHaveTextContent('3');
+ });
  it('hides register/approve/cancel without the capabilities',async()=>{
   mock([note()]);
   render(<InvoiceNotes {...props} canAdjust={false} canApprove={false}/>);
