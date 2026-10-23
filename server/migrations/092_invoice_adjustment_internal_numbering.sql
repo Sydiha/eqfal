@@ -4,11 +4,14 @@
 --   * No backfill: notes approved before this migration keep internal_number NULL. No data rows are inserted or changed, no capability is granted.
 -- Rollback: DROP TRIGGER invoice_adjustment_number_counters_guard; DROP FUNCTION allocate_adjustment_number, guard_adjustment_counter;
 --   DROP TABLE invoice_adjustment_number_counters; DROP INDEX invoice_adjustments_internal_number_uidx;
---   ALTER TABLE invoice_adjustments DROP CONSTRAINT invoice_adjustments_internal_number_state_check, DROP COLUMN internal_number;
+--   ALTER TABLE invoice_adjustments DROP CONSTRAINT invoice_adjustments_internal_number_state_check, DROP CONSTRAINT invoice_adjustments_approved_internal_number_check, DROP COLUMN internal_number;
 --   restore guard_invoice_adjustment() from 072 (approval_keys without 'internal_number').
 ALTER TABLE invoice_adjustments ADD COLUMN internal_number BIGINT CHECK (internal_number > 0);
 ALTER TABLE invoice_adjustments ADD CONSTRAINT invoice_adjustments_internal_number_state_check
   CHECK (internal_number IS NULL OR (status = 'approved' AND fiscal_year_id IS NOT NULL));
+-- Every NEW approval carries a number. NOT VALID: notes approved before this migration keep NULL (no backfill); they are immutable, so they are never re-checked.
+ALTER TABLE invoice_adjustments ADD CONSTRAINT invoice_adjustments_approved_internal_number_check
+  CHECK (status <> 'approved' OR internal_number IS NOT NULL) NOT VALID;
 CREATE UNIQUE INDEX invoice_adjustments_internal_number_uidx ON invoice_adjustments (company_id, adjustment_type, fiscal_year_id, internal_number) WHERE internal_number IS NOT NULL;
 
 CREATE TABLE invoice_adjustment_number_counters (
