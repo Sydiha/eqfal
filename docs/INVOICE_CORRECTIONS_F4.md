@@ -33,5 +33,6 @@ Status: draft/submitted cancellation and registration of EXTERNALLY issued credi
 - One transaction. Lock order: note, invoice, obligation, note journal, fiscal year (share), VAT month, accounting month. Requires an open fiscal year, accounting month and VAT period, the note date and original tax point in the same VAT period, settlements still within the adjusted amount, and no remaining approved credit above the original VAT groups (`INVOICE_ADJUSTMENT_VOID_BLOCKED`).
 - The note becomes `cancelled` (internal and external numbers, lines and approval data kept; the external number is freed like for a cancelled draft). The journal becomes `voided` (header and lines kept, never deleted, never postable). Original invoice, VAT snapshots, settlements and audit history are untouched; audit actions `invoice.adjustment.void` and `journal.void`.
 - Database: `voided` journals are immutable; draft to voided and approved to cancelled happen only inside the controlled transaction (setting `eqfal.adjustment_void` = note id); commit-time backstops check the voided journal and settlements; the settlement guard now locks the obligation row.
-- Not included: UI button, posted-note correction, unlinking the supporting document.
+- UI: InvoiceNotes shows "Cancel approved note" only for an approved note with a draft journal and `invoice.adjust_void`; reason and confirmation required; errors for 401/403/409 are shown in Arabic and English.
+- Not included: posted-note correction, unlinking the supporting document.
 
