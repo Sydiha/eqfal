@@ -47,7 +47,7 @@ export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,o
     {canApprove&&<button type="button" disabled={busy} onClick={()=>void send(`/api/invoice-adjustments/${n.id}/approve`,'POST',{version:n.version})}>{t('invoiceNotes.approve')}</button>}
     {canAdjust&&<button type="button" disabled={busy} onClick={()=>setCancelling({id:n.id,reason:''})}>{t('invoiceNotes.cancel')}</button>}
    </span>}
-   {n.status==='approved'&&n.journal_status&&<span>{t('invoiceNotes.journal',{status:t(`invoiceWorkspace.journalStatuses.${n.journal_status}`)})}</span>}
+   {(n.status==='approved'||n.status==='cancelled')&&n.journal_status&&<span>{t('invoiceNotes.journal',{status:t(`invoiceWorkspace.journalStatuses.${n.journal_status}`)})}</span>}
   </li>)}</ul>}
   {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
   {cancelling&&<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceNotes.cancelTitle')}><p><strong>{t('invoiceNotes.cancelTitle')}</strong></p>

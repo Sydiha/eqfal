@@ -259,7 +259,7 @@ describe('company default roles provisioning', () => {
     const byRole = await provisionCapabilitiesByRole();
     expect(new Set(byRole['Company Manager'])).toEqual(new Set(COMPANY_MANAGER_CAPABILITIES));
     for (const forbidden of ['accounting.journal.create', 'accounting.journal.edit', 'accounting.journal.post', 'fiscal_year.close', 'monthly_close.close',
-      'monthly_close.reopen', 'vat.close', 'vat.reopen', 'tax_workpaper.approve', 'invoice.approve', 'invoice.adjust_approve', 'access.full_access.grant']) {
+      'monthly_close.reopen', 'vat.close', 'vat.reopen', 'tax_workpaper.approve', 'invoice.approve', 'invoice.adjust_approve', 'invoice.adjust_void', 'access.full_access.grant']) {
       expect(byRole['Company Manager']).not.toContain(forbidden);
     }
     expect(byRole['Company Manager']).toContain('access.membership.role.assign');
@@ -272,7 +272,7 @@ describe('company default roles provisioning', () => {
     expect(byRole['Operations']).toHaveLength(12);
     for (const forbidden of ['accounting.journal.create', 'accounting.journal.edit', 'accounting.journal.post', 'accounting.journal.reverse',
       'fiscal_year.close', 'fiscal_year.create', 'monthly_close.close', 'monthly_close.reopen', 'vat.close', 'vat.reopen',
-      'invoice.cancel', 'invoice.delete', 'invoice.adjust', 'invoice.adjust_approve', 'invoice.recurring', 'document.approve', 'access.full_access.grant']) {
+      'invoice.cancel', 'invoice.delete', 'invoice.adjust', 'invoice.adjust_approve', 'invoice.adjust_void', 'invoice.recurring', 'document.approve', 'access.full_access.grant']) {
       expect(byRole['Operations'], forbidden).not.toContain(forbidden);
     }
     expect(byRole['Operations'].filter((c) => c.startsWith('access.'))).toEqual([]);
