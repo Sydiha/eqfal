@@ -7,7 +7,7 @@ import { formatMoney } from '../money-format';
  * External credit / debit notes registered against one approved invoice. EQFAL registers notes issued elsewhere; it never issues them.
  * Amounts, VAT, period rules and caps are decided by the server; this only collects raw inputs and shows the stored result.
  */
-type Note={id:string;adjustment_type:'credit'|'debit';status:'draft'|'approved'|'cancelled';adjustment_date:string;external_number:string;reason:string;subtotal_amount:string;vat_amount:string;total_amount:string;version:number;journal_id:string|null;journal_status:string|null};
+type Note={id:string;adjustment_type:'credit'|'debit';status:'draft'|'approved'|'cancelled';adjustment_date:string;external_number:string;internal_number?:string|null;reason:string;subtotal_amount:string;vat_amount:string;total_amount:string;version:number;journal_id:string|null;journal_status:string|null};
 type FormLine={description:string;vat_treatment:string;vat_rate:string;net_amount:string;vat_recoverability:string;vat_recoverable_percent:string};
 type Form={adjustment_type:'credit'|'debit';external_number:string;adjustment_date:string;reason:string;lines:FormLine[]};
 const TREATMENTS=['standard','zero_rated','exempt','out_of_scope'] as const;
@@ -40,7 +40,7 @@ export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,o
   {loadError&&<p className="sales-invoices__error">{t('invoiceNotes.loadError')}</p>}
   {notes&&notes.length===0&&<p className="sales-invoices__hint">{t('invoiceNotes.empty')}</p>}
   {notes&&notes.length>0&&<ul className="sales-invoices__settlements" data-testid="invoice-notes-list">{notes.map(n=><li key={n.id}>
-   <span>{t(`invoiceWorkspace.adjustmentTypes.${n.adjustment_type}`)} {n.external_number} | {t(`invoiceWorkspace.adjustmentStatuses.${n.status}`)}</span>
+   <span>{t(`invoiceWorkspace.adjustmentTypes.${n.adjustment_type}`)} {n.external_number}{n.internal_number&&<> | {t('invoiceNotes.internalNumber')}: <bdi dir="ltr" data-testid="note-internal-number">{n.internal_number}</bdi></>} | {t(`invoiceWorkspace.adjustmentStatuses.${n.status}`)}</span>
    <span>{formatDisplayDate(n.adjustment_date,'en')} | {n.reason}</span>
    <strong>{money(n.total_amount)} {currency}</strong>
    {n.status==='draft'&&<span className="modal-actions">

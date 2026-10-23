@@ -185,7 +185,7 @@ export class InvoiceAdjustmentService {
     const header = (await client.query(
       `SELECT a.id, a.original_invoice_id, a.direction, a.adjustment_type, a.status, a.adjustment_date::text, a.external_number, a.reason, a.notes, a.counterparty_id,
               c.name AS counterparty_name, a.currency, a.subtotal_amount::text, a.vat_amount::text, a.total_amount::text, a.created_by_user_id, a.approved_by_user_id,
-              a.approved_at, a.cancelled_by_user_id, a.cancelled_at, a.cancellation_reason, a.fiscal_year_id, a.version, a.created_at, a.updated_at,
+              a.approved_at, a.cancelled_by_user_id, a.cancelled_at, a.cancellation_reason, a.fiscal_year_id, a.internal_number::text, a.version, a.created_at, a.updated_at,
               i.internal_number AS original_internal_number, i.external_reference AS original_external_reference, i.total_amount::text AS original_total_amount,
               l.document_id AS source_document_id, j.id AS journal_id, j.status AS journal_status
        FROM invoice_adjustments a
@@ -215,7 +215,7 @@ export class InvoiceAdjustmentService {
     const exists = await this.db.query('SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2', [invoiceId, companyId]);
     if (!exists.rowCount) throw new InvoiceError(404, 'INVOICE_NOT_FOUND', 'Invoice not found');
     const rows = (await this.db.query(
-      `SELECT a.id, a.adjustment_type, a.status, a.adjustment_date::text, a.external_number, a.reason, a.subtotal_amount::text, a.vat_amount::text, a.total_amount::text,
+      `SELECT a.id, a.adjustment_type, a.status, a.adjustment_date::text, a.external_number, a.internal_number::text, a.reason, a.subtotal_amount::text, a.vat_amount::text, a.total_amount::text,
               a.version, j.id AS journal_id, j.status AS journal_status
        FROM invoice_adjustments a LEFT JOIN journal_entries j ON j.company_id = a.company_id AND j.source_type = 'invoice_adjustment' AND j.source_id = a.id
        WHERE a.original_invoice_id = $1 AND a.company_id = $2 ORDER BY a.adjustment_date, a.created_at, a.id`, [invoiceId, companyId])).rows;
@@ -441,9 +441,11 @@ export class InvoiceAdjustmentService {
           [mapped.payable!, '0', note.total_amount, null]];
       const journalLines = note.adjustment_type === 'credit' ? natural.map(([a, d, c, m]) => [a, c, d, m] as [string, string, string, string | null]) : natural;
 
+      // Internal number (per company + note type + fiscal year), allocated only here, in the approval transaction: a failed approval consumes none.
+      const internalNumber = (await client.query<{ n: string }>('SELECT allocate_adjustment_number($1, $2, $3)::text AS n', [companyId, note.adjustment_type, fiscalYearId])).rows[0]!.n;
       await client.query(
-        `UPDATE invoice_adjustments SET status='approved', approved_by_user_id=$3, approved_at=NOW(), fiscal_year_id=$4, version=version+1, updated_at=NOW()
-         WHERE id=$1 AND company_id=$2 AND status='draft'`, [id, companyId, actorUserId, fiscalYearId]);
+        `UPDATE invoice_adjustments SET status='approved', approved_by_user_id=$3, approved_at=NOW(), fiscal_year_id=$4, internal_number=$5, version=version+1, updated_at=NOW()
+         WHERE id=$1 AND company_id=$2 AND status='draft'`, [id, companyId, actorUserId, fiscalYearId, internalNumber]);
       const label = `${note.adjustment_type === 'credit' ? 'Credit' : 'Debit'} note ${note.external_number}`;
       const journal = (await client.query(
         `INSERT INTO journal_entries (company_id, fiscal_year_id, accounting_date, description, reference, source_type, source_id, entry_type, status, created_by)

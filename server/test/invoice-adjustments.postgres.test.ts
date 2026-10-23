@@ -335,4 +335,82 @@ describeDatabase('external credit/debit notes (PostgreSQL)', () => {
     await accounting.post(co.id, approver, out.journal_id);
     expect((await q('SELECT status FROM journal_entries WHERE id=$1', [out.journal_id]))[0].status).toBe('posted');
   });
+
+  it('internal numbering: per company + note type + fiscal year, at approval only, concurrency-safe, rollback-safe, immutable, invoices untouched', async () => {
+    const co = await company('num');
+    const inv = await posted(co, 'sales', [std('')]);
+    const invNumbers = async () => q(`SELECT internal_number::text n FROM invoices WHERE company_id=$1 ORDER BY internal_number`, [co.id]);
+    const counters = async () => n(`SELECT count(*) n FROM invoice_number_counters WHERE company_id=$1`, [co.id]);
+    const invBefore = { numbers: await invNumbers(), counters: await counters() };
+    const c1 = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    const c2 = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    const d1 = await create(co, inv.id, noteBody('debit', [nl('10.00')]));
+    // drafts carry no internal number and consumed none
+    expect(c1.internal_number ?? null).toBeNull();
+    expect(await n(`SELECT count(*) n FROM invoice_adjustment_number_counters WHERE company_id=$1`, [co.id])).toBe(0);
+    // two concurrent approvals of the same type get distinct consecutive numbers
+    const [a, b] = await Promise.all([approveNote(co, c1.id, c1.version), approveNote(co, c2.id, c2.version)]);
+    const nums = (await q(`SELECT internal_number::text n, external_number e FROM invoice_adjustments WHERE id = ANY($1) ORDER BY internal_number`, [[c1.id, c2.id]]));
+    expect(nums.map((r: { n: string }) => r.n)).toEqual(['1', '2']);
+    expect(a.adjustment.internal_number).not.toBe(b.adjustment.internal_number);
+    // external numbers are preserved
+    expect((await q(`SELECT external_number e FROM invoice_adjustments WHERE id=$1`, [c1.id]))[0].e).toBe(c1.external_number);
+    // the debit counter is independent
+    const dOut = await approveNote(co, d1.id, d1.version);
+    expect(dOut.adjustment.internal_number).toBe('1');
+    // a failed approval (period closed) consumes no number
+    const c3 = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    await q(`UPDATE vat_periods SET status='closed' WHERE id=$1`, [co.vatPeriod]);
+    expect(await code(approveNote(co, c3.id, c3.version))).toBe('INVOICE_VAT_PERIOD_CLOSED');
+    await q(`UPDATE vat_periods SET status='open' WHERE id=$1`, [co.vatPeriod]);
+    expect((await q(`SELECT internal_number FROM invoice_adjustments WHERE id=$1`, [c3.id]))[0].internal_number).toBeNull();
+    const c3ok = await approveNote(co, c3.id, c3.version);
+    expect(c3ok.adjustment.internal_number).toBe('3');
+    // uniqueness, immutability, draft cannot carry a number, counters cannot decrease or be deleted
+    expect(await code(q(`UPDATE invoice_adjustments SET internal_number=1 WHERE id=$1`, [c1.id]))).toBe('23514');
+    expect(await code(q(`UPDATE invoice_adjustment_number_counters SET last_number=1 WHERE company_id=$1 AND adjustment_type='credit'`, [co.id]))).toBe('23514');
+    expect(await code(q(`DELETE FROM invoice_adjustment_number_counters WHERE company_id=$1`, [co.id]))).toBe('23514');
+    const c4 = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    expect(await code(q(`UPDATE invoice_adjustments SET internal_number=9 WHERE id=$1`, [c4.id]))).toBe('23514');
+    // invoice numbering is untouched
+    expect({ numbers: await invNumbers(), counters: await counters() }).toEqual(invBefore);
+    // historical approved notes (no number) stay readable
+    expect((await notes.listForInvoice(co.id, inv.id)).adjustments.length).toBeGreaterThan(0);
+  });
+
+  it('internal numbering: a failure AFTER allocation rolls the counter back; companies and fiscal years number independently; new approvals need a number', async () => {
+    const co = await company('rb');
+    const inv = await posted(co, 'sales', [std()]);
+    const counter = async () => q(`SELECT last_number::text l FROM invoice_adjustment_number_counters WHERE company_id=$1 AND adjustment_type='credit' AND fiscal_year_id=$2`, [co.id, co.fy]);
+    const first = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    await approveNote(co, first.id, first.version);
+    expect(await counter()).toEqual([{ l: '1' }]);
+    // fail the approval after allocate_adjustment_number() and the note UPDATE: the draft journal insert raises
+    const victim = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    await q(`CREATE OR REPLACE FUNCTION test_fail_note_journal() RETURNS trigger AS $$ BEGIN IF NEW.source_id = '${victim.id}' THEN RAISE EXCEPTION 'injected failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
+    await q(`CREATE TRIGGER test_fail_note_journal BEFORE INSERT ON journal_entries FOR EACH ROW EXECUTE FUNCTION test_fail_note_journal()`);
+    try { expect(await code(approveNote(co, victim.id, victim.version))).not.toBe('ok'); }
+    finally { await q('DROP TRIGGER test_fail_note_journal ON journal_entries'); await q('DROP FUNCTION test_fail_note_journal()'); }
+    expect(await counter()).toEqual([{ l: '1' }]);
+    expect((await q(`SELECT status, internal_number FROM invoice_adjustments WHERE id=$1`, [victim.id]))[0]).toEqual({ status: 'draft', internal_number: null });
+    const retry = await approveNote(co, victim.id, victim.version);
+    expect(retry.adjustment.internal_number).toBe('2');
+    // another company restarts at 1
+    const other = await company('rb2');
+    const oInv = await posted(other, 'sales', [std()]);
+    const oNote = await create(other, oInv.id, noteBody('credit', [nl('10.00')]));
+    expect((await approveNote(other, oNote.id, oNote.version)).adjustment.internal_number).toBe('1');
+    // another fiscal year of the same company restarts at 1 (its own invoice and VAT period)
+    const fy2 = (await q(`INSERT INTO fiscal_years (company_id, name, start_date, end_date) VALUES ($1,'FY27','2027-01-01','2027-12-31') RETURNING id`, [co.id]))[0].id;
+    await q(`INSERT INTO vat_periods (company_id, fiscal_year_id, period_start, period_end, status) VALUES ($1,$2,'2027-03-01','2027-03-31','open')`, [co.id, fy2]);
+    const inv2 = await posted(co, 'sales', [std()], { date: '2027-03-10' });
+    const n2 = await create(co, inv2.id, noteBody('credit', [nl('10.00')], { adjustment_date: '2027-03-20' }));
+    const out2 = await approveNote(co, n2.id, n2.version);
+    expect(out2.adjustment.internal_number).toBe('1');
+    expect(out2.adjustment.fiscal_year_id).toBe(fy2);
+    expect(await n(`SELECT count(*) n FROM invoice_adjustment_number_counters WHERE company_id=$1`, [co.id])).toBe(2);
+    // the database refuses a draft -> approved transition without a number
+    const d = await create(co, inv.id, noteBody('credit', [nl('10.00')]));
+    expect(await code(q(`UPDATE invoice_adjustments SET status='approved', approved_by_user_id=$2, approved_at=NOW(), fiscal_year_id=$3 WHERE id=$1`, [d.id, approver, co.fy]))).toBe('23514');
+  });
 });
