@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from './test-utils';
+import type { DateContextState } from '../context/DateContext';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpeningBalanceReview } from '../components/OpeningBalanceReview';
 import i18n from '../i18n';
@@ -74,5 +75,21 @@ describe('OpeningBalanceFileImport', () => {
     await i18n.changeLanguage('ar');
     vi.stubGlobal('fetch', mock([], preview())); renderView();
     await waitFor(() => expect(screen.getByText('استيراد من Excel/CSV')).toBeInTheDocument());
+  });
+
+  // Regression: the header's fiscal-year context can briefly hold an id from another company/year. The page used it unchecked, the API answered 404
+  // "Opening balance review not found", and the screen showed zeros until the user left and returned.
+  it('ignores a stale header fiscal-year id that is not in this company and loads the real year', async () => {
+    const staleId = '99999999-9999-4999-8999-999999999999';
+    const base = mock([], preview());
+    const f = vi.fn().mockImplementation((url: string, init?: RequestInit) => String(url).includes(staleId) ? json({ error: 'Opening balance review not found' }, 404) : base(url, init));
+    vi.stubGlobal('fetch', f);
+    const ctx = { companyId: 'c', selectedFiscalYearId: staleId, availableFiscalYears: [], selectedPeriodId: null, availablePeriodsForSelectedYear: [], periodMode: 'specific', isLoading: false, error: null,
+      onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => {} } as unknown as DateContextState;
+    render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove={false} onUnauthorized={() => undefined} />, { dateContextValue: ctx });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add item' })).toBeInTheDocument());
+    expect(screen.queryByText('Opening balance review not found')).toBeNull();
+    expect(f.mock.calls.some(([u]) => String(u).includes(staleId))).toBe(false);
+    expect(f.mock.calls.some(([u]) => String(u).includes(`/api/opening-balances/${year.id}`))).toBe(true);
   });
 });
