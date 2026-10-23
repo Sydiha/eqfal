@@ -1,7 +1,7 @@
 # EQFAL Session Handoff
 
-**Date:** 2026-10-06
-**Session:** Task 33 official documentation cleanup
+**Date:** 2026-10-23
+**Session:** T7 documentation and Phase 14 Row 4 reconciliation (docs only)
 
 ## Current Objective
 Maintain synchronized EQFAL project context with minimal token/credit usage
@@ -10,6 +10,7 @@ Maintain synchronized EQFAL project context with minimal token/credit usage
 idle
 
 ## Completed This Session
+- T7.3/T7.4 results recorded in PROJECT_STATE.md and matrix §9; reports stored in `docs/evidence/t7/`; Row 4 kept `PARTIAL` (docs only, baseline `d2c32d4`)
 - Docs reconciled against main after Tasks 29–32 (Task 33, docs only)
 - Earlier: PR #307 merged (Phase 15D Purchases visual); PR #214 merged; PR #229 closed without merge (superseded by #231)
 - Open PRs: none at the time of Task 33 inspection (excluding the Task 33 PR itself)
@@ -30,11 +31,11 @@ idle
 If project skills are unavailable because the session starts outside the repository root, perform context-sync manually by reading PROJECT_STATE.md + SESSION_HANDOFF.md and verifying origin/main.
 
 ## Next Exact Step
-Owner selects the next EQFAL task
+Owner reviews the docs PR and decides Row 4: accept listed limits (PASS) or require a Replit TEST run
 
 ## Do Not Repeat
 - Do not redesign this workflow.
 - Do not reopen completed PR #214, #229, #307, #314, #315, #316, #317, or #318 work.
 - Do not reconsider GitHub Actions unless the Owner explicitly asks.
 
-**Last updated:** 2026-10-06
+**Last updated:** 2026-10-23
