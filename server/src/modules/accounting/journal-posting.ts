@@ -5,7 +5,8 @@ import { isOperationalSourceType, operationalSourceQuery, OperationalSource, Jou
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
 import { invoiceAdjustmentJournalIsExact } from '../vat/vat-invoice-adjustment';
-import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE } from './journal-posting-errors';
+import { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError, OPENING_BALANCE_MANUAL_CODE, OPENING_BALANCE_CONTEXT_CODE, CARRYFORWARD_RECONCILIATION_CODE } from './journal-posting-errors';
+import { verifyCarryforwardReview } from '../fiscal-years/fiscal-year-carryforward';
 import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath, assertCutoverPostingContext } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 import { partnerJournalIsExact, partnerReversalJournalIsExact } from './partner-transaction-posting';
@@ -74,6 +75,13 @@ async function assertOpeningBalanceReviewContext(
   if (duplicate.rowCount) throw blocked('A posted opening balance journal already exists for this fiscal year');
   // Path exclusivity: a fiscal year governed by an active external-reference range follows the cut-over path, never the opening path.
   await assertFiscalYearNotInCutoverPath(client, companyId, journal.fiscal_year_id);
+  // B1: a carry-forward review is posted only when it equals the originating year's closing position exactly. Every opening-balance
+  // journal reaches the ledger through this function, so no other approval or posting path can skip it. Mismatches are never corrected.
+  const carry = await verifyCarryforwardReview(client, companyId, reviewId, journal.id);
+  if (carry) {
+    throw new OpeningBalanceJournalBlockedError(CARRYFORWARD_RECONCILIATION_CODE,
+      `Carry-forward opening balance does not reconcile with the closing balances of the originating fiscal year (${carry.reason})`, carry.mismatches);
+  }
 }
 
 /**

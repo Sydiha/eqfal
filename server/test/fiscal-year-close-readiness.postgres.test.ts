@@ -43,7 +43,8 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
     const fy = (await pool.query<{ id: string }>(
       "INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,'FY 2026','2026-01-01','2026-12-31') RETURNING id", [company])).rows[0]!.id;
     const fy2025 = (await pool.query<{ id: string }>(
-      "INSERT INTO fiscal_years(company_id,name,start_date,end_date) VALUES($1,'FY 2025','2025-01-01','2025-12-31') RETURNING id", [company])).rows[0]!.id;
+      // P1 B2: the preceding year is closed with nothing to carry (empty ledger), so FY 2026 needs no carry-forward.
+      "INSERT INTO fiscal_years(company_id,name,start_date,end_date,status) VALUES($1,'FY 2025','2025-01-01','2025-12-31','closed') RETURNING id", [company])).rows[0]!.id;
     const specs: ProfileSpec[] = opts.profiles ?? [
       { from: '2025-01-01', to: null, vat: opts.vat ? 'registered' : 'not_registered', regFrom: '2025-01-01' },
     ];
@@ -288,6 +289,51 @@ describeDatabase('Fiscal-year close readiness gate with PostgreSQL', () => {
         const readiness = await getFiscalYearCloseReadiness(client, w.company, { id: w.fy, start_date: '2026-01-01', end_date: '2026-12-31' });
         expect(readiness.warnings.map((x) => x.code)).not.toContain('vat_profile_needs_review');
       } finally { client.release(); }
+    });
+  });
+
+  // P1 B2 (Owner policy F1): existing exceptions are preserved; nothing else exempts a subsequent year.
+  describe('subsequent-year carry-forward prerequisite', () => {
+    /** FY 2025 reopened with a posted balance (so there IS something to carry) and an approved, posted ordinary opening balance on FY 2026. */
+    async function withHistory(w: World) {
+      await pool.query("UPDATE fiscal_years SET status='open' WHERE id=$1", [w.fy2025]);
+      const posted = async (fy: string, date: string, entryType: string) => {
+        const j = (await pool.query<{ id: string }>(
+          'INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,entry_type,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
+          [w.company, fy, date, entryType, entryType, userId])).rows[0]!.id;
+        await pool.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,sequence) VALUES($1,$2,$3,50,0,1),($1,$2,$4,0,50,2)', [w.company, j, w.asset.balance, w.asset.pnl]);
+        await pool.query("UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1", [j, userId]);
+        return j;
+      };
+      await posted(w.fy2025, '2025-06-01', 'standard');
+      const opening = await posted(w.fy, '2026-01-01', 'opening_balance');
+      await pool.query(
+        "INSERT INTO opening_balance_reviews(company_id,fiscal_year_id,prepared_by,status,submitted_by,submitted_at,approved_by,approved_at,journal_entry_id) VALUES($1,$2,$3,'approved',$3,NOW(),$3,NOW(),$4)",
+        [w.company, w.fy, userId, opening]);
+    }
+
+    it('first live year: an approved historical opening balance still suffices, even with an earlier open year', async () => {
+      const w = await world({ profiles: [{ from: '2025-01-01', to: null, vat: 'not_registered', firstLive: '2026-01-01' }] });
+      await withHistory(w);
+      await expectCloses(w);
+    });
+
+    it('not the first live year: the same approved ordinary opening balance does not replace the carry-forward', async () => {
+      const w = await world();
+      await withHistory(w);
+      await expectBlocked(w, 'previous_fiscal_year_not_closed');
+      await pool.query("UPDATE fiscal_years SET status='closed' WHERE id=$1", [w.fy2025]);
+      await expectBlocked(w, 'carryforward_missing');
+    });
+
+    it('no approved profile: the prerequisite applies (no implicit first-live exception)', async () => {
+      const w = await world({ profiles: [] });
+      await withHistory(w);
+      expect(await tryClose(w)).toContain('previous_fiscal_year_not_closed');
+    });
+
+    it('a preceding year with nothing to carry needs no carry-forward', async () => {
+      await expectCloses(await world());
     });
   });
 });

@@ -12,8 +12,11 @@ export const OPENING_BALANCE_CONTEXT_CODE = 'OPENING_BALANCE_REVIEW_CONTEXT_INVA
 
 /** An opening-balance journal that is not created and posted by the approved opening-balance review workflow. `code` is stable for the client. */
 export class OpeningBalanceJournalBlockedError extends JournalPostingConflictError {
-  constructor(public readonly code: string, message: string) { super(message); }
+  constructor(public readonly code: string, message: string, public readonly mismatches?: Array<{ account_id: string; code: string; expected: string; actual: string }>) { super(message); }
 }
+
+/** B1: a carry-forward opening balance that does not equal the originating year's closing position exactly. */
+export const CARRYFORWARD_RECONCILIATION_CODE = 'CARRYFORWARD_RECONCILIATION_MISMATCH';
 
 export const LEDGER_SOURCE_AUTHORITY_BLOCKED_CODE = 'LEDGER_SOURCE_AUTHORITY_BLOCKED';
 export const ONBOARDING_PATH_CUTOVER_ACTIVE_CODE = 'ONBOARDING_PATH_CUTOVER_ACTIVE';

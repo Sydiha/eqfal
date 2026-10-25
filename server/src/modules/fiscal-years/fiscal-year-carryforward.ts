@@ -57,21 +57,10 @@ async function finalBalances(client: Pick<PoolClient, 'query'>, companyId: strin
      ORDER BY a.code,a.id`, [companyId, yearId])).rows;
 }
 
-async function compute(client: Pick<PoolClient, 'query'>, companyId: string, from: Year, to: Year | null, retainedAccount: { id: string; code: string; name: string; account_type: string; is_active: boolean } | null) {
-  const rows = await finalBalances(client, companyId, from.id);
-  const blockers: Array<{ code: string; detail?: string }> = [];
-  const totalNet = rows.reduce((sum, r) => sum + cents(r.net), 0n);
-  if (totalNet !== 0n) blockers.push({ code: 'TRIAL_BALANCE_UNBALANCED', detail: money(totalNet) });
-  if (from.status !== 'closed') blockers.push({ code: 'FISCAL_YEAR_NOT_CLOSED' });
-  if (!to) blockers.push({ code: 'NEXT_FISCAL_YEAR_MISSING' });
-  else if (to.status !== 'open') blockers.push({ code: 'NEXT_FISCAL_YEAR_CLOSED' });
-  if (to) {
-    if ((await client.query('SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, to.id])).rowCount
-      || (await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance'", [companyId, to.id])).rowCount) {
-      blockers.push({ code: 'OPENING_BALANCE_ALREADY_EXISTS' });
-    }
-  }
+type RetainedRef = { id: string; code: string; name: string; is_active: boolean };
 
+/** Pure netting of a closed year's final balances into the carried lines (debit-positive halalas), shared by prepare and the reconciliation checks. */
+function carryNets(rows: NetRow[], retainedAccount: RetainedRef | null) {
   // Result of the year = net of all revenue/expense accounts (credit-positive profit). Balance-sheet accounts are carried as they stand.
   let result = 0n; // debit-positive net of P&L accounts; profit is negative here
   const carried = new Map<string, { row: NetRow; net: bigint }>();
@@ -90,6 +79,92 @@ async function compute(client: Pick<PoolClient, 'query'>, companyId: string, fro
       net: (existing?.net ?? 0n) - netResult,
     });
   }
+  return { carried, netResult };
+}
+
+/** Per-account debit-positive net in halalas; zero nets are kept so an extra account is still reported. */
+export type AccountNets = Map<string, { code: string; net: bigint }>;
+export type CarryMismatch = { account_id: string; code: string; expected: string; actual: string };
+
+const signed = (net: bigint) => (net === 0n ? 'none' : `${net > 0n ? 'debit' : 'credit'}:${money(net < 0n ? -net : net)}`);
+
+/**
+ * Expected opening position of the next year, recomputed from the closed year's authoritative posted ledger (never from the stored proposal).
+ * `empty` = nothing to carry: no balance-sheet balance and a zero result.
+ */
+export async function expectedCarryforward(client: Pick<PoolClient, 'query'>, companyId: string, fromYearId: string, retainedAccountId: string | null) {
+  const rows = await finalBalances(client, companyId, fromYearId);
+  const retained = retainedAccountId
+    ? (await client.query<RetainedRef>('SELECT id,code,name,is_active FROM accounts WHERE id=$1 AND company_id=$2', [retainedAccountId, companyId])).rows[0] ?? null
+    : null;
+  const { carried, netResult } = carryNets(rows, retained);
+  const nets: AccountNets = new Map([...carried.values()].filter(({ net }) => net !== 0n).map(({ row, net }) => [row.account_id, { code: row.code, net }]));
+  const unbalanced = rows.reduce((sum, r) => sum + cents(r.net), 0n) !== 0n;
+  return { nets, netResult, unbalanced, empty: nets.size === 0 && netResult === 0n };
+}
+
+/** Exact (integer halalah) comparison: every account, side and amount must match; missing and extra accounts are both mismatches. */
+export function carryforwardMismatches(expected: AccountNets, actual: AccountNets): CarryMismatch[] {
+  const ids = new Set([...expected.keys(), ...actual.keys()]);
+  const out: CarryMismatch[] = [];
+  for (const id of ids) {
+    const e = expected.get(id), a = actual.get(id);
+    if (e && a && e.net === a.net) continue;
+    out.push({ account_id: id, code: (e ?? a)!.code, expected: signed(e?.net ?? 0n), actual: a ? signed(a.net) : 'missing' });
+  }
+  return out.sort((x, y) => x.code.localeCompare(y.code) || x.account_id.localeCompare(y.account_id));
+}
+
+/** Debit-positive net per account of a query returning (account_id, code, net::text). */
+export async function accountNets(client: Pick<PoolClient, 'query'>, sql: string, params: unknown[]): Promise<AccountNets> {
+  const rows = (await client.query<{ account_id: string; code: string; net: string }>(sql, params)).rows;
+  return new Map(rows.map((r) => [r.account_id, { code: r.code, net: cents(r.net) }]));
+}
+
+/**
+ * B1 (Owner policy F2): a carry-forward opening balance review may be reviewed, but it may only be posted when the review's items AND the
+ * journal being posted equal, exactly, the carry-forward recomputed from the originating closed year's posted ledger. Ordinary opening
+ * balance reviews (no carry-forward record) return null and are not affected. Runs inside the posting transaction (review already locked).
+ */
+export async function verifyCarryforwardReview(client: Pick<PoolClient, 'query'>, companyId: string, reviewId: string, journalId: string) {
+  const record = (await client.query<{ from_fiscal_year_id: string; retained_earnings_account_id: string }>(
+    'SELECT from_fiscal_year_id,retained_earnings_account_id FROM fiscal_year_carryforwards WHERE company_id=$1 AND opening_balance_review_id=$2',
+    [companyId, reviewId])).rows[0];
+  if (!record) return null;
+  // FOR SHARE: the originating year cannot change state while the comparison is made; it must still be closed.
+  const from = (await client.query<{ status: string }>('SELECT status FROM fiscal_years WHERE id=$1 AND company_id=$2 FOR SHARE', [record.from_fiscal_year_id, companyId])).rows[0];
+  if (!from || from.status !== 'closed') return { reason: 'SOURCE_YEAR_NOT_CLOSED', mismatches: [] as CarryMismatch[] };
+  const expected = await expectedCarryforward(client, companyId, record.from_fiscal_year_id, record.retained_earnings_account_id);
+  if (expected.unbalanced) return { reason: 'SOURCE_LEDGER_UNBALANCED', mismatches: [] as CarryMismatch[] };
+  const items = await accountNets(client,
+    `SELECT i.account_id,a.code,SUM(CASE WHEN i.balance_side='debit' THEN i.amount ELSE -i.amount END)::text net
+     FROM opening_balance_items i JOIN accounts a ON a.id=i.account_id AND a.company_id=i.company_id
+     WHERE i.company_id=$1 AND i.review_id=$2 GROUP BY i.account_id,a.code`, [companyId, reviewId]);
+  const journal = await accountNets(client,
+    `SELECT l.account_id,a.code,SUM(l.debit-l.credit)::text net
+     FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
+     WHERE l.company_id=$1 AND l.journal_entry_id=$2 GROUP BY l.account_id,a.code`, [companyId, journalId]);
+  const mismatches = carryforwardMismatches(expected.nets, items);
+  for (const m of carryforwardMismatches(expected.nets, journal)) if (!mismatches.some((x) => x.account_id === m.account_id)) mismatches.push(m);
+  return mismatches.length ? { reason: 'CARRYFORWARD_RECONCILIATION_MISMATCH', mismatches } : null;
+}
+
+async function compute(client: Pick<PoolClient, 'query'>, companyId: string, from: Year, to: Year | null, retainedAccount: { id: string; code: string; name: string; account_type: string; is_active: boolean } | null) {
+  const rows = await finalBalances(client, companyId, from.id);
+  const blockers: Array<{ code: string; detail?: string }> = [];
+  const totalNet = rows.reduce((sum, r) => sum + cents(r.net), 0n);
+  if (totalNet !== 0n) blockers.push({ code: 'TRIAL_BALANCE_UNBALANCED', detail: money(totalNet) });
+  if (from.status !== 'closed') blockers.push({ code: 'FISCAL_YEAR_NOT_CLOSED' });
+  if (!to) blockers.push({ code: 'NEXT_FISCAL_YEAR_MISSING' });
+  else if (to.status !== 'open') blockers.push({ code: 'NEXT_FISCAL_YEAR_CLOSED' });
+  if (to) {
+    if ((await client.query('SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2', [companyId, to.id])).rowCount
+      || (await client.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance'", [companyId, to.id])).rowCount) {
+      blockers.push({ code: 'OPENING_BALANCE_ALREADY_EXISTS' });
+    }
+  }
+
+  const { carried, netResult } = carryNets(rows, retainedAccount);
   const lines: CarryLine[] = [...carried.values()].filter(({ net }) => net !== 0n).sort((x, y) => x.row.code.localeCompare(y.row.code)).map(({ row, net }) => ({
     account_id: row.account_id, code: row.code, name: row.name, account_type: row.account_type,
     category: CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',

@@ -3,6 +3,7 @@ import type { CompanyReconciliation } from '../banking/bank-reconciliation-core'
 import { AnnualClosingService } from '../annual-closing/annual-closing.service';
 import { lockAccountingRange } from '../monthly-close/accounting-period.guard';
 import { lockVatPeriodScope } from '../vat/vat.router';
+import { accountNets, carryforwardMismatches, expectedCarryforward } from './fiscal-year-carryforward';
 
 export interface CloseFinding {
   code: string;
@@ -106,7 +107,47 @@ async function loadApplicability(client: PoolClient, companyId: string, year: Cl
     "SELECT EXISTS(SELECT 1 FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2 AND status='approved') approved",
     [companyId, id],
   )).rows[0]!.approved;
-  return { ...evaluateProfileApplicability(profiles, start, end), openingApproved: approved };
+  return { ...evaluateProfileApplicability(profiles, start, end), openingApproved: approved, hasProfile: profiles.length > 0 };
+}
+
+/**
+ * B2 (Owner policy F1): a subsequent fiscal year closes only when the immediately preceding year of the same company is closed and its
+ * closing position has been carried into this year's posted opening balance EXACTLY (recomputed from the preceding year's posted ledger,
+ * integer halalas). Not applicable to the first year on record; the caller keeps the existing first-live-year and cut-over exceptions.
+ * Runs on the close transaction: this year is already FOR UPDATE (so no opening journal can be posted into it concurrently) and the
+ * preceding year is read FOR SHARE.
+ */
+export async function carryforwardPrerequisite(client: PoolClient, companyId: string, year: CloseYear): Promise<CloseFinding | null> {
+  const prev = (await client.query<{ id: string; name: string; end_date: string; status: string }>(
+    `SELECT id,name,end_date::text,status FROM fiscal_years WHERE company_id=$1 AND end_date<$2::date ORDER BY end_date DESC LIMIT 1 FOR SHARE`,
+    [companyId, year.start_date])).rows[0];
+  if (!prev) return null;
+  const finding = (code: string, detail: string, count = 1): CloseFinding => ({ code, count, detail });
+  if (prev.end_date !== dayBefore(year.start_date)) return finding('previous_fiscal_year_not_contiguous', prev.name);
+  if (prev.status !== 'closed') return finding('previous_fiscal_year_not_closed', prev.name);
+
+  const record = (await client.query<{ opening_balance_review_id: string; retained_earnings_account_id: string }>(
+    'SELECT opening_balance_review_id,retained_earnings_account_id FROM fiscal_year_carryforwards WHERE company_id=$1 AND from_fiscal_year_id=$2 AND to_fiscal_year_id=$3',
+    [companyId, prev.id, year.id])).rows[0];
+  const opening = (await client.query<{ id: string }>(
+    "SELECT id FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance' AND status='posted'", [companyId, year.id])).rows;
+  const expected = await expectedCarryforward(client, companyId, prev.id, record?.retained_earnings_account_id ?? null);
+  if (expected.unbalanced) return finding('carryforward_reconciliation_mismatch', `${prev.name}: trial balance unbalanced`);
+  if (!record) {
+    // Nothing to carry (no balance-sheet balance, zero result): valid only while this year has no opening balance either.
+    if (expected.empty && opening.length === 0) return null;
+    return finding('carryforward_missing', prev.name);
+  }
+  const review = (await client.query<{ status: string; journal_entry_id: string | null }>(
+    'SELECT status,journal_entry_id FROM opening_balance_reviews WHERE id=$1 AND company_id=$2', [record.opening_balance_review_id, companyId])).rows[0];
+  const journalId = review?.status === 'approved' ? review.journal_entry_id : null;
+  if (!journalId || opening.length !== 1 || opening[0]!.id !== journalId) return finding('carryforward_opening_not_posted', prev.name);
+  const posted = await accountNets(client,
+    `SELECT l.account_id,a.code,SUM(l.debit-l.credit)::text net
+     FROM journal_lines l JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
+     WHERE l.company_id=$1 AND l.journal_entry_id=$2 GROUP BY l.account_id,a.code`, [companyId, journalId]);
+  const mismatches = carryforwardMismatches(expected.nets, posted);
+  return mismatches.length ? finding('carryforward_reconciliation_mismatch', mismatches.map((m) => m.code).join(','), mismatches.length) : null;
 }
 
 /**
@@ -145,7 +186,14 @@ export async function getFiscalYearCloseReadiness(
     ['partner_ownership_overlap', num(d.partners!.summary.overlapping_ownership_periods)],
     ['partner_transactions_draft', num(d.partners!.summary.draft_partner_transactions)],
   ];
-  const blockers = blockerSpec.filter(([, count]) => count > 0).map(([code, count]) => ({ code, count }));
+  const blockers: CloseFinding[] = blockerSpec.filter(([, count]) => count > 0).map(([code, count]) => ({ code, count }));
+  // B2: existing exceptions only. A year that contains the authoritative first live accounting date follows the opening-balance rule
+  // above (any approved opening balance); a year on the cut-over path is opened by its cut-over journal.
+  const firstLiveYear = apply.hasProfile && apply.openingApplicable;
+  if (!firstLiveYear && !cutover) {
+    const carry = await carryforwardPrerequisite(client, companyId, year);
+    if (carry) blockers.push(carry);
+  }
 
   const warnings: CloseFinding[] = [];
   const warn = (code: string, count: number, detail?: string) => warnings.push(detail === undefined ? { code, count } : { code, count, detail });
