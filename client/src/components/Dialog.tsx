@@ -16,9 +16,10 @@ function unlockScroll() {
 /**
  * Shared modal. Rendered in a portal on document.body so no ancestor stacking context can place page chrome above it.
  * The dialog is capped to the viewport and scrolls internally (see .modal in shared-ui.css), traps Tab focus,
- * locks background scrolling and restores focus to the opener on close. size="wide" is for forms and tables.
+ * locks background scrolling and restores focus to the opener on close. size="wide" is for forms and tables;
+ * className scopes page-specific styling (e.g. a wider invoice details dialog) without changing other dialogs.
  */
-export function Dialog({ title, children, busy = false, onClose, size }: { title: string; children: ReactNode; busy?: boolean; onClose: () => void; size?: 'wide' }) {
+export function Dialog({ title, children, busy = false, onClose, size, className }: { title: string; children: ReactNode; busy?: boolean; onClose: () => void; size?: 'wide'; className?: string }) {
   const titleId = useRef(`dialog-${Math.random().toString(36).slice(2)}`);
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -46,7 +47,7 @@ export function Dialog({ title, children, busy = false, onClose, size }: { title
     return () => { document.removeEventListener('keydown', keydown); unlockScroll(); previous?.focus(); };
   }, []);
   return createPortal(<div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId.current} className={size === 'wide' ? 'modal modal--wide' : 'modal'} tabIndex={-1}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId.current} className={[size === 'wide' ? 'modal modal--wide' : 'modal', className].filter(Boolean).join(' ')} tabIndex={-1}>
       <h3 id={titleId.current}>{title}</h3>{children}
     </div>
   </div>, document.body);

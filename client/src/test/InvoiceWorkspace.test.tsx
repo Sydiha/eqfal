@@ -36,6 +36,11 @@ const calls=(fetchMock:ReturnType<typeof vi.fn>,needle:string)=>fetchMock.mock.c
 const listCalls=(fetchMock:ReturnType<typeof vi.fn>)=>fetchMock.mock.calls.map(c=>String(c[0])).filter(u=>u.startsWith('/api/invoices?'));
 const lastList=(fetchMock:ReturnType<typeof vi.fn>)=>new URL(listCalls(fetchMock).at(-1)!,'http://x').searchParams;
 
+// Sensitive invoice actions (cancel / delete) live in the "More" menu of the details dialog.
+const moreTrigger=()=>screen.queryByRole('button',{name:/^(More|المزيد)$/});
+const moreItem=(name:string)=>{fireEvent.click(moreTrigger()!);return screen.getByRole('menuitem',{name});};
+const queryMoreItem=(name:string)=>{const trigger=moreTrigger();if(!trigger)return null;fireEvent.click(trigger);const item=screen.queryByRole('menuitem',{name});fireEvent.keyDown(screen.getByRole('menu'),{key:'Escape'});return item;};
+
 beforeEach(async()=>{vi.restoreAllMocks();window.history.replaceState(null,'','/?page=purchases');document.body.style.overflow='';await i18n.changeLanguage('en')});
 
 describe('Purchase direction',()=>{
@@ -525,18 +530,18 @@ describe('F4 cancellation and correction history',()=>{
 
  it('hides the cancel button without invoice.cancel and offers it for draft and submitted invoices with it',async()=>{
   await open(base,caps);
-  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  expect(queryMoreItem('Cancel invoice')).toBeNull();
   cleanup();
   await open(submittedInvoice,{...caps,canCancel:true});
-  expect(screen.getByRole('button',{name:'Cancel invoice'})).toBeInTheDocument();
+  expect(moreItem('Cancel invoice')).toBeEnabled();
   cleanup();
   await open(base,{...caps,canCancel:true});
-  expect(screen.getByRole('button',{name:'Cancel invoice'})).toBeInTheDocument();
+  expect(moreItem('Cancel invoice')).toBeEnabled();
  });
 
  it('requires a reason, then sends the version and the reason once and reloads the invoice',async()=>{
   const fetchMock=await open(submittedInvoice,{...caps,canCancel:true},(key)=>key===`POST /api/invoices/${ID}/cancel`?json({invoice:cancelled}):undefined);
-  fireEvent.click(screen.getByRole('button',{name:'Cancel invoice'}));
+  fireEvent.click(moreItem('Cancel invoice'));
   const group=await screen.findByRole('group',{name:'Cancel this invoice?'});
   const confirm=within(group).getByRole('button',{name:'Cancel invoice'});
   expect(confirm).toBeDisabled();
@@ -551,24 +556,28 @@ describe('F4 cancellation and correction history',()=>{
   await open(cancelled,{...caps,canCancel:true});
   const history=await screen.findByTestId('correction-history');
   expect(within(history).getByText('Issued by mistake')).toBeInTheDocument();
-  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  expect(queryMoreItem('Cancel invoice')).toBeNull();
   expect(screen.getByTestId('next-action-note')).toHaveTextContent('cancelled');
  });
 
  it('never offers cancelling an approved invoice, explains the credit/debit note route and lists existing notes',async()=>{
   const withNote={...approved,adjustments:[{id:'a1',adjustment_type:'credit',status:'draft',adjustment_date:'2026-10-05',total_amount:'115.00',reason:'Returned goods'}]};
-  await open(withNote,{...full,canCancel:true},()=>undefined,'PINV-0001');
-  expect(screen.queryByRole('button',{name:'Cancel invoice'})).not.toBeInTheDocument();
+  const note={id:'a1',adjustment_type:'credit',status:'draft',adjustment_date:'2026-10-05',external_number:'CN-1',internal_number:null,reason:'Returned goods',subtotal_amount:'100.00',vat_amount:'15.00',total_amount:'115.00',version:1,journal_id:null,journal_status:null};
+  await open(withNote,{...full,canCancel:true},(key)=>key===`GET /api/invoices/${ID}/adjustments`?json({adjustments:[note]}):undefined,'PINV-0001');
+  expect(queryMoreItem('Cancel invoice')).toBeNull();
   expect(screen.getByTestId('correction-hint')).toHaveTextContent('credit or debit note');
-  const list=await screen.findByTestId('invoice-adjustments');
+  const list=await screen.findByTestId('invoice-notes-list');
   expect(within(list).getByText(/Credit note/)).toBeInTheDocument();
   expect(within(list).getByText(/Returned goods/)).toBeInTheDocument();
+  // Each external note is listed once (by the notes section with its actions), never repeated in a second history list.
+  expect(screen.getAllByText(/Returned goods/)).toHaveLength(1);
+  expect(screen.queryByTestId('invoice-adjustments')).not.toBeInTheDocument();
  });
 
  it('shows the server rejection in Arabic and keeps the invoice open',async()=>{
   await i18n.changeLanguage('ar');
   await open(submittedInvoice,{...caps,canCancel:true},(key)=>key===`POST /api/invoices/${ID}/cancel`?json({error:'x',code:'INVOICE_CANCEL_NOT_ALLOWED'},409):undefined);
-  fireEvent.click(screen.getByRole('button',{name:'إلغاء الفاتورة'}));
+  fireEvent.click(moreItem('إلغاء الفاتورة'));
   const group=await screen.findByRole('group',{name:'إلغاء هذه الفاتورة؟'});
   fireEvent.change(within(group).getByLabelText('سبب الإلغاء'),{target:{value:'خطأ'}});
   fireEvent.click(within(group).getByRole('button',{name:'إلغاء الفاتورة'}));
@@ -600,13 +609,13 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
 
  it('hides delete without invoice.delete and says why',async()=>{
   await open(base,caps);
-  expect(screen.queryByRole('button',{name:'Delete draft'})).not.toBeInTheDocument();
+  expect(queryMoreItem('Delete draft')).toBeNull();
   expect(screen.getByTestId('delete-note')).toHaveTextContent('You do not have permission to delete invoices');
  });
 
  it('asks for confirmation, then deletes with the current version once and reloads the list',async()=>{
   const fetchMock=await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined);
-  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  fireEvent.click(moreItem('Delete draft'));
   expect(calls(fetchMock,'DELETE ')).toHaveLength(0); // nothing is sent before the confirmation
   const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
   expect(group).toHaveTextContent('cannot be recovered');
@@ -618,7 +627,7 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
 
  it('cancelling the confirmation sends nothing and keeps the invoice open',async()=>{
   const fetchMock=await open(base,del);
-  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  fireEvent.click(moreItem('Delete draft'));
   const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
   fireEvent.click(within(group).getByRole('button',{name:'Cancel'}));
   expect(screen.queryByRole('group',{name:'Permanently delete this draft invoice?'})).not.toBeInTheDocument();
@@ -628,13 +637,13 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
 
  it.each([[submittedInvoice,'Return it to draft first'],[approved,'never deleted'],[cancelledInvoice,'cannot be deleted']] as const)('keeps delete disabled and explains why for a %#-th non-draft status',async(invoice,text)=>{
   await open(invoice as Record<string,unknown>,del,()=>undefined,'sales',invoice===approved?'PINV-0001':'REF-9');
-  expect(screen.getByRole('button',{name:'Delete draft'})).toBeDisabled();
-  expect(screen.getByTestId('delete-note')).toHaveTextContent(text);
+  expect(moreItem('Delete draft')).toBeDisabled();
+  expect(within(screen.getByRole('menu')).getByTestId('delete-note')).toHaveTextContent(text);
  });
 
  it('shows the server refusal and keeps the invoice open',async()=>{
   await open(base,del,(key)=>key===DELETE?json({error:'x',code:'INVOICE_DELETE_NOT_ALLOWED'},409):undefined);
-  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  fireEvent.click(moreItem('Delete draft'));
   const group=await screen.findByRole('group',{name:'Permanently delete this draft invoice?'});
   fireEvent.click(within(group).getByRole('button',{name:'Delete permanently'}));
   expect(await screen.findByRole('alert')).toHaveTextContent('Only a draft invoice can be deleted');
@@ -643,7 +652,7 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
 
  it('works for purchase invoices too',async()=>{
   const fetchMock=await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined,'purchase');
-  fireEvent.click(screen.getByRole('button',{name:'Delete draft'}));
+  fireEvent.click(moreItem('Delete draft'));
   fireEvent.click(within(await screen.findByRole('group',{name:'Permanently delete this draft invoice?'})).getByRole('button',{name:'Delete permanently'}));
   await waitFor(()=>expect(calls(fetchMock,DELETE)).toHaveLength(1));
  });
@@ -651,7 +660,7 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
  it('is fully available in Arabic',async()=>{
   await i18n.changeLanguage('ar');
   await open(base,del,(key)=>key===DELETE?json({deleted:true,id:ID}):undefined);
-  fireEvent.click(screen.getByRole('button',{name:'حذف المسودة'}));
+  fireEvent.click(moreItem('حذف المسودة'));
   const group=await screen.findByRole('group',{name:'حذف مسودة الفاتورة نهائيًا؟'});
   expect(group).toHaveTextContent('لا يمكن استرجاعها');
   expect(within(group).getByRole('button',{name:'حذف نهائي'})).toBeInTheDocument();

@@ -50,3 +50,87 @@
 .sales-invoices__settlements{list-style:none;margin:.25rem 0 0;padding:0;display:grid;gap:.35rem}
 .sales-invoices__settlements li{display:grid;grid-template-columns:auto 1fr auto;gap:.75rem;align-items:baseline;font-size:.875rem}
 @media (max-width:600px){.sales-invoices__settlements li{grid-template-columns:1fr auto}.sales-invoices__settlements li span:nth-child(2){grid-column:1/-1;order:3;color:var(--muted,#667483)}}
+
+/* Invoice details dialog (P2): summary header, collapsible sections and one sticky action area.
+   Everything is scoped to .sales-invoices__detail so no other dialog changes. */
+.modal--wide.sales-invoices__detail{width:min(100%,900px)}
+.sales-invoices__detail{font-size:.9rem;line-height:1.5}
+.sales-invoices__detail table{width:100%;border-collapse:collapse}
+.sales-invoices__detail th{padding:.5rem .6rem;font-size:.75rem;font-weight:600;color:var(--muted,#667483);text-align:start;white-space:nowrap;border-bottom:1px solid var(--border,#e6ecee);text-transform:none}
+.sales-invoices__detail td{padding:.55rem .6rem;font-size:.85rem;text-align:start;border-bottom:1px solid var(--border,#e6ecee);vertical-align:top}
+.sales-invoices__detail .sales-invoices__num{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sales-invoices__detail .sales-invoices__line-total{font-weight:700}
+.sales-invoices__line-note{display:block;margin-block-start:.15rem;font-size:.75rem;color:var(--muted,#667483)}
+.sales-invoices__summary-head{padding-block-end:var(--space-3,.75rem)}
+.sales-invoices__meta{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem 1rem;margin:0 0 var(--space-3,.75rem);color:var(--muted,#667483);font-size:.85rem}
+.sales-invoices__meta strong{color:var(--text,#0b1d3a)}
+.sales-invoices__kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-2,.5rem);margin:0}
+.sales-invoices__kpis>div{padding:.6rem .8rem;border:1px solid var(--border,#e6ecee);border-radius:var(--radius,12px);background:#f8fafc;min-width:0}
+.sales-invoices__kpis dt{font-size:.75rem;font-weight:600;color:var(--muted,#667483)}
+.sales-invoices__kpis dd{margin:.15rem 0 0;font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums}
+.sales-invoices__kpi--outstanding dd{color:var(--warning,#9a6500)}
+.sales-invoices__section{margin-block:var(--space-2,.5rem);border:1px solid var(--border,#e6ecee);border-radius:var(--radius,12px);background:var(--surface,#fff)}
+.sales-invoices__section>summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;font-weight:700;cursor:pointer;list-style:none;border-radius:var(--radius,12px)}
+.sales-invoices__section>summary::-webkit-details-marker{display:none}
+.sales-invoices__section>summary::after{content:"▾";color:var(--muted,#667483);transform:rotate(-90deg);transition:transform .15s}
+[dir=rtl] .sales-invoices__section>summary::after{transform:rotate(90deg)}
+.sales-invoices__section[open]>summary::after,[dir=rtl] .sales-invoices__section[open]>summary::after{transform:none}
+.sales-invoices__section>summary:hover{background:#f8fafc}
+.sales-invoices__section>summary:focus-visible{outline:3px solid rgba(14,143,122,.35);outline-offset:-3px}
+.sales-invoices__section-body{padding:0 1rem 1rem}
+.sales-invoices__detail .sales-invoices__section-body>.sales-invoices__facts:first-child{margin-block-start:0}
+.sales-invoices__detail .sales-invoices__finance{margin-block:0 var(--space-2,.5rem)}
+.sales-invoices__detail .sales-invoices__totals{max-width:360px;margin-inline-start:auto;grid-template-columns:1fr}
+.sales-invoices__detail .sales-invoices__totals div{display:flex;justify-content:space-between;gap:1rem;align-items:baseline}
+.sales-invoices__detail .sales-invoices__totals dd{margin:0;font-variant-numeric:tabular-nums}
+/* Notes rows: text on one side, amount on the other, actions and journal status on their own rows (no orphan grid cells). */
+.sales-invoices__detail [data-testid="invoice-notes-list"] li{grid-template-columns:minmax(0,1fr) auto;padding:.6rem .75rem;border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px);background:var(--surface,#fff)}
+.sales-invoices__detail [data-testid="invoice-notes-list"] li>span:nth-child(2){grid-column:1;color:var(--muted,#667483);font-size:.8rem}
+.sales-invoices__detail [data-testid="invoice-notes-list"] li>strong{grid-column:2;grid-row:1/span 2;align-self:center;font-variant-numeric:tabular-nums}
+.sales-invoices__detail [data-testid="invoice-notes-list"] li>span:nth-child(n+4){grid-column:1/-1}
+/* Only the footer is sticky; nested action rows (note actions, confirmations, the notes form) stay in the flow. */
+.sales-invoices__detail .modal-actions{position:static;inset:auto;z-index:auto;margin:0;padding:0;border:0;background:none}
+.sales-invoices__detail [data-testid="invoice-notes-list"] .modal-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.sales-invoices__detail [data-testid="invoice-notes-list"] .modal-actions button{min-height:34px;padding:.3rem .7rem;font-size:.82rem;min-width:0;width:auto}
+.sales-invoices__detail .sales-invoices__form .modal-actions{display:flex;justify-content:flex-end;gap:.5rem}
+.sales-invoices__footer{position:sticky;inset-block-end:0;z-index:2;max-height:min(60dvh,420px);overflow-y:auto;overscroll-behavior:contain;margin-block-start:var(--space-3,.75rem);padding-block:.75rem 1rem;background:var(--surface,#fff);border-top:1px solid var(--border,#e6ecee)}
+.sales-invoices__footer .sales-invoices__next{margin-block:0 .4rem}
+.sales-invoices__alert{margin:0 0 .5rem;padding:.6rem .8rem;border:1px solid #e5b6b6;border-radius:var(--radius-sm,8px);background:#fff2f2;color:#8b1e1e}
+.sales-invoices__footer .sales-invoices__mapping-hint{margin-block-end:.5rem}
+.sales-invoices__footer .sales-invoices__confirm{margin-block-start:0}
+.sales-invoices__footer .sales-invoices__confirm .modal-actions{display:flex;justify-content:flex-end;gap:.5rem}
+.sales-invoices__footer .sales-invoices__confirm label{display:grid;gap:.25rem;margin-block-end:.5rem;font-size:.8rem;font-weight:600;color:var(--muted,#667483)}
+.sales-invoices__actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.sales-invoices__actions-gap{flex:1}
+.sales-invoices__danger{background:var(--danger,#ad2e2e);border-color:var(--danger,#ad2e2e)}
+.sales-invoices__danger:hover{background:#8b1e1e;border-color:#8b1e1e}
+.sales-invoices__more{position:relative}
+.sales-invoices__menu{position:absolute;inset-block-end:calc(100% + 6px);inset-inline-start:0;z-index:3;display:grid;min-width:200px;padding:.35rem;background:var(--surface,#fff);border:1px solid var(--border,#e6ecee);border-radius:var(--radius,12px);box-shadow:0 12px 32px rgba(11,29,51,.16)}
+.sales-invoices__menu-note{display:block;padding:0 .9rem .4rem;font-size:.75rem;color:var(--muted,#667483);max-width:280px}
+.sales-invoices__menu [role="menuitem"]{width:100%;justify-content:flex-start;min-height:38px;border:0;background:none;color:var(--danger,#ad2e2e);text-align:start}
+.sales-invoices__menu [role="menuitem"]:hover:not(:disabled),.sales-invoices__menu [role="menuitem"]:focus-visible{background:#fff2f2}
+.sales-invoices__menu [role="menuitem"]:disabled{color:var(--muted,#667483)}
+@media (max-width:640px){
+ .sales-invoices__kpis{grid-template-columns:1fr 1fr}
+ .sales-invoices__kpis>div:first-child{grid-column:1/-1}
+ .sales-invoices__section>summary{padding:.65rem .75rem}
+ .sales-invoices__section-body{padding:0 .75rem .75rem}
+ /* Lines become labelled cards instead of a wide horizontal table. */
+ .sales-invoices__detail .sales-invoices__lines thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+ .sales-invoices__detail .sales-invoices__lines,.sales-invoices__detail .sales-invoices__lines tbody{display:block}
+ .sales-invoices__detail .sales-invoices__lines tr{display:grid;gap:.15rem;margin-block-end:.5rem;padding:.6rem .7rem;border:1px solid var(--border,#e6ecee);border-radius:var(--radius-sm,8px)}
+ .sales-invoices__detail .sales-invoices__lines td{display:flex;justify-content:space-between;gap:.75rem;padding:0;border:0;font-size:.8rem;text-align:end}
+ .sales-invoices__detail .sales-invoices__lines td::before{content:attr(data-label);color:var(--muted,#667483);text-align:start}
+ .sales-invoices__detail .sales-invoices__lines td:first-child{display:block;margin-block-end:.25rem;font-weight:700;font-size:.88rem;text-align:start}
+ .sales-invoices__detail .sales-invoices__lines td:first-child::before{content:none}
+ .sales-invoices__detail .sales-invoices__lines td.sales-invoices__line-total{padding-block-start:.25rem;border-block-start:1px solid var(--border,#e6ecee)}
+ .sales-invoices__detail .sales-invoices__scroll{overflow-x:visible}
+ .sales-invoices__detail .sales-invoices__totals{max-width:none}
+ .sales-invoices__footer{max-height:50dvh}
+ .sales-invoices__actions{display:grid;grid-template-columns:1fr 1fr}
+ .sales-invoices__actions>.primary{grid-column:1/-1;order:-1}
+ .sales-invoices__actions-gap{display:none}
+ .sales-invoices__more>button{width:100%}
+ .sales-invoices__menu{inset-inline-start:auto;inset-inline-end:0}
+ .sales-invoices__detail .sales-invoices__actions button{width:100%;min-width:0}
+}
