@@ -232,10 +232,10 @@ describeDatabase('invoice approval + account mappings (PostgreSQL)', () => {
     await q(`UPDATE fiscal_years SET status='closed' WHERE id=$1`, [D.fy]);
     await expect(approve(D, approver, id, await version(id))).rejects.toMatchObject({ code: 'INVOICE_FISCAL_YEAR_CLOSED' });
     const none = await submitted(D, 'sales', '2027-02-01');
-    await expect(approve(D, approver, none, await version(none))).rejects.toMatchObject({ code: 'INVOICE_FISCAL_YEAR_UNRESOLVED' });
+    await expect(approve(D, approver, none, await version(none))).rejects.toMatchObject({ code: 'INVOICE_FISCAL_YEAR_UNRESOLVED', details: { reason: 'no_fiscal_year' } });
     await q(`INSERT INTO fiscal_years (company_id, name, start_date, end_date) VALUES ($1,'OV','2027-01-01','2027-12-31'),($1,'OV2','2027-06-01','2028-05-31')`, [D.id]);
     const overlap = await submitted(D, 'sales', '2027-07-01');
-    await expect(approve(D, approver, overlap, await version(overlap))).rejects.toMatchObject({ code: 'INVOICE_FISCAL_YEAR_UNRESOLVED' });
+    await expect(approve(D, approver, overlap, await version(overlap))).rejects.toMatchObject({ code: 'INVOICE_FISCAL_YEAR_UNRESOLVED', details: { reason: 'multiple_fiscal_years' } });
     expect(await n('SELECT count(*) n FROM invoice_number_counters WHERE company_id=$1', [D.id])).toBe(0);
   });
 

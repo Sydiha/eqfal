@@ -79,7 +79,31 @@ export class VatService{
  async reopen(companyId:string,actor:string,id:string,reason:string){return this.tx(async client=>{const period=(await client.query<Period>('SELECT *,period_start::text,period_end::text FROM vat_periods WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];if(!period)throw new VatNotFoundError();if(period.status!=='closed')throw new VatConflictError('VAT period is not closed');await lockVatRange(companyId,period.period_start,period.period_end,client);const after=(await client.query<Period>("UPDATE vat_periods SET status='open',updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *,period_start::text,period_end::text",[id,companyId])).rows[0]!;await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'vat_period.reopen',entity_type:'vat_period',entity_id:id,before_data:{status:'closed'},after_data:{status:'open'},reason},client);return after;});}
 }
 function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null}return new VatService(pool)}
-function handle(error:unknown,res:Response){if(error instanceof VatValidationError)res.status(400).json({error:error.message});else if(error instanceof VatNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatConflictError)res.status(409).json({error:error.message});else throw error;}
+/**
+ * Stable codes for known VAT failures, keyed by their legacy message. Statuses, messages and conditions are unchanged; malformed
+ * requests and not-found responses stay code-free. The client maps each code to an AR/EN message and never shows the raw text.
+ */
+export const VAT_ERROR_CODES:Record<string,string>={
+ 'Invalid recoverability':'VAT_RECOVERABILITY_INVALID',
+ 'Period must be within its fiscal year':'VAT_PERIOD_OUTSIDE_FISCAL_YEAR',
+ 'VAT period overlaps an existing period':'VAT_PERIOD_OVERLAP',
+ 'VAT for an externally maintained period is not managed in EQFAL':'VAT_PERIOD_EXTERNAL',
+ 'No single approved accounting profile governs this VAT period':'VAT_PROFILE_NOT_SINGLE',
+ 'VAT registration status does not permit period creation':'VAT_REGISTRATION_NOT_PERMITTED',
+ 'VAT period starts before VAT registration':'VAT_PERIOD_BEFORE_REGISTRATION',
+ 'VAT period is outside the VAT registration window':'VAT_PERIOD_OUTSIDE_REGISTRATION',
+ 'VAT filing frequency is required':'VAT_FILING_FREQUENCY_REQUIRED',
+ 'VAT period must be one complete calendar month':'VAT_PERIOD_NOT_FULL_MONTH',
+ 'VAT period must be one complete calendar quarter':'VAT_PERIOD_NOT_FULL_QUARTER',
+ 'Document is not eligible for VAT review':'VAT_DOCUMENT_NOT_ELIGIBLE',
+ 'VAT period is closed':'VAT_PERIOD_CLOSED',
+ 'VAT review was modified':'VAT_REVIEW_VERSION_CONFLICT',
+ 'VAT period is not open':'VAT_PERIOD_NOT_OPEN',
+ 'VAT period has blockers':'VAT_PERIOD_HAS_BLOCKERS',
+ 'VAT period is not closed':'VAT_PERIOD_NOT_CLOSED',
+};
+const withCode=(message:string)=>{const code=VAT_ERROR_CODES[message];return code?{error:message,code}:{error:message};};
+function handle(error:unknown,res:Response){if(error instanceof VatValidationError)res.status(400).json(withCode(error.message));else if(error instanceof VatNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatConflictError)res.status(409).json(withCode(error.message));else throw error;}
 vatRouter.get('/vat-periods',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{const value=service(res);if(value)res.json(await value.list(context(req).activeCompanyId));}));
 vatRouter.get('/vat-periods/:id',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new VatValidationError('Invalid request');const value=service(res);if(value)res.json(await value.get(context(req).activeCompanyId,req.params.id));}catch(error){handle(error,res)}}));
 vatRouter.post('/vat-periods',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('vat.close'),route(async(req,res)=>{try{const body=parseCreate(req.body);if(!body)throw new VatValidationError('Invalid request');const value=service(res);if(value)res.status(201).json(await value.create(context(req).activeCompanyId,context(req).user.id,body.fiscalYearId,body.start,body.end));}catch(error){handle(error,res)}}));

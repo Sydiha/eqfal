@@ -76,6 +76,6 @@ for (const action of ['pause', 'resume', 'end'] as const) {
 // Manual "generate due drafts now" for the active company. Needs invoice.create as well, because it creates draft invoices. Only occurrences already due are generated.
 recurringInvoiceRouter.post('/recurring-invoices/run-due', ...write, requireCapability('invoice.recurring'), route((req, res) => handle(res, async (svc) => {
   const { companyId, capabilities } = who(req);
-  if (!capabilities.includes('invoice.create')) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (!capabilities.includes('invoice.create')) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
   res.json({ results: await svc.runDueForCompany(companyId) });
 })));

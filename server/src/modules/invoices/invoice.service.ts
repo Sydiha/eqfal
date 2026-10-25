@@ -371,11 +371,11 @@ export class InvoiceDraftService {
       }
       // V1 sales: the creator must state the tax point and a VAT treatment for every line before review. Nothing is inferred.
       // V2 purchases follow the same rule, and every standard-rated purchase line also needs an explicit input VAT recoverability.
-      if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${current.direction} invoice needs a tax point date before it can be submitted`);
+      if (!before.tax_point_date) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${current.direction} invoice needs a tax point date before it can be submitted`, { reason: 'tax_point_missing' });
       await assertStandardRates(client, current.direction, before.tax_point_date, before.lines);
-      if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted');
+      if (before.lines.some((l: { vat_treatment: string | null }) => !l.vat_treatment)) throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every line needs an explicit VAT treatment before the invoice can be submitted', { reason: 'line_treatment_missing' });
       if (current.direction === 'purchase' && before.lines.some((l: { vat_treatment: string | null; vat_recoverability: string | null }) => l.vat_treatment === 'standard' && !l.vat_recoverability)) {
-        throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit VAT recoverability before the invoice can be submitted');
+        throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit VAT recoverability before the invoice can be submitted', { reason: 'recoverability_missing' });
       }
       await client.query(
         `UPDATE invoices SET status = 'submitted', version = version + 1, updated_at = NOW() WHERE id = $1 AND company_id = $2 AND status = 'draft'`,
