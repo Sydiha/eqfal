@@ -71,6 +71,7 @@ const OVERRIDES: Record<string, Pair> = {
   'bank.statement.confirm': ['Confirm or replace bank statement balances', 'اعتماد أرصدة كشوف البنك أو استبدالها'],
   'bank.reconciliation.settings': ['Activate bank reconciliation checks', 'تفعيل فحوصات المطابقة البنكية'],
   'obligation.settle': ['Settle obligations', 'تسوية الالتزامات'], 'invoice.create': ['Create invoices', 'إنشاء الفواتير'],
+  'invoice.mapping.view': ['View invoice account mappings', 'عرض ربط حسابات الفواتير'], 'invoice.mapping.manage': ['Manage invoice account mappings (also needs view)', 'إدارة ربط حسابات الفواتير (يتطلب صلاحية العرض أيضًا)'],
   'payment.settle': ['Settle payments', 'تسوية الدفعات'],
   'partner.transaction.view': ['View partner transactions and ledgers', 'عرض معاملات الشركاء وكشوفهم'],
   'partner.transaction.create': ['Prepare partner transactions', 'إعداد معاملات الشركاء'],

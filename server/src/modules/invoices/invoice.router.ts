@@ -158,7 +158,7 @@ invoiceRouter.post('/invoices/:id/approve', ...write, requireCapability('invoice
     const invoice = await new InvoiceDraftService(pool).get(ctx.activeCompanyId!, req.params.id!);
     res.json({ invoice, obligation_id: result.obligation_id, journal_id: result.journal_id, vat_review_id: result.vat_review_id });
   } catch (error) {
-    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code }); return; }
+    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code, ...(error.details ?? {}) }); return; }
     throw error;
   }
 }));

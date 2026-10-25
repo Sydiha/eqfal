@@ -132,7 +132,7 @@ export class InvoiceApprovalService {
     // A purchase needs the input-VAT account only when some VAT is actually recoverable (a fully non-recoverable VAT has no VAT_INPUT line).
     const needed = requiredKeys(before.direction, before.direction === 'sales' ? hasVat : recoverableTotalH > 0n);
     const missing = needed.filter((k) => !mapped[k]);
-    if (missing.length) throw new InvoiceError(409, 'INVOICE_MAPPING_MISSING', `Missing or invalid account mappings: ${missing.join(', ')}`);
+    if (missing.length) throw new InvoiceError(409, 'INVOICE_MAPPING_MISSING', `Missing or invalid account mappings: ${missing.join(', ')}`, { missing_keys: missing });
 
     const number = (await client.query<{ n: string }>('SELECT allocate_invoice_number($1, $2, $3)::text AS n', [companyId, before.direction, fiscalYearId])).rows[0]!.n;
     await client.query(

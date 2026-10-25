@@ -6,7 +6,7 @@ import { InvoiceError } from './invoice.service';
  * Company-specific account mappings for invoice accounting (owner decision A1). This service only stores explicit
  * choices made by an authorized person: it never proposes, defaults or infers an account. Each key accepts only
  * accounts of the matching type. Invoice approval reads them to prepare its draft journal and is rejected when a
- * required mapping is missing, inactive or of the wrong type. No route exposes this service yet.
+ * required mapping is missing, inactive or of the wrong type. Exposed by invoice-account-mapping.router.ts behind invoice.mapping.view / invoice.mapping.manage.
  */
 export const MAPPING_KEYS = ['receivable', 'payable', 'sales_revenue', 'purchase_expense', 'vat_output', 'vat_input'] as const;
 export type MappingKey = (typeof MAPPING_KEYS)[number];
@@ -45,6 +45,26 @@ export class InvoiceAccountMappingService {
     const rows = (await this.db.query<{ mapping_key: MappingKey; account_id: string }>(
       'SELECT mapping_key, account_id FROM invoice_account_mappings WHERE company_id = $1 ORDER BY mapping_key', [companyId])).rows;
     return rows;
+  }
+
+  /** Per key: the current mapping with its account and a status, plus the accounts that may be chosen. Read-only; never proposes a default. */
+  async overview(companyId: string) {
+    const mappings = (await this.db.query<{ mapping_key: MappingKey; account_id: string; code: string; name: string; name_ar: string | null; is_active: boolean; account_type: string }>(
+      `SELECT m.mapping_key, m.account_id, a.code, a.name, a.name_ar, a.is_active, a.account_type FROM invoice_account_mappings m
+       JOIN accounts a ON a.id = m.account_id AND a.company_id = m.company_id WHERE m.company_id = $1`, [companyId])).rows;
+    const byKey = new Map(mappings.map((m) => [m.mapping_key, m]));
+    const accounts = (await this.db.query<{ id: string; code: string; name: string; name_ar: string | null; account_type: string }>(
+      `SELECT id, code, name, name_ar, account_type FROM accounts WHERE company_id = $1 AND is_active AND account_type = ANY($2::text[]) ORDER BY code, id`,
+      [companyId, [...new Set(Object.values(MAPPING_ACCOUNT_TYPE))]])).rows;
+    return MAPPING_KEYS.map((key) => {
+      const m = byKey.get(key);
+      const status = !m ? 'missing' : (!m.is_active || m.account_type !== MAPPING_ACCOUNT_TYPE[key]) ? 'invalid' : 'configured';
+      return {
+        key, section: key === 'receivable' || key === 'sales_revenue' || key === 'vat_output' ? 'sales' : 'purchases', required_account_type: MAPPING_ACCOUNT_TYPE[key], status,
+        account: m ? { id: m.account_id, code: m.code, name: m.name, name_ar: m.name_ar, is_active: m.is_active, account_type: m.account_type } : null,
+        eligible_accounts: accounts.filter((a) => a.account_type === MAPPING_ACCOUNT_TYPE[key]).map(({ id, code, name, name_ar }) => ({ id, code, name, name_ar })),
+      };
+    });
   }
 
   /** Keys with no usable mapping (absent, deactivated account, or account type changed) for this company. */

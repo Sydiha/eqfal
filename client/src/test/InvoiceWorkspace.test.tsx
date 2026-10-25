@@ -295,6 +295,25 @@ describe('Approval, accounting and next action',()=>{
   expect(await screen.findByRole('alert')).toHaveTextContent('A required account mapping is missing or inactive. Complete it before approving.');
  });
 
+ it('names the missing mappings on approval failure and links to the mapping page only with view permission',async()=>{
+  const missing=()=>mockApi(submitted,(key)=>key===`POST /api/invoices/${ID}/approve`?json({error:'x',code:'INVOICE_MAPPING_MISSING',missing_keys:['receivable','vat_output']},409):undefined);
+  missing();
+  const onNavigate=vi.fn();
+  const {unmount}=render(<InvoiceWorkspace {...full} canViewMappings onNavigate={onNavigate} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('REF-9'));
+  fireEvent.click(await screen.findByRole('button',{name:'Approve invoice'}));
+  expect(await screen.findByTestId('mapping-missing')).toHaveTextContent('Accounts receivable, Output VAT');
+  fireEvent.click(screen.getByRole('button',{name:'Open Invoice Account Mappings'}));
+  expect(onNavigate).toHaveBeenCalledWith('invoiceMappings',{});
+  unmount();
+  missing();
+  render(<InvoiceWorkspace {...full} onNavigate={onNavigate} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('REF-9'));
+  fireEvent.click(await screen.findByRole('button',{name:'Approve invoice'}));
+  expect(await screen.findByTestId('mapping-missing')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Open Invoice Account Mappings'})).toBeNull();
+ });
+
  it('shows number, obligation, journal, VAT, paid and outstanding for an approved invoice',async()=>{
   mockApi(approved);
   render(<InvoiceWorkspace {...full} direction="purchase" onUnauthorized={vi.fn()}/>);
