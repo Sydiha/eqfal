@@ -12,7 +12,7 @@ export async function findCorrectionBlocker(client: PoolClient, original: Compan
   if (await exists(`SELECT 1 FROM monthly_close_periods WHERE company_id=$1 AND status='closed' AND ${overlap('period_start', 'period_end')} LIMIT 1`)) return 'CLOSED_MONTH';
   if (await exists(`SELECT 1 FROM fiscal_years WHERE company_id=$1 AND status='closed' AND ${overlap('start_date', 'end_date')} LIMIT 1`)) return 'CLOSED_FISCAL_YEAR';
   if (await exists(`SELECT 1 FROM annual_closing_packages a JOIN fiscal_years f ON f.id=a.fiscal_year_id AND f.company_id=a.company_id
-                    WHERE a.company_id=$1 AND a.status IN ('finalized','handed_off') AND ${overlap('f.start_date', 'f.end_date')} LIMIT 1`)) return 'ANNUAL_PACKAGE';
+                    WHERE a.company_id=$1 AND a.status IN ('finalized','handed_off','reviewed','approved') AND ${overlap('f.start_date', 'f.end_date')} LIMIT 1`)) return 'ANNUAL_PACKAGE';
   if (await exists('SELECT 1 FROM tax_working_papers WHERE company_id=$1 AND accounting_profile_id=$2 LIMIT 1', [original.company_id, original.id])) return 'TAX_WORKPAPER';
   if (!changedKeys.some((k) => (VAT_KEYS as readonly string[]).includes(k))) return null;
   if (await exists(`SELECT 1 FROM vat_periods WHERE company_id=$1 AND ${overlap('period_start', 'period_end')} LIMIT 1`)) return 'VAT_PERIOD';
