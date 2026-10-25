@@ -46,7 +46,9 @@ describe('Invoice side: Record collection / Record payment',()=>{
   fireEvent.click(await screen.findByText('INV-1'));
   const list=await screen.findByTestId('invoice-settlements');
   expect(within(list).getByText('First transfer')).toBeInTheDocument();expect(within(list).getByText(/400\.00 SAR/)).toBeInTheDocument();
-  expect(screen.getByText('123.45 SAR')).toBeInTheDocument();
+  expect(within(screen.getByRole('region',{name:'Financial status'})).getByText('123.45 SAR')).toBeInTheDocument();
+  // The same server value heads the dialog summary; nothing is recomputed on the client.
+  expect(within(screen.getByRole('group',{name:'Invoice summary'})).getByText('123.45 SAR')).toBeInTheDocument();
  });
  it.each([
   ['journal not posted',{journal:{id:JR,status:'draft'}},caps,'Post the journal first'],

@@ -1,4 +1,4 @@
-import {FormEvent,useCallback,useEffect,useRef,useState} from 'react';
+import {FormEvent,KeyboardEvent,ReactNode,RefObject,useCallback,useEffect,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
@@ -34,6 +34,51 @@ const fromInvoice=(i:Invoice):FormValues=>({counterparty_id:i.counterparty_id,is
 const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.counterparty_id,issue_date:v.issue_date,due_date:v.due_date||null,supply_date:v.supply_date||null,tax_point_date:v.tax_point_date||null,external_reference:v.external_reference.trim()||null,notes:v.notes.trim()||null,source_document_id:v.source_document_id||null,lines:v.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,...(l.discount_amount?{discount_amount:l.discount_amount}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:l.vat_treatment?'0':l.vat_rate,vat_treatment:l.vat_treatment||null,...(direction==='purchase'&&l.vat_treatment==='standard'&&l.vat_recoverability?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
+type MoreItem={key:string;label:string;enabled:boolean;onSelect:()=>void;note?:ReactNode};
+/**
+ * Menu for the sensitive invoice actions (cancel / delete). It only regroups buttons the workspace already decided to show:
+ * each item keeps its enablement and opens the same confirmation step. Arrow keys move between enabled items; Escape closes
+ * the menu (not the dialog) and returns focus to the trigger.
+ */
+function MoreMenu({label,menuLabel,items,disabled,triggerRef,onOpenChange}:{label:string;menuLabel:string;items:MoreItem[];disabled:boolean;triggerRef:RefObject<HTMLButtonElement>;onOpenChange?:(open:boolean)=>void}){
+ const[open,setOpen]=useState(false);
+ const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
+ // The footer clips overflow while scrolling; it is told when the menu opens so it can let the menu show in full.
+ useEffect(()=>{openChangeRef.current?.(open);return()=>{if(open)openChangeRef.current?.(false)}},[open]);
+ const menuRef=useRef<HTMLDivElement>(null);
+ const menuId=useRef(`invoice-more-${Math.random().toString(36).slice(2)}`).current;
+ const enabledItems=()=>Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')??[]);
+ useEffect(()=>{
+  if(!open)return;
+  (enabledItems()[0]??menuRef.current)?.focus();
+  const outside=(event:MouseEvent)=>{const target=event.target as Node;if(!menuRef.current?.contains(target)&&!triggerRef.current?.contains(target))setOpen(false)};
+  document.addEventListener('mousedown',outside);
+  return()=>document.removeEventListener('mousedown',outside);
+ },[open,triggerRef]);
+ const close=()=>{setOpen(false);triggerRef.current?.focus()};
+ const onKeyDown=(event:KeyboardEvent<HTMLDivElement>)=>{
+  if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}
+  if(event.key==='Tab'){setOpen(false);return;}
+  const list=enabledItems();if(list.length===0)return;
+  const index=list.indexOf(document.activeElement as HTMLButtonElement);
+  const next=event.key==='ArrowDown'?(index+1)%list.length:event.key==='ArrowUp'?(index-1+list.length)%list.length:event.key==='Home'?0:event.key==='End'?list.length-1:-1;
+  if(next>=0){event.preventDefault();list[next]!.focus();}
+ };
+ return <div className="sales-invoices__more">
+  <button ref={triggerRef} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open?menuId:undefined} disabled={disabled} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();setOpen(true)}}}>{label}</button>
+  {open&&<div ref={menuRef} id={menuId} role="menu" aria-label={menuLabel} className="sales-invoices__menu" tabIndex={-1} onKeyDown={onKeyDown}>
+   {items.map(item=><div key={item.key} role="none"><button type="button" role="menuitem" disabled={!item.enabled} onClick={()=>{setOpen(false);item.onSelect()}}>{item.label}</button>{item.note}</div>)}
+  </div>}
+ </div>;
+}
+
+/** Wraps an existing confirmation step and moves focus into it when it opens, so keyboard users land on the choice. */
+function ConfirmStep({label,children}:{label:string;children:ReactNode}){
+ const ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{ref.current?.querySelector<HTMLElement>('textarea, button:not(:disabled)')?.focus()},[]);
+ return <div ref={ref} className="sales-invoices__confirm" role="group" aria-label={label}>{children}</div>;
+}
+
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
  const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canAdjustVoid=false,canRecurring=false,canViewDocuments=false}=caps;
  const{t}=useTranslation();
@@ -44,6 +89,8 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const unauthorized=useCallback(()=>unauthorizedRef.current(),[]);
  const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[missingKeys,setMissingKeys]=useState<string[]>([]),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null),[confirmDelete,setConfirmDelete]=useState(false);
  const[rate,setRate]=useState<RateState|null>(null);
+ const moreRef=useRef<HTMLButtonElement>(null);
+ const[moreOpen,setMoreOpen]=useState(false);
  const readFilters=():Filters=>({q:readQueryParameter(`${prefix}Q`)??'',status:readQueryParameter(`${prefix}Status`,{allowedValues:INVOICE_STATUSES})??'',party:readQueryParameter(`${prefix}Party`,{pattern:/^[0-9a-f-]{36}$/i})??'',from:validDate(readQueryParameter(`${prefix}From`)),to:validDate(readQueryParameter(`${prefix}To`))});
  const[filters,setFilters]=useState<Filters>(readFilters);
  const[searchText,setSearchText]=useState(filters.q);
@@ -203,19 +250,29 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   const settleReason=settle?.reason?t(`invoiceWorkspace.reasons.${settle.reason}`):null;
   const primaryLabel=action.kind==='submit'?t('salesInvoice.submit'):action.kind==='approve'?t('invoiceWorkspace.approve'):action.kind==='post'?t('invoiceWorkspace.postJournal'):null;
   const onPrimary=()=>{if(action.kind==='submit')void transition(invoice,'submit');else if(action.kind==='approve')void transition(invoice,'approve');else if(action.kind==='post')setConfirmPost(true)};
+  // Sensitive actions keep their exact visibility and enablement; they only move into the "More" menu and still open the same confirmation step.
+  const sensitive:MoreItem[]=[
+   ...((invoice.status==='draft'||invoice.status==='submitted')&&canCancel?[{key:'cancel',label:t('salesInvoice.cancelInvoice'),enabled:!busy,onSelect:()=>setCancelReason('')}]:[]),
+   // When deletion is shown but not allowed for this status, its reason sits under the disabled item inside the menu.
+   ...(del.visible?[{key:'delete',label:t('invoiceWorkspace.deleteInvoice'),enabled:!busy&&del.enabled,onSelect:()=>setConfirmDelete(true),note:deleteReason?<span className="sales-invoices__menu-note" data-testid="delete-note">{deleteReason}</span>:undefined}]:[]),
+  ];
   return <>
    {settleReason&&settle&&!settle.enabled&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="settle-note">{settleReason}</p>}
    {reason&&<p className={`sales-invoices__hint sales-invoices__next${action.kind==='none'?'':' sales-invoices__next--blocked'}`} data-testid="next-action-note">{reason}</p>}
-   {deleteReason&&(del.visible||del.reason==='noDelete')&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="delete-note">{deleteReason}</p>}
-   <div className="modal-actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
+   {deleteReason&&del.reason==='noDelete'&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="delete-note">{deleteReason}</p>}
+   <div className="modal-actions sales-invoices__actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
+    {sensitive.length>0&&<MoreMenu label={t('invoiceWorkspace.more')} menuLabel={t('invoiceWorkspace.moreLabel')} items={sensitive} disabled={busy} triggerRef={moreRef} onOpenChange={setMoreOpen}/>}
+    <span className="sales-invoices__actions-gap" aria-hidden="true"/>
     {invoice.status==='draft'&&canEdit&&<button type="button" onClick={()=>startEdit(invoice)} disabled={busy}>{t('salesInvoice.edit')}</button>}
     {invoice.status==='submitted'&&canSubmit&&<button type="button" onClick={()=>void transition(invoice,'return')} disabled={busy}>{t('salesInvoice.return')}</button>}
-    {(invoice.status==='draft'||invoice.status==='submitted')&&canCancel&&<button type="button" onClick={()=>setCancelReason('')} disabled={busy}>{t('salesInvoice.cancelInvoice')}</button>}
-    {del.visible&&<button type="button" onClick={()=>setConfirmDelete(true)} disabled={busy||!del.enabled}>{t('invoiceWorkspace.deleteInvoice')}</button>}
     {settle&&settle.reason!=='cancelled'&&<button type="button" className={primaryLabel?undefined:'primary'} onClick={()=>openSettlement(invoice)} disabled={busy||!settle.enabled}>{t(isPurchase?'invoiceWorkspace.recordPayment':'invoiceWorkspace.recordCollection')}</button>}
     {primaryLabel&&<button type="button" className="primary" onClick={onPrimary} disabled={busy||!action.enabled}>{primaryLabel}</button>}</div>
   </>;
  };
+ // Leaving a confirmation step returns focus to the "More" trigger (or stays in the dialog), never to the page behind it.
+ const backToActions=(reset:()=>void)=>{reset();requestAnimationFrame(()=>moreRef.current?.focus())};
+ const amount=(value:string|null|undefined,currency:string)=>value!=null?<bdi className="sales-invoices__amount" dir="ltr">{money(value)} {currency}</bdi>:'—';
+ const titleNumber=(i:Invoice)=>i.internal_number??t(`invoiceWorkspace.noNumber.${i.status}`);
 
  return <section className="sales-invoices" aria-labelledby={`${prefix}-title`}>
   <div className="sales-invoices__head"><div><h2 id={`${prefix}-title`}>{d('title')}</h2><p>{d('intro')}</p></div>{canCreate&&<button type="button" className="primary" onClick={startNew}>{d('add')}</button>}</div>
@@ -234,39 +291,70 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <div className="sales-invoices__scroll"><table><thead><tr><th>{t('salesInvoice.number')}</th><th>{d('counterparty')}</th><th>{t('salesInvoice.issueDate')}</th><th>{t('salesInvoice.dueDate')}</th><th>{t('salesInvoice.total')}</th><th>{t('invoiceWorkspace.outstanding')}</th><th>{t('salesInvoice.status')}</th></tr></thead><tbody>{rows.map(i=><tr key={i.id} tabIndex={0} onClick={()=>void open(i.id)} onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();void open(i.id)}}}><td>{numberOf(i)}</td><td>{i.counterparty_name}</td><td>{formatDisplayDate(i.issue_date,'en')}</td><td>{formatDisplayDate(i.due_date,'en')}</td><td className="sales-invoices__amount">{money(i.total_amount)}</td><td className="sales-invoices__amount">{i.outstanding_amount!=null?money(i.outstanding_amount):'—'}</td><td><span className={`sales-invoices__status sales-invoices__status--${i.status}`}>{stageLabel(i)}</span></td></tr>)}</tbody></table></div>
    {pages>1&&<nav className="sales-invoices__pager" aria-label={t('invoiceWorkspace.pagination.label')}><button type="button" disabled={page<=1} onClick={()=>goToPage(page-1)}>{t('invoiceWorkspace.pagination.previous')}</button><span>{t('invoiceWorkspace.pagination.page',{page,pages})}</span><button type="button" disabled={page>=pages} onClick={()=>goToPage(page+1)}>{t('invoiceWorkspace.pagination.next')}</button></nav>}</>)}
   {canView&&<RecurringInvoices direction={direction} canManage={canRecurring} canGenerate={canRecurring&&canCreate} onChanged={()=>void load()} onUnauthorized={unauthorized}/>}
-  {detail&&<Dialog size="wide" title={`${t('salesInvoice.detail')} | ${numberOf(detail)}`} busy={busy} onClose={()=>setDetail(null)}>
-   <dl className="sales-invoices__facts"><div><dt>{d('counterparty')}</dt><dd>{detail.counterparty_name}</dd></div><div><dt>{t('salesInvoice.status')}</dt><dd>{stageLabel(detail)}</dd></div><div><dt>{t('salesInvoice.issueDate')}</dt><dd>{formatDisplayDate(detail.issue_date,'en')}</dd></div><div><dt>{t('salesInvoice.dueDate')}</dt><dd>{formatDisplayDate(detail.due_date,'en')}</dd></div><div><dt>{t('salesInvoice.taxPointDate')}</dt><dd>{formatDisplayDate(detail.tax_point_date,'en')}</dd></div>{detail.external_reference&&<div><dt>{t('salesInvoice.reference')}</dt><dd>{detail.external_reference}</dd></div>}</dl>
-   {(detail.status==='approved'||detail.status==='cancelled')&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.financeTitle')}><h4>{t('invoiceWorkspace.financeTitle')}</h4>
-    <dl className="sales-invoices__facts">
-     <div><dt>{t('invoiceWorkspace.invoiceNumber')}</dt><dd>{detail.internal_number??'—'}</dd></div>
-     <div><dt>{t('invoiceWorkspace.obligation')}</dt><dd>{detail.obligation?(<>{detail.obligation.is_cancelled?t('invoiceWorkspace.obligationCancelled'):t('invoiceWorkspace.obligationLinked')}{caps.canViewObligations&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openObligation'),'obligations',{obligationId:detail.obligation.id})}</>}</>):'—'}</dd></div>
-     <div><dt>{t('invoiceWorkspace.journal')}</dt><dd>{detail.journal?(<>{t(`invoiceWorkspace.journalStatuses.${detail.journal.status}`)}{caps.canViewAccounting&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openJournal'),'accounting',{accountingTab:'journals',journalId:detail.journal.id})}</>}</>):t('invoiceWorkspace.journalStatuses.none')}</dd></div>
-     <div><dt>{t('invoiceWorkspace.vat')}</dt><dd>{t(`invoiceWorkspace.vatStatuses.${detail.vat?.status??'pending'}`)}{detail.vat?.status==='reviewed'&&caps.canViewVat&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openVat'),'vat',{})}</>}</dd></div>
-     <div><dt>{t('invoiceWorkspace.paid')}</dt><dd>{detail.paid_amount!=null?`${money(detail.paid_amount)} ${detail.currency}`:'—'}</dd></div>
-     {detail.adjusted_amount!=null&&detail.adjusted_amount!==detail.total_amount&&<div><dt>{t('invoiceNotes.adjustedAmount')}</dt><dd>{money(detail.adjusted_amount)} {detail.currency}</dd></div>}
-     <div><dt>{t('invoiceWorkspace.outstanding')}</dt><dd>{detail.outstanding_amount!=null?`${money(detail.outstanding_amount)} ${detail.currency}`:'—'}</dd></div>
+  {detail&&<Dialog size="wide" className="sales-invoices__detail" title={`${t('salesInvoice.detail')} | ${titleNumber(detail)}`} busy={busy} onClose={()=>setDetail(null)}>
+   <div className="sales-invoices__summary-head" role="group" aria-label={t('invoiceWorkspace.detailSummary')}>
+    <p className="sales-invoices__meta"><span className={`sales-invoices__status sales-invoices__status--${detail.status}`}>{stageLabel(detail)}</span><span>{d('counterparty')}: <strong>{detail.counterparty_name}</strong></span><span>{t('salesInvoice.issueDate')}: <bdi dir="ltr">{formatDisplayDate(detail.issue_date,'en')}</bdi></span></p>
+    {/* Every figure is the server's own value (total, paid, outstanding, adjusted); nothing is derived here. */}
+    <dl className="sales-invoices__kpis">
+     <div><dt>{t('salesInvoice.total')}</dt><dd>{amount(detail.total_amount,detail.currency)}</dd></div>
+     <div><dt>{t('invoiceWorkspace.paid')}</dt><dd>{amount(detail.paid_amount,detail.currency)}</dd></div>
+     <div className="sales-invoices__kpi--outstanding"><dt>{t('invoiceWorkspace.outstanding')}</dt><dd>{amount(detail.outstanding_amount,detail.currency)}</dd></div>
+     {detail.adjusted_amount!=null&&detail.adjusted_amount!==detail.total_amount&&<div><dt>{t('invoiceNotes.adjustedAmount')}</dt><dd>{amount(detail.adjusted_amount,detail.currency)}</dd></div>}
     </dl>
-    {(detail.settlements?.length??0)>0&&<><h5>{t('invoiceWorkspace.settlementHistory')}</h5><ul className="sales-invoices__settlements" data-testid="invoice-settlements">{detail.settlements!.map(x=><li key={x.id}><span>{formatDisplayDate(x.transaction_date,'en')}</span><span>{x.description??x.note??'—'}</span><strong>{money(x.amount)} {detail.currency}</strong></li>)}</ul></>}
-   </section>}
-   {detail.source_document_id&&canViewDocuments&&<p className="sales-invoices__hint">{t('invoiceWorkspace.evidence')}: <a href={`/api/documents/${detail.source_document_id}/file`} target="_blank" rel="noreferrer">{t('invoiceWorkspace.openDocument')}</a></p>}
-   <div className="sales-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate','net','vat','lineTotal'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map(l=><tr key={l.line_number}><td>{l.description}</td><td>{l.quantity}</td><td>{money(l.unit_price)}</td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td>{l.vat_rate}%</td><td>{money(l.net_amount??'0')}</td><td>{money(l.vat_amount??'0')}</td><td>{money(l.total_amount??'0')}</td></tr>)}</tbody></table></div>
-   <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
-   {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
-   {error&&missingKeys.length>0&&<div className="sales-invoices__mapping-hint" data-testid="mapping-missing"><p>{t('invoiceMappings.missingList',{keys:missingKeys.map(k=>t(`invoiceMappings.keys.${k}`,{defaultValue:k})).join(t('invoiceMappings.listSeparator'))})}</p>{caps.canViewMappings&&onNavigate?<button type="button" onClick={()=>onNavigate('invoiceMappings',{})}>{t('invoiceMappings.goToPage')}</button>:<p>{t('invoiceMappings.askAdmin')}</p>}</div>}
-   {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
-   {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} canVoid={canAdjustVoid} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
-   {(detail.cancellation||(detail.adjustments?.length??0)>0)&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>
-    {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
-    {(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}
-   </section>}
-   {confirmDelete&&detail.status==='draft'?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmDeleteTitle')}><p><strong>{t('invoiceWorkspace.confirmDeleteTitle')}</strong></p><p>{t('invoiceWorkspace.confirmDeleteBody')}</p>
-     <div className="modal-actions"><button type="button" onClick={()=>setConfirmDelete(false)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void deleteInvoice(detail)} disabled={busy}>{t('invoiceWorkspace.confirmDelete')}</button></div></div>
-    :cancelReason!==null?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmCancelTitle')}><p><strong>{t('invoiceWorkspace.confirmCancelTitle')}</strong></p><p>{t('invoiceWorkspace.confirmCancelBody')}</p>
-     <label>{t('invoiceWorkspace.cancellationReason')}<textarea value={cancelReason} maxLength={500} onChange={e=>setCancelReason(e.target.value)} required/></label>
-     <div className="modal-actions"><button type="button" onClick={()=>setCancelReason(null)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void cancelInvoice(detail)} disabled={busy||cancelReason.trim()===''}>{t('invoiceWorkspace.confirmCancel')}</button></div></div>
-    :confirmPost?<div className="sales-invoices__confirm" role="group" aria-label={t('invoiceWorkspace.confirmPostTitle')}><p><strong>{t('invoiceWorkspace.confirmPostTitle')}</strong></p><p>{t('invoiceWorkspace.confirmPostBody')}</p>
-     <div className="modal-actions"><button type="button" onClick={()=>setConfirmPost(false)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void postJournal(detail)} disabled={busy}>{t('invoiceWorkspace.confirmPost')}</button></div></div>
-    :renderActions(detail)}
+   </div>
+   {/* tabIndex makes the section toggles part of the dialog's focus trap, so the dialog opens focused on the first section (top) instead of a link further down. */}
+   <details className="sales-invoices__section" open><summary tabIndex={0}>{t('invoiceWorkspace.sections.overview')}</summary><div className="sales-invoices__section-body">
+    <dl className="sales-invoices__facts"><div><dt>{d('counterparty')}</dt><dd>{detail.counterparty_name}</dd></div><div><dt>{t('salesInvoice.status')}</dt><dd>{stageLabel(detail)}</dd></div><div><dt>{t('salesInvoice.issueDate')}</dt><dd>{formatDisplayDate(detail.issue_date,'en')}</dd></div><div><dt>{t('salesInvoice.dueDate')}</dt><dd>{formatDisplayDate(detail.due_date,'en')}</dd></div><div><dt>{t('salesInvoice.taxPointDate')}</dt><dd>{formatDisplayDate(detail.tax_point_date,'en')}</dd></div>{detail.external_reference&&<div><dt>{t('salesInvoice.reference')}</dt><dd>{detail.external_reference}</dd></div>}</dl>
+    {detail.source_document_id&&canViewDocuments&&<p className="sales-invoices__hint">{t('invoiceWorkspace.evidence')}: <a href={`/api/documents/${detail.source_document_id}/file`} target="_blank" rel="noreferrer">{t('invoiceWorkspace.openDocument')}</a></p>}
+    <div className="sales-invoices__scroll"><table className="sales-invoices__lines"><thead><tr>{(['description','quantity','unitPrice','discount','vatTreatment','vatRate','net','vat','lineTotal'] as const).map(k=><th key={k} className={k==='description'||k==='vatTreatment'?undefined:'sales-invoices__num'}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map(l=><tr key={l.line_number}>
+     <td data-label={t('salesInvoice.description')}>{l.description}{isPurchase&&l.vat_recoverability&&<span className="sales-invoices__line-note">{t('purchaseInvoice.recoverability')}: {t(`purchaseInvoice.recoverabilities.${l.vat_recoverability}`)}{l.vat_recoverability==='partially_recoverable'&&l.vat_recoverable_percent?<> (<bdi dir="ltr">{l.vat_recoverable_percent}%</bdi>)</>:null}</span>}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.quantity')}>{l.quantity}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.unitPrice')}>{money(l.unit_price)}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.discount')}>{l.discount_amount&&Number(l.discount_amount)!==0?money(l.discount_amount):'—'}</td>
+     <td data-label={t('salesInvoice.vatTreatment')}>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.vatRate')}>{l.vat_rate}%</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.net')}>{money(l.net_amount??'0')}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.vat')}>{money(l.vat_amount??'0')}</td>
+     <td className="sales-invoices__num sales-invoices__line-total" data-label={t('salesInvoice.lineTotal')}>{money(l.total_amount??'0')}</td></tr>)}</tbody></table></div>
+    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
+   </div></details>
+   <details className="sales-invoices__section" open><summary tabIndex={0}>{t('invoiceWorkspace.sections.financial')}</summary><div className="sales-invoices__section-body">
+    {(detail.status==='approved'||detail.status==='cancelled')?<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.financeTitle')}>
+     <dl className="sales-invoices__facts">
+      <div><dt>{t('invoiceWorkspace.invoiceNumber')}</dt><dd>{detail.internal_number??'—'}</dd></div>
+      <div><dt>{t('invoiceWorkspace.obligation')}</dt><dd>{detail.obligation?(<>{detail.obligation.is_cancelled?t('invoiceWorkspace.obligationCancelled'):t('invoiceWorkspace.obligationLinked')}{caps.canViewObligations&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openObligation'),'obligations',{obligationId:detail.obligation.id})}</>}</>):'—'}</dd></div>
+      <div><dt>{t('invoiceWorkspace.journal')}</dt><dd>{detail.journal?(<>{t(`invoiceWorkspace.journalStatuses.${detail.journal.status}`)}{caps.canViewAccounting&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openJournal'),'accounting',{accountingTab:'journals',journalId:detail.journal.id})}</>}</>):t('invoiceWorkspace.journalStatuses.none')}</dd></div>
+      <div><dt>{t('invoiceWorkspace.vat')}</dt><dd>{t(`invoiceWorkspace.vatStatuses.${detail.vat?.status??'pending'}`)}{detail.vat?.status==='reviewed'&&caps.canViewVat&&onNavigate&&<> {linkTo(t('invoiceWorkspace.openVat'),'vat',{})}</>}</dd></div>
+      <div><dt>{t('invoiceWorkspace.paid')}</dt><dd>{detail.paid_amount!=null?`${money(detail.paid_amount)} ${detail.currency}`:'—'}</dd></div>
+      {detail.adjusted_amount!=null&&detail.adjusted_amount!==detail.total_amount&&<div><dt>{t('invoiceNotes.adjustedAmount')}</dt><dd>{money(detail.adjusted_amount)} {detail.currency}</dd></div>}
+      <div><dt>{t('invoiceWorkspace.outstanding')}</dt><dd>{detail.outstanding_amount!=null?`${money(detail.outstanding_amount)} ${detail.currency}`:'—'}</dd></div>
+     </dl>
+     {(detail.settlements?.length??0)>0&&<><h5>{t('invoiceWorkspace.settlementHistory')}</h5><ul className="sales-invoices__settlements" data-testid="invoice-settlements">{detail.settlements!.map(x=><li key={x.id}><span>{formatDisplayDate(x.transaction_date,'en')}</span><span>{x.description??x.note??'—'}</span><strong>{money(x.amount)} {detail.currency}</strong></li>)}</ul></>}
+    </section>:<p className="sales-invoices__hint">{t('invoiceWorkspace.financePending')}</p>}
+   </div></details>
+   <details className="sales-invoices__section" open><summary tabIndex={0}>{t('invoiceWorkspace.sections.corrections')}</summary><div className="sales-invoices__section-body">
+    {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
+    {/* An approved invoice's notes are listed once, by InvoiceNotes, together with their permitted actions. */}
+    {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} canVoid={canAdjustVoid} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
+    {(detail.cancellation||(detail.status!=='approved'&&(detail.adjustments?.length??0)>0))&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>
+     {detail.cancellation&&<dl className="sales-invoices__facts"><div><dt>{t('invoiceWorkspace.cancelledOn')}</dt><dd>{formatDisplayDate(detail.cancellation.cancelled_at.slice(0,10),'en')}</dd></div><div><dt>{t('invoiceWorkspace.cancellationReason')}</dt><dd>{detail.cancellation.reason}</dd></div></dl>}
+     {detail.status!=='approved'&&(detail.adjustments?.length??0)>0&&<ul className="sales-invoices__settlements" data-testid="invoice-adjustments">{detail.adjustments!.map(x=><li key={x.id}><span>{t(`invoiceWorkspace.adjustmentTypes.${x.adjustment_type}`)} | {t(`invoiceWorkspace.adjustmentStatuses.${x.status}`)}</span><span>{formatDisplayDate(x.adjustment_date,'en')} | {x.reason}</span><strong>{money(x.total_amount)} {detail.currency}</strong></li>)}</ul>}
+    </section>}
+    {detail.status!=='approved'&&!detail.cancellation&&<p className="sales-invoices__hint">{t('invoiceWorkspace.correctionsPending')}</p>}
+   </div></details>
+   {/* The action area stays reachable at the bottom of the dialog; blocking errors are shown right above the buttons that caused them. */}
+   <div className={`sales-invoices__footer${moreOpen?' sales-invoices__footer--menu-open':''}`}>
+    {error&&<p role="alert" ref={node=>node?.scrollIntoView?.({block:'nearest'})} className="sales-invoices__error sales-invoices__alert">{error}</p>}
+    {error&&missingKeys.length>0&&<div className="sales-invoices__mapping-hint" data-testid="mapping-missing"><p>{t('invoiceMappings.missingList',{keys:missingKeys.map(k=>t(`invoiceMappings.keys.${k}`,{defaultValue:k})).join(t('invoiceMappings.listSeparator'))})}</p>{caps.canViewMappings&&onNavigate?<button type="button" onClick={()=>onNavigate('invoiceMappings',{})}>{t('invoiceMappings.goToPage')}</button>:<p>{t('invoiceMappings.askAdmin')}</p>}</div>}
+    {confirmDelete&&detail.status==='draft'?<ConfirmStep label={t('invoiceWorkspace.confirmDeleteTitle')}><p><strong>{t('invoiceWorkspace.confirmDeleteTitle')}</strong></p><p>{t('invoiceWorkspace.confirmDeleteBody')}</p>
+      <div className="modal-actions"><button type="button" onClick={()=>backToActions(()=>setConfirmDelete(false))} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary sales-invoices__danger" onClick={()=>void deleteInvoice(detail)} disabled={busy}>{t('invoiceWorkspace.confirmDelete')}</button></div></ConfirmStep>
+     :cancelReason!==null?<ConfirmStep label={t('invoiceWorkspace.confirmCancelTitle')}><p><strong>{t('invoiceWorkspace.confirmCancelTitle')}</strong></p><p>{t('invoiceWorkspace.confirmCancelBody')}</p>
+      <label>{t('invoiceWorkspace.cancellationReason')}<textarea value={cancelReason} maxLength={500} onChange={e=>setCancelReason(e.target.value)} required/></label>
+      <div className="modal-actions"><button type="button" onClick={()=>backToActions(()=>setCancelReason(null))} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary sales-invoices__danger" onClick={()=>void cancelInvoice(detail)} disabled={busy||cancelReason.trim()===''}>{t('invoiceWorkspace.confirmCancel')}</button></div></ConfirmStep>
+     :confirmPost?<ConfirmStep label={t('invoiceWorkspace.confirmPostTitle')}><p><strong>{t('invoiceWorkspace.confirmPostTitle')}</strong></p><p>{t('invoiceWorkspace.confirmPostBody')}</p>
+      <div className="modal-actions"><button type="button" onClick={()=>setConfirmPost(false)} disabled={busy}>{t('common.cancel')}</button><button type="button" className="primary" onClick={()=>void postJournal(detail)} disabled={busy}>{t('invoiceWorkspace.confirmPost')}</button></div></ConfirmStep>
+     :renderActions(detail)}
+   </div>
   </Dialog>}
   {form&&<Dialog size="wide" title={form.id?t('salesInvoice.editTitle'):d('newTitle')} busy={busy} onClose={()=>setForm(null)}>
    <form className="sales-invoices__form" onSubmit={e=>void save(e)}>
