@@ -34,9 +34,9 @@ describe('first-login password change for administratively created users', () =>
     const repo = new UserRepository({ query } as unknown as Pool);
     await repo.create({ email: 'A@Example.com', password: 'hash', mustChangePassword: true });
     await repo.create({ email: 'b@example.com', password: 'hash' });
-    expect(query.mock.calls[0]![0]).toMatch(/must_change_password\)\s+VALUES \(LOWER\(\$1\), \$2, TRUE\)/);
+    expect(query.mock.calls[0]![0]).toMatch(/must_change_password, display_name\)\s+VALUES \(LOWER\(\$1\), \$2, TRUE, \$3\)/);
     expect(query.mock.calls[1]![0]).not.toMatch(/must_change_password/);
-    expect(query.mock.calls[0]![1]).toEqual(['A@Example.com', 'hash']);
+    expect(query.mock.calls[0]![1]).toEqual(['A@Example.com', 'hash', null]);
   });
 
   it('migration 082 never rewrites existing users (no forced change for existing accounts)', () => {

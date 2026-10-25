@@ -20,6 +20,8 @@ export interface AuthSessionContext {
   user: {
     id: string;
     email: string;
+    /** Administrator-entered name (migration 095); null when not set. The UI then shows the email. */
+    displayName: string | null;
     /** Global System Admin (users.is_system_admin). Display/UX hint only; every check is re-derived server-side. */
     isSystemAdmin: boolean;
     /** Set by an administrative reset: the API allows only change-password, session read and logout until it is cleared. */
@@ -28,6 +30,11 @@ export interface AuthSessionContext {
   allowedCompanies: AllowedCompany[];
   activeCompanyId: string | null;
   capabilities: string[];
+}
+
+/** Session as returned to the client: adds the active company's role, for display only (never used for authorization). */
+export interface SessionView extends AuthSessionContext {
+  activeRole: { name: string; isFullAccess: boolean } | null;
 }
 
 export interface LoginResult extends AuthSessionContext {
@@ -92,7 +99,7 @@ export class SessionService {
 
     return {
       token,
-      user: { id: user.id, email: user.email, isSystemAdmin, mustChangePassword: user.must_change_password === true },
+      user: { id: user.id, email: user.email, displayName: user.display_name ?? null, isSystemAdmin, mustChangePassword: user.must_change_password === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId,
       capabilities,
@@ -119,7 +126,7 @@ export class SessionService {
       : [];
 
     return {
-      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: session.user_must_change_password === true },
+      user: { id: session.user_id, email: session.user_email, displayName: session.user_display_name ?? null, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: session.user_must_change_password === true },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: reconciledCompanyId,
       capabilities,
@@ -142,11 +149,17 @@ export class SessionService {
     );
 
     return {
-      user: { id: session.user_id, email: session.user_email, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: false },
+      user: { id: session.user_id, email: session.user_email, displayName: session.user_display_name ?? null, isSystemAdmin: session.user_is_system_admin === true, mustChangePassword: false },
       allowedCompanies: toAllowedCompanies(memberships),
       activeCompanyId: requestedCompanyId,
       capabilities,
     };
+  }
+
+  /** Adds the role of the active company's membership (null for a System Admin without membership, or no role). */
+  async view(context: AuthSessionContext): Promise<SessionView> {
+    const role = context.activeCompanyId ? await this.memberships.getActiveRole(context.user.id, context.activeCompanyId) : null;
+    return { ...context, activeRole: role ? { name: role.name, isFullAccess: role.is_full_access } : null };
   }
 
   async logout(token: string): Promise<void> {

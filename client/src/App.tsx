@@ -7,7 +7,8 @@ import { apiErrorMessage, toApiError } from './api/apiError';
 import './shared-ui.css';
 import './login.css';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
-import { useAuth } from './context/AuthContext';
+import { useAuth, type AuthSession } from './context/AuthContext';
+import type { TFunction } from 'i18next';
 import { DateContextProvider } from './context/DateContext';
 
 type Period = {
@@ -136,8 +137,17 @@ function LoginForm() {
   </main>;
 }
 
+/** Header role: System Admin, else the active company's membership role (default role names localized). Display only. */
+export function headerRoleLabel(session: AuthSession, t: TFunction): string {
+  if (session.user.isSystemAdmin) return t('systemAdmin.systemAdmin');
+  const name = session.activeRole?.name;
+  if (!name) return t('home.noRole');
+  return t(`home.roleNames.${name}`, { defaultValue: name });
+}
+
 function AuthenticatedShell() {
   const { logout, switchCompany, session } = useAuth();
+  const { t } = useTranslation();
   const [page, setPageState] = useState<Page>(pageFromUrl);
   const [documentEntry, setDocumentEntry] = useState<DocumentEntryContext | null>(null);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -183,7 +193,7 @@ function AuthenticatedShell() {
   };
   const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
   const handlePeriodChange = (id: string) => { setSelectedPeriodId(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} returnFromDocumentEntry={returnFromDocumentEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
+  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} displayName={session!.user.displayName ?? null} roleLabel={headerRoleLabel(session!, t)} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} returnFromDocumentEntry={returnFromDocumentEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
 }
 
 function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, returnFromDocumentEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; returnFromDocumentEntry: (entry: DocumentEntryContext) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {
@@ -216,7 +226,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canDeletePartner={c.includes('partner.delete')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} capabilities={c} onUnauthorized={handleUnauthorized}/>}
     {page === 'sourceAuthority' && <SourceAuthority canManage={c.includes('source_authority.manage')} canActivate={c.includes('source_authority.activate')} canManageSupplements={c.includes('source_authority.supplement_manage')} canApproveSupplements={c.includes('source_authority.supplement_approve')} onUnauthorized={handleUnauthorized}/>}
-    {page === 'access' && <AccessAdministration capabilities={c} currentUserId={session.user.id} isSystemAdmin={session.user.isSystemAdmin === true} companyName={activeCompany?.name ?? ''} onUnauthorized={handleUnauthorized}/>}
+    {page === 'access' && <AccessAdministration capabilities={c} onAccessChanged={refreshSession} currentUserId={session.user.id} isSystemAdmin={session.user.isSystemAdmin === true} companyName={activeCompany?.name ?? ''} onUnauthorized={handleUnauthorized}/>}
     {page === 'companies' && <CompaniesManagement capabilities={c} onUnauthorized={handleUnauthorized} onChanged={refreshSession}/>}
     {page === 'auditLog' && <AuditLog canView={c.includes('audit.view')} onUnauthorized={handleUnauthorized}/>}
     {page === 'companyProfile' && <CompanyAccountingProfile canView={c.includes('company_accounting_profile.view')} canCreate={c.includes('company_accounting_profile.create')} canEdit={c.includes('company_accounting_profile.edit')} canSubmit={c.includes('company_accounting_profile.submit')} canReview={c.includes('company_accounting_profile.review')} canApprove={c.includes('company_accounting_profile.approve')} canCorrect={c.includes('company_accounting_profile.correct')} onUnauthorized={handleUnauthorized}/>}

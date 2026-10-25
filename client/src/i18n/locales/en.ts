@@ -12,6 +12,8 @@ const en = {
     welcome: 'Welcome back',
     context: 'Everything you need to start managing the company’s financial work from one place.',
     currentUser: 'Current user',
+    noRole: 'No role',
+    roleNames: { 'Full Access': 'Full Access', 'Company Manager': 'Company Manager', 'Finance Manager': 'Finance Manager', Accountant: 'Accountant', Operations: 'Operations', Viewer: 'Viewer' },
     quickActions: 'Quick actions',
     quickActionsDescription: 'Jump directly to the core tasks available to you.',
     documentsDescription: 'Review and manage financial documents for the active company.',
@@ -164,6 +166,7 @@ const en = {
     conflict: 'Conflict: this short code is already used, or this is your last active company and cannot be disabled.',
   },
   access: {
+    displayName: 'Name (optional)',
     resetPassword: 'Reset password', resetPasswordTitle: 'Reset password for {{email}}',
     resetPasswordWarn: 'A temporary password will be generated and shown once. This user will be signed out of every session and must choose a new password at the next sign-in.',
     resetPasswordConfirm: 'Reset password', resetPasswordDoneTitle: 'Temporary password',
@@ -213,7 +216,7 @@ const en = {
     confirm: 'Grant',
   },
   systemAdmin: {
-    tab: 'Global administration', usersTab: 'Users', companiesTab: 'Companies', systemAdmin: 'System Admin',
+    tab: 'Global administration', usersTab: 'Users', companiesTab: 'Companies', systemAdmin: 'System Admin', saveName: 'Save name',
     description: 'System Admin manages every company, user and membership. Each change is checked by the server and recorded in the audit log.',
     searchUsers: 'Search by email', search: 'Search', noUsers: 'No users found.', selectUser: 'Select a user to manage their company access.',
     companyCount: '{{count}} active companies', disableUser: 'Disable account', enableUser: 'Enable account',

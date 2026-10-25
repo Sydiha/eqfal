@@ -6,7 +6,7 @@ import { StatusBadge, WorkspaceState } from './SharedUI';
 import { SensitivityMap, grantImpact, roleChangeImpact } from './accessRisk';
 import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
 
-interface AdminUser { id: string; email: string; is_active: boolean; is_system_admin: boolean; active_memberships: number }
+interface AdminUser { id: string; email: string; display_name?: string | null; is_active: boolean; is_system_admin: boolean; active_memberships: number }
 interface AdminCompany { id: string; slug: string; name: string; name_ar: string | null; is_active: boolean }
 interface AdminRole { id: string; name: string; is_full_access: boolean; capabilities: string[] }
 interface AdminMembership { id: string; company_id: string; company_name: string; company_name_ar: string | null; company_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean }
@@ -28,7 +28,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
  * (a separate role per company, enable/disable per membership) and companies. Every action is authorized again by the
  * server (/api/admin/* re-checks System Admin; ceilings, Full Access and last-admin rules apply server-side).
  */
-export function SystemAdministration({ currentUserId, onUnauthorized }: { currentUserId: string; onUnauthorized: () => void }) {
+export function SystemAdministration({ currentUserId, onUnauthorized, onAccessChanged }: { currentUserId: string; onUnauthorized: () => void; onAccessChanged?: () => Promise<void> | void }) {
   const { t, i18n } = useTranslation();
   const rtl = i18n.language.startsWith('ar');
   const companyLabel = (c: { name: string; name_ar: string | null }) => (rtl && c.name_ar ? c.name_ar : c.name);
@@ -97,6 +97,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
     try {
       await work(); after?.();
       await Promise.all([loadUsers(search), loadCompanies(), selectedId ? loadMemberships(selectedId) : Promise.resolve()]);
+      void onAccessChanged?.(); // the header re-reads the session (own name or role may have changed)
     } catch (reason) { fail(reason); }
     finally { setBusy(false); setPending(null); }
   };
@@ -131,7 +132,8 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
   const createUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    void mutate(() => request('/api/admin/users', json('POST', { email: String(data.get('email') ?? '').trim(), password: String(data.get('password') ?? '') }), onUnauthorized), () => setDialog(null));
+    const displayName = String(data.get('display_name') ?? '').trim();
+    void mutate(() => request('/api/admin/users', json('POST', { email: String(data.get('email') ?? '').trim(), password: String(data.get('password') ?? ''), ...(displayName ? { display_name: displayName } : {}) }), onUnauthorized), () => setDialog(null));
   };
   const createCompany = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,6 +164,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
         <ul className="acc-role-list" aria-label={t('systemAdmin.usersTab')}>
           {users.length === 0 ? <li className="acc-empty">{t('systemAdmin.noUsers')}</li> : users.map((user) => <li key={user.id}>
             <button className={user.id === selectedId ? 'is-active' : ''} aria-pressed={user.id === selectedId} onClick={() => select(user.id)}>
+              {user.display_name && <strong dir="auto">{user.display_name}</strong>}
               <strong dir="ltr">{user.email}</strong>
               <span>{[user.is_system_admin ? t('systemAdmin.systemAdmin') : null, !user.is_active ? t('access.userDisabled') : null, t('systemAdmin.companyCount', { count: user.active_memberships })].filter(Boolean).join(' · ')}</span>
             </button>
@@ -171,6 +174,12 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
       <div className="acc-card">
         {!selected ? <p className="acc-hint">{t('systemAdmin.selectUser')}</p> : <>
           <h3 dir="ltr" className="acc-user-title">{selected.email}</h3>
+          <form key={selected.id} className="acc-form acc-inline-form" onSubmit={(event) => {
+            event.preventDefault();
+            const value = String(new FormData(event.currentTarget).get('display_name') ?? '').trim();
+            void mutate(() => request(`/api/admin/users/${selected.id}/display-name`, json('PATCH', { display_name: value || null }), onUnauthorized));
+          }}><label>{t('access.displayName')}<input name="display_name" maxLength={100} dir="auto" defaultValue={selected.display_name ?? ''} /></label>
+            <button type="submit" className="acc-ghost" disabled={busy}>{t('systemAdmin.saveName')}</button></form>
           <div className="acc-bulk">
             <button type="button" className="acc-ghost" disabled={busy || selected.id === currentUserId} onClick={() => void mutate(() => request(`/api/admin/users/${selected.id}/active`, json('PATCH', { is_active: !selected.is_active }), onUnauthorized))}>{t(selected.is_active ? 'systemAdmin.disableUser' : 'systemAdmin.enableUser')}</button>
             <button type="button" className="acc-ghost" disabled={busy || !selected.is_active} onClick={() => toggleSystemAdmin(selected)}>{t(selected.is_system_admin ? 'systemAdmin.revokeAdmin' : 'systemAdmin.grantAdmin')}</button>
@@ -211,7 +220,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
     </div>}
     {pending && <GrantConfirmDialog pending={pending} busy={busy} onCancel={() => setPending(null)} />}
     {dialog === 'createUser' && <Dialog title={t('systemAdmin.createUserTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
-      <form onSubmit={createUser} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label>
+      <form onSubmit={createUser} className="acc-form"><label>{t('access.displayName')}<input name="display_name" maxLength={100} dir="auto" /></label><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label>
         <label>{t('access.password')}<input name="password" type="password" required minLength={8} maxLength={256} dir="ltr" autoComplete="new-password" /></label><small>{t('access.passwordHint')}</small>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}
     {dialog === 'createCompany' && <Dialog title={t('systemAdmin.createCompany')} busy={busy} onClose={() => setDialog(null)}>{dialogError}

@@ -15,6 +15,8 @@ export interface AccessRole { id: string; name: string; is_full_access: boolean;
 interface Props {
   capabilities: readonly string[];
   currentUserId: string;
+  /** Re-reads the session after a successful access change, so the header role follows the server. */
+  onAccessChanged?: () => Promise<void> | void;
   /** Shows the global administration tab (server re-verifies System Admin on every /api/admin request). */
   isSystemAdmin?: boolean;
   /** Active company display name, used in grant warnings. */
@@ -55,7 +57,7 @@ function GroupCheckbox({ label, checked, indeterminate, disabled, onChange }: { 
  * Every action is also enforced server-side (capability, tenant scope and ceiling checks);
  * hiding controls here is only a convenience.
  */
-export function AccessAdministration({ capabilities, currentUserId, isSystemAdmin = false, companyName = '', onUnauthorized }: Props) {
+export function AccessAdministration({ capabilities, currentUserId, onAccessChanged, isSystemAdmin = false, companyName = '', onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const lang = langOf(i18n.language);
   const can = (capability: string) => capabilities.includes(capability);
@@ -111,7 +113,7 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
 
   const mutate = async (work: () => Promise<unknown>, afterSuccess?: () => void) => {
     setBusy(true); setErrorKey(null); setFailure(null);
-    try { await work(); afterSuccess?.(); await load(); }
+    try { await work(); afterSuccess?.(); await load(); void onAccessChanged?.(); }
     catch (reason) { if (!(reason instanceof ApiError && reason.status === 401)) { setErrorKey(errorKeyFor(reason)); setFailure(reason instanceof ApiError ? reason : null); } }
     finally { setBusy(false); setPending(null); }
   };
@@ -147,6 +149,8 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
     const body: Record<string, string> = { email: String(data.get('email') ?? '').trim(), password: String(data.get('password') ?? '') };
     const roleId = String(data.get('role_id') ?? '');
     if (roleId) body.role_id = roleId;
+    const displayName = String(data.get('display_name') ?? '').trim();
+    if (displayName) body.display_name = displayName;
     const run = () => void mutate(() => request('/api/access/users', json('POST', body), onUnauthorized), () => setDialog(null));
     const role = roleById(roleId || null);
     if (!role) { run(); return; }
@@ -231,7 +235,7 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
       {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => setTab('global')}>{t('systemAdmin.tab')}</button>}
     </div>
     {isSystemAdmin && <p className="acc-hint" data-testid="access-identity-note">{t('access.identityNote', { company: companyName, role: members.find((m) => m.user_id === currentUserId)?.role_name ?? t('access.noRole') })}</p>}
-    {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized}/>}
+    {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized} onAccessChanged={onAccessChanged}/>}
     {tab !== 'global' && errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
     {tab === 'global' ? null : loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
       <p className="acc-hint">{t('access.disableHint')}</p>
@@ -313,7 +317,7 @@ export function AccessAdministration({ capabilities, currentUserId, isSystemAdmi
       <form onSubmit={addMember} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label><small>{t('access.emailHint')}</small>
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.add')}</button></div></form></Dialog>}
     {dialog === 'createUser' && <Dialog title={t('access.createUserTitle')} busy={busy} onClose={() => setDialog(null)}>{dialogError}
-      <form onSubmit={createUser} className="acc-form"><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label>
+      <form onSubmit={createUser} className="acc-form"><label>{t('access.displayName')}<input name="display_name" maxLength={100} dir="auto" /></label><label>{t('access.email')}<input name="email" type="email" required maxLength={254} dir="ltr" /></label>
         <label>{t('access.password')}<input name="password" type="password" required minLength={8} maxLength={256} dir="ltr" autoComplete="new-password" /></label><small>{t('access.passwordHint')}</small>
         {can('access.membership.role.assign') && <label>{t('access.role')}<select name="role_id" defaultValue=""><option value="">{t('access.noRole')}</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>}
         <div className="modal-actions"><button type="button" className="acc-ghost" onClick={() => setDialog(null)}>{t('common.cancel')}</button><button className="acc-primary" type="submit" disabled={busy}>{busy ? t('access.saving') : t('access.create')}</button></div></form></Dialog>}

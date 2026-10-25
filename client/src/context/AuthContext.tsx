@@ -17,6 +17,8 @@ export interface AuthCompany {
 export interface AuthUser {
   id: string;
   email: string;
+  /** Administrator-entered name; null/absent when not set (the header then shows the email). */
+  displayName?: string | null;
   /** Global System Admin (server-verified on every admin request; this flag only shows the administration UI). */
   isSystemAdmin?: boolean;
   /** Set after an administrative reset: only the change-password screen and sign-out are available until it is cleared. */
@@ -27,6 +29,8 @@ export interface AuthSession {
   user: AuthUser;
   allowedCompanies: AuthCompany[];
   activeCompanyId: string | null;
+  /** Role of the active company's membership, for display only (null for System Admin without membership or no role). */
+  activeRole?: { name: string; isFullAccess: boolean } | null;
   capabilities: string[];
 }
 

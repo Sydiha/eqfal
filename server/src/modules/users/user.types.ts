@@ -12,6 +12,8 @@ export interface User {
   is_system_admin?: boolean;
   /** Migration 082. Optional so older fixtures without the column stay valid. */
   must_change_password?: boolean;
+  /** Migration 095: administrator-entered name; null when not set. Optional so older fixtures stay valid. */
+  display_name?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -28,4 +30,6 @@ export interface CreateUserInput {
   password: string;
   /** Administratively chosen initial password: the user must replace it at first login (migration 082). */
   mustChangePassword?: boolean;
+  /** Optional administrator-entered name (migration 095). */
+  displayName?: string | null;
 }

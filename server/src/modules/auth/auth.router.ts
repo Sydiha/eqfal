@@ -96,7 +96,7 @@ authRouter.post('/auth/login', requireSameOrigin, asyncRoute(async (req, res) =>
   attempt.release(true);
   const { token, ...context } = result;
   setSessionCookie(res, token);
-  res.status(200).json(context);
+  res.status(200).json(await service.view(context));
 }));
 
 authRouter.get('/auth/session', asyncRoute(async (req, res) => {
@@ -116,7 +116,7 @@ authRouter.get('/auth/session', asyncRoute(async (req, res) => {
     return;
   }
 
-  res.status(200).json(context);
+  res.status(200).json(await service.view(context));
 }));
 
 authRouter.post('/auth/switch-company', requireSameOrigin, asyncRoute(async (req, res) => {
@@ -146,7 +146,7 @@ authRouter.post('/auth/switch-company', requireSameOrigin, asyncRoute(async (req
     return;
   }
 
-  res.status(200).json(context);
+  res.status(200).json(await service.view(context));
 }));
 
 authRouter.post('/auth/change-password', requireSameOrigin, asyncRoute(async (req, res) => {
@@ -207,7 +207,7 @@ authRouter.post('/auth/change-password', requireSameOrigin, asyncRoute(async (re
 
   attempt.release(true);
   setSessionCookie(res, result.token);
-  res.status(200).json(result.context);
+  res.status(200).json(await service.view(result.context));
 }));
 
 authRouter.post('/auth/logout', requireSameOrigin, asyncRoute(async (req, res) => {
