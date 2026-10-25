@@ -159,7 +159,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   if(!invoice.journal)return;
   setBusy(true);setError(null);
   try{
-   const response=await fetch(`/api/accounting/journals/${invoice.journal.id}/post`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+   const response=await fetch(`/api/journals/${invoice.journal.id}/post`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
    if(response.status===401){unauthorized();return;}
    if(!response.ok){const payload=await response.json().catch(()=>({})) as {code?:string};const key=`invoiceWorkspace.postErrors.${payload.code}`;const text=t(key);setError(payload.code&&text!==key?text:t('invoiceWorkspace.postErrors.generic'));setConfirmPost(false);return;}
    setConfirmPost(false);
