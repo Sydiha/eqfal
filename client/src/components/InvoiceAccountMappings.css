@@ -1,0 +1,37 @@
+/* Invoice account mappings (P2-C2). Scoped to .invoice-mappings; uses the shared tokens from App.css. */
+.invoice-mappings .invoice-mappings__summary{display:grid;gap:4px;margin:0;padding:.85rem 1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);line-height:1.6}
+.invoice-mappings .invoice-mappings__summary.is-warning{border-color:#f0dca8;background:#fff8e6;color:#6f4a00}
+.invoice-mappings .invoice-mappings__summary.is-error{border-color:#efcaca;background:#fff6f6;color:#8b1e1e}
+.invoice-mappings .invoice-mappings__summary.is-success{border-color:#bfe3da;background:var(--primary-soft);color:#0a5a4b}
+.invoice-mappings .invoice-mappings__section h3{margin:0 0 12px}
+.invoice-mappings .invoice-mappings__rows{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.invoice-mappings .invoice-mappings__row{display:grid;grid-template-columns:minmax(160px,1fr) minmax(220px,1.5fr) minmax(260px,1.8fr);gap:14px;align-items:start;padding:14px;border:1px solid var(--border);border-inline-start:4px solid #5fbf9f;border-radius:var(--radius);background:var(--surface)}
+.invoice-mappings .invoice-mappings__row.is-missing{border-inline-start-color:#d9a21b;background:#fffdf6}
+.invoice-mappings .invoice-mappings__row.is-invalid{border-inline-start-color:var(--danger);background:#fffafa}
+.invoice-mappings .invoice-mappings__role,.invoice-mappings .invoice-mappings__current,.invoice-mappings .invoice-mappings__actions{display:grid;gap:6px;align-content:start;min-width:0}
+.invoice-mappings .invoice-mappings__role .badge{justify-self:start}
+.invoice-mappings .invoice-mappings__muted{color:var(--muted);font-size:.82rem}
+.invoice-mappings .invoice-mappings__account-label{font-weight:700;overflow-wrap:anywhere}
+.invoice-mappings .invoice-mappings__code{font-variant-numeric:tabular-nums}
+.invoice-mappings .invoice-mappings__facts{display:flex;flex-wrap:wrap;gap:6px}
+.invoice-mappings .invoice-mappings__reason{margin:0;color:var(--danger);font-size:.84rem;line-height:1.6}
+.invoice-mappings .is-missing .invoice-mappings__reason{color:var(--warning)}
+.invoice-mappings .invoice-mappings__note{margin:0;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:#f7f9fa;color:var(--muted);font-size:.84rem;line-height:1.6}
+.invoice-mappings .invoice-mappings__note.is-warning{border-color:#f0dca8;background:#fff8e6;color:#6f4a00}
+.invoice-mappings .invoice-mappings__select{width:100%;min-height:var(--control)}
+.invoice-mappings .invoice-mappings__compare{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:8px 10px;border:1px dashed #b8c7cc;border-radius:var(--radius-sm);background:var(--primary-soft);font-size:.84rem}
+.invoice-mappings .invoice-mappings__compare:not(:has(.invoice-mappings__arrow)){grid-template-columns:1fr}
+.invoice-mappings .invoice-mappings__compare small{display:block;color:var(--muted)}
+.invoice-mappings .invoice-mappings__compare-label{display:block;color:var(--muted);font-size:.74rem}
+.invoice-mappings .invoice-mappings__arrow{font-weight:700;color:var(--primary)}
+[dir=rtl] .invoice-mappings .invoice-mappings__arrow{transform:scaleX(-1)}
+.invoice-mappings .invoice-mappings__buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* Disabled Save must read as unavailable, not as a faded primary button, while staying legible. */
+.invoice-mappings button.invoice-mappings__save:disabled{border-color:#d5dde0;background:#eef2f3;color:#5b6873;opacity:1;cursor:not-allowed}
+.invoice-mappings button.invoice-mappings__clear:disabled{opacity:.6;cursor:not-allowed}
+.invoice-mappings .invoice-mappings__unsaved{color:var(--warning);background:#fff1cf}
+.invoice-mappings .invoice-mappings__spinner{display:inline-block;width:14px;height:14px;margin-inline-end:6px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;vertical-align:-2px;animation:invoice-mappings-spin .8s linear infinite}
+@keyframes invoice-mappings-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.invoice-mappings .invoice-mappings__spinner{animation:none}}
+@media(max-width:64em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr 1fr}.invoice-mappings .invoice-mappings__actions{grid-column:1/-1}}
+@media(max-width:48em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__compare{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__arrow{justify-self:center;transform:rotate(90deg)!important}.invoice-mappings .invoice-mappings__buttons button{flex:1}}
