@@ -42,6 +42,7 @@ import { invoiceAccountMappingRouter } from './modules/invoices/invoice-account-
 import { recordDeletionRouter } from './modules/record-deletion/record-deletion.router';
 import { recurringInvoiceRouter } from './modules/invoices/recurring-invoice.router';
 import { ledgerSourceAuthorityRouter } from './modules/ledger-source-authority/ledger-source-authority.router';
+import { historicalRecordsRouter } from './modules/historical-records/historical-records.router';
 import logger from './shared/logger';
 import config from './config';
 import { securityHeaders } from './shared/security-headers';
@@ -86,6 +87,7 @@ app.use('/api', vatReturnsRouter);
 app.use('/api', recordDeletionRouter);
 app.use('/api', accountingRouter);
 app.use('/api', ledgerSourceAuthorityRouter);
+app.use('/api', historicalRecordsRouter);
 app.use('/api', salesRouter);
 app.use('/api', purchasesRouter);
 app.use('/api', fixedAssetsRouter);
