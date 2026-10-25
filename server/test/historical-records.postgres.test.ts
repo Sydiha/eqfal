@@ -205,7 +205,37 @@ describeDatabase('historical records (PostgreSQL)', () => {
     await change('in_progress', 'Reopened: missing supplier statement found');
     await official(p);
     await expect(pool.query(`UPDATE historical_periods SET period_end = period_end - 1 WHERE id=$1`, [p])).rejects.toThrow(/HISTORICAL_RECORD_IMMUTABLE/);
-    await expect(period(companyA, `${year}-01-01`, `${year}-12-31`)).rejects.toMatchObject({ code: '23505' });
+    await expect(period(companyA, `${year}-01-01`, `${year}-12-31`)).rejects.toThrow(/HISTORICAL_PERIOD_OVERLAP/);
+  });
+
+  it('refuses partially overlapping or contained periods of one company, including through a date update, and allows adjacent and other-company periods', async () => {
+    const base = await period(companyA, '1990-03-01', '1990-08-31');
+    for (const [s, e] of [['1990-01-01', '1990-03-01'], ['1990-08-31', '1990-12-31'], ['1990-05-01', '1990-06-30'], ['1990-01-01', '1990-12-31'], ['1990-06-01', '1990-09-30']]) {
+      await expect(period(companyA, s, e)).rejects.toThrow(/HISTORICAL_PERIOD_OVERLAP/);
+    }
+    const before = await period(companyA, '1990-01-01', '1990-02-28');
+    await period(companyA, '1990-09-01', '1990-12-31');
+    await expect(period(companyB, '1990-05-01', '1990-06-30')).resolves.toBeTruthy();
+    await expect(pool.query(`UPDATE historical_periods SET period_end = '1990-03-15' WHERE id = $1`, [before])).rejects.toThrow(/HISTORICAL_PERIOD_OVERLAP/);
+    await expect(pool.query(`UPDATE historical_periods SET period_start = '1990-02-15', period_end = '1990-04-01' WHERE id = $1`, [before])).rejects.toThrow(/HISTORICAL_PERIOD_OVERLAP/);
+    await pool.query(`UPDATE historical_periods SET period_end = '1990-02-27' WHERE id = $1`, [before]);
+    expect(base).toBeTruthy();
+  });
+
+  it('serialises concurrent overlapping inserts so only one commits', async () => {
+    const insert = (c: import('pg').PoolClient, s: string, e: string) => c.query(
+      `INSERT INTO historical_periods (company_id, label, period_start, period_end, completeness, status_reason, status_changed_by, created_by)
+       VALUES ($1, 'Race', $2, $3, 'incomplete', 'Race', $4, $4)`, [companyA, s, e, user]);
+    const a = await pool.connect(); const b = await pool.connect();
+    try {
+      await a.query('BEGIN'); await b.query('BEGIN');
+      await insert(a, '1980-01-01', '1980-12-31');
+      const second = insert(b, '1980-06-01', '1981-05-31').then(() => 'ok', (e) => String(e.message));
+      await new Promise((r) => setTimeout(r, 200));
+      await a.query('COMMIT');
+      expect(await second).toMatch(/HISTORICAL_PERIOD_OVERLAP/);
+      await b.query('ROLLBACK');
+    } finally { a.release(); b.release(); }
   });
 
   it('coexists with an operational fiscal year for the same dates and never creates journals', async () => {

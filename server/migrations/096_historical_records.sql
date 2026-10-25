@@ -24,7 +24,7 @@
 -- ROLLBACK (only while the three tables are empty):
 --   DROP TRIGGER documents_historical_protection ON documents; DROP FUNCTION documents_historical_protection();
 --   DROP TABLE historical_statement_lines, historical_statement_versions, historical_periods;  -- drops their triggers
---   DROP FUNCTION historical_periods_guard(), historical_statement_versions_guard(), historical_statement_lines_guard(),
+--   DROP FUNCTION historical_periods_guard(), historical_periods_overlap_guard(), historical_statement_versions_guard(), historical_statement_lines_guard(),
 --     historical_version_fingerprint(uuid);
 --   DELETE FROM capabilities WHERE id IN ('historical.view','historical.manage','historical.approve');
 --   DELETE FROM _schema_migrations WHERE filename = '096_historical_records.sql';
@@ -158,6 +158,20 @@ BEGIN
 END $$;
 CREATE TRIGGER historical_periods_guard BEFORE UPDATE OR DELETE ON historical_periods
   FOR EACH ROW EXECUTE FUNCTION historical_periods_guard();
+
+-- No two historical periods of one company may share any date (inclusive bounds); fiscal years are deliberately not checked. A per-company
+-- advisory lock serialises concurrent inserts and date updates (each query in this VOLATILE function sees rows committed while waiting).
+CREATE FUNCTION historical_periods_overlap_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('historical-period:' || NEW.company_id::text, 0));
+  IF EXISTS (SELECT 1 FROM historical_periods p WHERE p.company_id = NEW.company_id AND p.id <> NEW.id
+             AND p.period_start <= NEW.period_end AND p.period_end >= NEW.period_start) THEN
+    RAISE EXCEPTION 'HISTORICAL_PERIOD_OVERLAP' USING ERRCODE = '23514', DETAIL = 'Historical periods of one company cannot overlap';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER historical_periods_overlap_guard BEFORE INSERT OR UPDATE OF company_id, period_start, period_end ON historical_periods
+  FOR EACH ROW EXECUTE FUNCTION historical_periods_overlap_guard();
 
 -- Fingerprint over the version content, its ordered lines and the sha256 of every referenced document.
 CREATE FUNCTION historical_version_fingerprint(p_version UUID) RETURNS TEXT LANGUAGE sql STABLE AS $$
