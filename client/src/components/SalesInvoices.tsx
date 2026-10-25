@@ -40,8 +40,11 @@ type MoreItem={key:string;label:string;enabled:boolean;onSelect:()=>void;note?:R
  * each item keeps its enablement and opens the same confirmation step. Arrow keys move between enabled items; Escape closes
  * the menu (not the dialog) and returns focus to the trigger.
  */
-function MoreMenu({label,menuLabel,items,disabled,triggerRef}:{label:string;menuLabel:string;items:MoreItem[];disabled:boolean;triggerRef:RefObject<HTMLButtonElement>}){
+function MoreMenu({label,menuLabel,items,disabled,triggerRef,onOpenChange}:{label:string;menuLabel:string;items:MoreItem[];disabled:boolean;triggerRef:RefObject<HTMLButtonElement>;onOpenChange?:(open:boolean)=>void}){
  const[open,setOpen]=useState(false);
+ const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
+ // The footer clips overflow while scrolling; it is told when the menu opens so it can let the menu show in full.
+ useEffect(()=>{openChangeRef.current?.(open);return()=>{if(open)openChangeRef.current?.(false)}},[open]);
  const menuRef=useRef<HTMLDivElement>(null);
  const menuId=useRef(`invoice-more-${Math.random().toString(36).slice(2)}`).current;
  const enabledItems=()=>Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')??[]);
@@ -87,6 +90,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[missingKeys,setMissingKeys]=useState<string[]>([]),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null),[confirmDelete,setConfirmDelete]=useState(false);
  const[rate,setRate]=useState<RateState|null>(null);
  const moreRef=useRef<HTMLButtonElement>(null);
+ const[moreOpen,setMoreOpen]=useState(false);
  const readFilters=():Filters=>({q:readQueryParameter(`${prefix}Q`)??'',status:readQueryParameter(`${prefix}Status`,{allowedValues:INVOICE_STATUSES})??'',party:readQueryParameter(`${prefix}Party`,{pattern:/^[0-9a-f-]{36}$/i})??'',from:validDate(readQueryParameter(`${prefix}From`)),to:validDate(readQueryParameter(`${prefix}To`))});
  const[filters,setFilters]=useState<Filters>(readFilters);
  const[searchText,setSearchText]=useState(filters.q);
@@ -257,7 +261,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    {reason&&<p className={`sales-invoices__hint sales-invoices__next${action.kind==='none'?'':' sales-invoices__next--blocked'}`} data-testid="next-action-note">{reason}</p>}
    {deleteReason&&del.reason==='noDelete'&&<p className="sales-invoices__hint sales-invoices__next sales-invoices__next--blocked" data-testid="delete-note">{deleteReason}</p>}
    <div className="modal-actions sales-invoices__actions"><button type="button" onClick={()=>setDetail(null)} disabled={busy}>{t('common.close')}</button>
-    {sensitive.length>0&&<MoreMenu label={t('invoiceWorkspace.more')} menuLabel={t('invoiceWorkspace.moreLabel')} items={sensitive} disabled={busy} triggerRef={moreRef}/>}
+    {sensitive.length>0&&<MoreMenu label={t('invoiceWorkspace.more')} menuLabel={t('invoiceWorkspace.moreLabel')} items={sensitive} disabled={busy} triggerRef={moreRef} onOpenChange={setMoreOpen}/>}
     <span className="sales-invoices__actions-gap" aria-hidden="true"/>
     {invoice.status==='draft'&&canEdit&&<button type="button" onClick={()=>startEdit(invoice)} disabled={busy}>{t('salesInvoice.edit')}</button>}
     {invoice.status==='submitted'&&canSubmit&&<button type="button" onClick={()=>void transition(invoice,'return')} disabled={busy}>{t('salesInvoice.return')}</button>}
@@ -339,7 +343,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
     {detail.status!=='approved'&&!detail.cancellation&&<p className="sales-invoices__hint">{t('invoiceWorkspace.correctionsPending')}</p>}
    </div></details>
    {/* The action area stays reachable at the bottom of the dialog; blocking errors are shown right above the buttons that caused them. */}
-   <div className="sales-invoices__footer">
+   <div className={`sales-invoices__footer${moreOpen?' sales-invoices__footer--menu-open':''}`}>
     {error&&<p role="alert" ref={node=>node?.scrollIntoView?.({block:'nearest'})} className="sales-invoices__error sales-invoices__alert">{error}</p>}
     {error&&missingKeys.length>0&&<div className="sales-invoices__mapping-hint" data-testid="mapping-missing"><p>{t('invoiceMappings.missingList',{keys:missingKeys.map(k=>t(`invoiceMappings.keys.${k}`,{defaultValue:k})).join(t('invoiceMappings.listSeparator'))})}</p>{caps.canViewMappings&&onNavigate?<button type="button" onClick={()=>onNavigate('invoiceMappings',{})}>{t('invoiceMappings.goToPage')}</button>:<p>{t('invoiceMappings.askAdmin')}</p>}</div>}
     {confirmDelete&&detail.status==='draft'?<ConfirmStep label={t('invoiceWorkspace.confirmDeleteTitle')}><p><strong>{t('invoiceWorkspace.confirmDeleteTitle')}</strong></p><p>{t('invoiceWorkspace.confirmDeleteBody')}</p>

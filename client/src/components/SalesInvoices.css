@@ -94,6 +94,8 @@
 .sales-invoices__detail [data-testid="invoice-notes-list"] .modal-actions button{min-height:34px;padding:.3rem .7rem;font-size:.82rem;min-width:0;width:auto}
 .sales-invoices__detail .sales-invoices__form .modal-actions{display:flex;justify-content:flex-end;gap:.5rem}
 .sales-invoices__footer{position:sticky;inset-block-end:0;z-index:2;max-height:min(60dvh,420px);overflow-y:auto;overscroll-behavior:contain;margin-block-start:var(--space-3,.75rem);padding-block:.75rem 1rem;background:var(--surface,#fff);border-top:1px solid var(--border,#e6ecee)}
+/* While the "More" menu is open the footer must not clip it (the menu opens upwards over the dialog body). */
+.sales-invoices__detail .sales-invoices__footer.sales-invoices__footer--menu-open{max-height:none;overflow:visible}
 .sales-invoices__footer .sales-invoices__next{margin-block:0 .4rem}
 .sales-invoices__alert{margin:0 0 .5rem;padding:.6rem .8rem;border:1px solid #e5b6b6;border-radius:var(--radius-sm,8px);background:#fff2f2;color:#8b1e1e}
 .sales-invoices__footer .sales-invoices__mapping-hint{margin-block-end:.5rem}

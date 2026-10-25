@@ -139,6 +139,20 @@ describe('Invoice details actions',()=>{
   expect(document.activeElement).toBe(trigger);
  });
 
+ it('lets the open "More" menu escape the scrolling footer so no item is clipped, and restores it on close',async()=>{
+  const dialog=await openDetails(submitted);
+  const footer=dialog.querySelector('.sales-invoices__footer')!;
+  expect(footer).not.toHaveClass('sales-invoices__footer--menu-open');
+  fireEvent.click(within(dialog).getByRole('button',{name:'More'}));
+  expect(footer).toHaveClass('sales-invoices__footer--menu-open');
+  const menu=screen.getByRole('menu');
+  expect(footer.contains(menu)).toBe(true);
+  expect(within(menu).getByRole('menuitem',{name:'Delete draft'})).toBeDisabled();
+  expect(within(menu).getByTestId('delete-note')).toHaveTextContent('Return it to draft first');
+  fireEvent.keyDown(menu,{key:'Escape'});
+  expect(footer).not.toHaveClass('sales-invoices__footer--menu-open');
+ });
+
  it('moves focus into the cancellation step and keeps the reason requirement',async()=>{
   const dialog=await openDetails(submitted);
   fireEvent.click(within(dialog).getByRole('button',{name:'More'}));
