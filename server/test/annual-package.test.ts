@@ -40,6 +40,9 @@ class PackageDb {
     if(normalized.startsWith("UPDATE annual_closing_packages SET status='approved'")){if(this.package.id!==args[0]||this.package.company_id!==args[1]||this.package.status!=='reviewed'||this.package.version!==args[4])return{rows:[],rowCount:0};Object.assign(this.package,{status:'approved',approved_by_user_id:args[2],approved_at:'2026-01-02',approval_note:args[3],version:this.package.version+1});return{rows:[{...this.package}],rowCount:1};}
     if(normalized.startsWith("UPDATE annual_closing_packages SET status='handed_off'")){if(this.package.id!==args[0]||this.package.company_id!==args[1]||this.package.status!=='finalized'||this.package.version!==args[5])return{rows:[],rowCount:0};Object.assign(this.package,{status:'handed_off',handed_off_by_user_id:args[2],handoff_note:args[3],handoff_reference:args[4],version:this.package.version+1});return{rows:[{...this.package}],rowCount:1};}
     if(normalized.startsWith('UPDATE annual_closing_packages')){if(this.package.id!==args[0]||this.package.company_id!==args[1]||this.package.status!=='draft'||this.package.version!==args[4])return{rows:[],rowCount:0};Object.assign(this.package,{status:'finalized',final_snapshot_id:args[2],finalized_by_user_id:args[3],version:this.package.version+1});return{rows:[{...this.package}],rowCount:1};}
+    if(normalized.startsWith('SELECT status FROM fiscal_years'))return{rows:[{status:'closed'}],rowCount:1};
+    if(normalized.startsWith('SELECT a.id::text account_id'))return{rows:[],rowCount:0};
+    if(normalized.startsWith("SELECT COUNT(*)::text n FROM journal_entries"))return{rows:[{n:'0'}],rowCount:1};
     throw new Error(`Unhandled SQL: ${normalized}`);
   });
 }
