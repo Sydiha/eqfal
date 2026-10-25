@@ -46,6 +46,9 @@ describe('P1 error localization',()=>{
   for(const [code,reasons] of Object.entries(REASONS))for(const r of reasons){const e=(en as any).salesInvoice.errorReasons[code][r],a=(ar as any).salesInvoice.errorReasons[code][r];expect(e,`${code}.${r}`).toBeTruthy();expect(a).toMatch(/[؀-ۿ]/)}
   expect((en as any).vat.actionError).toBeTruthy();expect((ar as any).vat.actionError).toMatch(/[؀-ۿ]/);
  });
+ it('keeps VAT_INCOMPLETE guidance valid for both submit and approval',()=>{
+  for(const l of [en,ar] as any[])for(const text of Object.values(l.salesInvoice.errorReasons.INVOICE_VAT_INCOMPLETE) as string[]){expect(text).not.toMatch(/return a submitted invoice to draft first|أعد الفاتورة المرسلة إلى مسودة أولًا/);expect(text).toMatch(/If the invoice is already submitted|إذا كانت الفاتورة مرسلة/)}
+ });
  it('drops the obsolete self-approval and unused approval texts',()=>{
   for(const l of [en,ar] as any[]){expect(l.salesInvoice.errors.INVOICE_SELF_APPROVAL).toBeUndefined();expect(l.invoiceNotes.errors.INVOICE_SELF_APPROVAL).toBeUndefined();expect(l.salesInvoice.errors.INVOICE_VAT_PREREQUISITE).toBeUndefined();expect(l.salesInvoice.errors.INVOICE_DIRECTION_UNSUPPORTED).toBeUndefined()}
  });
