@@ -350,6 +350,20 @@ export class MembershipRepository {
    *    registered capability (current and future); any other role holds exactly its role_capabilities rows.
    * The explicit roles/company join is defense-in-depth against a corrupted or manually-written cross-company role_id.
    */
+  /** Role of the user's ACTIVE membership in an active company (display only; authorization uses capabilities). */
+  async getActiveRole(userId: string, companyId: string, client?: PoolClient): Promise<{ name: string; is_full_access: boolean } | null> {
+    const runner: QueryRunner = client ?? this.pool;
+    const { rows } = await runner.query<{ name: string; is_full_access: boolean }>(
+      `SELECT r.name, r.is_full_access
+       FROM memberships m
+       JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
+       JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       WHERE m.user_id = $1 AND m.company_id = $2 AND m.is_active = TRUE`,
+      [userId, companyId],
+    );
+    return rows[0] ?? null;
+  }
+
   async getActiveCapabilities(userId: string, companyId: string, client?: PoolClient): Promise<string[]> {
     const runner: QueryRunner = client ?? this.pool;
     const { rows } = await runner.query<{ capability_id: string }>(

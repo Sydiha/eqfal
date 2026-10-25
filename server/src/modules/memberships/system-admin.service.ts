@@ -6,7 +6,7 @@ import { AccessPolicyError } from './access-policy-error';
 const SYSTEM_ADMIN_BOOTSTRAP_LOCK_KEY = 7_432_093;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export interface AdminUser { id: string; email: string; is_active: boolean; is_system_admin: boolean; created_at: Date; active_memberships: number }
+export interface AdminUser { id: string; email: string; display_name: string | null; is_active: boolean; is_system_admin: boolean; created_at: Date; active_memberships: number }
 export interface AdminUserMembership {
   id: string; company_id: string; company_name: string; company_name_ar: string | null; company_is_active: boolean;
   role_id: string | null; role_name: string | null; role_is_full_access: boolean; is_active: boolean;
@@ -71,7 +71,7 @@ export class SystemAdminService {
 
   async listUsers(search: string | null): Promise<AdminUser[]> {
     const { rows } = await this.pool.query<AdminUser>(
-      `SELECT u.id, u.email, u.is_active, u.is_system_admin, u.created_at,
+      `SELECT u.id, u.email, u.display_name, u.is_active, u.is_system_admin, u.created_at,
               (SELECT COUNT(*)::int FROM memberships m WHERE m.user_id = u.id AND m.is_active = TRUE) AS active_memberships
        FROM users u
        WHERE $1::text IS NULL OR u.email ILIKE '%' || $1 || '%'
@@ -98,16 +98,16 @@ export class SystemAdminService {
   }
 
   /** Creates an account without any company access; memberships are added separately. Throws pg 23505 on a duplicate email. */
-  async createUser(email: string, password: string, actorUserId: string): Promise<AdminUser> {
+  async createUser(email: string, password: string, actorUserId: string, displayName: string | null = null): Promise<AdminUser> {
     const hash = await bcrypt.hash(password, 12);
     return this.transaction(async (client) => {
       const { rows } = await client.query<AdminUser>(
-        `INSERT INTO users (email, password_hash) VALUES (LOWER($1), $2)
-         RETURNING id, email, is_active, is_system_admin, created_at, 0 AS active_memberships`,
-        [email, hash],
+        `INSERT INTO users (email, password_hash, must_change_password, display_name) VALUES (LOWER($1), $2, TRUE, $3)
+         RETURNING id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships`,
+        [email, hash, displayName],
       );
       const user = rows[0] as AdminUser;
-      await this.log(client, { actor: actorUserId, action: 'system.user.create', target: user.id, before: null, after: { email: user.email, is_active: true, is_system_admin: false } });
+      await this.log(client, { actor: actorUserId, action: 'system.user.create', target: user.id, before: null, after: { email: user.email, display_name: user.display_name, is_active: true, is_system_admin: false, must_change_password: true } });
       return user;
     });
   }
@@ -115,7 +115,7 @@ export class SystemAdminService {
   async setUserActive(userId: string, active: boolean, actorUserId: string): Promise<AdminUser> {
     return this.transaction(async (client) => {
       if (!active && userId === actorUserId) throw new AccessPolicyError('You cannot disable your own account', 'ACCESS_SELF_LOCKOUT');
-      const before = (await client.query<AdminUser>('SELECT id, email, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
+      const before = (await client.query<AdminUser>('SELECT id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
       if (!before) throw new Error('User not found');
       if (!active && before.is_system_admin) await this.assertNotLastSystemAdmin(client, userId);
       if (!active) {
@@ -132,7 +132,7 @@ export class SystemAdminService {
         if (orphaned.rows.length > 0) throw new AccessPolicyError('The last active Full Access member of a company cannot be disabled', 'ACCESS_LAST_FULL_ACCESS');
       }
       const after = (await client.query<AdminUser>(
-        'UPDATE users SET is_active = $2, updated_at = NOW() WHERE id = $1 RETURNING id, email, is_active, is_system_admin, created_at, 0 AS active_memberships',
+        'UPDATE users SET is_active = $2, updated_at = NOW() WHERE id = $1 RETURNING id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships',
         [userId, active],
       )).rows[0] as AdminUser;
       // A disabled account loses every session at once (sessions of active accounts are untouched).
@@ -142,16 +142,32 @@ export class SystemAdminService {
     });
   }
 
+  /** Sets or clears an account's display name (migration 095). Display only; audited in system_audit_log. */
+  async setDisplayName(userId: string, displayName: string | null, actorUserId: string): Promise<AdminUser> {
+    return this.transaction(async (client) => {
+      const before = (await client.query<AdminUser>('SELECT id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
+      if (!before) throw new Error('User not found');
+      const after = (await client.query<AdminUser>(
+        'UPDATE users SET display_name = $2, updated_at = NOW() WHERE id = $1 RETURNING id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships',
+        [userId, displayName],
+      )).rows[0] as AdminUser;
+      if (before.display_name !== after.display_name) {
+        await this.log(client, { actor: actorUserId, action: 'system.user.display_name.change', target: userId, before: { display_name: before.display_name }, after: { display_name: after.display_name } });
+      }
+      return after;
+    });
+  }
+
   /** Grants or revokes global System Admin. Only callable by an active System Admin (checked by the router and again here). */
   async setSystemAdmin(userId: string, value: boolean, actorUserId: string): Promise<AdminUser> {
     return this.transaction(async (client) => {
       if (!(await SystemAdminService.isActiveSystemAdmin(client, actorUserId))) throw new AccessPolicyError('Only an active System Admin can change System Admin status', 'ACCESS_SYSTEM_ADMIN_REQUIRED');
-      const before = (await client.query<AdminUser>('SELECT id, email, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
+      const before = (await client.query<AdminUser>('SELECT id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
       if (!before) throw new Error('User not found');
       if (value && !before.is_active) throw new AccessPolicyError('A disabled account cannot become System Admin', 'ACCESS_TARGET_INACTIVE');
       if (!value) await this.assertNotLastSystemAdmin(client, userId);
       const after = (await client.query<AdminUser>(
-        'UPDATE users SET is_system_admin = $2, updated_at = NOW() WHERE id = $1 RETURNING id, email, is_active, is_system_admin, created_at, 0 AS active_memberships',
+        'UPDATE users SET is_system_admin = $2, updated_at = NOW() WHERE id = $1 RETURNING id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships',
         [userId, value],
       )).rows[0] as AdminUser;
       if (before.is_system_admin !== after.is_system_admin) {

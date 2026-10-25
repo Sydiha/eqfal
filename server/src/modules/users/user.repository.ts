@@ -27,10 +27,10 @@ export class UserRepository {
     // The flag column is only named when requested, so account creation that never needs it (bootstrap) is unaffected.
     const { rows } = input.mustChangePassword
       ? await runner.query<User>(
-        `INSERT INTO users (email, password_hash, must_change_password)
-         VALUES (LOWER($1), $2, TRUE)
+        `INSERT INTO users (email, password_hash, must_change_password, display_name)
+         VALUES (LOWER($1), $2, TRUE, $3)
          RETURNING *`,
-        [input.email, input.password],
+        [input.email, input.password, input.displayName ?? null],
       )
       : await runner.query<User>(
         `INSERT INTO users (email, password_hash)

@@ -7,6 +7,8 @@ import { handleKnownError } from './access-administration.router';
 import { sensitivityMap } from './capability-sensitivity';
 import { MembershipService } from './membership.service';
 import { SystemAdminService } from './system-admin.service';
+import { validateNewPassword } from '../users/password-policy';
+import { parseDisplayName } from '../users/display-name';
 
 /**
  * Global administration (/api/admin/*) for an active System Admin only. These routes do NOT need an active company or
@@ -104,16 +106,28 @@ systemAdminRouter.get('/admin/users', ...read, asyncRoute(async (req, res) => {
 const MIN_PASSWORD = 8;
 systemAdminRouter.post('/admin/users', ...write, asyncRoute(async (req, res) => {
   const body = req.body as Record<string, unknown>;
-  const email = exactObject(body, ['email', 'password']) && typeof body.email === 'string' ? body.email.trim() : '';
+  const email = exactObject(body, ['email', 'password', 'display_name']) && typeof body.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
   if (!email || email.length > 254 || !EMAIL.test(email) || password.length < MIN_PASSWORD || password.length > 256) { res.status(400).json(BAD); return; }
-  try { res.status(201).json(await new SystemAdminService(db()).createUser(email, password, actor(req))); }
+  // Same policy as a user's own password change; the account must still replace this password at first login.
+  const violation = validateNewPassword(password, { email });
+  if (violation) { res.status(400).json({ ...BAD, code: violation }); return; }
+  const displayName = parseDisplayName(body.display_name);
+  if (displayName === undefined) { res.status(400).json(BAD); return; }
+  try { res.status(201).json(await new SystemAdminService(db()).createUser(email, password, actor(req), displayName)); }
   catch (error) { fail(error, res); }
 }));
 
 systemAdminRouter.patch('/admin/users/:id/active', ...write, asyncRoute(async (req, res) => {
   if (!UUID.test(req.params.id!) || !exactObject(req.body, ['is_active']) || typeof req.body.is_active !== 'boolean') { res.status(400).json(BAD); return; }
   try { res.json(await new SystemAdminService(db()).setUserActive(req.params.id!, req.body.is_active, actor(req))); }
+  catch (error) { fail(error, res); }
+}));
+
+systemAdminRouter.patch('/admin/users/:id/display-name', ...write, asyncRoute(async (req, res) => {
+  const displayName = exactObject(req.body, ['display_name']) ? parseDisplayName(req.body.display_name) : undefined;
+  if (!UUID.test(req.params.id!) || displayName === undefined) { res.status(400).json(BAD); return; }
+  try { res.json(await new SystemAdminService(db()).setDisplayName(req.params.id!, displayName, actor(req))); }
   catch (error) { fail(error, res); }
 }));
 

@@ -394,4 +394,84 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect((await ops.req('POST', '/journals', { fiscal_year_id: ids.fyA, accounting_date: '2026-10-01', description: 'manual' })).status).toBe(403);
     expect((await ops.req('POST', `/journals/${approved.json.journal_id}/post`, {})).status).toBe(403);
   });
+
+  // ── Phase B finalization (2026-10-25): header identity, display name, System Admin password policy, negatives ──
+  it('session shows the active company role and refreshes it on switch; System Admin has no membership role', async () => {
+    const multi = new Client(email('multi'));
+    const first = await multi.use((await multi.login()).allowedCompanies.find((c: { id: string }) => c.id === ids.coA).id);
+    expect(first.activeRole).toEqual({ name: 'Viewer', isFullAccess: false });
+    expect(first.user.displayName).toBeNull();
+    expect((await multi.use(ids.coB!)).activeRole).toEqual({ name: 'Accountant', isFullAccess: false });
+    expect((await multi.req('GET', '/auth/session')).json.activeRole.name).toBe('Accountant');
+    // An access change is visible on the next session read (display only; capabilities are re-derived the same way).
+    await q('UPDATE memberships SET role_id=$1 WHERE user_id=$2 AND company_id=$3', [roles['ViewerB'], ids.multi, ids.coB]);
+    expect((await multi.req('GET', '/auth/session')).json.activeRole.name).toBe('Viewer');
+    await q('UPDATE memberships SET role_id=$1 WHERE user_id=$2 AND company_id=$3', [roles['AccountantB'], ids.multi, ids.coB]);
+    const owner = (await clients.ownerA!.req('GET', '/auth/session')).json;
+    expect(owner.activeRole).toEqual({ name: 'Full Access', isFullAccess: true });
+    // A System Admin in a company where it holds no membership (the header shows "System Admin" from isSystemAdmin).
+    const sa = await clients.sa!.use(ids.coA!);
+    expect(sa.user.isSystemAdmin).toBe(true);
+    expect(sa.activeRole).toBeNull();
+  });
+
+  it('System Admin creates accounts under the password policy with a required first-login change and an optional display name', async () => {
+    const sa = clients.sa!;
+    expect((await sa.req('POST', '/admin/users', { email: email('weak'), password: email('weak') })).json.code).toBe('PASSWORD_CONTAINS_EMAIL');
+    expect((await sa.req('POST', '/admin/users', { email: email('weak'), password: 'x'.repeat(73) })).json.code).toBe('PASSWORD_TOO_LONG');
+    expect((await sa.req('POST', '/admin/users', { email: email('weak'), password: 'Named-User-Pass-1', display_name: 'x'.repeat(101) })).status).toBe(400);
+    expect(await n('SELECT count(*) n FROM users WHERE email=$1', [email('weak')])).toBe(0);
+    const created = await sa.req('POST', '/admin/users', { email: email('named'), password: 'Named-User-Pass-1', display_name: '  سارة أحمد  ' });
+    expect(created.status).toBe(201);
+    expect(created.json.display_name).toBe('سارة أحمد');
+    expect((await q('SELECT must_change_password FROM users WHERE id=$1', [created.json.id]))[0].must_change_password).toBe(true);
+    const named = new Client(email('named'));
+    const login = await named.req('POST', '/auth/login', { email: email('named'), password: 'Named-User-Pass-1' });
+    expect(login.json.user).toMatchObject({ displayName: 'سارة أحمد', mustChangePassword: true });
+    expect((await named.req('GET', '/invoices')).json.code).toBe('PASSWORD_CHANGE_REQUIRED');
+    // Without a name nothing is derived from the email.
+    const plain = await sa.req('POST', '/admin/users', { email: email('plain'), password: 'Plain-User-Pass-1' });
+    expect(plain.json.display_name).toBeNull();
+  });
+
+  it('only a System Admin edits a display name; it is audited and validated by the API and the database', async () => {
+    const target = ids.staffA!;
+    expect((await clients.mgrA!.req('PATCH', `/admin/users/${target}/display-name`, { display_name: 'Hijack' })).json.code).toBe('ACCESS_SYSTEM_ADMIN_REQUIRED');
+    expect((await clients.sa!.req('PATCH', `/admin/users/${target}/display-name`, { display_name: 'Staff A', extra: 1 })).status).toBe(400);
+    expect((await clients.sa!.req('PATCH', `/admin/users/${target}/display-name`, { display_name: 'Staff A' })).json.display_name).toBe('Staff A');
+    expect((await clients.staffA!.req('GET', '/auth/session')).json.user.displayName).toBe('Staff A');
+    expect(await n("SELECT count(*) n FROM system_audit_log WHERE action='system.user.display_name.change' AND target_user_id=$1", [target])).toBe(1);
+    expect((await clients.sa!.req('PATCH', `/admin/users/${target}/display-name`, { display_name: '' })).json.display_name).toBeNull();
+    await expect(q("UPDATE users SET display_name='  ' WHERE id=$1", [target])).rejects.toThrow(/users_display_name_check/);
+  });
+
+  it('a company manager may name a new account at creation (no edit route), within existing guards', async () => {
+    const created = await clients.ownerA!.req('POST', '/access/users', { email: email('companynamed'), password: 'Company-Named-1', display_name: 'Omar' });
+    expect(created.status).toBe(201);
+    expect((await q('SELECT display_name FROM users WHERE email=$1', [email('companynamed')]))[0].display_name).toBe('Omar');
+    expect((await clients.ownerA!.req('POST', '/access/users', { email: email('badname'), password: 'Company-Named-1', display_name: 42 })).status).toBe(400);
+  });
+
+  it('a non System Admin cannot grant or revoke System Admin, over HTTP or by calling the service directly', async () => {
+    const { SystemAdminService } = await import('../src/modules/memberships/system-admin.service');
+    expect((await clients.ownerA!.req('PUT', `/admin/users/${ids.staffA}/system-admin`, { is_system_admin: true })).json.code).toBe('ACCESS_SYSTEM_ADMIN_REQUIRED');
+    await expect(new SystemAdminService(pool).setSystemAdmin(ids.staffA!, true, ids.ownerA!)).rejects.toMatchObject({ code: 'ACCESS_SYSTEM_ADMIN_REQUIRED' });
+    await expect(new SystemAdminService(pool).setSystemAdmin(ids.sa!, false, ids.ownerA!)).rejects.toMatchObject({ code: 'ACCESS_SYSTEM_ADMIN_REQUIRED' });
+    expect((await q('SELECT is_system_admin FROM users WHERE id=$1', [ids.staffA]))[0].is_system_admin).toBe(false);
+    expect((await q('SELECT is_system_admin FROM users WHERE id=$1', [ids.sa]))[0].is_system_admin).toBe(true);
+  });
+
+  it('disabling a membership during an active session removes that company and its capabilities on the very next request', async () => {
+    const user = (await q<{ id: string }>('INSERT INTO users(email,password_hash) VALUES($1,$2) RETURNING id', [email('live'), await bcrypt.hash(PASSWORD, 4)]))[0]!.id;
+    await q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)', [user, ids.coA, roles['AccountantA']]);
+    const live = new Client(email('live'));
+    expect((await live.login()).activeCompanyId).toBe(ids.coA);
+    expect((await live.req('GET', '/accounts')).status).toBe(200);
+    expect((await clients.ownerA!.req('PATCH', `/access/memberships/${await membershipId(user, ids.coA!)}/active`, { is_active: false })).status).toBe(200);
+    const after = await live.req('GET', '/auth/session');
+    expect(after.status).toBe(200);
+    expect(after.json).toMatchObject({ allowedCompanies: [], activeCompanyId: null, capabilities: [], activeRole: null });
+    expect((await live.req('GET', '/accounts')).status).toBe(403);
+    expect((await live.req('POST', '/auth/switch-company', { companyId: ids.coA })).status).toBe(403);
+  });
 });

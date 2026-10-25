@@ -150,14 +150,14 @@ export class MembershipService {
    * administrator-chosen password at first login (must_change_password); existing users are untouched.
    * Throws pg 23505 when the email already has an account.
    */
-  async createUserForCompany(email: string, password: string, roleId: string | null, companyId: string, actorUserId: string): Promise<Membership> {
+  async createUserForCompany(email: string, password: string, roleId: string | null, companyId: string, actorUserId: string, displayName: string | null = null): Promise<Membership> {
     const hash = await bcrypt.hash(password, 12);
     return this.transaction(async (client) => {
       const role = roleId ? await this.repo.findRoleById(roleId, client) : null;
       if (roleId && (!role || role.company_id !== companyId)) throw new Error('Role not found');
-      const user = await new UserRepository(this.pool).create({ email, password: hash, mustChangePassword: true }, client);
+      const user = await new UserRepository(this.pool).create({ email, password: hash, mustChangePassword: true, displayName }, client);
       let membership = await this.repo.createMembership({ user_id: user.id, company_id: companyId }, client);
-      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.create', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { email: user.email, company_id: companyId } }, client);
+      await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.user.create', entity_type: 'user', entity_id: user.id, before_data: null, after_data: { email: user.email, display_name: user.display_name ?? null, company_id: companyId } }, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.membership.create', entity_type: 'membership', entity_id: membership.id, before_data: null, after_data: this.membershipSnapshot(membership) }, client);
       if (role) {
         await this.assertCanAssign(membership, role, actorUserId, client);

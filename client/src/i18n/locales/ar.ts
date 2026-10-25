@@ -12,6 +12,8 @@ const ar = {
     welcome: 'مرحبًا بعودتك',
     context: 'كل ما تحتاجه للبدء في متابعة أعمال الشركة المالية من مكان واحد.',
     currentUser: 'المستخدم الحالي',
+    noRole: 'بدون دور',
+    roleNames: { 'Full Access': 'وصول كامل', 'Company Manager': 'مدير الشركة', 'Finance Manager': 'المدير المالي', Accountant: 'محاسب', Operations: 'العمليات', Viewer: 'مشاهد' },
     quickActions: 'الإجراءات السريعة',
     quickActionsDescription: 'انتقل مباشرة إلى المهام الأساسية المتاحة لك.',
     documentsDescription: 'مراجعة وإدارة المستندات المالية للشركة النشطة.',
@@ -164,6 +166,7 @@ const ar = {
     conflict: 'تعارض: الرمز المختصر مستخدم مسبقًا، أو هذه آخر شركة نشطة لديك ولا يمكن تعطيلها.',
   },
   access: {
+    displayName: 'الاسم (اختياري)',
     resetPassword: 'إعادة تعيين كلمة المرور', resetPasswordTitle: 'إعادة تعيين كلمة مرور {{email}}',
     resetPasswordWarn: 'سيتم إنشاء كلمة مرور مؤقتة وعرضها مرة واحدة فقط. سيُسجَّل خروج هذا المستخدم من كل جلساته ويجب أن يختار كلمة مرور جديدة عند أول دخول.',
     resetPasswordConfirm: 'إعادة التعيين', resetPasswordDoneTitle: 'كلمة المرور المؤقتة',
@@ -213,7 +216,7 @@ const ar = {
     confirm: 'منح',
   },
   systemAdmin: {
-    tab: 'الإدارة العامة', usersTab: 'المستخدمون', companiesTab: 'الشركات', systemAdmin: 'مدير النظام',
+    tab: 'الإدارة العامة', usersTab: 'المستخدمون', companiesTab: 'الشركات', systemAdmin: 'مدير النظام', saveName: 'حفظ الاسم',
     description: 'مدير النظام يدير كل الشركات والمستخدمين والعضويات. كل تغيير يتحقق منه الخادم ويُسجَّل في سجل التدقيق.',
     searchUsers: 'بحث بالبريد الإلكتروني', search: 'بحث', noUsers: 'لا يوجد مستخدمون.', selectUser: 'اختر مستخدماً لإدارة وصوله إلى الشركات.',
     companyCount: '{{count}} شركة نشطة', disableUser: 'تعطيل الحساب', enableUser: 'تفعيل الحساب',

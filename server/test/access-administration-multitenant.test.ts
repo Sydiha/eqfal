@@ -195,7 +195,7 @@ describe('new user creation (POST /access/users)', () => {
     grant(['access.membership.create']);
     mocks.createUserForCompany.mockResolvedValue({ id: 'm' });
     expect((await postUser({ email: 'n@example.com', password: 'longenough1' })).status).toBe(201);
-    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', null, 'company-a', 'user');
+    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', null, 'company-a', 'user', null);
     expect((await postUser({ email: 'n@example.com', password: 'longenough1', company_id: 'company-b' })).status).toBe(400);
     expect(mocks.createUserForCompany).toHaveBeenCalledTimes(1);
   });
@@ -212,7 +212,7 @@ describe('new user creation (POST /access/users)', () => {
     grant(['access.membership.create', 'access.membership.role.assign']);
     mocks.createUserForCompany.mockResolvedValue({ id: 'm' });
     expect((await postUser({ email: 'n@example.com', password: 'longenough1', role_id: role })).status).toBe(201);
-    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', role, 'company-a', 'user');
+    expect(mocks.createUserForCompany).toHaveBeenCalledWith('n@example.com', 'longenough1', role, 'company-a', 'user', null);
   });
 
   it('returns 409 when the email already has an account', async () => {

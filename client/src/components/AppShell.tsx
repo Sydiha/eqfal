@@ -69,7 +69,7 @@ function writeExpandedGroups(ids: NavGroupId[]) {
   try { window.localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(ids)); } catch { /* preference only */ }
 }
 
-export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
+export function AppShell({ page, setPage, capabilities, email, displayName, roleLabel, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; displayName?: string | null; roleLabel?: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
@@ -120,7 +120,7 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
 
   const isAr = i18n.language === 'ar';
   const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
-  const userInitial = email.trim().charAt(0).toUpperCase() || 'U';
+  const userInitial = (displayName?.trim() || email.trim()).charAt(0).toUpperCase() || 'U';
   const groupLabels = i18n.language === 'ar'
     ? { invoices: 'الفواتير', operations: 'التشغيل', accounting: 'المحاسبة', closing: 'الإقفال', administration: 'الإدارة' }
     : { invoices: 'Invoices', operations: 'Operations', accounting: 'Accounting', closing: 'Closing', administration: 'Administration' };
@@ -205,8 +205,11 @@ export function AppShell({ page, setPage, capabilities, email, onSwitch, onLogou
               <Group gap={8} wrap="nowrap" className="user-summary">
                 <span className="user-avatar" aria-hidden="true">{userInitial}</span>
                 <Stack gap={0} className="user-copy">
-                  <Text size="sm" fw={650}>{email}</Text>
-                  <Text size="xs" c="dimmed">{t('home.currentUser')}</Text>
+                  {displayName
+                    ? <Text size="sm" fw={650} dir="auto" className="user-name">{displayName}</Text>
+                    : <Text size="sm" fw={650} dir="ltr" className="user-email">{email}</Text>}
+                  <Text size="xs" c="dimmed" className="user-role">{roleLabel ?? t('home.currentUser')}</Text>
+                  {displayName && <Text size="xs" c="dimmed" dir="ltr" className="user-email">{email}</Text>}
                 </Stack>
               </Group>
             </UnstyledButton>

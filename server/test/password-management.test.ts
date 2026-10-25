@@ -63,6 +63,7 @@ beforeEach(() => {
   vi.spyOn(MembershipRepository.prototype, 'listActiveCompaniesForUser').mockResolvedValue([{ membership_id: 'x', company_id: A, company_name: 'A', company_name_ar: null, role_id: 'r' }]);
   vi.spyOn(MembershipRepository.prototype, 'listAllActiveCompaniesForSystemAdmin').mockResolvedValue([{ membership_id: 'x', company_id: A, company_name: 'A', company_name_ar: null, role_id: 'r' }]);
   vi.spyOn(MembershipRepository.prototype, 'getActiveCapabilities').mockImplementation(async (userId) => (actorIsSystemAdmin && userId === actor ? [...capsOf('owner'), 'access.user.password.reset'] : capsOf(userId)));
+  vi.spyOn(MembershipRepository.prototype, 'getActiveRole').mockResolvedValue(null);
   vi.spyOn(MembershipRepository.prototype, 'findMembershipById').mockImplementation(async (id) => Object.values(members).find((m) => m.id === id) ?? null);
   vi.spyOn(MembershipRepository.prototype, 'findRoleById').mockImplementation(async (id) => roles[id] ?? null);
   vi.spyOn(MembershipRepository.prototype, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
