@@ -42,7 +42,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const prefix=direction==='purchase'?'purchaseInv':'salesInv';
  const unauthorizedRef=useRef(onUnauthorized);unauthorizedRef.current=onUnauthorized;
  const unauthorized=useCallback(()=>unauthorizedRef.current(),[]);
- const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null),[confirmDelete,setConfirmDelete]=useState(false);
+ const[list,setList]=useState<Invoice[]|null>(null),[total,setTotal]=useState(0),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Invoice|null>(null),[form,setForm]=useState<{id:string|null;version:number|null;values:FormValues}|null>(null),[parties,setParties]=useState<Counterparty[]>([]),[documents,setDocuments]=useState<EvidenceDocument[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[missingKeys,setMissingKeys]=useState<string[]>([]),[confirmPost,setConfirmPost]=useState(false),[cancelReason,setCancelReason]=useState<string|null>(null),[confirmDelete,setConfirmDelete]=useState(false);
  const[rate,setRate]=useState<RateState|null>(null);
  const readFilters=():Filters=>({q:readQueryParameter(`${prefix}Q`)??'',status:readQueryParameter(`${prefix}Status`,{allowedValues:INVOICE_STATUSES})??'',party:readQueryParameter(`${prefix}Party`,{pattern:/^[0-9a-f-]{36}$/i})??'',from:validDate(readQueryParameter(`${prefix}From`)),to:validDate(readQueryParameter(`${prefix}To`))});
  const[filters,setFilters]=useState<Filters>(readFilters);
@@ -84,12 +84,12 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  },[searchText,filters.q,prefix]);
 
  const request=async(url:string,method:string,body?:unknown):Promise<Invoice|null>=>{
-  setBusy(true);setError(null);
+  setBusy(true);setError(null);setMissingKeys([]);
   try{
    const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
    if(response.status===401){unauthorized();return null;}
-   const payload=await response.json().catch(()=>({})) as {invoice?:Invoice;code?:string};
-   if(!response.ok||!payload.invoice){setError(errorText(payload.code));return null;}
+   const payload=await response.json().catch(()=>({})) as {invoice?:Invoice;code?:string;missing_keys?:unknown[]};
+   if(!response.ok||!payload.invoice){setError(errorText(payload.code));if(payload.code==='INVOICE_MAPPING_MISSING'&&Array.isArray(payload.missing_keys))setMissingKeys(payload.missing_keys.filter((k):k is string=>typeof k==='string'));return null;}
    return payload.invoice;
   }catch{setError(errorText(undefined));return null;}
   finally{setBusy(false)}
@@ -251,6 +251,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    <div className="sales-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate','net','vat','lineTotal'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map(l=><tr key={l.line_number}><td>{l.description}</td><td>{l.quantity}</td><td>{money(l.unit_price)}</td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td>{l.vat_rate}%</td><td>{money(l.net_amount??'0')}</td><td>{money(l.vat_amount??'0')}</td><td>{money(l.total_amount??'0')}</td></tr>)}</tbody></table></div>
    <dl className="sales-invoices__totals"><div><dt>{t('salesInvoice.subtotal')}</dt><dd>{money(detail.subtotal_amount)}</dd></div><div><dt>{t('salesInvoice.vatTotal')}</dt><dd>{money(detail.vat_amount)}</dd></div><div><dt>{t('salesInvoice.total')}</dt><dd><strong>{money(detail.total_amount)} {detail.currency}</strong></dd></div></dl>
    {error&&<p role="alert" className="sales-invoices__error">{error}</p>}
+   {error&&missingKeys.length>0&&<div className="sales-invoices__mapping-hint" data-testid="mapping-missing"><p>{t('invoiceMappings.missingList',{keys:missingKeys.map(k=>t(`invoiceMappings.keys.${k}`,{defaultValue:k})).join(t('invoiceMappings.listSeparator'))})}</p>{caps.canViewMappings&&onNavigate?<button type="button" onClick={()=>onNavigate('invoiceMappings',{})}>{t('invoiceMappings.goToPage')}</button>:<p>{t('invoiceMappings.askAdmin')}</p>}</div>}
    {detail.status==='approved'&&<p className="sales-invoices__hint" data-testid="correction-hint">{t('invoiceWorkspace.correctionApprovedHint')}</p>}
    {detail.status==='approved'&&canView&&<InvoiceNotes invoiceId={detail.id} purchase={isPurchase} currency={detail.currency} canAdjust={canAdjust} canApprove={canAdjustApprove} canVoid={canAdjustVoid} onChanged={()=>void open(detail.id)} onUnauthorized={unauthorized}/>}
    {(detail.cancellation||(detail.adjustments?.length??0)>0)&&<section className="sales-invoices__finance" aria-label={t('invoiceWorkspace.correctionTitle')} data-testid="correction-history"><h4>{t('invoiceWorkspace.correctionTitle')}</h4>

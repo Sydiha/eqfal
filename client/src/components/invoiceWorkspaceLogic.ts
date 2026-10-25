@@ -15,6 +15,8 @@ export type InvoiceCaps = {
   canPostJournal?: boolean;
   /** obligation.settlement.create (the existing settlement authorization; no invoice-specific capability). */
   canCreateSettlement?: boolean;
+  /** invoice.mapping.view: offers a link to the account mapping page when approval fails for missing mappings. */
+  canViewMappings?: boolean;
   canViewAccounting?: boolean; canViewObligations?: boolean; canViewVat?: boolean; canViewDocuments?: boolean;
   currentUserId?: string;
 };

@@ -22,7 +22,7 @@ export type InvoiceErrorCode =
   | 'RECURRING_NOT_FOUND' | 'RECURRING_VERSION_CONFLICT' | 'RECURRING_INVALID_STATE' | 'RECURRING_SCHEDULE_LOCKED';
 
 export class InvoiceError extends Error {
-  constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string) { super(message); }
+  constructor(readonly status: 400 | 403 | 404 | 409, readonly code: InvoiceErrorCode, message: string, readonly details?: Record<string, unknown>) { super(message); }
 }
 
 const invalid = (message: string) => new InvoiceError(400, 'INVOICE_VALIDATION', message);

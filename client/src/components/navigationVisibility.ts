@@ -13,6 +13,7 @@ export type NavigationPage =
   | 'periodicAdjustments'
   | 'sales'
   | 'purchases'
+  | 'invoiceMappings'
   | 'assets'
   | 'companyProfile'
   | 'access'
@@ -34,6 +35,9 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
     case 'purchases':
       // Invoice access is independent of the legacy document/obligation access.
       return (has(capabilities, 'document.view') && has(capabilities, 'obligation.view')) || has(capabilities, 'invoice.view') || has(capabilities, 'invoice.create');
+    case 'invoiceMappings':
+      // Managing alone never shows the page: the page and its entry need the view capability.
+      return has(capabilities, 'invoice.mapping.view');
     case 'documents':
       return has(capabilities, 'document.view');
     case 'banks':

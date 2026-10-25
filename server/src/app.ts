@@ -38,6 +38,7 @@ import { managerFinancialSnapshotRouter } from './modules/manager-financial-snap
 import { whtReviewRouter } from './modules/wht-reviews/wht-review.router';
 import { auditLogRouter } from './modules/audit-log/audit-log.router';
 import { invoiceRouter } from './modules/invoices/invoice.router';
+import { invoiceAccountMappingRouter } from './modules/invoices/invoice-account-mapping.router';
 import { recordDeletionRouter } from './modules/record-deletion/record-deletion.router';
 import { recurringInvoiceRouter } from './modules/invoices/recurring-invoice.router';
 import { ledgerSourceAuthorityRouter } from './modules/ledger-source-authority/ledger-source-authority.router';
@@ -103,6 +104,7 @@ app.use('/api', managerFinancialSnapshotRouter);
 app.use('/api', whtReviewRouter);
 app.use('/api', auditLogRouter);
 app.use('/api', invoiceRouter);
+app.use('/api', invoiceAccountMappingRouter);
 app.use('/api', recurringInvoiceRouter);
 
 // Production only: serve the built React app (client/dist) and SPA routes from the same origin as the API.
