@@ -324,7 +324,7 @@ describe('Approval, accounting and next action',()=>{
  });
 
  it('requires an explicit confirmation before posting the journal and never posts on its own',async()=>{
-  const fetchMock=mockApi(approved,(key)=>key===`POST /api/accounting/journals/${JOURNAL}/post`?json({id:JOURNAL,status:'posted'}):undefined);
+  const fetchMock=mockApi(approved,(key)=>key===`POST /api/journals/${JOURNAL}/post`?json({id:JOURNAL,status:'posted'}):undefined);
   render(<InvoiceWorkspace {...full} direction="purchase" onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByText('PINV-0001'));
   expect(calls(fetchMock,'/post')).toEqual([]);
@@ -337,14 +337,14 @@ describe('Approval, accounting and next action',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Post journal'}));
   const before=calls(fetchMock,`GET /api/invoices/${ID}`).length;
   fireEvent.click(within(screen.getByRole('group',{name:'Post this journal?'})).getByRole('button',{name:'Post journal'}));
-  await waitFor(()=>expect(calls(fetchMock,`POST /api/accounting/journals/${JOURNAL}/post`).length).toBe(1));
+  await waitFor(()=>expect(calls(fetchMock,`POST /api/journals/${JOURNAL}/post`).length).toBe(1));
   expect((calls(fetchMock,'/post')[0]![1] as RequestInit).body).toBe('{}');
   // the financial state is re-read from the server after posting
   await waitFor(()=>expect(calls(fetchMock,`GET /api/invoices/${ID}`).length).toBeGreaterThan(before));
  });
 
  it('maps posting failures to safe messages and keeps the invoice open',async()=>{
-  mockApi(approved,(key)=>key===`POST /api/accounting/journals/${JOURNAL}/post`?json({error:'raw',code:'ACCOUNTING_PERIOD_CLOSED'},409):undefined);
+  mockApi(approved,(key)=>key===`POST /api/journals/${JOURNAL}/post`?json({error:'raw',code:'ACCOUNTING_PERIOD_CLOSED'},409):undefined);
   render(<InvoiceWorkspace {...full} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByText('PINV-0001'));
   fireEvent.click(await screen.findByRole('button',{name:'Post journal'}));
