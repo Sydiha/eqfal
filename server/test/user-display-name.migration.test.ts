@@ -6,9 +6,9 @@ const sql = readFileSync(new URL('../migrations/095_user_display_name.sql', impo
 const databaseUrl = process.env['DATABASE_URL'];
 
 describe('Migration 095 user display name', () => {
-  it('is the next migration number and only one file uses it', () => {
+  it('follows 094 and only one file uses its number', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort();
-    expect(files.at(-1)).toBe('095_user_display_name.sql');
+    expect(files[files.indexOf('095_user_display_name.sql') - 1]).toMatch(/^094_/);
     expect(files.filter((f) => f.startsWith('095_'))).toHaveLength(1);
   });
 
