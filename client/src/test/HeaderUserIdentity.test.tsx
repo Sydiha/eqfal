@@ -61,6 +61,20 @@ describe('header user identity', () => {
   });
 });
 
+describe('header after a session refresh', () => {
+  it('shows an edited name once the session is re-read', async () => {
+    await act(async () => { await i18n.changeLanguage('en'); });
+    current = session({ activeRole: { name: 'Full Access', isFullAccess: true }, capabilities: ['access.view'] });
+    const box = await header();
+    expect(box.getByText('سارة أحمد')).toBeTruthy();
+    current = session({ displayName: 'Sara Ahmed', activeRole: { name: 'Full Access', isFullAccess: true }, capabilities: ['access.view'] });
+    // Switching company re-reads the session the same way refreshSession does after an access change.
+    switched = current;
+    fireEvent.change(screen.getByLabelText(i18n.t('company.switchAriaLabel')), { target: { value: 'co-b' } });
+    await waitFor(() => expect(box.getByText('Sara Ahmed')).toBeTruthy());
+  });
+});
+
 describe('headerRoleLabel', () => {
   const t = i18n.t.bind(i18n);
   it('labels a System Admin regardless of membership', async () => {

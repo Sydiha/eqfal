@@ -28,7 +28,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
  * (a separate role per company, enable/disable per membership) and companies. Every action is authorized again by the
  * server (/api/admin/* re-checks System Admin; ceilings, Full Access and last-admin rules apply server-side).
  */
-export function SystemAdministration({ currentUserId, onUnauthorized }: { currentUserId: string; onUnauthorized: () => void }) {
+export function SystemAdministration({ currentUserId, onUnauthorized, onAccessChanged }: { currentUserId: string; onUnauthorized: () => void; onAccessChanged?: () => Promise<void> | void }) {
   const { t, i18n } = useTranslation();
   const rtl = i18n.language.startsWith('ar');
   const companyLabel = (c: { name: string; name_ar: string | null }) => (rtl && c.name_ar ? c.name_ar : c.name);
@@ -97,6 +97,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized }: { curren
     try {
       await work(); after?.();
       await Promise.all([loadUsers(search), loadCompanies(), selectedId ? loadMemberships(selectedId) : Promise.resolve()]);
+      void onAccessChanged?.(); // the header re-reads the session (own name or role may have changed)
     } catch (reason) { fail(reason); }
     finally { setBusy(false); setPending(null); }
   };

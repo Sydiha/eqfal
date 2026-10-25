@@ -443,6 +443,14 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(await n("SELECT count(*) n FROM system_audit_log WHERE action='system.user.display_name.change' AND target_user_id=$1", [target])).toBe(1);
     expect((await clients.sa!.req('PATCH', `/admin/users/${target}/display-name`, { display_name: '' })).json.display_name).toBeNull();
     await expect(q("UPDATE users SET display_name='  ' WHERE id=$1", [target])).rejects.toThrow(/users_display_name_check/);
+    // The service re-checks System Admin status itself, so a direct call by a non System Admin is refused and writes nothing.
+    const { SystemAdminService } = await import('../src/modules/memberships/system-admin.service');
+    await expect(new SystemAdminService(pool).setDisplayName(target, 'Hijack', ids.ownerA!)).rejects.toMatchObject({ code: 'ACCESS_SYSTEM_ADMIN_REQUIRED' });
+    expect((await q('SELECT display_name FROM users WHERE id=$1', [target]))[0].display_name).toBeNull();
+    expect(await n("SELECT count(*) n FROM system_audit_log WHERE action='system.user.display_name.change' AND target_user_id=$1", [target])).toBe(2);
+    // Editing the System Admin's OWN name shows on its next session read (what the header refreshes from).
+    expect((await clients.sa!.req('PATCH', `/admin/users/${ids.sa}/display-name`, { display_name: 'مدير إقفال' })).status).toBe(200);
+    expect((await clients.sa!.req('GET', '/auth/session')).json.user.displayName).toBe('مدير إقفال');
   });
 
   it('a company manager may name a new account at creation (no edit route), within existing guards', async () => {

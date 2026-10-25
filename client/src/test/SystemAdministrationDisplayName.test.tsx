@@ -34,6 +34,15 @@ describe('System Admin display name', () => {
     await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH').at(-1)!.body).toEqual({ display_name: null }));
   });
 
+  it('asks the shell to refresh the session after a change, so the header shows the new name', async () => {
+    const onAccessChanged = vi.fn();
+    render(<MantineProvider><SystemAdministration currentUserId={user.id} onUnauthorized={vi.fn()} onAccessChanged={onAccessChanged} /></MantineProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: /Sara/ }));
+    fireEvent.change(await screen.findByLabelText(i18n.t('access.displayName')), { target: { value: 'Sara Ahmed' } });
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('systemAdmin.saveName') }));
+    await waitFor(() => expect(onAccessChanged).toHaveBeenCalled());
+  });
+
   it('sends an optional name when creating an account and omits it when blank', async () => {
     renderAdmin();
     fireEvent.click(await screen.findByRole('button', { name: i18n.t('access.createUser') }));

@@ -1,6 +1,8 @@
 -- Migration 095 (Phase B): optional user display name.
 -- users.display_name is entered by an administrator; NULL keeps existing accounts unchanged and the UI falls back to the
 -- email. It is never derived from the email. Display only: authorization never reads it.
+-- DEPLOYMENT ORDER: apply this migration BEFORE deploying the code. The session lookup selects users.display_name on
+-- every authenticated request, so code without the column fails all signed-in requests; the migration alone is harmless.
 -- Additive and idempotent. Rollback (manual, Owner-approved): ALTER TABLE users DROP CONSTRAINT users_display_name_check,
 -- DROP COLUMN display_name;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;

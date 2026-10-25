@@ -235,7 +235,7 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
       {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => setTab('global')}>{t('systemAdmin.tab')}</button>}
     </div>
     {isSystemAdmin && <p className="acc-hint" data-testid="access-identity-note">{t('access.identityNote', { company: companyName, role: members.find((m) => m.user_id === currentUserId)?.role_name ?? t('access.noRole') })}</p>}
-    {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized}/>}
+    {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized} onAccessChanged={onAccessChanged}/>}
     {tab !== 'global' && errorKey && !dialog && <WorkspaceState tone="error" action={<button onClick={() => void load()}>{t('access.retry')}</button>}>{errorText}</WorkspaceState>}
     {tab === 'global' ? null : loading && !loaded ? <WorkspaceState>{t('access.loading')}</WorkspaceState> : loaded && tab === 'members' && <div className="acc-card">
       <p className="acc-hint">{t('access.disableHint')}</p>

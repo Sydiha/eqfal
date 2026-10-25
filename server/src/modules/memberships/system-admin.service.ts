@@ -142,9 +142,10 @@ export class SystemAdminService {
     });
   }
 
-  /** Sets or clears an account's display name (migration 095). Display only; audited in system_audit_log. */
+  /** Sets or clears an account's display name (migration 095). Only an active System Admin (router and here); audited. */
   async setDisplayName(userId: string, displayName: string | null, actorUserId: string): Promise<AdminUser> {
     return this.transaction(async (client) => {
+      if (!(await SystemAdminService.isActiveSystemAdmin(client, actorUserId))) throw new AccessPolicyError('Only an active System Admin can change a display name', 'ACCESS_SYSTEM_ADMIN_REQUIRED');
       const before = (await client.query<AdminUser>('SELECT id, email, display_name, is_active, is_system_admin, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
       if (!before) throw new Error('User not found');
       const after = (await client.query<AdminUser>(
