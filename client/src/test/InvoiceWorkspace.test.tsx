@@ -292,7 +292,7 @@ describe('Approval, accounting and next action',()=>{
   render(<InvoiceWorkspace {...full} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByText('REF-9'));
   fireEvent.click(await screen.findByRole('button',{name:'Approve invoice'}));
-  expect(await screen.findByRole('alert')).toHaveTextContent('A required account mapping is missing or inactive. Complete it before approving.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('The invoice was not approved: a required account mapping is missing or inactive. Complete the mappings listed below, then approve again.');
  });
 
  it('names the missing mappings on approval failure and links to the mapping page only with view permission',async()=>{

@@ -36,7 +36,7 @@ async function handle(res: Response, work: (svc: InvoiceDraftService) => Promise
   try {
     await work(svc);
   } catch (error) {
-    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code }); return; }
+    if (error instanceof InvoiceError) { res.status(error.status).json({ error: error.message, code: error.code, ...(error.details ?? {}) }); return; }
     throw error;
   }
 }
@@ -53,7 +53,7 @@ invoiceRouter.get('/invoices', ...read, requireCapability('invoice.view'), route
 const requireAnyInvoiceCapability: RequestHandler = (req, res, next) => {
   const context = getAuthenticatedContext(req);
   if (!context) { res.status(401).json({ error: 'Unauthenticated' }); return; }
-  if (!context.activeCompanyId || !['invoice.view', 'invoice.create', 'invoice.edit'].some((c) => context.capabilities.includes(c))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (!context.activeCompanyId || !['invoice.view', 'invoice.create', 'invoice.edit'].some((c) => context.capabilities.includes(c))) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
   next();
 };
 invoiceRouter.get('/invoices/customers', ...read, requireAnyInvoiceCapability, route((req, res) => handle(res, async (svc) => {

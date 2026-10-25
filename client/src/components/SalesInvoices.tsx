@@ -55,7 +55,8 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const rateDate=form&&!isPurchase?(form.values.tax_point_date||form.values.issue_date):'';
  const formOpen=!!form;
  const money=(value:string|null|undefined)=>formatMoney(value,'0.00');
- const errorText=(code:string|undefined)=>{const key=`${ns}.errors.${code}`;const text=t(key);if(code&&text!==key)return text;const shared=t(`salesInvoice.errors.${code}`);return code&&shared!==`salesInvoice.errors.${code}`?shared:t('salesInvoice.errors.generic')};
+ // Most specific first: the stated reason of a code, this direction's text, the shared invoice text, then the app-wide code (e.g. FORBIDDEN).
+ const errorText=(code:string|undefined,reason?:unknown)=>{if(!code)return t('salesInvoice.errors.generic');const keys=[...(typeof reason==='string'?[`salesInvoice.errorReasons.${code}.${reason}`]:[]),`${ns}.errors.${code}`,`salesInvoice.errors.${code}`,`errors.${code}`];for(const key of keys){const text=t(key);if(text!==key)return text;}return t('salesInvoice.errors.generic')};
 
  const load=useCallback(async()=>{
   if(rangeInvalid)return;
@@ -88,8 +89,8 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   try{
    const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
    if(response.status===401){unauthorized();return null;}
-   const payload=await response.json().catch(()=>({})) as {invoice?:Invoice;code?:string;missing_keys?:unknown[]};
-   if(!response.ok||!payload.invoice){setError(errorText(payload.code));if(payload.code==='INVOICE_MAPPING_MISSING'&&Array.isArray(payload.missing_keys))setMissingKeys(payload.missing_keys.filter((k):k is string=>typeof k==='string'));return null;}
+   const payload=await response.json().catch(()=>({})) as {invoice?:Invoice;code?:string;reason?:unknown;missing_keys?:unknown[]};
+   if(!response.ok||!payload.invoice){setError(errorText(payload.code,payload.reason));if(payload.code==='INVOICE_MAPPING_MISSING'&&Array.isArray(payload.missing_keys))setMissingKeys(payload.missing_keys.filter((k):k is string=>typeof k==='string'));return null;}
    return payload.invoice;
   }catch{setError(errorText(undefined));return null;}
   finally{setBusy(false)}
@@ -161,7 +162,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
   try{
    const response=await fetch(`/api/journals/${invoice.journal.id}/post`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
    if(response.status===401){unauthorized();return;}
-   if(!response.ok){const payload=await response.json().catch(()=>({})) as {code?:string};const key=`invoiceWorkspace.postErrors.${payload.code}`;const text=t(key);setError(payload.code&&text!==key?text:t('invoiceWorkspace.postErrors.generic'));setConfirmPost(false);return;}
+   if(!response.ok){const payload=await response.json().catch(()=>({})) as {code?:string};const key=`invoiceWorkspace.postErrors.${payload.code}`,shared=`errors.${payload.code}`;const text=t(key),sharedText=t(shared);setError(payload.code&&text!==key?text:payload.code&&sharedText!==shared?sharedText:t('invoiceWorkspace.postErrors.generic'));setConfirmPost(false);return;}
    setConfirmPost(false);
   }catch{setError(t('invoiceWorkspace.postErrors.generic'));setConfirmPost(false);return;}
   finally{setBusy(false)}

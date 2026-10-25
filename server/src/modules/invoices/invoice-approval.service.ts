@@ -75,17 +75,18 @@ export class InvoiceApprovalService {
     const vatLines = (await client.query<{ vat_treatment: InvoiceVatTreatment | null; vat_rate: string; net_amount: string; vat_amount: string; vat_recoverability: string | null; vat_recoverable_percent: string | null }>(
       'SELECT vat_treatment, vat_rate::text AS vat_rate, net_amount::text AS net_amount, vat_amount::text AS vat_amount, vat_recoverability, vat_recoverable_percent::text AS vat_recoverable_percent FROM invoice_lines WHERE invoice_id = $1 AND company_id = $2 ORDER BY line_number', [invoiceId, companyId])).rows;
     if (!before.tax_point_date || !vatLines.length || vatLines.some((l) => !l.vat_treatment)) {
-      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${before.direction} invoice needs a tax point date and an explicit VAT treatment on every line`);
+      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', `A ${before.direction} invoice needs a tax point date and an explicit VAT treatment on every line`,
+        { reason: !before.tax_point_date ? 'tax_point_missing' : 'line_treatment_missing' });
     }
     if (before.direction === 'sales' && vatLines.some((l) => l.vat_recoverability !== null || l.vat_recoverable_percent !== null)) {
-      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Sales VAT has no recoverability');
+      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Sales VAT has no recoverability', { reason: 'sales_recoverability_present' });
     }
     // Purchases: the recoverable part of every line comes only from its explicit statement; a missing or incoherent one blocks approval.
     const recoverableByLine = vatLines.map((l) => (before.direction === 'purchase'
       ? purchaseLineRecoverable({ vat_treatment: l.vat_treatment!, vat_amount: l.vat_amount, vat_recoverability: l.vat_recoverability, vat_recoverable_percent: l.vat_recoverable_percent })
       : undefined));
     if (recoverableByLine.some((r) => r === null)) {
-      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit, valid VAT recoverability (and a percent when partial)');
+      throw new InvoiceError(409, 'INVOICE_VAT_INCOMPLETE', 'Every standard-rated purchase line needs an explicit, valid VAT recoverability (and a percent when partial)', { reason: 'recoverability_missing' });
     }
     const groups: InvoiceVatGroup[] = groupInvoiceLines(vatLines.map((l, i) => ({ ...l, vat_treatment: l.vat_treatment!, recoverable_vat_halalas: recoverableByLine[i] ?? undefined })));
     const recoverableTotalH = groups.reduce((sum, g) => sum + toHalalas(g.recoverable_vat_amount), 0n);
@@ -99,7 +100,8 @@ export class InvoiceApprovalService {
     // Fiscal years may overlap in the data (no exclusion constraint): require exactly one, and it must be open.
     const years = (await client.query<{ id: string }>(
       'SELECT id FROM fiscal_years WHERE company_id = $1 AND $2::date BETWEEN start_date AND end_date', [companyId, before.issue_date])).rows;
-    if (years.length !== 1) throw new InvoiceError(409, 'INVOICE_FISCAL_YEAR_UNRESOLVED', years.length === 0 ? 'No fiscal year covers the issue date' : 'More than one fiscal year covers the issue date');
+    if (years.length !== 1) throw new InvoiceError(409, 'INVOICE_FISCAL_YEAR_UNRESOLVED', years.length === 0 ? 'No fiscal year covers the issue date' : 'More than one fiscal year covers the issue date',
+      { reason: years.length === 0 ? 'no_fiscal_year' : 'multiple_fiscal_years' });
     const fiscalYearId = years[0]!.id;
     // Lock order, shared with journal posting, VAT review writes, custody allocation and fiscal-year close:
     //   fiscal-year row -> document row -> VAT month lock -> accounting month lock.

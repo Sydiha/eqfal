@@ -156,7 +156,7 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     // missing recoverability on a standard purchase line: valid draft, cannot be submitted
     const missing = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', tax_point_date: '2026-03-10',
       lines: [{ description: 'x', quantity: '1', unit_price: '100.00', vat_rate: '15', vat_treatment: 'standard' }] }));
-    await expect(drafts.submit(co.id, creator, missing.id, missing.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(drafts.submit(co.id, creator, missing.id, missing.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'recoverability_missing' } });
     // values outside the approved set (e.g. a UI-style 'needs_review') are rejected, never defaulted
     expect(() => parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [{ ...line('standard', '15'), vat_recoverability: 'needs_review' }] })).toThrow(/not valid/);
     expect(() => parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [{ ...line('exempt', '0'), vat_recoverability: 'fully_recoverable' }] })).toThrow(/only to a standard line/);
@@ -166,13 +166,13 @@ describeDatabase('invoice VAT V2 purchase integration (PostgreSQL)', () => {
     expect(await code(q(`UPDATE invoice_lines SET vat_recoverability='partially_recoverable' WHERE invoice_id=$1`, [missing.id]))).toBe('23514'); // partial needs an explicit percent
     // missing tax point date
     const noTax = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', lines: [line('standard', '15')] }));
-    await expect(drafts.submit(co.id, creator, noTax.id, noTax.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(drafts.submit(co.id, creator, noTax.id, noTax.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'tax_point_missing' } });
     // the approver cannot repair it either: a submitted purchase whose recoverability was removed is refused, and nothing is written
     // (submitted lines are immutable, so the gap is created on the draft and the status forced behind the service's back)
     const sneaky = await drafts.create(co.id, creator, 'purchase', parseDraft({ counterparty_id: co.supp, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
     await q(`UPDATE invoice_lines SET vat_recoverability=NULL WHERE invoice_id=$1`, [sneaky.id]);
     await q(`UPDATE invoices SET status='submitted', version=version+1 WHERE id=$1`, [sneaky.id]);
-    await expect(approve(co, { id: sneaky.id, version: sneaky.version + 1 })).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(approve(co, { id: sneaky.id, version: sneaky.version + 1 })).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'recoverability_missing' } });
     expect(await n(`SELECT count(*) n FROM obligations WHERE company_id=$1`, [co.id])).toBe(0);
   });
 

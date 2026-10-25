@@ -67,7 +67,7 @@ export function requireCapability(capability: string) {
       return;
     }
     if (!context.activeCompanyId || !context.capabilities.includes(capability)) {
-      res.status(403).json({ error: 'Forbidden' });
+      res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' });
       return;
     }
     next();

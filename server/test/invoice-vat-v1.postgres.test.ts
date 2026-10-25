@@ -160,9 +160,9 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     // a 15% line without any treatment is a valid DRAFT but cannot be submitted
     const noTreatment = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10',
       lines: [{ description: 'x', quantity: '1', unit_price: '100.00', vat_rate: '15' }] }));
-    await expect(drafts.submit(co.id, creator, noTreatment.id, noTreatment.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(drafts.submit(co.id, creator, noTreatment.id, noTreatment.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'line_treatment_missing' } });
     const noTaxPoint = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', lines: [line('standard', '15')] }));
-    await expect(drafts.submit(co.id, creator, noTaxPoint.id, noTaxPoint.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(drafts.submit(co.id, creator, noTaxPoint.id, noTaxPoint.version)).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'tax_point_missing' } });
     // database coherence checks
     const inv = await drafts.create(co.id, creator, 'sales', parseDraft({ counterparty_id: co.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
     expect(await code(q(`UPDATE invoice_lines SET vat_treatment='standard', vat_rate=0, vat_amount=0, total_amount=net_amount WHERE invoice_id=$1`, [inv.id]))).toBe('23514');
@@ -172,7 +172,7 @@ describeDatabase('invoice VAT V1 sales integration (PostgreSQL)', () => {
     const sneaky = await drafts.create(c2.id, creator, 'sales', parseDraft({ counterparty_id: c2.cust, issue_date: '2026-03-10', tax_point_date: '2026-03-10', lines: [line('standard', '15')] }));
     await q(`UPDATE invoice_lines SET vat_treatment=NULL WHERE invoice_id=$1`, [sneaky.id]);
     await q(`UPDATE invoices SET status='submitted', version=version+1 WHERE id=$1`, [sneaky.id]);
-    await expect(approve(c2, { id: sneaky.id, version: sneaky.version + 1 })).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE' });
+    await expect(approve(c2, { id: sneaky.id, version: sneaky.version + 1 })).rejects.toMatchObject({ code: 'INVOICE_VAT_INCOMPLETE', details: { reason: 'line_treatment_missing' } });
   });
 
   it('the reviewed snapshot is immutable and must reproduce the invoice exactly (checked at commit)', async () => {
