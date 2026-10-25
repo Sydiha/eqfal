@@ -40,6 +40,7 @@ describe('Phase 5D.1 cash-flow classification foundation',()=>{
 
   it('does not alter journals or create cash-flow report persistence',()=>{
     expect(migration).not.toMatch(/journal_entries|journal_lines|cash_flow_statement/i);
-    expect(router).not.toMatch(/journal_entries|journal_lines|cash.?flow.?statement/i);
+    // P2: the router reads journal_lines (closed-year activity check) but never writes journals.
+    expect(router).not.toMatch(/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+journal_(entries|lines)|cash.?flow.?statement/i);
   });
 });

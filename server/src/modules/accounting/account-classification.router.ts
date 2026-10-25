@@ -1,5 +1,5 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
@@ -63,6 +63,39 @@ const ALLOWED:Record<AccountType,readonly StatementCategory[]>={
 
 class ClassificationValidationError extends Error{}
 class ClassificationNotFoundError extends Error{}
+export const CLASSIFICATION_CLOSED_YEAR_CODE='ACCOUNT_CLASSIFICATION_CLOSED_YEAR_LOCKED';
+export class ClassificationClosedYearError extends Error{
+  constructor(readonly fiscalYears:Array<{id:string;name:string}>){super('Account classification is locked by a closed fiscal year');}
+}
+
+/**
+ * P2-F1/F2: closed-year statements are computed from the account's CURRENT classification, so a classification change on an account
+ * with closed-year activity would silently restate them. Activity = a posted journal line in the closed year (ordinary, opening and
+ * cut-over journals alike) or a line of an approved/superseded cut-over supplement whose authority range lies in that year.
+ * Locking: every fiscal year of the company is read FOR SHARE, in start-date order, before the check; closeFiscalYear takes the year's
+ * row FOR UPDATE, so a close either commits first (and this check sees it closed) or waits until this update has committed.
+ */
+async function closedYearsWithActivity(client:PoolClient,companyId:string,accountId:string){
+  const years=(await client.query<{id:string;name:string;status:string}>(
+    'SELECT id,name,status FROM fiscal_years WHERE company_id=$1 ORDER BY start_date,id FOR SHARE',
+    [companyId],
+  )).rows;
+  const closed=years.filter(year=>year.status==='closed').map(year=>year.id);
+  if(!closed.length)return[];
+  return(await client.query<{id:string;name:string}>(
+    `SELECT f.id,f.name FROM fiscal_years f
+     WHERE f.company_id=$1 AND f.id=ANY($3::uuid[]) AND (
+       EXISTS(SELECT 1 FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+              WHERE l.company_id=$1 AND l.account_id=$2 AND j.fiscal_year_id=f.id AND j.status='posted')
+       OR EXISTS(SELECT 1 FROM cutover_supplement_lines s
+              JOIN cutover_supplement_versions v ON v.id=s.version_id AND v.company_id=s.company_id
+              JOIN ledger_source_authority a ON a.id=v.authority_id AND a.company_id=v.company_id
+              WHERE s.company_id=$1 AND s.account_id=$2 AND v.status IN ('approved','superseded')
+                AND a.from_date<=f.end_date AND a.to_date>=f.start_date))
+     ORDER BY f.start_date,f.id`,
+    [companyId,accountId,closed],
+  )).rows;
+}
 
 const route=(handler:(req:Request,res:Response)=>Promise<void>):RequestHandler=>
   (req,res,next:NextFunction)=>void handler(req,res).catch(next);
@@ -143,6 +176,12 @@ export class AccountClassificationService{
       if(!compatible(before.account_type,statementCategory,isContra)||!cashCompatible(before.account_type,cashRole)){
         throw new ClassificationValidationError('Invalid account classification');
       }
+      const changed=statementCategory!==before.statement_category||isContra!==before.is_contra
+        ||cashRole!==before.cash_role||cashFlowCategory!==before.cash_flow_category;
+      if(changed){
+        const locked=await closedYearsWithActivity(client,companyId,id);
+        if(locked.length)throw new ClassificationClosedYearError(locked);
+      }
 
       const after=(await client.query<AccountClassification>(
         `UPDATE accounts
@@ -179,6 +218,9 @@ const service=(res:Response)=>{
 const handle=(error:unknown,res:Response)=>{
   if(error instanceof ClassificationValidationError){res.status(400).json({error:error.message});return;}
   if(error instanceof ClassificationNotFoundError){res.status(404).json({error:'Account not found'});return;}
+  if(error instanceof ClassificationClosedYearError){
+    res.status(409).json({error:error.message,code:CLASSIFICATION_CLOSED_YEAR_CODE,fiscal_years:error.fiscalYears});return;
+  }
   throw error;
 };
 

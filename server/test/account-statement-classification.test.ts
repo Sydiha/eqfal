@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration=readFileSync(new URL('../migrations/033_account_statement_classification.sql',import.meta.url),'utf8');
@@ -41,8 +41,20 @@ describe('Phase 5A account statement classification',()=>{
 
   it('does not alter posted journals, trial balance, or general ledger logic',()=>{
     expect(migration).not.toMatch(/journal_entries|journal_lines|trial.balance|general.ledger/i);
-    expect(router).not.toMatch(/journal_entries|journal_lines|trial.?balance|general.?ledger/i);
+    // P2: the router reads journal_lines (closed-year activity check) but never writes journals.
+    expect(router).not.toMatch(/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+journal_(entries|lines)|trial.?balance|general.?ledger/i);
     expect(accountingRouter).toContain('async trialBalance(');
     expect(accountingRouter).toContain('async ledger(');
+  });
+
+  it('P2: has a single write path for classification fields, guarded by the closed-year lock',()=>{
+    const src=new URL('../src/',import.meta.url);
+    const files=(readdirSync(src,{recursive:true}) as string[]).filter(f=>f.endsWith('.ts'));
+    const writers=files.filter(f=>/UPDATE\s+accounts\s+SET[^`]*(statement_category|is_contra|cash_role|cash_flow_category)/i.test(readFileSync(new URL(f,src),'utf8')));
+    expect(writers.map(f=>f.replace(/\\/g,'/'))).toEqual(['modules/accounting/account-classification.router.ts']);
+    expect(router).toContain('closedYearsWithActivity(client,companyId,id)');
+    expect(router).toContain("'ACCOUNT_CLASSIFICATION_CLOSED_YEAR_LOCKED'");
+    expect(router).toContain('ORDER BY start_date,id FOR SHARE');
+    expect(router).toContain('res.status(409)');
   });
 });
