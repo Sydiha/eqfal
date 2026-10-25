@@ -243,4 +243,274 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(res.json.blockers.map((b: any) => b.code)).toContain('TRIAL_BALANCE_UNBALANCED');
     expect(await h.count('SELECT COUNT(*)::text n FROM opening_balance_reviews WHERE company_id=$1', [bad.id])).toBe(0);
   });
+
+  // ── P1 (Owner policies F1, F2, F5): carry-forward approval reconciliation, subsequent-year close prerequisite, exact halalas ──
+  const client = (co: Co) => u[co.owner]!.client;
+  const submit = (co: Co, fy = co.fy26!) => client(co).req('POST', `/opening-balances/${fy}/submit-review`, {});
+  const approve = (co: Co, fy = co.fy26!) => client(co).req('POST', `/opening-balances/${fy}/approve`, {});
+  const closeYear = (co: Co, fy: string) => client(co).req('POST', `/fiscal-years/${fy}/close`, {});
+  const codes = (res: { json: any }) => (res.json?.blockers ?? []).map((b: { code: string }) => b.code);
+  const closeMonths = async (co: Co, fy: string, year: number) => {
+    for (let m = 1; m <= 12; m++) {
+      await h.q("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,$3,$4,'closed')",
+        [co.id, fy, new Date(Date.UTC(year, m - 1, 1)).toISOString().slice(0, 10), new Date(Date.UTC(year, m, 0)).toISOString().slice(0, 10)]);
+    }
+  };
+  const reviewOf = async (co: Co, fy = co.fy26!) => (await h.q<{ id: string; status: string; journal_entry_id: string | null }>(
+    'SELECT id,status,journal_entry_id FROM opening_balance_reviews WHERE company_id=$1 AND fiscal_year_id=$2', [co.id, fy]))[0]!;
+  const itemOf = async (co: Co, account: string) => (await h.q<{ id: string; amount: string; balance_side: string; version: number }>(
+    'SELECT i.id,i.amount::text,i.balance_side,i.version FROM opening_balance_items i JOIN opening_balance_reviews r ON r.id=i.review_id WHERE r.company_id=$1 AND r.fiscal_year_id=$2 AND i.account_id=$3',
+    [co.id, co.fy26, account]))[0]!;
+  const postedOpenings = (co: Co, fy = co.fy26!) => h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2 AND entry_type='opening_balance' AND status='posted'", [co.id, fy]);
+  const balanceOf = async (co: Co, fy: string, account: string) => {
+    const row = ((await client(co).req('GET', `/trial-balance?fiscal_year_id=${fy}`)).json.accounts as any[]).find((a) => a.account_id === account);
+    if (!row || (!Number(row.debit_balance) && !Number(row.credit_balance))) return 'none';
+    return Number(row.debit_balance) ? `debit:${row.debit_balance}` : `credit:${row.credit_balance}`;
+  };
+  const expectRejected = async (co: Co) => {
+    const res = await approve(co);
+    expect([res.status, res.json.code]).toEqual([409, 'CARRYFORWARD_RECONCILIATION_MISMATCH']);
+    const review = await reviewOf(co);
+    expect([review.status, review.journal_entry_id]).toEqual(['in_review', null]); // never corrected, never posted
+    expect(await postedOpenings(co)).toBe(0);
+    expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND fiscal_year_id=$2", [co.id, co.fy26])).toBe(0);
+    expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='opening_balance.approve'", [co.id])).toBe(0);
+    return res.json.mismatches as Array<{ code: string; expected: string; actual: string }>;
+  };
+  /** setup -> prepare -> submit -> approve (posted) -> close the twelve months of FY26. */
+  const carried = async (label: string, o: Parameters<typeof setup>[2] = {}) => {
+    const co = await setup(label, u.ownerA!.id, o);
+    expect((await prep(co.owner, co)).status).toBe(201);
+    expect((await submit(co)).status).toBe(200);
+    const approved = await approve(co);
+    expect(approved.status).toBe(200);
+    await closeMonths(co, co.fy26!, 2026);
+    return co;
+  };
+
+  describe('P1 B1: carry-forward approval reconciles exactly with the originating year', () => {
+    it('rejects a draft modified by review (account replaced), without correcting or posting it', async () => {
+      const co = await setup('p1M', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      const other = await h.account(co.id, 'C-CAP2', 'equity', 'equity');
+      const capital = await itemOf(co, co.capital);
+      expect((await client(co).req('PATCH', `/opening-balances/${co.fy26}/items/${capital.id}`, { account_id: other, version: capital.version })).status).toBe(200);
+      expect((await submit(co)).status).toBe(200);
+      const mismatches = await expectRejected(co);
+      expect(mismatches.map((m) => `${m.code}:${m.expected}>${m.actual}`).sort()).toEqual(['C-CAP2:none>credit:10000.00', 'C-CAP:credit:10000.00>missing']);
+    });
+
+    it('rejects a balanced but incorrect draft: one halalah moved between two accounts', async () => {
+      const co = await setup('p1H', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      await h.q('UPDATE opening_balance_items SET amount=amount+0.01 WHERE account_id=ANY($1)', [[co.bank, co.re]]); // still balanced
+      expect((await submit(co)).status).toBe(200);
+      const mismatches = await expectRejected(co);
+      expect(mismatches.map((m) => `${m.code}:${m.expected}>${m.actual}`)).toEqual(['C-BANK:debit:13700.00>debit:13700.01', 'C-RE:credit:3000.00>credit:3000.01']);
+    });
+
+    it('rejects a flipped side, a missing required line and an extra zero-net account', async () => {
+      const flip = await setup('p1F', u.ownerA!.id);
+      expect((await prep(flip.owner, flip)).status).toBe(201);
+      await h.q("UPDATE opening_balance_items SET balance_side='debit' WHERE account_id=$1", [flip.ap]);
+      await h.q("UPDATE opening_balance_items SET amount=amount-1400 WHERE account_id=$1", [flip.bank]); // keep it balanced
+      expect((await submit(flip)).status).toBe(200);
+      expect((await expectRejected(flip)).map((m) => m.code)).toEqual(['C-AP', 'C-BANK']);
+
+      const missing = await setup('p1D', u.ownerA!.id);
+      expect((await prep(missing.owner, missing)).status).toBe(201);
+      await h.q('DELETE FROM opening_balance_items WHERE account_id=ANY($1)', [[missing.ap]]);
+      await h.q("UPDATE opening_balance_items SET amount=amount-700 WHERE account_id=$1", [missing.bank]);
+      expect((await submit(missing)).status).toBe(200);
+      expect((await expectRejected(missing)).map((m) => `${m.code}:${m.actual}`)).toEqual(['C-AP:missing', 'C-BANK:debit:13000.00']);
+
+      const extra = await setup('p1X', u.ownerA!.id);
+      expect((await prep(extra.owner, extra)).status).toBe(201);
+      const review = await reviewOf(extra);
+      const suspense = await h.account(extra.id, 'C-SUSP', 'asset', 'current_asset');
+      for (const side of ['debit', 'credit']) {
+        await h.q(`INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,confidence,created_by) VALUES($1,$2,'other_asset',$3,5,$4,'internal_ledger','high',$5)`,
+          [extra.id, review.id, suspense, side, u.ownerA!.id]);
+      }
+      expect((await submit(extra)).status).toBe(200);
+      expect((await expectRejected(extra)).map((m) => `${m.code}:${m.expected}>${m.actual}`)).toEqual(['C-SUSP:none>none']);
+    });
+
+    it('cannot be bypassed by posting the opening journal through the canonical posting contract directly', async () => {
+      const co = await setup('p1B', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      await h.q("UPDATE opening_balance_items SET amount=amount+1 WHERE account_id=ANY($1)", [[co.bank, co.capital]]);
+      expect((await submit(co)).status).toBe(200);
+      const review = await reviewOf(co);
+      const { postJournalInTransaction } = await import('../src/modules/accounting/journal-posting');
+      const c = await h.db.connect();
+      try {
+        await c.query('BEGIN');
+        const j = (await c.query<{ id: string }>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,entry_type,created_by) VALUES($1,$2,'2026-01-01','x','opening_balance',$3) RETURNING id", [co.id, co.fy26, u.ownerA!.id])).rows[0]!;
+        // The journal itself carries the CORRECT carry-forward; the review items do not. Both must reconcile.
+        const lines: Array<[string, string, string]> = [[co.bank, '13700.00', '0'], [co.capital, '0', '10000.00'], [co.ap, '0', '700.00'], [co.re, '0', '3000.00']];
+        let seq = 1;
+        for (const [acc, d, cr] of lines) await c.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,sequence) VALUES($1,$2,$3,$4,$5,$6)', [co.id, j.id, acc, d, cr, seq++]);
+        await expect(postJournalInTransaction(c, co.id, u.ownerA!.id, j.id, { openingBalanceReviewId: review.id })).rejects.toMatchObject({ code: 'CARRYFORWARD_RECONCILIATION_MISMATCH' });
+      } finally { await c.query('ROLLBACK'); c.release(); }
+      expect(await postedOpenings(co)).toBe(0);
+    });
+
+    it('approves and posts a reviewed draft that still matches exactly (a note edit is harmless)', async () => {
+      const co = await setup('p1OK', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      const re = await itemOf(co, co.re);
+      expect((await client(co).req('PATCH', `/opening-balances/${co.fy26}/items/${re.id}`, { note: 'Reviewed by FM', version: re.version })).status).toBe(200);
+      expect((await submit(co)).status).toBe(200);
+      const res = await approve(co);
+      expect(res.status).toBe(200);
+      expect(res.json.journal.status).toBe('posted');
+      expect(await postedOpenings(co)).toBe(1);
+      expect(await balanceOf(co, co.fy26!, co.re)).toBe('credit:3000.00');
+    });
+
+    it('leaves an ordinary (non carry-forward) opening balance review unaffected', async () => {
+      const co = await setup('p1Ord', u.ownerA!.id);
+      const review = (await h.q<{ id: string }>('INSERT INTO opening_balance_reviews(company_id,fiscal_year_id,prepared_by) VALUES($1,$2,$3) RETURNING id', [co.id, co.fy26, u.ownerA!.id]))[0]!;
+      for (const [cat, acc, amount, side] of [['other_asset', co.bank, '123.45', 'debit'], ['equity', co.capital, '123.45', 'credit']]) {
+        await h.q(`INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,confidence,created_by) VALUES($1,$2,$3,$4,$5,$6,'internal_ledger','high',$7)`,
+          [co.id, review.id, cat, acc, amount, side, u.ownerA!.id]);
+      }
+      expect((await submit(co)).status).toBe(200);
+      const res = await approve(co);
+      expect(res.status).toBe(200);
+      expect(res.json.journal.status).toBe('posted');
+      // ...but it is not a carry-forward of FY25, so FY26 cannot close on it (F1).
+      await closeMonths(co, co.fy26!, 2026);
+      const closed = await closeYear(co, co.fy26!);
+      expect([closed.status, codes(closed)]).toEqual([409, ['carryforward_missing']]);
+    });
+
+    it('lets exactly one of several concurrent approvals post the carry-forward', async () => {
+      const co = await setup('p1CA', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      expect((await submit(co)).status).toBe(200);
+      const results = await Promise.all(Array.from({ length: 5 }, () => approve(co)));
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      expect(results.filter((r) => r.status !== 200).every((r) => r.status === 409)).toBe(true);
+      expect(await postedOpenings(co)).toBe(1);
+      expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='opening_balance.approve'", [co.id])).toBe(1);
+    });
+  });
+
+  describe('P1 B2: a subsequent fiscal year closes only on a valid carry-forward', () => {
+    it('blocks while the preceding year is open, while no carry-forward exists and while it is not yet posted', async () => {
+      const open = await setup('p1Y1', u.ownerA!.id, { close: false });
+      await closeMonths(open, open.fy26!, 2026);
+      const r1 = await closeYear(open, open.fy26!);
+      expect([r1.status, r1.json.code]).toEqual([409, 'FISCAL_YEAR_CLOSE_BLOCKED']);
+      expect(r1.json.blockers).toContainEqual({ code: 'previous_fiscal_year_not_closed', count: 1, detail: 'FY25' });
+
+      const none = await setup('p1Y2', u.ownerA!.id);
+      await closeMonths(none, none.fy26!, 2026);
+      expect(codes(await closeYear(none, none.fy26!))).toContain('carryforward_missing');
+
+      const pending = await setup('p1Y3', u.ownerA!.id);
+      expect((await prep(pending.owner, pending)).status).toBe(201);
+      expect((await submit(pending)).status).toBe(200);
+      await closeMonths(pending, pending.fy26!, 2026);
+      expect(codes(await closeYear(pending, pending.fy26!))).toContain('carryforward_opening_not_posted');
+      for (const co of [open, none, pending]) {
+        expect((await h.q('SELECT status FROM fiscal_years WHERE id=$1', [co.fy26]))[0]!.status).toBe('open');
+        expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='fiscal_year.status_change'", [co.id])).toBe(0);
+      }
+    });
+
+    it('verifies the carry-forward, not just its existence: a later change to the closed year blocks the close', async () => {
+      const co = await carried('p1Y4');
+      // Fixture write that bypasses the closed-year guard on purpose (as a data repair would): the posted opening no longer equals FY25.
+      await h.postedJournal(co.id, co.fy25, '2025-12-31', u.ownerA!.id, [[co.exp, '0.01', '0'], [co.bank, '0', '0.01']]);
+      const res = await closeYear(co, co.fy26!);
+      expect(res.status).toBe(409);
+      expect(res.json.blockers).toContainEqual({ code: 'carryforward_reconciliation_mismatch', count: 2, detail: 'C-BANK,C-RE' });
+    });
+
+    it('blocks a gap between fiscal years (no contiguous preceding year)', async () => {
+      const co = await setup('p1Gap', u.ownerA!.id, { next: false });
+      const fy27 = await h.fiscalYear(co.id, 'FY27', '2027-01-01', '2027-12-31');
+      await closeMonths(co, fy27, 2027);
+      expect((await closeYear(co, fy27)).json.blockers).toContainEqual({ code: 'previous_fiscal_year_not_contiguous', count: 1, detail: 'FY25' });
+    });
+
+    it.each([
+      { name: 'profit', revenue: '5000.00', result: '3000.00', re: 'credit:3000.00' },
+      { name: 'loss', revenue: '1000.00', result: '-1000.00', re: 'debit:1000.00' },
+      { name: 'complete zero-profit year', revenue: '2000.00', result: '0.00', re: 'none' },
+    ])('closes the subsequent year after a valid carry-forward: $name', async ({ revenue, result, re }) => {
+      const co = await carried(`p1V${result.replace(/\W/g, '')}`, { revenue });
+      const carry = (await h.q<{ net_result: string }>('SELECT net_result::text FROM fiscal_year_carryforwards WHERE company_id=$1', [co.id]))[0]!;
+      expect(carry.net_result).toBe(result);
+      expect((await client(co).req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy25}`)).json.profit_or_loss).toBe(result);
+      expect(await balanceOf(co, co.fy26!, co.re)).toBe(re);
+      const pos = (await client(co).req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy26}`)).json;
+      expect([pos.accounting_equation.balanced, pos.current_period_earnings]).toEqual([true, '0.00']);
+      const res = await closeYear(co, co.fy26!);
+      expect([res.status, res.json.fiscalYear?.status]).toEqual([200, 'closed']);
+      expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND entity_id=$2 AND action='fiscal_year.status_change'", [co.id, co.fy26])).toBe(1);
+    });
+
+    it('lets exactly one of several concurrent close requests close the year', async () => {
+      const co = await carried('p1CC');
+      const results = await Promise.all(Array.from({ length: 4 }, () => closeYear(co, co.fy26!)));
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      for (const r of results.filter((x) => x.status !== 200)) expect([r.status, r.json.code]).toEqual([409, 'FISCAL_YEAR_ALREADY_CLOSED']);
+      expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND entity_id=$2 AND action='fiscal_year.status_change'", [co.id, co.fy26])).toBe(1);
+    });
+
+    it('a racing approval and close never leave a closed year without its opening balance', async () => {
+      // Approval needs January open; the close needs every month closed: whichever commits first, the other must refuse.
+      const co = await setup('p1Race', u.ownerA!.id);
+      expect((await prep(co.owner, co)).status).toBe(201);
+      expect((await submit(co)).status).toBe(200);
+      await closeMonths(co, co.fy26!, 2026);
+      const [a, c] = await Promise.all([approve(co), closeYear(co, co.fy26!)]);
+      expect(a.status).toBe(409);
+      expect(c.status).toBe(409);
+      expect(codes(c)).toContain('carryforward_opening_not_posted');
+      expect((await h.q('SELECT status FROM fiscal_years WHERE id=$1', [co.fy26]))[0]!.status).toBe('open');
+      expect(await postedOpenings(co)).toBe(0);
+    });
+
+    it('keeps companies isolated: one company\'s carry-forward never satisfies, closes or blocks another', async () => {
+      const x = await carried('p1IsoX');
+      const y = await setup('p1IsoY', u.ownerA!.id); // identical ledger, no carry-forward
+      await closeMonths(y, y.fy26!, 2026);
+      expect((await u.ownerB!.client.req('POST', `/fiscal-years/${x.fy26}/close`, {})).status).toBe(404);
+      expect(codes(await closeYear(y, y.fy26!))).toContain('carryforward_missing');
+      expect((await closeYear(x, x.fy26!)).status).toBe(200);
+      expect((await h.q('SELECT status FROM fiscal_years WHERE id=$1', [y.fy26]))[0]!.status).toBe('open');
+    });
+
+    it('reconciles retained earnings across three consecutive years in exact halalas', async () => {
+      const co = await carried('p1Three', { revenue: '5000.01' }); // FY25 profit 3000.01
+      const fy27 = await h.fiscalYear(co.id, 'FY27', '2027-01-01', '2027-12-31');
+      // FY26 activity: revenue 0.10 x 3 + 0.20, expense 100.25 -> loss 99.75 (fractional halalas, exact)
+      for (const amount of ['0.10', '0.10', '0.10', '0.20']) await h.postedJournal(co.id, co.fy26!, '2026-06-01', u.ownerA!.id, [[co.bank, amount, '0'], [co.rev, '0', amount]]);
+      await h.postedJournal(co.id, co.fy26!, '2026-07-01', u.ownerA!.id, [[co.exp, '100.25', '0'], [co.bank, '0', '100.25']]);
+      const soce26 = (await client(co).req('GET', `/financial-statements/changes-in-equity?fiscal_year_id=${co.fy26}`)).json;
+      expect([soce26.opening_equity, soce26.current_period_earnings, soce26.closing_equity, soce26.reconciliation.difference, soce26.reconciliation.balanced])
+        .toEqual(['13000.01', '-99.75', '12900.26', '0.00', true]);
+      expect((await closeYear(co, co.fy26!)).status).toBe(200);
+
+      const next = { ...co, fy25: co.fy26!, fy26: fy27 };
+      expect((await prep(co.owner, next)).status).toBe(201);
+      expect((await submit(next)).status).toBe(200);
+      expect((await approve(next)).status).toBe(200);
+      expect(await balanceOf(co, fy27, co.re)).toBe('credit:2900.26'); // 3000.01 - 99.75
+      const soce27 = (await client(co).req('GET', `/financial-statements/changes-in-equity?fiscal_year_id=${fy27}`)).json;
+      expect(soce27.opening_equity).toBe(soce26.closing_equity); // cross-year reconciliation
+      const pos27 = (await client(co).req('GET', `/financial-statements/financial-position?fiscal_year_id=${fy27}`)).json;
+      expect([pos27.total_assets, pos27.total_equity, pos27.accounting_equation.difference]).toEqual(['13600.26', '12900.26', '0.00']);
+      // Prior years' statements are unchanged by the later carry-forwards (comparatives stay traceable).
+      expect((await client(co).req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy25}`)).json.profit_or_loss).toBe('3000.01');
+      expect((await client(co).req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${co.fy26}`)).json.profit_or_loss).toBe('-99.75');
+      await closeMonths(co, fy27, 2027);
+      expect((await closeYear(co, fy27)).status).toBe(200);
+    });
+  });
 });
