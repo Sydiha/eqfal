@@ -1,0 +1,30 @@
+.opening-balance-view .ob-badge--bad{background:#fee2e2;color:#b91c1c}
+.ob-ex__head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ob-ex ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.ob-ex li{border:1px solid var(--ob-border,#e2e8f0);border-radius:8px;padding:10px;min-width:0}
+.ob-ex__issue--stale{border-color:#f59e0b}
+.ob-ex__row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ob-ex__row strong{overflow-wrap:anywhere}
+.ob-ex__detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px;margin:6px 0 0}
+.ob-ex__detail>div{min-width:0}
+.ob-ex__detail dt{font-size:11px;color:var(--ob-muted,#64748b)}
+.ob-ex__detail dd{margin:0;overflow-wrap:anywhere}
+.ob-ex__audit .ob-ex__reason{grid-column:1/-1}
+.ob-ex__stale{margin:8px 0 0;padding:8px;border-radius:8px;background:#fef3c7;color:#92400e}
+.ob-ex__actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.ob-ex__fix{margin-top:12px;padding:10px;border-radius:8px;background:#fef2f2}
+.ob-ex__fix h4{margin:0;font-size:13px}
+.ob-ex__history{margin-top:12px}
+.ob-ex__gate{margin-top:12px;padding:10px;border-radius:8px}
+.ob-ex__gate--blocked{background:#fef3c7;color:#92400e}
+.ob-ex__gate--ok{background:#ecfdf5;color:#065f46}
+.ob-ex__gate ul{margin-top:4px;list-style:disc;padding-inline-start:20px;display:block}
+.ob-ex__gate li{border:0;padding:0}
+.ob-ex__dialog-body{display:grid;gap:8px}
+.ob-ex__dialog-body textarea{width:100%;box-sizing:border-box}
+.ob-ex__disclosure{margin:0;padding:8px;border-radius:8px;background:#f1f5f9}
+.ob-ex__ack{display:flex;gap:8px;align-items:flex-start}
+.ob-ex__error{margin:0;color:#b91c1c}
+@media (max-width:640px){.ob-ex__actions button{flex:1 1 100%}.ob-ex__dialog .modal-actions{flex-wrap:wrap}.ob-ex__dialog .modal-actions button{flex:1 1 100%}}
+.ob-ex__dialog .ob-ex__ack{display:flex;flex-direction:row;align-items:flex-start;gap:8px;font-weight:400}
+.ob-ex__dialog .ob-ex__ack input{width:auto;min-width:0;flex:none;margin:3px 0 0;padding:0}
