@@ -174,3 +174,102 @@ describe('OpeningBalanceExceptions', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(true));
   });
 });
+
+describe('approval gate fails closed', () => {
+  const Y2 = '22222222-2222-4222-8222-222222222222';
+  const yr = (id: string, name: string) => ({ id, name, start_date: '2026-01-01', end_date: '2026-12-31', status: 'open' });
+  const clean = { status: 'verified', blocking: false, issues: [] };
+  const cleanEx = { required_count: 0, accepted_unverified_count: 0, stale_count: 0, issues: [], exceptions: [] };
+  const mkItem = (id: string, side: string) => ({ id, category: 'bank', account_id: 'a1', amount: '10.00', balance_side: side, source_type: 'bank_statement', source_reference: null, confidence: 'high', note: null });
+  const pageFetch = (evidence: (url: string) => Promise<Response>) => vi.fn().mockImplementation((url: string) => {
+    if (url === '/api/fiscal-years') return json({ fiscalYears: [yr(YEAR, 'FY 2026'), yr(Y2, 'FY 2027')] });
+    if (url === '/api/accounts') return json({ accounts: [] });
+    if (url.endsWith('/suggestions')) return json({ suggestions: [] });
+    if (url.endsWith('/reconciliation') || url.endsWith('/exceptions')) return evidence(url);
+    if (url.includes('/api/opening-balances/')) return json({ year: yr(YEAR, 'FY 2026'), review: { id: 'r1', status: 'in_review', journal_entry_id: null }, items: [mkItem('i1', 'debit'), mkItem('i2', 'credit')], summary: { debit: '10.00', credit: '10.00', difference: '0.00', confidence: { high: 2, medium: 0, low: 0 } } });
+    return json({});
+  });
+  const renderPage = () => render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove canAcceptException onUnauthorized={vi.fn()} />);
+  const approve = () => screen.getByRole('button', { name: /^Approve/ }) as HTMLButtonElement;
+  const ok = (url: string) => json(url.endsWith('/reconciliation') ? clean : cleanEx);
+
+  it('keeps approval disabled while evidence is loading and enables it only after a valid response', async () => {
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    vi.stubGlobal('fetch', pageFetch(async url => { await gate; return ok(url); }));
+    renderPage();
+    await waitFor(() => expect(approve()).toBeTruthy());
+    expect(approve().disabled).toBe(true);
+    await new Promise(r => setTimeout(r, 30));
+    expect(approve().disabled).toBe(true);
+    release();
+    await waitFor(() => expect(approve().disabled).toBe(false));
+  });
+
+  it('keeps approval disabled when either request fails or returns an invalid body', async () => {
+    for (const bad of [(u: string) => (u.endsWith('/exceptions') ? json({ error: 'x' }, 500) : ok(u)), (u: string) => (u.endsWith('/reconciliation') ? json({ error: 'x', code: 'FORBIDDEN' }, 403) : ok(u)), (u: string) => (u.endsWith('/exceptions') ? json({}) : ok(u)), (u: string) => (u.endsWith('/reconciliation') ? json({ status: 'verified' }) : ok(u))]) {
+      vi.stubGlobal('fetch', pageFetch(async u => bad(u)));
+      const { unmount } = renderPage();
+      expect(await screen.findByText('Could not load the evidence review.')).toBeTruthy();
+      expect(approve().disabled).toBe(true);
+      expect(screen.getByText(/Evidence could not be verified/)).toBeTruthy();
+      unmount();
+    }
+  });
+
+  it('never reports an enabled gate before the first successful validation', async () => {
+    let release!: () => void; const hold = new Promise<void>(r => { release = r; });
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (u: string) => { await hold; return ok(u); }));
+    const onGate = vi.fn(); setup({ onGate });
+    await new Promise(r => setTimeout(r, 20));
+    expect(onGate.mock.calls.every(c => c[0].blocked === true)).toBe(true);
+    release();
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith({ blocked: false }));
+  });
+
+  it('blocks again while a refresh is in flight and when the review status changes', async () => {
+    let hold: Promise<void> | null = null; let release!: () => void;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (u: string) => { if (hold) await hold; return ok(u); }));
+    const onGate = vi.fn();
+    const el = (status: string, token: number) => <OpeningBalanceExceptions yearId={YEAR} reviewStatus={status} canAccept lang="en" reloadToken={token} describeItem={String} onUnauthorized={vi.fn()} onGate={onGate} />;
+    const { rerender } = render(el('in_review', 0));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith({ blocked: false }));
+    hold = new Promise<void>(r => { release = r; });
+    rerender(el('in_review', 1));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith({ blocked: true }));
+    release(); hold = null;
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith({ blocked: false }));
+    hold = new Promise<void>(r => { release = r; });
+    rerender(el('draft', 1));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith({ blocked: true }));
+    release();
+  });
+
+  it('blocks approval when the page unmounts the section, and on blocking, missing or stale findings', async () => {
+    const onGate = vi.fn();
+    vi.stubGlobal('fetch', server({ issues: [aggIssue] })); const a = setup({ onGate });
+    await waitFor(() => expect(screen.getByText(/still need an accepted reason/)).toBeTruthy());
+    expect(onGate).toHaveBeenLastCalledWith({ blocked: true });
+    onGate.mockClear(); a.unmount();
+    expect(onGate).toHaveBeenLastCalledWith({ blocked: true });
+  });
+
+  it('blocks approval while switching fiscal year and ignores a late response for the previous year', async () => {
+    let releaseOld!: () => void; const old = new Promise<void>(r => { releaseOld = r; });
+    let releaseNew!: () => void; const next = new Promise<void>(r => { releaseNew = r; });
+    let oldHeld = false;
+    vi.stubGlobal('fetch', pageFetch(async url => {
+      if (url.includes(Y2)) { await next; return ok(url); }
+      if (oldHeld) { await old; return ok(url); }
+      return ok(url);
+    }));
+    renderPage();
+    await waitFor(() => expect(approve().disabled).toBe(false));
+    oldHeld = false;
+    fireEvent.change(document.getElementById('ob-year') as HTMLSelectElement, { target: { value: Y2 } });
+    await new Promise(r => setTimeout(r, 30));
+    const btn = screen.queryByRole('button', { name: /^Approve/ }) as HTMLButtonElement | null;
+    expect(btn === null || btn.disabled).toBe(true);
+    releaseOld(); releaseNew();
+    await waitFor(() => expect(approve().disabled).toBe(false));
+  });
+});

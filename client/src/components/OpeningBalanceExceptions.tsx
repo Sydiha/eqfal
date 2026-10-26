@@ -41,7 +41,7 @@ const TEXT = {
     revokeHint: 'Explain why the acceptance is withdrawn.', ackLabel: (v: string) => `I acknowledge that the unexplained difference of ${v} stays in the opening balance and is not verified.`,
     notVerified: 'Accepting records your decision and reason. It does not verify the balance, and the item stays "Accepted — not verified".', confirmAccept: 'Accept — not verified', confirmRevoke: 'Revoke acceptance', cancel: 'Cancel', working: 'Saving…',
     gateTitle: 'Final approval is unavailable', gateBlocking: 'Blocked or mismatched findings must be corrected first; they cannot be accepted.', gateMissing: (n: number) => `${n} finding(s) still need an accepted reason.`, gateStale: (n: number) => `${n} accepted exception(s) are stale and must be accepted again.`, gateOk: 'All required findings are accepted. Approval is available to authorized approvers; accepted items remain not verified.',
-    gateDraft: 'Findings can be accepted only after the review is submitted (in review).', viewOnly: 'You can view these findings but you do not have permission to accept or revoke.', needReviewState: 'Acceptance and revocation are available only while the review is in review.',
+    gateChecking: 'Evidence is being checked. Approval stays unavailable until the check completes.', gateFailed: 'Evidence could not be verified, so final approval is unavailable. Retry the evidence review.', gateDraft: 'Findings can be accepted only after the review is submitted (in review).', viewOnly: 'You can view these findings but you do not have permission to accept or revoke.', needReviewState: 'Acceptance and revocation are available only while the review is in review.',
     errors: { FORBIDDEN: 'You do not have permission to accept or revoke evidence exceptions.', OB_EXCEPTION_REVIEW_STATE: 'Exceptions can be changed only while the review is in review.', OB_EXCEPTION_REASON_REQUIRED: 'Enter a meaningful reason of at least 10 characters.', OB_EXCEPTION_NOT_ELIGIBLE: 'This finding cannot be accepted.', OB_EXCEPTION_STALE: 'The evidence changed. The list was refreshed; review the new figures.', OB_EXCEPTION_DIFFERENCE_ACK_REQUIRED: 'The displayed difference must be acknowledged.', OB_EXCEPTION_ALREADY_ACTIVE: 'This finding is already accepted.', OB_EXCEPTION_NOT_ACTIVE: 'This exception is no longer active.', OB_EXCEPTION_NOT_FOUND: 'Exception not found.', OB_EXCEPTION_ISSUE_NOT_FOUND: 'This finding no longer exists. The list was refreshed.', FISCAL_YEAR_CLOSED: 'The fiscal year is closed.', generic: 'The change could not be saved.' } as Record<string, string>,
     codes: {
       OB_BANK_AGGREGATE_ONLY: 'Bank balance imported as a single total, with no bank account link', OB_REFERENCE_MISSING: 'Not linked to its bank account or obligation', OB_BANK_EVIDENCE_MISSING: 'No confirmed bank statement balance', OB_BANK_CURRENCY_NOT_COMPARABLE: 'Bank currency differs, so it cannot be compared', OB_FUNCTIONAL_CURRENCY_UNKNOWN: 'Company functional currency is not set',
@@ -68,7 +68,7 @@ const TEXT = {
     revokeHint: 'اشرح سبب سحب القبول.', ackLabel: (v: string) => `أُقرّ بأن الفرق غير المبرَّر البالغ ${v} يبقى ضمن الرصيد الافتتاحي وأنه غير موثّق.`,
     notVerified: 'القبول يسجّل قرارك وسببك فقط. لا يوثّق الرصيد، ويبقى البند «مقبول — غير موثّق».', confirmAccept: 'قبول — غير موثّق', confirmRevoke: 'سحب القبول', cancel: 'إلغاء', working: 'جارٍ الحفظ…',
     gateTitle: 'الاعتماد النهائي غير متاح', gateBlocking: 'يجب تصحيح الملاحظات المحجوبة أو غير المتطابقة أولاً؛ ولا يمكن قبولها.', gateMissing: (n: number) => `${n} ملاحظة ما زالت تحتاج إلى قبول مع سبب.`, gateStale: (n: number) => `${n} استثناء مقبول أصبح قديماً ويجب قبوله مجدداً.`, gateOk: 'كل الملاحظات المطلوبة مقبولة. الاعتماد متاح للمعتمدين المخوّلين، وتبقى البنود المقبولة غير موثّقة.',
-    gateDraft: 'يمكن قبول الملاحظات فقط بعد إرسال المراجعة (قيد المراجعة).', viewOnly: 'يمكنك عرض هذه الملاحظات، لكن ليست لديك صلاحية القبول أو السحب.', needReviewState: 'القبول والسحب متاحان فقط أثناء حالة «قيد المراجعة».',
+    gateChecking: 'جارٍ فحص الأدلة. يبقى الاعتماد غير متاح حتى يكتمل الفحص.', gateFailed: 'تعذر التحقق من الأدلة، لذا الاعتماد النهائي غير متاح. أعد محاولة مراجعة الأدلة.', gateDraft: 'يمكن قبول الملاحظات فقط بعد إرسال المراجعة (قيد المراجعة).', viewOnly: 'يمكنك عرض هذه الملاحظات، لكن ليست لديك صلاحية القبول أو السحب.', needReviewState: 'القبول والسحب متاحان فقط أثناء حالة «قيد المراجعة».',
     errors: { FORBIDDEN: 'ليست لديك صلاحية قبول استثناءات الأدلة أو سحبها.', OB_EXCEPTION_REVIEW_STATE: 'يمكن تغيير الاستثناءات فقط أثناء حالة «قيد المراجعة».', OB_EXCEPTION_REASON_REQUIRED: 'أدخل سبباً واضحاً من 10 أحرف على الأقل.', OB_EXCEPTION_NOT_ELIGIBLE: 'لا يمكن قبول هذه الملاحظة.', OB_EXCEPTION_STALE: 'تغيّر الدليل. تم تحديث القائمة؛ راجع الأرقام الجديدة.', OB_EXCEPTION_DIFFERENCE_ACK_REQUIRED: 'يجب الإقرار بالفرق المعروض.', OB_EXCEPTION_ALREADY_ACTIVE: 'هذه الملاحظة مقبولة بالفعل.', OB_EXCEPTION_NOT_ACTIVE: 'هذا الاستثناء لم يعد فعّالاً.', OB_EXCEPTION_NOT_FOUND: 'الاستثناء غير موجود.', OB_EXCEPTION_ISSUE_NOT_FOUND: 'لم تعد هذه الملاحظة موجودة. تم تحديث القائمة.', FISCAL_YEAR_CLOSED: 'السنة المالية مغلقة.', generic: 'تعذر حفظ التغيير.' } as Record<string, string>,
     codes: {
       OB_BANK_AGGREGATE_ONLY: 'رصيد البنك مستورد كإجمالي واحد دون ربط بحساب بنكي', OB_REFERENCE_MISSING: 'غير مرتبط بحسابه البنكي أو بالتزامه', OB_BANK_EVIDENCE_MISSING: 'لا يوجد رصيد كشف بنكي مؤكد', OB_BANK_CURRENCY_NOT_COMPARABLE: 'عملة البنك مختلفة فلا يمكن المقارنة', OB_FUNCTIONAL_CURRENCY_UNKNOWN: 'العملة الوظيفية للشركة غير محددة',
@@ -99,17 +99,20 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [validatedKey, setValidatedKey] = useState<string | null>(null);
   const request = useRef(0);
+  const key = `${yearId}|${reviewStatus}|${reloadToken}`;
   const base = `/api/opening-balances/${yearId}`;
 
   const load = async () => {
     const mine = ++request.current;
-    setLoading(true); setFailed(false);
+    const key = `${yearId}|${reviewStatus}|${reloadToken}`;
+    setLoading(true); setFailed(false); setValidatedKey(null);
     try {
       const [r, e] = await Promise.all([call(`${base}/reconciliation`, {}, onUnauthorized), call(`${base}/exceptions`, {}, onUnauthorized)]);
       if (mine !== request.current) return;
       if (!Array.isArray((r as Recon)?.issues) || !Array.isArray((e as Exceptions)?.issues) || !Array.isArray((e as Exceptions)?.exceptions)) throw new ApiErr(200, 'generic');
-      setRecon(r as Recon); setEx(e as Exceptions);
+      setRecon(r as Recon); setEx(e as Exceptions); setValidatedKey(key);
     } catch (err) {
       if (mine === request.current && !(err instanceof ApiErr && err.status === 401)) { setFailed(true); setRecon(null); setEx(null); }
     } finally { if (mine === request.current) setLoading(false); }
@@ -121,8 +124,10 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
   const missing = ex ? ex.issues.filter(i => i.acceptance === 'none').length : 0;
   const stale = ex ? ex.issues.filter(i => i.acceptance === 'stale').length : 0;
   const blocking = recon?.blocking ?? false;
-  const gateBlocked = inReview && (failed || blocking || missing > 0 || stale > 0);
+  // Fail closed: approval stays blocked until a response for exactly this year, review status and refresh has been validated.
+  const gateBlocked = loading || failed || !ex || !recon || validatedKey !== key || blocking || missing > 0 || stale > 0;
   useEffect(() => { onGate({ blocked: gateBlocked }); }, [gateBlocked]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onGate({ blocked: true }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeDialog = () => { if (busy) return; setDialog(null); setReason(''); setAck(false); setDialogError(null); };
   const open = (d: NonNullable<typeof dialog>) => { setReason(''); setAck(false); setDialogError(null); setDialog(d); };
@@ -159,7 +164,7 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
   const codeText = (c: string) => t.codes[c] ?? c;
 
   if (loading && !ex && !recon) return <section className="ob-card ob-ex" aria-busy="true"><p className="ob-muted" role="status">{t.loading}</p></section>;
-  if (failed) return <section className="ob-card ob-ex"><h3>{t.title}</h3><p role="alert">{t.loadError}</p><button type="button" onClick={() => void load()}>{t.retry}</button></section>;
+  if (failed) return <section className="ob-card ob-ex"><h3>{t.title}</h3><p role="alert">{t.loadError}</p>{inReview && <p role="status"><strong>{t.gateTitle}</strong> {t.gateFailed}</p>}<button type="button" onClick={() => void load()}>{t.retry}</button></section>;
   if (!recon || !ex) return null;
 
   const status = recon.status;
@@ -220,7 +225,7 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
 
     {inReview && <div className={`ob-ex__gate ob-ex__gate--${gateBlocked ? 'blocked' : 'ok'}`} role="status">
       {gateBlocked ? <><strong>{t.gateTitle}</strong><ul>
-        {blocking && <li>{t.gateBlocking}</li>}{missing > 0 && <li>{t.gateMissing(missing)}</li>}{stale > 0 && <li>{t.gateStale(stale)}</li>}
+        {(loading || validatedKey !== key) && <li>{t.gateChecking}</li>}{blocking && <li>{t.gateBlocking}</li>}{missing > 0 && <li>{t.gateMissing(missing)}</li>}{stale > 0 && <li>{t.gateStale(stale)}</li>}
       </ul></> : <span>{t.gateOk}</span>}
     </div>}
 
