@@ -14,6 +14,8 @@ function loadMock(review:unknown,items:unknown[],difference='0.00'){
   if(url==='/api/fiscal-years')return response({fiscalYears:[year]});
   if(url==='/api/accounts')return response({accounts:[cash,equity]});
   if(url.endsWith('/suggestions'))return response({suggestions:[]});
+  if(url.endsWith('/reconciliation'))return response({status:'verified',blocking:false,issues:[]});
+  if(url.endsWith('/exceptions'))return response({required_count:0,accepted_unverified_count:0,stale_count:0,issues:[],exceptions:[]});
   if(url.includes('/api/opening-balances/'))return response({year,review,items,summary:{debit:'100.00',credit:difference==='0.00'?'100.00':'0.00',difference,confidence:{high:1,medium:0,low:1}}});
   return response({});
  });

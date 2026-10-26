@@ -56,6 +56,7 @@ const GROUPS: Record<string, Pair> = {
 };
 /** Whole-ID overrides where composition would read poorly. */
 const OVERRIDES: Record<string, Pair> = {
+  'opening_balance.exception.accept': ['Accept or revoke opening balance evidence exceptions', 'قبول استثناءات أدلة الأرصدة الافتتاحية أو سحبها'],
   'access.view': ['View users & permissions', 'عرض المستخدمين والصلاحيات'], 'access.manage': ['Manage users & permissions', 'إدارة الصلاحيات'],
   'access.membership.create': ['Add company members', 'إنشاء عضوية مستخدم'], 'access.membership.role.assign': ['Assign roles to members', 'تعيين دور للعضو'],
   'access.user.password.reset': ['Reset member passwords', 'إعادة تعيين كلمات مرور الأعضاء'],
