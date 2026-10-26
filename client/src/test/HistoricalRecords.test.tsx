@@ -238,6 +238,46 @@ describe('HistoricalRecords versions', () => {
     expect(screen.queryByText(/SAR/)).toBeNull();
   });
 
+
+  it('blocks comparison when the declared basis is in another currency (English and Arabic) and calls no comparison endpoint', async () => {
+    const f = stub({ versions: [{ ...official, functional_currency: 'EUR' }, draft], versionOverride: { ...draft } });
+    const view = render(<HistoricalRecords canManage canApprove onUnauthorized={vi.fn()} />);
+    await open();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[1]!);
+    await screen.findByText('Financial comparison');
+    expect(await screen.findByTestId('currency-mismatch')).toHaveTextContent('this version is in USD and the compared version is in EUR');
+    expect(screen.getByRole('button', { name: 'Show comparison' })).toBeDisabled();
+    expect(f.mock.calls.some(([u]) => String(u).includes('/comparison'))).toBe(false);
+    view.unmount();
+    await i18n.changeLanguage('ar');
+    render(<HistoricalRecords canManage canApprove onUnauthorized={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'فتح' }));
+    await screen.findByRole('heading', { name: 'FY 2023' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'فتح' })[1]!);
+    expect(await screen.findByTestId('currency-mismatch')).toHaveTextContent('عملة هذه النسخة USD وعملة النسخة المقارَن بها EUR');
+  });
+
+  it('blocks an explicitly selected version in another currency and allows one in the same currency', async () => {
+    const eur = { ...official, id: 'v5', version_no: 5, functional_currency: 'EUR' };
+    const noBasis = { ...draft, basis_version_id: null };
+    const f = stub({ versions: [official, noBasis, eur], versionOverride: { ...noBasis } });
+    render(<HistoricalRecords canManage canApprove onUnauthorized={vi.fn()} />);
+    await open();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[1]!);
+    await screen.findByText('Financial comparison');
+    const show = screen.getByRole('button', { name: 'Show comparison' });
+    expect(show).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Compare with'), { target: { value: 'v5' } });
+    expect(await screen.findByTestId('currency-mismatch')).toBeInTheDocument();
+    expect(show).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Compare with'), { target: { value: 'v1' } });
+    expect(screen.queryByTestId('currency-mismatch')).toBeNull();
+    expect(show).toBeEnabled();
+    fireEvent.click(show);
+    expect(await screen.findByText('900.00 USD')).toBeInTheDocument();
+    expect(f.mock.calls.filter(([u]) => String(u).includes('/comparison')).length).toBe(1);
+  });
+
   it('remounting for another company reloads from scratch (company-scoped data is not kept)', async () => {
     const f = stub();
     const first = render(<HistoricalRecords canManage canApprove onUnauthorized={vi.fn()} />);

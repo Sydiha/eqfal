@@ -71,7 +71,11 @@ export function HistoricalVersion({ versionId, siblings, reconstructionCompleted
   const when = (value: string | null) => (value ? formatDisplayDateTime(value, language) : '—');
   const basisVersion = siblings.find((s) => s.id === v.basis_version_id);
   const comparable = siblings.filter((s) => s.id !== v.id && s.statement_type === v.statement_type && s.state !== 'voided');
-  const canCompare = !!v.basis_version_id || !!against;
+  // The comparison API does not check currencies, so the UI only compares versions that are known to share one functional currency.
+  const target = siblings.find((s) => s.id === (against || v.basis_version_id));
+  const currencyMismatch = !!target && target.functional_currency !== v.functional_currency;
+  const targetUnknown = !!(against || v.basis_version_id) && !target;
+  const canCompare = !!(against || v.basis_version_id) && !currencyMismatch && !targetUnknown;
   const canEditLines = canManage && draft;
   const fact = (label: string, value: ReactNode) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
 
@@ -137,9 +141,13 @@ export function HistoricalVersion({ versionId, siblings, reconstructionCompleted
         <label>{tx('قارن مع', 'Compare with')}
           <select value={against} onChange={(e) => { setAgainst(e.target.value); setComparison(null); }}>
             <option value="">{v.basis_version_id ? tx('الأساس المعلن لهذه النسخة', 'This version\'s declared basis') : tx('اختر نسخة', 'Choose a version')}</option>
-            {comparable.map((s) => <option key={s.id} value={s.id}>{`v${s.version_no} — ${pick(PROVENANCE[s.provenance], ar)} (${lookup(STATE, s.state, ar)})`}</option>)}</select></label>
-        <button type="button" className="hr-primary" disabled={!canCompare || comparing} onClick={() => void compare()}>{comparing ? tx('جارٍ المقارنة…', 'Comparing…') : tx('عرض المقارنة', 'Show comparison')}</button>
+            {comparable.map((s) => <option key={s.id} value={s.id}>{`v${s.version_no} — ${pick(PROVENANCE[s.provenance], ar)} (${lookup(STATE, s.state, ar)}) · ${s.functional_currency}`}</option>)}</select></label>
+        <button type="button" className="hr-primary" disabled={!canCompare || comparing} onClick={() => { if (canCompare) void compare(); }}>{comparing ? tx('جارٍ المقارنة…', 'Comparing…') : tx('عرض المقارنة', 'Show comparison')}</button>
       </div>
+      {currencyMismatch && <div className="hr-error" role="alert" data-testid="currency-mismatch">
+        {tx(`لا يمكن المقارنة المباشرة: عملة هذه النسخة ${v.functional_currency} وعملة النسخة المقارَن بها ${target!.functional_currency}. لا تُعرض فروق بين عملتين مختلفتين لأنها قد تكون مضللة. حوّل القائمتين إلى عملة واحدة خارج هذا السجل أو اختر نسخة بالعملة نفسها.`,
+          `Direct comparison is not possible: this version is in ${v.functional_currency} and the compared version is in ${target!.functional_currency}. Differences between two currencies are not shown because they would be misleading. Convert both statements to one currency outside this record, or choose a version in the same currency.`)}</div>}
+      {targetUnknown && <div className="hr-error" role="alert" data-testid="currency-unknown">{tx('تعذر التحقق من عملة النسخة المقارَن بها، لذلك لا تُعرض المقارنة. أعد تحميل الصفحة.', 'The currency of the compared version could not be verified, so the comparison is not shown. Reload the page.')}</div>}
       {comparison && <div aria-live="polite">
         <div className="hr-sides">{[{ side: comparison.basis, title: tx('الأصل (المقارَن به)', 'Original (compared against)') }, { side: comparison.version, title: tx('هذه النسخة', 'This version') }].map(({ side, title }) =>
           <div className="hr-side" key={title}><strong>{title} · v{side.version_no}</strong><Provenance provenance={side.provenance} ar={ar} />
