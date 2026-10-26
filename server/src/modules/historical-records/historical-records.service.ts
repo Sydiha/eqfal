@@ -529,6 +529,9 @@ export class HistoricalRecordsService {
     if (basis.id === version.id || basis.period_id !== version.period_id || basis.statement_type !== version.statement_type) {
       throw new HistoricalError('HISTORICAL_COMPARISON_INVALID', 'Only versions of the same period and statement can be compared', 422);
     }
+    if (basis.functional_currency !== version.functional_currency) {
+      throw new HistoricalError('HISTORICAL_COMPARISON_INVALID', 'Versions with different functional currencies cannot be compared', 422);
+    }
     const rows = (await this.pool.query(
       `SELECT COALESCE(v.line_code, b.line_code) AS line_code,
               COALESCE(v.label_ar, b.label_ar) AS label_ar, COALESCE(v.label_en, b.label_en) AS label_en,
@@ -544,7 +547,7 @@ export class HistoricalRecordsService {
       `SELECT (COALESCE((SELECT SUM(amount) FROM historical_statement_lines WHERE version_id = $1 AND company_id = $3), 0)
              - COALESCE((SELECT SUM(amount) FROM historical_statement_lines WHERE version_id = $2 AND company_id = $3), 0))::text AS d`, [id, baseId, a.companyId])).rows[0].d;
     const describe = (v: typeof version) => ({
-      id: v.id, version_no: v.version_no, state: v.state, kind: v.kind, provenance: provenanceOf(v), proof_level: v.proof_level, internal_purpose: v.internal_purpose,
+      id: v.id, version_no: v.version_no, state: v.state, kind: v.kind, functional_currency: v.functional_currency, provenance: provenanceOf(v), proof_level: v.proof_level, internal_purpose: v.internal_purpose,
       source_type: v.source_type, confidence: v.confidence, evidence_reference: v.evidence_reference, review_status: v.review_status, fingerprint: v.fingerprint,
     });
     return {
