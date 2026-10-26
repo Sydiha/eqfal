@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
-import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
+import { acceptAllIncomplete } from './helpers/ob-exceptions';
+import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_DEFAULT_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
 
 // C4-P2a: opening balance reconciliation gate over real HTTP + PostgreSQL. Requires a disposable DATABASE_URL.
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
@@ -20,7 +21,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const noCap = await h.user(`${label}-none`);
     const id = await h.company(label, owner.id);
     await h.member(id, accountant.id, [...ACCOUNTANT_CAPABILITIES]);
-    await h.member(id, manager.id, [...FINANCE_MANAGER_CAPABILITIES]);
+    await h.member(id, manager.id, [...FINANCE_MANAGER_DEFAULT_CAPABILITIES]);
     await h.member(id, viewer.id, ['opening_balance.view']);
     await h.member(id, noCap.id, ['obligation.view']);
     for (const u of [owner, accountant, manager, viewer, noCap]) await u.client.login();
@@ -79,6 +80,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
   const patch = (co: Co, it: { id: string; version: number }, body: Record<string, unknown>) =>
     co.accountant.client.req('PATCH', `/opening-balances/${co.fy}/items/${it.id}`, { version: it.version, ...body });
   const submit = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {});
+  const accept = async (co: Co) => { const r = await acceptAllIncomplete(co.manager.client, co.fy); expect([200, 201]).toContain(r.status); };
   const approve = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {});
   const report = (co: Co) => co.viewer.client.req('GET', `/opening-balances/${co.fy}/reconciliation`);
   const reviewStatus = async (co: Co) => (await h.q<{ status: string }>('SELECT status FROM opening_balance_reviews WHERE company_id=$1', [co.id]))[0]?.status;
@@ -127,6 +129,8 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_BANK_AGGREGATE_ONLY', 'OB_SUBLEDGER_AGGREGATE_ONLY', 'OB_SUBLEDGER_UNLINKED_OBLIGATION', 'OB_SUBLEDGER_TOTAL_DIFFERENCE']));
     expect(issueCodes(rep)).not.toContain('OB_REFERENCE_MISSING');
     expect((await submit(co)).status).toBe(200);
+    expect((await approve(co)).status).toBe(409); // incomplete evidence needs a recorded acceptance first (C4-P2b-1)
+    await accept(co);
     expect((await approve(co)).status).toBe(200);
     expect(await journals(co)).toBe(1);
   });
@@ -335,6 +339,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const closed = await setup('closed');
     await bankItem(closed, '10.00', { bank_account_id: null }); await balance(closed, '10.00');
     expect((await submit(closed)).status).toBe(200);
+    await accept(closed);
     await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [closed.fy]);
     const r = await approve(closed);
     expect(r.status).toBe(409);
@@ -344,6 +349,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const ok = await setup('immut');
     await bankItem(ok, '10.00', { bank_account_id: null }); await balance(ok, '10.00');
     expect((await submit(ok)).status).toBe(200);
+    await accept(ok);
     expect((await approve(ok)).status).toBe(200);
     const snapshot = await h.q('SELECT id,amount,version FROM opening_balance_items WHERE company_id=$1 ORDER BY id', [ok.id]);
     const rep = await report(ok);

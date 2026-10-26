@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
-import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
+import { acceptAllIncomplete } from './helpers/ob-exceptions';
+import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_DEFAULT_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
 
 // T1 / G4: partner attribution of opening capital, current and loan items over real HTTP + PostgreSQL. Requires a disposable DATABASE_URL.
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
@@ -19,7 +20,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     const manager = await h.user(`${label}-fm`);
     const id = await h.company(label, owner.id);
     await h.member(id, accountant.id, [...ACCOUNTANT_CAPABILITIES]);
-    await h.member(id, manager.id, [...FINANCE_MANAGER_CAPABILITIES]);
+    await h.member(id, manager.id, [...FINANCE_MANAGER_DEFAULT_CAPABILITIES]);
     for (const x of [owner, accountant, manager]) await x.client.login();
     const fy = await h.fiscalYear(id, 'FY26', '2026-01-01', '2026-12-31');
     const bank = await h.account(id, 'OB-BANK', 'asset', 'current_asset');
@@ -76,6 +77,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     await h.q("INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,confidence,created_by) VALUES($1,$2,'bank',$3,500.00,'debit','internal_ledger','high',$4)", [co.id, review, co.bank, co.owner.id]);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(400);
     await h.q("UPDATE opening_balance_reviews SET status='in_review',submitted_by=$2,submitted_at=NOW() WHERE id=$1", [review, co.owner.id]);
+    expect([200, 201]).toContain((await acceptAllIncomplete(co.manager.client, co.fy)).status);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {})).status).toBe(400);
     const r = (await h.q<{ status: string; journal_entry_id: string | null }>('SELECT status,journal_entry_id FROM opening_balance_reviews WHERE id=$1', [review]))[0]!;
     expect(r).toEqual({ status: 'in_review', journal_entry_id: null });
@@ -86,6 +88,7 @@ describeDatabase('opening-balance partner attribution (PostgreSQL)', () => {
     const cap = (await post(co, item(co, { partner_id: co.partner }))).json.item;
     expect((await post(co, item(co, { category: 'bank', account_id: co.bank, balance_side: 'debit' }))).status).toBe(201);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {})).status).toBe(200);
+    expect([200, 201]).toContain((await acceptAllIncomplete(co.manager.client, co.fy)).status);
     expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {})).status).toBe(200);
     expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND entry_type='opening_balance' AND status='posted'", [co.id])).toBe(1);
     const ledger = (await co.owner.client.req('GET', `/partners/${co.partner}/ledger?from=2026-01-01&to=2026-12-31`)).json;

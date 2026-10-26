@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedActiveAuthorityRange } from './helpers/authority-fixture';
+import { acceptAllIncomplete } from './helpers/ob-exceptions';
 import { startHarness } from './helpers/http-pg';
 
 // Ledger source authority (C1B-1) over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
@@ -131,6 +132,7 @@ describeDatabase('ledger source authority (PostgreSQL)', () => {
     expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND entry_type='opening_balance'", [co.id])).toBe(0);
 
     await review(fy27);
+    expect([200, 201]).toContain((await acceptAllIncomplete(co.owner.client, fy27)).status); // manual items without references are incomplete evidence (C4-P2b-1)
     const ok = await co.owner.client.req('POST', `/opening-balances/${fy27}/approve`, {});
     expect(ok.status).toBe(200);
   });

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
-import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
+import { acceptAllIncomplete } from './helpers/ob-exceptions';
+import { ACCOUNTANT_CAPABILITIES, FINANCE_MANAGER_DEFAULT_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
 
 // Opening-balance posting guard (PR #452) over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
@@ -20,7 +21,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
     const manager = await h.user(`${label}-fm`);
     const id = await h.company(label, owner.id);
     await h.member(id, accountant.id, [...ACCOUNTANT_CAPABILITIES]);
-    await h.member(id, manager.id, [...FINANCE_MANAGER_CAPABILITIES]);
+    await h.member(id, manager.id, [...FINANCE_MANAGER_DEFAULT_CAPABILITIES]);
     for (const x of [owner, accountant, manager]) await x.client.login();
     const fy = await h.fiscalYear(id, 'FY26', '2026-01-01', '2026-12-31');
     const bank = await h.account(id, 'OB-BANK', 'asset', 'current_asset');
@@ -32,6 +33,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
     if (status === 'in_review') await h.q("UPDATE opening_balance_reviews SET status='in_review',submitted_by=$2,submitted_at=NOW() WHERE id=$1", [review, owner.id]);
     return { id, fy, owner, bank, equity, review, accountant, manager };
   }
+  const accept = async (co: Co) => { const r = await acceptAllIncomplete(co.manager.client, co.fy); expect([200, 201]).toContain(r.status); };
   const approve = (who: User, co: Co) => who.client.req('POST', `/opening-balances/${co.fy}/approve`, {});
   const openingJournals = (co: Co, status?: string) => h.count(`SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND entry_type='opening_balance'${status ? ` AND status='${status}'` : ''}`, [co.id]);
   const reviewRow = async (co: Co) => (await h.q<{ status: string; journal_entry_id: string | null }>('SELECT status,journal_entry_id FROM opening_balance_reviews WHERE id=$1', [co.review]))[0]!;
@@ -61,6 +63,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
 
   it('approval posts exactly one opening journal; a repeat approval is refused and creates nothing', async () => {
     const co = await setup('obOnce');
+    await accept(co);
     const res = await approve(co.manager, co);
     expect(res.status).toBe(200);
     expect(res.json.journal.status).toBe('posted');
@@ -74,6 +77,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
 
   it('concurrent approvals of the same review: exactly one succeeds and one posted opening journal exists', async () => {
     const co = await setup('obRace');
+    await accept(co);
     const results = await Promise.all(Array.from({ length: 6 }, (_, i) => approve(i % 2 ? co.manager : co.owner, co)));
     expect(results.filter((r) => r.status === 200)).toHaveLength(1);
     for (const r of results.filter((x) => x.status !== 200)) expect(r.status).toBe(409);
@@ -86,6 +90,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
 
   it('rolls back journal, lines, review state and audit when a failure is injected at the last step', async () => {
     const co = await setup('obAtomic');
+    await accept(co);
     const fn = `fail_ob_approve_${co.id.replace(/-/g, '')}`;
     await h.q(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.company_id='${co.id}' AND NEW.action='opening_balance.approve' THEN RAISE EXCEPTION 'injected failure'; END IF; RETURN NEW; END $$`);
     await h.q(`CREATE TRIGGER ${fn} BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
@@ -158,6 +163,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
 
   it('default Accountant cannot approve; default Finance Manager can', async () => {
     const co = await setup('obAuthz');
+    await accept(co);
     const denied = await approve(co.accountant, co);
     expect(denied.status).toBe(403);
     expect(await openingJournals(co)).toBe(0);

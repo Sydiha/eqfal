@@ -128,6 +128,18 @@ export const FINANCE_MANAGER_CAPABILITIES: readonly string[] = [
 ];
 
 /**
+ * Finance Manager grants added after migration 059 (whose matrix above stays frozen and contract-tested). Migration 097 grants these
+ * to existing Finance Manager roles; company provisioning adds them to new ones. Accountant and Viewer never receive them.
+ */
+export const FINANCE_MANAGER_POST_059_CAPABILITIES: readonly string[] = ['opening_balance.exception.accept'];
+
+/** What a newly provisioned Finance Manager role holds. */
+export const FINANCE_MANAGER_DEFAULT_CAPABILITIES: readonly string[] = [
+  ...FINANCE_MANAGER_CAPABILITIES,
+  ...FINANCE_MANAGER_POST_059_CAPABILITIES,
+];
+
+/**
  * Company Manager (migration 075; owner decision 2026-10-15): manages staff, memberships, roles and capability grants of
  * its own company within the capability ceiling, and prepares operational documents. It does NOT hold manual journal
  * create/edit/post, fiscal-year or period closing/reopening, tax or VAT final approval, document or invoice approvals, or

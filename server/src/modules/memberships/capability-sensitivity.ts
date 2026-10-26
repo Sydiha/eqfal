@@ -54,6 +54,7 @@ const SENSITIVE_EXACT = new Set([
   'fiscal_year.create',
   'fiscal_year.edit',
   'invoice.cancel',
+  'opening_balance.exception.accept',
   'document.delete',
   'invoice.delete',
   'accounting.journal.delete',
