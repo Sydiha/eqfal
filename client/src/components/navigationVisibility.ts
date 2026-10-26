@@ -19,6 +19,7 @@ export type NavigationPage =
   | 'access'
   | 'companies'
   | 'sourceAuthority'
+  | 'historicalRecords'
   | 'auditLog'
   | 'account';
 
@@ -66,6 +67,8 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
       return has(capabilities, 'access.view');
     case 'sourceAuthority':
       return has(capabilities, 'source_authority.view');
+    case 'historicalRecords':
+      return has(capabilities, 'historical.view');
     case 'companies':
       return has(capabilities, 'company.view');
     case 'auditLog':

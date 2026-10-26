@@ -46,14 +46,14 @@ function ShellIcon({ name }: { name: IconName }) {
   return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', auditLog: 'auditLog', account: 'account' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', historicalRecords: 'documents', auditLog: 'auditLog', account: 'account' };
 
 type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
   { id: 'invoices', pages: ['sales', 'purchases', 'invoiceMappings'] },
   { id: 'operations', pages: ['documents', 'banks', 'obligations'] },
   { id: 'accounting', pages: ['accounting', 'openingBalances', 'periodicAdjustments', 'assets', 'vat'] },
-  { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears'] },
+  { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears', 'historicalRecords'] },
   { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'sourceAuthority', 'auditLog'] },
 ];
 const EXPANDED_STORAGE_KEY = 'eqfal.nav.expandedGroups';
@@ -80,7 +80,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
     writeExpandedGroups(next);
     return next;
   });
-  const pageLabel=(next:Page)=>next==='sourceAuthority'?(i18n.language==='ar'?'سلطة مصدر الدفاتر':'Ledger Source Authority'):next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='invoiceMappings'?(i18n.language==='ar'?'ربط حسابات الفواتير':'Invoice Account Mappings'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
+  const pageLabel=(next:Page)=>next==='historicalRecords'?(i18n.language==='ar'?'السجلات التاريخية':'Historical Records'):next==='sourceAuthority'?(i18n.language==='ar'?'سلطة مصدر الدفاتر':'Ledger Source Authority'):next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='invoiceMappings'?(i18n.language==='ar'?'ربط حسابات الفواتير':'Invoice Account Mappings'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
