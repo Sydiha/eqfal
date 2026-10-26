@@ -75,7 +75,7 @@ export type ReconciliationInput = {
   /** Bank accounts linked to each GL account on the start date (used only to imply a missing bank reference). */
   bankLinksByAccount: Map<string, string[]>;
   /** Confirmed statement closing balance dated the day before the start date, per bank account. */
-  statements: Map<string, { closing_balance: string; currency_code: string }>;
+  statements: Map<string, { closing_balance: string; currency_code: string; id?: string }>;
   referencedObligations: Map<string, ReconciliationObligation>;
   /** Every live opening obligation recognised on the start date. */
   openingObligations: ReconciliationObligation[];
@@ -216,7 +216,7 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
  * statements are share-locked and each bank account takes the statement advisory lock, so a concurrent cancel, supersede or
  * confirm is ordered strictly before or after this check. Reads only; writes nothing.
  */
-export async function loadOpeningReconciliation(client: PoolClient, companyId: string, reviewId: string, startDate: string, lock = false): Promise<ReconciliationReport> {
+export async function loadOpeningReconciliationInput(client: PoolClient, companyId: string, reviewId: string, startDate: string, lock = false): Promise<ReconciliationInput> {
   const share = lock ? ' FOR SHARE' : '';
   // An untouched row of the trial-balance import is the only genuine aggregate. The import writes its rows and its audit event in one
   // transaction, so they share the transaction timestamp; a hand-entered item has its own, and any later edit raises its version.
@@ -250,8 +250,8 @@ export async function loadOpeningReconciliation(client: PoolClient, companyId: s
     [companyId, startDate])).rows;
   const bankAccounts = new Map((await client.query<{ id: string; currency_code: string }>(
     'SELECT id,currency_code FROM bank_accounts WHERE company_id=$1 AND id=ANY($2::uuid[])', [companyId, bankIds])).rows.map((r) => [r.id, r]));
-  const statements = new Map((await client.query<{ bank_account_id: string; closing_balance: string; currency_code: string }>(
-    `SELECT bank_account_id,closing_balance::text,currency_code FROM bank_statement_balances WHERE company_id=$1 AND bank_account_id=ANY($2::uuid[]) AND status='confirmed' AND period_end=$3::date-1${share}`,
+  const statements = new Map((await client.query<{ id: string; bank_account_id: string; closing_balance: string; currency_code: string }>(
+    `SELECT id,bank_account_id,closing_balance::text,currency_code FROM bank_statement_balances WHERE company_id=$1 AND bank_account_id=ANY($2::uuid[]) AND status='confirmed' AND period_end=$3::date-1${share}`,
     [companyId, bankIds, startDate])).rows.map((r) => [r.bank_account_id, r]));
   const oblSql = 'SELECT id,direction,counterparty_id,original_amount::text,source_type,is_cancelled,recognized_on::text FROM obligations';
   const referencedObligations = new Map((await client.query<ReconciliationObligation>(
@@ -267,10 +267,14 @@ export async function loadOpeningReconciliation(client: PoolClient, companyId: s
        SELECT id FROM d`, [companyId, key])).rows;
     if (ids.length) controlAccounts.set(key, new Set(ids.map((r) => r.id)));
   }
-  return evaluateOpeningReconciliation({
+  return {
     startDate, functionalCurrency: profile.length === 1 ? profile[0]!.functional_currency : null,
     items, bankAccounts, bankLinks, bankLinksByAccount, statements, referencedObligations, openingObligations, controlAccounts,
-  });
+  };
+}
+
+export async function loadOpeningReconciliation(client: PoolClient, companyId: string, reviewId: string, startDate: string, lock = false): Promise<ReconciliationReport> {
+  return evaluateOpeningReconciliation(await loadOpeningReconciliationInput(client, companyId, reviewId, startDate, lock));
 }
 
 export class OpeningBalanceReconciliationBlockedError extends Error {

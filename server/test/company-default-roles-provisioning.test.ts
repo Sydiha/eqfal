@@ -4,6 +4,7 @@ import { CompanyManagementService } from '../src/modules/companies/company.servi
 import {
   ACCOUNTANT_CAPABILITIES,
   FINANCE_MANAGER_CAPABILITIES,
+  FINANCE_MANAGER_DEFAULT_CAPABILITIES,
   LEGACY_UNASSIGNED_CAPABILITIES,
   COMPANY_MANAGER_CAPABILITIES,
   OPERATIONS_CAPABILITIES,
@@ -176,11 +177,14 @@ describe('company default roles provisioning', () => {
     expect(new Set(byRole['Accountant'])).toEqual(new Set(ACCOUNTANT_CAPABILITIES));
   });
 
-  it('provisions Finance Manager role with exactly the canonical 96 capabilities', async () => {
+  it('provisions Finance Manager role with the canonical 96 capabilities plus the post-059 grant (opening_balance.exception.accept)', async () => {
     const byRole = await provisionCapabilitiesByRole();
     expect(FINANCE_MANAGER_CAPABILITIES).toHaveLength(96);
-    expect(byRole['Finance Manager']).toHaveLength(FINANCE_MANAGER_CAPABILITIES.length);
-    expect(new Set(byRole['Finance Manager'])).toEqual(new Set(FINANCE_MANAGER_CAPABILITIES));
+    expect(FINANCE_MANAGER_DEFAULT_CAPABILITIES).toHaveLength(97);
+    expect(byRole['Finance Manager']).toHaveLength(FINANCE_MANAGER_DEFAULT_CAPABILITIES.length);
+    expect(new Set(byRole['Finance Manager'])).toEqual(new Set(FINANCE_MANAGER_DEFAULT_CAPABILITIES));
+    expect(byRole['Accountant']).not.toContain('opening_balance.exception.accept');
+    expect(byRole['Viewer']).not.toContain('opening_balance.exception.accept');
   });
 
   it('provisions a strict Viewer < Accountant < Finance Manager hierarchy and no explicit Full Access rows', async () => {

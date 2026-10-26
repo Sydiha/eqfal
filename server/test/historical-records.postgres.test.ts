@@ -12,9 +12,9 @@ const databaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
 describe('Migration 096 historical records (static)', () => {
-  it('is the next migration number and only one file uses it', () => {
+  it('keeps its migration number and only one file uses it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort();
-    expect(files.at(-1)).toBe('096_historical_records.sql');
+    expect(files).toContain('096_historical_records.sql');
     expect(files.filter((f) => f.startsWith('096_'))).toHaveLength(1);
   });
 

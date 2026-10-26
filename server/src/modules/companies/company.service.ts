@@ -5,7 +5,7 @@ import {
   ACCOUNTANT_CAPABILITIES,
   COMPANY_MANAGER_CAPABILITIES,
   OPERATIONS_CAPABILITIES,
-  FINANCE_MANAGER_CAPABILITIES,
+  FINANCE_MANAGER_DEFAULT_CAPABILITIES,
   VIEWER_CAPABILITIES,
 } from '../memberships/default-role-capabilities';
 
@@ -40,7 +40,7 @@ interface DefaultRoleDefinition {
 const DEFAULT_ROLES: DefaultRoleDefinition[] = [
   { name: 'Viewer', is_full_access: false, capabilities: [...VIEWER_CAPABILITIES] },
   { name: 'Accountant', is_full_access: false, capabilities: [...ACCOUNTANT_CAPABILITIES] },
-  { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_CAPABILITIES] },
+  { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_DEFAULT_CAPABILITIES] },
   { name: 'Company Manager', is_full_access: false, capabilities: [...COMPANY_MANAGER_CAPABILITIES] },
   { name: 'Operations', is_full_access: false, capabilities: [...OPERATIONS_CAPABILITIES] },
   { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, capabilities: [] },
