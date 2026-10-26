@@ -7,9 +7,16 @@ import { fromCents, lockBankAccountReconciliation, toCents } from '../banking/ba
 // Classification (worst wins): blocked > mismatch > incomplete_evidence > verified.
 //   blocked             a reference is invalid, foreign, duplicated or contradicts the item or its GL account.
 //   mismatch            two exact amounts that should agree do not (a confirmed accounting difference).
-//   incomplete_evidence the evidence needed to verify is absent or not comparable (aggregate-only items, no confirmed statement,
-//                       a different currency, an unmapped control account). Reported, never treated as a mismatch.
+//   incomplete_evidence the evidence needed to verify is absent or not comparable (imported aggregate items, items with a missing
+//                       reference, no confirmed statement, a different currency, an unmapped control account, a total that
+//                       cannot be proven complete). Reported, never treated as a mismatch.
 // Only `blocked` and `mismatch` stop submission and approval. A bank running balance is never evidence of the opening balance.
+//
+// Provenance: only rows written by the trial-balance import (see `provenance`) are genuine aggregates. An item entered or edited by
+// hand without its reference is `OB_REFERENCE_MISSING`; when exactly one reference is implied (the counterparty's only unclaimed
+// opening obligation, or the only bank account linked to the item's GL account) its amount is still compared 1:1, so removing a
+// reference cannot hide a confirmed difference.
+// Totals are never a confirmed mismatch: the schema cannot prove the opening obligation population complete.
 
 export type ReconciliationStatus = 'verified' | 'incomplete_evidence' | 'mismatch' | 'blocked';
 export type ReconciliationSection = 'bank' | 'receivable' | 'payable';
@@ -21,6 +28,7 @@ export const OB_CODES = {
   bankGlMismatch: 'OB_BANK_ACCOUNT_GL_MISMATCH',
   bankDuplicate: 'OB_BANK_DUPLICATE',
   bankAggregateOnly: 'OB_BANK_AGGREGATE_ONLY',
+  referenceMissing: 'OB_REFERENCE_MISSING',
   bankEvidenceMissing: 'OB_BANK_EVIDENCE_MISSING',
   bankAmountMismatch: 'OB_BANK_AMOUNT_MISMATCH',
   bankCurrencyNotComparable: 'OB_BANK_CURRENCY_NOT_COMPARABLE',
@@ -36,7 +44,7 @@ export const OB_CODES = {
   controlAccountMismatch: 'OB_CONTROL_ACCOUNT_MISMATCH',
   subledgerAggregateOnly: 'OB_SUBLEDGER_AGGREGATE_ONLY',
   subledgerUnlinkedObligation: 'OB_SUBLEDGER_UNLINKED_OBLIGATION',
-  subledgerTotalMismatch: 'OB_SUBLEDGER_TOTAL_MISMATCH',
+  subledgerTotalDifference: 'OB_SUBLEDGER_TOTAL_DIFFERENCE',
 } as const;
 
 export type ReconciliationIssue = {
@@ -50,6 +58,8 @@ export type ReconciliationIssue = {
 export type ReconciliationItem = {
   id: string; category: string; account_id: string; amount: string; balance_side: 'debit' | 'credit';
   counterparty_id: string | null; bank_account_id: string | null; obligation_id: string | null;
+  /** `import` only for an untouched row written by the trial-balance import; everything else is `manual`. */
+  provenance: 'import' | 'manual';
 };
 export type ReconciliationObligation = {
   id: string; direction: 'receivable' | 'payable'; counterparty_id: string; original_amount: string;
@@ -62,6 +72,8 @@ export type ReconciliationInput = {
   bankAccounts: Map<string, { currency_code: string }>;
   /** GL accounts linked to each bank account on the fiscal year start date. */
   bankLinks: Map<string, string[]>;
+  /** Bank accounts linked to each GL account on the start date (used only to imply a missing bank reference). */
+  bankLinksByAccount: Map<string, string[]>;
   /** Confirmed statement closing balance dated the day before the start date, per bank account. */
   statements: Map<string, { closing_balance: string; currency_code: string }>;
   referencedObligations: Map<string, ReconciliationObligation>;
@@ -94,29 +106,40 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
   const bankItems = input.items.filter((i) => i.category === 'bank');
   const seenBank = new Map<string, number>();
   for (const i of bankItems) if (i.bank_account_id) seenBank.set(i.bank_account_id, (seenBank.get(i.bank_account_id) ?? 0) + 1);
+  /** Currency and confirmed-statement comparison for one item and the bank account it refers to (stated or implied). */
+  const compareBank = (i: ReconciliationItem, bankId: string, inferred: boolean) => {
+    const bank = input.bankAccounts.get(bankId)!;
+    const mark: Record<string, string> = inferred ? { inferred: 'true' } : {};
+    if (!input.functionalCurrency) { add('bank', 'incomplete_evidence', OB_CODES.functionalCurrencyUnknown, i); return; }
+    if (bank.currency_code !== input.functionalCurrency) {
+      add('bank', 'incomplete_evidence', OB_CODES.bankCurrencyNotComparable, i, { bank_currency: bank.currency_code, functional_currency: input.functionalCurrency });
+      return;
+    }
+    const stmt = input.statements.get(bankId);
+    if (!stmt) { add('bank', 'incomplete_evidence', OB_CODES.bankEvidenceMissing, i); return; }
+    if (stmt.currency_code !== bank.currency_code) {
+      add('bank', 'incomplete_evidence', OB_CODES.bankCurrencyNotComparable, i, { bank_currency: bank.currency_code, statement_currency: stmt.currency_code });
+      return;
+    }
+    const expected = toCents(stmt.closing_balance), actual = signed(i);
+    if (expected !== actual) {
+      add('bank', 'mismatch', OB_CODES.bankAmountMismatch, i, { expected: fromCents(expected), actual: fromCents(actual), difference: fromCents(actual - expected), ...mark });
+    }
+  };
   for (const i of bankItems) {
-    if (!i.bank_account_id) { add('bank', 'incomplete_evidence', OB_CODES.bankAggregateOnly, i); continue; }
-    const bank = input.bankAccounts.get(i.bank_account_id);
-    if (!bank) { add('bank', 'blocked', OB_CODES.referenceInvalid, i, { reference: 'bank_account_id' }); continue; }
+    if (!i.bank_account_id) {
+      if (i.provenance === 'import') { add('bank', 'incomplete_evidence', OB_CODES.bankAggregateOnly, i); continue; }
+      const implied = [...new Set(input.bankLinksByAccount.get(i.account_id) ?? [])].filter((b) => input.bankAccounts.has(b));
+      add('bank', 'incomplete_evidence', OB_CODES.referenceMissing, i, { reference: 'bank_account_id', ...(implied.length === 1 ? { implied_bank_account_id: implied[0]! } : {}) });
+      if (implied.length === 1) compareBank(i, implied[0]!, true);
+      continue;
+    }
+    if (!input.bankAccounts.has(i.bank_account_id)) { add('bank', 'blocked', OB_CODES.referenceInvalid, i, { reference: 'bank_account_id' }); continue; }
     if (seenBank.get(i.bank_account_id)! > 1) add('bank', 'blocked', OB_CODES.bankDuplicate, i, { bank_account_id: i.bank_account_id });
     const links = input.bankLinks.get(i.bank_account_id) ?? [];
     if (!links.length) add('bank', 'blocked', OB_CODES.bankLedgerLinkMissing, i, { as_of_date: input.startDate });
     else if (!links.includes(i.account_id)) add('bank', 'blocked', OB_CODES.bankGlMismatch, i, { account_id: i.account_id, linked_account_ids: links.join(',') });
-    if (!input.functionalCurrency) { add('bank', 'incomplete_evidence', OB_CODES.functionalCurrencyUnknown, i); continue; }
-    if (bank.currency_code !== input.functionalCurrency) {
-      add('bank', 'incomplete_evidence', OB_CODES.bankCurrencyNotComparable, i, { bank_currency: bank.currency_code, functional_currency: input.functionalCurrency });
-      continue;
-    }
-    const stmt = input.statements.get(i.bank_account_id);
-    if (!stmt) { add('bank', 'incomplete_evidence', OB_CODES.bankEvidenceMissing, i); continue; }
-    if (stmt.currency_code !== bank.currency_code) {
-      add('bank', 'incomplete_evidence', OB_CODES.bankCurrencyNotComparable, i, { bank_currency: bank.currency_code, statement_currency: stmt.currency_code });
-      continue;
-    }
-    const expected = toCents(stmt.closing_balance), actual = signed(i);
-    if (expected !== actual) {
-      add('bank', 'mismatch', OB_CODES.bankAmountMismatch, i, { expected: fromCents(expected), actual: fromCents(actual), difference: fromCents(actual - expected) });
-    }
+    compareBank(i, i.bank_account_id, false);
   }
 
   // ---- receivable / payable ----
@@ -125,13 +148,29 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
   const subledgerTotals: Record<'receivable' | 'payable', bigint> = { receivable: 0n, payable: 0n };
   for (const o of input.openingObligations) subledgerTotals[o.direction] += toCents(o.original_amount);
   const glTotals: Record<'receivable' | 'payable', bigint> = { receivable: 0n, payable: 0n };
-  const aggregateOnly: Record<'receivable' | 'payable', boolean> = { receivable: false, payable: false };
 
   for (const section of ['receivable', 'payable'] as const) {
     const naturalSide = section === 'receivable' ? 'debit' : 'credit';
     for (const i of input.items.filter((x) => x.category === section)) {
       glTotals[section] += i.balance_side === naturalSide ? toCents(i.amount) : -toCents(i.amount);
-      if (!i.obligation_id) { aggregateOnly[section] = true; add(section, 'incomplete_evidence', OB_CODES.subledgerAggregateOnly, i); continue; }
+      if (!i.obligation_id) {
+        if (i.provenance === 'import') { add(section, 'incomplete_evidence', OB_CODES.subledgerAggregateOnly, i); continue; }
+        // Entered or edited by hand without its obligation: never a legitimate aggregate. If the counterparty has exactly one
+        // opening obligation that no stated reference claims, it is the implied one and the amount is still compared 1:1.
+        const candidates = i.counterparty_id
+          ? input.openingObligations.filter((o) => o.direction === section && o.counterparty_id === i.counterparty_id && !obligationUse.has(o.id))
+          : [];
+        const sameCounterparty = input.items.filter((x) => x.category === section && !x.obligation_id && x.counterparty_id === i.counterparty_id).length;
+        const implied = candidates.length === 1 && sameCounterparty === 1 ? candidates[0]! : null;
+        add(section, 'incomplete_evidence', OB_CODES.referenceMissing, i, { reference: 'obligation_id', ...(implied ? { implied_obligation_id: implied.id } : {}) });
+        if (implied) {
+          const naturalSide = section === 'receivable' ? 'debit' : 'credit';
+          if (i.balance_side !== naturalSide) add(section, 'mismatch', OB_CODES.obligationSideMismatch, i, { expected_side: naturalSide, actual_side: i.balance_side, inferred: 'true' });
+          const expected = toCents(implied.original_amount), actual = toCents(i.amount);
+          if (expected !== actual) add(section, 'mismatch', OB_CODES.obligationAmountMismatch, i, { expected: fromCents(expected), actual: fromCents(actual), difference: fromCents(actual - expected), inferred: 'true' });
+        }
+        continue;
+      }
       const o = input.referencedObligations.get(i.obligation_id);
       if (!o || o.is_cancelled) { add(section, 'blocked', OB_CODES.obligationInvalid, i, { obligation_id: i.obligation_id, reason: o ? 'cancelled' : 'not_found' }); continue; }
       if (o.source_type !== 'opening_balance' || o.recognized_on !== input.startDate) {
@@ -148,16 +187,15 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
       const expected = toCents(o.original_amount), actual = toCents(i.amount);
       if (expected !== actual) add(section, 'mismatch', OB_CODES.obligationAmountMismatch, i, { expected: fromCents(expected), actual: fromCents(actual), difference: fromCents(actual - expected) });
     }
-    // Totals are compared as a confirmed difference only when every item of the category is tied to an obligation; otherwise the
-    // difference is evidence that the allocation is incomplete, not an accounting error.
+    // Totals are informational: nothing in the schema proves the opening obligation population complete, so a difference (including a
+    // category with no items) is incomplete evidence, never a confirmed mismatch. One-to-one contradictions are reported per item above.
     const linkedIds = new Set(input.items.filter((x) => x.category === section && x.obligation_id).map((x) => x.obligation_id!));
     for (const o of input.openingObligations.filter((x) => x.direction === section && !linkedIds.has(x.id))) {
       add(section, 'incomplete_evidence', OB_CODES.subledgerUnlinkedObligation, undefined, { obligation_id: o.id, amount: o.original_amount });
     }
     if (glTotals[section] !== subledgerTotals[section]) {
-      const detail = { gl_total: fromCents(glTotals[section]), subledger_total: fromCents(subledgerTotals[section]), difference: fromCents(glTotals[section] - subledgerTotals[section]) };
-      if (!aggregateOnly[section]) add(section, 'mismatch', OB_CODES.subledgerTotalMismatch, undefined, detail);
-      else if (subledgerTotals[section] !== 0n) add(section, 'incomplete_evidence', OB_CODES.subledgerAggregateOnly, undefined, detail);
+      add(section, 'incomplete_evidence', OB_CODES.subledgerTotalDifference, undefined,
+        { gl_total: fromCents(glTotals[section]), subledger_total: fromCents(subledgerTotals[section]), difference: fromCents(glTotals[section] - subledgerTotals[section]) });
     }
   }
 
@@ -180,10 +218,30 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
  */
 export async function loadOpeningReconciliation(client: PoolClient, companyId: string, reviewId: string, startDate: string, lock = false): Promise<ReconciliationReport> {
   const share = lock ? ' FOR SHARE' : '';
+  // An untouched row of the trial-balance import is the only genuine aggregate. The import writes its rows and its audit event in one
+  // transaction, so they share the transaction timestamp; a hand-entered item has its own, and any later edit raises its version.
   const items = (await client.query<ReconciliationItem>(
-    `SELECT id,category,account_id,amount::text,balance_side,counterparty_id,bank_account_id,obligation_id FROM opening_balance_items WHERE company_id=$1 AND review_id=$2 ORDER BY created_at,id`,
+    `SELECT i.id,i.category,i.account_id,i.amount::text,i.balance_side,i.counterparty_id,i.bank_account_id,i.obligation_id,
+            CASE WHEN i.version=1 AND EXISTS (
+                   SELECT 1 FROM audit_log a WHERE a.company_id=i.company_id AND a.action='opening_balance.import'
+                      AND a.entity_type='opening_balance_review' AND a.entity_id=i.review_id AND a.created_at=i.created_at)
+                 THEN 'import' ELSE 'manual' END AS provenance
+       FROM opening_balance_items i WHERE i.company_id=$1 AND i.review_id=$2 ORDER BY i.created_at,i.id`,
     [companyId, reviewId])).rows;
-  const bankIds = [...new Set(items.filter((i) => i.bank_account_id).map((i) => i.bank_account_id!))].sort();
+  const linkRows = (await client.query<{ bank_account_id: string; account_id: string }>(
+    `SELECT bank_account_id,account_id FROM bank_account_ledger_links WHERE company_id=$1 AND valid_from<=$2::date AND (valid_to IS NULL OR valid_to>=$2::date)`,
+    [companyId, startDate])).rows;
+  const bankLinks = new Map<string, string[]>();
+  const bankLinksByAccount = new Map<string, string[]>();
+  for (const r of linkRows) {
+    bankLinks.set(r.bank_account_id, [...(bankLinks.get(r.bank_account_id) ?? []), r.account_id]);
+    bankLinksByAccount.set(r.account_id, [...(bankLinksByAccount.get(r.account_id) ?? []), r.bank_account_id]);
+  }
+  const bankItemAccounts = new Set(items.filter((i) => i.category === 'bank' && !i.bank_account_id).map((i) => i.account_id));
+  const bankIds = [...new Set([
+    ...items.filter((i) => i.bank_account_id).map((i) => i.bank_account_id!),
+    ...[...bankItemAccounts].flatMap((a) => bankLinksByAccount.get(a) ?? []),
+  ])].sort();
   const obligationIds = [...new Set(items.filter((i) => i.obligation_id).map((i) => i.obligation_id!))];
   if (lock) for (const id of bankIds) await lockBankAccountReconciliation(client, companyId, id);
 
@@ -192,10 +250,6 @@ export async function loadOpeningReconciliation(client: PoolClient, companyId: s
     [companyId, startDate])).rows;
   const bankAccounts = new Map((await client.query<{ id: string; currency_code: string }>(
     'SELECT id,currency_code FROM bank_accounts WHERE company_id=$1 AND id=ANY($2::uuid[])', [companyId, bankIds])).rows.map((r) => [r.id, r]));
-  const bankLinks = new Map<string, string[]>();
-  for (const r of (await client.query<{ bank_account_id: string; account_id: string }>(
-    `SELECT bank_account_id,account_id FROM bank_account_ledger_links WHERE company_id=$1 AND bank_account_id=ANY($2::uuid[]) AND valid_from<=$3::date AND (valid_to IS NULL OR valid_to>=$3::date)`,
-    [companyId, bankIds, startDate])).rows) bankLinks.set(r.bank_account_id, [...(bankLinks.get(r.bank_account_id) ?? []), r.account_id]);
   const statements = new Map((await client.query<{ bank_account_id: string; closing_balance: string; currency_code: string }>(
     `SELECT bank_account_id,closing_balance::text,currency_code FROM bank_statement_balances WHERE company_id=$1 AND bank_account_id=ANY($2::uuid[]) AND status='confirmed' AND period_end=$3::date-1${share}`,
     [companyId, bankIds, startDate])).rows.map((r) => [r.bank_account_id, r]));
@@ -215,7 +269,7 @@ export async function loadOpeningReconciliation(client: PoolClient, companyId: s
   }
   return evaluateOpeningReconciliation({
     startDate, functionalCurrency: profile.length === 1 ? profile[0]!.functional_currency : null,
-    items, bankAccounts, bankLinks, statements, referencedObligations, openingObligations, controlAccounts,
+    items, bankAccounts, bankLinks, bankLinksByAccount, statements, referencedObligations, openingObligations, controlAccounts,
   });
 }
 

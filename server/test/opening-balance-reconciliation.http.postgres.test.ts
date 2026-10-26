@@ -67,6 +67,17 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
   const arItem = (co: Co, amount: string, obligation_id: string | null, o: Record<string, unknown> = {}) =>
     addItem(co, { category: 'receivable', account_id: co.ar, amount, balance_side: 'debit', ...(obligation_id ? { obligation_id, counterparty_id: co.cp } : {}), ...o });
   const balance = (co: Co, amount: string) => addItem(co, { category: 'equity', account_id: co.equity, amount, balance_side: 'credit' });
+  /** The real trial-balance import path (the only source of genuine aggregate rows). */
+  const importTb = async (co: Co, rows: Array<{ account: string; category: string; debit?: string; credit?: string }>) => {
+    const r = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/import`, {
+      confirm: true, file_name: 'tb.csv',
+      items: rows.map((x, i) => ({ row: i + 1, account_id: x.account, debit: x.debit ?? '0.00', credit: x.credit ?? '0.00', category: x.category })),
+    });
+    expect(r.status, JSON.stringify(r.json)).toBe(201);
+    return r.json.items as Array<{ id: string; version: number }>;
+  };
+  const patch = (co: Co, it: { id: string; version: number }, body: Record<string, unknown>) =>
+    co.accountant.client.req('PATCH', `/opening-balances/${co.fy}/items/${it.id}`, { version: it.version, ...body });
   const submit = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {});
   const approve = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {});
   const report = (co: Co) => co.viewer.client.req('GET', `/opening-balances/${co.fy}/reconciliation`);
@@ -106,14 +117,15 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
 
   it('aggregate-only trial balance items stay supported: reported as incomplete evidence, never blocking', async () => {
     const co = await setup('agg');
-    await addItem(co, { category: 'bank', account_id: co.bankGl, amount: '700.00', balance_side: 'debit' });
-    await arItem(co, '300.00', null);
-    await balance(co, '1000.00');
-    await obligation(co, 'receivable', '50.00'); // a live opening obligation exists but the items are aggregate-only
+    await importTb(co, [
+      { account: co.bankGl, category: 'bank', debit: '700.00' }, { account: co.ar, category: 'receivable', debit: '300.00' }, { account: co.equity, category: 'equity', credit: '1000.00' },
+    ]);
+    await obligation(co, 'receivable', '50.00'); // a live opening obligation exists but the rows are aggregate-only
     const rep = await report(co);
     expect(rep.json.status).toBe('incomplete_evidence');
     expect(rep.json.blocking).toBe(false);
-    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_BANK_AGGREGATE_ONLY', 'OB_SUBLEDGER_AGGREGATE_ONLY', 'OB_SUBLEDGER_UNLINKED_OBLIGATION']));
+    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_BANK_AGGREGATE_ONLY', 'OB_SUBLEDGER_AGGREGATE_ONLY', 'OB_SUBLEDGER_UNLINKED_OBLIGATION', 'OB_SUBLEDGER_TOTAL_DIFFERENCE']));
+    expect(issueCodes(rep)).not.toContain('OB_REFERENCE_MISSING');
     expect((await submit(co)).status).toBe(200);
     expect((await approve(co)).status).toBe(200);
     expect(await journals(co)).toBe(1);
@@ -194,11 +206,87 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     await arItem(co, '99.99', o1); await balance(co, '99.99');
     const rep = await report(co);
     expect(rep.json.status).toBe('mismatch');
-    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_OBLIGATION_AMOUNT_MISMATCH', 'OB_SUBLEDGER_TOTAL_MISMATCH', 'OB_SUBLEDGER_UNLINKED_OBLIGATION']));
-    const total = rep.json.issues.find((i: any) => i.code === 'OB_SUBLEDGER_TOTAL_MISMATCH');
+    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_OBLIGATION_AMOUNT_MISMATCH', 'OB_SUBLEDGER_TOTAL_DIFFERENCE', 'OB_SUBLEDGER_UNLINKED_OBLIGATION']));
+    const total = rep.json.issues.find((i: any) => i.code === 'OB_SUBLEDGER_TOTAL_DIFFERENCE');
+    expect(total.class).toBe('incomplete_evidence');
     expect(total.detail).toEqual({ gl_total: '99.99', subledger_total: '130.00', difference: '-30.01' });
     expect(o2).toBeTruthy();
     expect((await submit(co)).json.code).toBe(BLOCKED);
+  });
+
+  it('a removed obligation reference neither becomes an aggregate nor hides an amount difference', async () => {
+    const co = await setup('rmref');
+    const o1 = await obligation(co, 'receivable', '100.00');
+    const o2 = await obligation(co, 'receivable', '250.00', co.cp2);
+    const a = await arItem(co, '100.00', o1);
+    const b = await addItem(co, { category: 'receivable', account_id: co.ar, amount: '250.00', balance_side: 'debit', obligation_id: o2, counterparty_id: co.cp2 });
+    await balance(co, '350.00');
+    expect((await report(co)).json.status).toBe('verified');
+    // strip the reference only: the item is a missing reference (incomplete), not a legitimate aggregate, and the section cannot be verified
+    const stripped = await patch(co, b, { obligation_id: null });
+    expect(stripped.status).toBe(200);
+    const rep = await report(co);
+    expect(rep.json.status).toBe('incomplete_evidence');
+    expect(rep.json.sections.receivable.status).toBe('incomplete_evidence');
+    expect(issueCodes(rep)).toContain('OB_REFERENCE_MISSING');
+    expect(issueCodes(rep)).not.toContain('OB_SUBLEDGER_AGGREGATE_ONLY');
+    // strip the reference and change the amount: the implied pairing still exposes the one-halala difference and blocks
+    const both = await patch(co, { id: b.id, version: stripped.json.item?.version ?? stripped.json.version }, { amount: '250.01' });
+    expect(both.status).toBe(200);
+    await balance(co, '0.01');
+    const blocked = await submit(co);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json).toMatchObject({ code: BLOCKED, status: 'mismatch' });
+    expect(blocked.json.issues.find((i: any) => i.code === 'OB_OBLIGATION_AMOUNT_MISMATCH')).toMatchObject({ item_id: b.id, detail: { expected: '250.00', actual: '250.01', difference: '0.01', inferred: 'true' } });
+    expect(await reviewStatus(co)).toBe('draft');
+    expect(a.id).toBeTruthy();
+  });
+
+  it('a removed bank account reference keeps the statement comparison through the linked GL account', async () => {
+    const co = await setup('rmbank');
+    await link(co); await statement(co, '1000.00');
+    const b = await bankItem(co, '1000.00'); await balance(co, '1000.00');
+    const stripped = await patch(co, b, { bank_account_id: null, amount: '1000.01' });
+    expect(stripped.status).toBe(200);
+    const rep = await report(co);
+    expect(rep.json.status).toBe('mismatch');
+    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_REFERENCE_MISSING', 'OB_BANK_AMOUNT_MISMATCH']));
+    expect(issueCodes(rep)).not.toContain('OB_BANK_AGGREGATE_ONLY');
+    expect((await submit(co)).status).toBe(409);
+  });
+
+  it('only an untouched import row is an aggregate: an edited row, or a hand-entered item copying the import text, is not', async () => {
+    const co = await setup('prov');
+    await link(co); await statement(co, '1000.00');
+    const rows = await importTb(co, [
+      { account: co.bankGl, category: 'bank', debit: '1000.00' }, { account: co.equity, category: 'equity', credit: '1000.00' },
+    ]);
+    const clean = await report(co);
+    expect(issueCodes(clean)).toEqual(['OB_BANK_AGGREGATE_ONLY']);
+    // an edit raises the version and removes the aggregate standing; the wrong amount is now compared against the statement
+    expect((await patch(co, rows[0]!, { amount: '1000.01' })).status).toBe(200);
+    const edited = await report(co);
+    expect(issueCodes(edited)).toEqual(expect.arrayContaining(['OB_REFERENCE_MISSING', 'OB_BANK_AMOUNT_MISMATCH']));
+    expect(issueCodes(edited)).not.toContain('OB_BANK_AGGREGATE_ONLY');
+
+    const forged = await setup('prov2');
+    await link(forged); await statement(forged, '1000.00');
+    await addItem(forged, { category: 'bank', account_id: forged.bankGl, amount: '1000.01', balance_side: 'debit', source_type: 'internal_ledger', confidence: 'medium', source_reference: 'import:tb.csv:row 1' });
+    await balance(forged, '1000.01');
+    const f = await report(forged);
+    expect(f.json.status).toBe('mismatch');
+    expect(issueCodes(f)).not.toContain('OB_BANK_AGGREGATE_ONLY');
+  });
+
+  it('a category with no items is incomplete evidence, never a confirmed mismatch', async () => {
+    const co = await setup('zero');
+    await obligation(co, 'receivable', '100.00');
+    await addItem(co, { category: 'other_asset', account_id: co.other, amount: '10.00', balance_side: 'debit' }); await balance(co, '10.00');
+    const rep = await report(co);
+    expect(rep.json.status).toBe('incomplete_evidence');
+    expect(rep.json.blocking).toBe(false);
+    expect(issueCodes(rep)).toEqual(expect.arrayContaining(['OB_SUBLEDGER_TOTAL_DIFFERENCE', 'OB_SUBLEDGER_UNLINKED_OBLIGATION']));
+    expect((await submit(co)).status).toBe(200);
   });
 
   it('does not compare a bank account in another currency, and never treats a running balance as the opening balance', async () => {
