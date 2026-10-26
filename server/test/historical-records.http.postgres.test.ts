@@ -291,6 +291,30 @@ describeDatabase('historical records API (PostgreSQL)', () => {
     expect((await ownerA.client.req('GET', `/historical/versions/${v2}/comparison?against=nope`)).status).toBe(400);
   });
 
+  it('refuses to compare versions with different functional currencies, for default and explicit basis, without writing', async () => {
+    const p = await period();
+    const v1 = await sealedOfficial(p);
+    const v2 = (await ownerA.client.req('POST', `/historical/versions/${v1}/corrections`, { confirm: true, source_type: 'internal_ledger', confidence: 'high' })).json.version.id;
+    const same = await ownerA.client.req('GET', `/historical/versions/${v2}/comparison`);
+    expect(same.status, JSON.stringify(same.json)).toBe(200);
+    expect(same.json.version.functional_currency).toBe('SAR');
+    expect(same.json.basis.functional_currency).toBe('SAR');
+    expect((await ownerA.client.req('GET', `/historical/versions/${v1}/comparison?against=${v2}`)).status).toBe(200);
+    expect((await ownerA.client.req('PATCH', `/historical/versions/${v2}`, { functional_currency: 'USD' })).status).toBe(200);
+    const snap = async () => ({
+      versions: await h.q('SELECT id, functional_currency, state FROM historical_statement_versions WHERE period_id=$1 ORDER BY id', [p]),
+      lines: await h.q('SELECT version_id, line_code, amount::text FROM historical_statement_lines WHERE version_id = ANY($1) ORDER BY version_id, line_no', [[v1, v2]]),
+      audit: await h.count('SELECT COUNT(*)::int::text n FROM audit_log WHERE company_id=$1', [A]),
+    });
+    const before = await snap();
+    for (const url of [`/historical/versions/${v2}/comparison`, `/historical/versions/${v2}/comparison?against=${v1}`, `/historical/versions/${v1}/comparison?against=${v2}`]) {
+      const r = await ownerA.client.req('GET', url);
+      expect(r.status, url).toBe(422);
+      expect(r.json.code).toBe('HISTORICAL_COMPARISON_INVALID');
+    }
+    expect(await snap()).toEqual(before);
+  });
+
   it('leaves journals, opening balances, fiscal years and closed periods untouched and logs no audit row for refused actions', async () => {
     const snapshot = async () => ({
       journals: await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1', [A]),
