@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, render, within } from './test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { OpeningBalanceReview } from '../components/OpeningBalanceReview';
 import i18n from '../i18n';
 
@@ -93,6 +94,24 @@ describe('three tabs', () => {
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(await tab(/بنود الأرصدة/));
     expect(await tab(/المراجعة والاعتماد/)).toBeTruthy();
+  });
+});
+
+describe('inactive panels stay hidden', () => {
+  // jsdom does not apply stylesheets, so the CSS contract is asserted on the source: a flex `.ob-panel` must never override `hidden`.
+  const css = readFileSync('src/components/OpeningBalanceReview.css', 'utf8').replace(/\s+/g, '');
+  it('has a scoped rule that keeps [hidden] panels at display:none', () => {
+    expect(css).toContain('.opening-balance-view.ob-panel{display:flex');
+    expect(css).toContain('.opening-balance-view.ob-panel[hidden]{display:none}');
+    expect(css).toContain('.opening-balance-view[hidden]{display:none!important}');
+  });
+  it('marks every inactive panel hidden, removes it from the tab order and keeps the evidence section mounted', async () => {
+    vi.stubGlobal('fetch', page({ ev: { issues: [incomplete()] } })); view();
+    await screen.findByRole('tab', { name: /Balance Items/ });
+    for (const k of ['recon', 'review'] as const) await waitFor(() => expect(document.getElementById(`ob-panel-${k}`)!.hidden).toBe(true));
+    await waitFor(() => expect(document.getElementById('ob-panel-recon')!.textContent).toContain('Evidence review'));
+    expect(screen.queryByRole('tabpanel', { name: /Reconciliation/ })).toBeNull();
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
   });
 });
 

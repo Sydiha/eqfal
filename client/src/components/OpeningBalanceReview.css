@@ -128,6 +128,7 @@
 .opening-balance-view .ob-tabs>button[aria-selected=true]::after{content:'';position:absolute;inset-inline:10px;bottom:0;height:3px;border-radius:3px;background:#0f766e}
 .opening-balance-view .ob-tabs__count{margin-inline-start:6px}
 .opening-balance-view .ob-panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.opening-balance-view .ob-panel[hidden]{display:none}
 .opening-balance-view details.ob-card>summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:32px}
 .opening-balance-view details.ob-card>summary h3{display:inline;margin:0}
 .opening-balance-view .ob-sub{display:block;color:var(--ob-muted);font-size:12px;overflow-wrap:anywhere}
