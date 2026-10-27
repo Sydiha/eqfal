@@ -10,7 +10,7 @@ const K1 = 'a'.repeat(64), K2 = 'b'.repeat(64), F1 = 'c'.repeat(64), F2 = 'd'.re
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
 const aggIssue = { issue_key: K1, evidence_fingerprint: F1, code: 'OB_BANK_AGGREGATE_ONLY', class: 'incomplete_evidence', section: 'bank', item_id: 'item-1', acceptable: true, acceptance: 'none' };
 const diffIssue = { issue_key: K2, evidence_fingerprint: F2, code: 'OB_SUBLEDGER_TOTAL_DIFFERENCE', class: 'incomplete_evidence', section: 'receivable', detail: { gl_total: '1500.00', subledger_total: '1000.00', difference: '500.00' }, acceptable: true, acceptance: 'none' };
-const exRow = { id: 'e1', issue_code: 'OB_BANK_AGGREGATE_ONLY', section: 'bank', item_id: 'item-1', reason: 'Bank confirmation requested from branch', accepted_by: 'user-fm', accepted_at: '2026-10-26T08:00:00Z', status: 'active', acknowledged_difference: null, ended_at: null, end_reason: null };
+const exRow = { id: 'e1', issue_code: 'OB_BANK_AGGREGATE_ONLY', section: 'bank', item_id: 'item-1', reason: 'Bank confirmation requested from branch', accepted_by: '0b9f7e2e-6f3c-4a55-9d2b-1a2b3c4d5e6f', accepted_by_name: 'Noura Al-Shehri', ended_by_name: null, accepted_at: '2026-10-26T08:00:00Z', status: 'active', acknowledged_difference: null, ended_at: null, end_reason: null };
 
 function server(o: { issues?: unknown[]; exceptions?: unknown[]; recon?: unknown; post?: (url: string, body: any) => Promise<Response> } = {}) {
   const issues = o.issues ?? [aggIssue];
@@ -94,8 +94,9 @@ describe('OpeningBalanceExceptions', () => {
   it('shows accepted_by, accepted_at, reason and the "Accepted — not verified." status', async () => {
     vi.stubGlobal('fetch', server({ issues: [{ ...aggIssue, acceptance: 'accepted_unverified', exception_id: 'e1' }], exceptions: [exRow] })); const { onGate } = setup();
     expect((await screen.findAllByText('Accepted — not verified.')).length).toBeGreaterThan(0);
-    expect(screen.getByText('user-fm')).toBeTruthy();
-    expect(screen.getByText('2026-10-26 08:00')).toBeTruthy();
+    expect(screen.getByText('Noura Al-Shehri')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('0b9f7e2e');
+    expect(screen.getByText('26 Oct 2026, 11:00')).toBeTruthy();
     expect(screen.getByText('Bank confirmation requested from branch')).toBeTruthy();
     expect(screen.queryByText(/^Verified$/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Accept…' })).toBeNull();
@@ -170,7 +171,8 @@ describe('OpeningBalanceExceptions', () => {
       return json({});
     }));
     render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove canAcceptException onUnauthorized={vi.fn()} />);
-    expect(await screen.findByText('Final approval is unavailable')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('tab', { name: /Review & Approval/ }));
+    expect((await screen.findAllByText(/blockers? prevent(s)? approval/)).length).toBeGreaterThan(0);
     await waitFor(() => expect((screen.getByRole('button', { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(true));
   });
 });
@@ -190,13 +192,14 @@ describe('approval gate fails closed', () => {
     return json({});
   });
   const renderPage = () => render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove canAcceptException onUnauthorized={vi.fn()} />);
+  const openReview = async () => { fireEvent.click(await screen.findByRole('tab', { name: /Review & Approval/ })); };
   const approve = () => screen.getByRole('button', { name: /^Approve/ }) as HTMLButtonElement;
   const ok = (url: string) => json(url.endsWith('/reconciliation') ? clean : cleanEx);
 
   it('keeps approval disabled while evidence is loading and enables it only after a valid response', async () => {
     let release!: () => void; const gate = new Promise<void>(r => { release = r; });
     vi.stubGlobal('fetch', pageFetch(async url => { await gate; return ok(url); }));
-    renderPage();
+    renderPage(); await openReview();
     await waitFor(() => expect(approve()).toBeTruthy());
     expect(approve().disabled).toBe(true);
     await new Promise(r => setTimeout(r, 30));
@@ -208,7 +211,7 @@ describe('approval gate fails closed', () => {
   it('keeps approval disabled when either request fails or returns an invalid body', async () => {
     for (const bad of [(u: string) => (u.endsWith('/exceptions') ? json({ error: 'x' }, 500) : ok(u)), (u: string) => (u.endsWith('/reconciliation') ? json({ error: 'x', code: 'FORBIDDEN' }, 403) : ok(u)), (u: string) => (u.endsWith('/exceptions') ? json({}) : ok(u)), (u: string) => (u.endsWith('/reconciliation') ? json({ status: 'verified' }) : ok(u))]) {
       vi.stubGlobal('fetch', pageFetch(async u => bad(u)));
-      const { unmount } = renderPage();
+      const { unmount } = renderPage(); await openReview();
       expect(await screen.findByText('Could not load the evidence review.')).toBeTruthy();
       expect(approve().disabled).toBe(true);
       expect(screen.getByText(/Evidence could not be verified/)).toBeTruthy();
@@ -262,7 +265,7 @@ describe('approval gate fails closed', () => {
       if (oldHeld) { await old; return ok(url); }
       return ok(url);
     }));
-    renderPage();
+    renderPage(); await openReview();
     await waitFor(() => expect(approve().disabled).toBe(false));
     oldHeld = false;
     fireEvent.change(document.getElementById('ob-year') as HTMLSelectElement, { target: { value: Y2 } });
