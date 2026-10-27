@@ -104,6 +104,16 @@ describeDatabase('custody accounting controls (PostgreSQL)', () => {
     expect((await co.recipient.client.req('PUT', '/custody/account-mapping', { account_id: co.custodyGl })).status).toBe(401);
     await co.recipient.client.login();
     expect((await co.recipient.client.req('PUT', '/custody/account-mapping', { account_id: co.custodyGl })).status).toBe(403);
+    // operational custody authority alone never grants ledger configuration; accounting.chart.edit does
+    const closer = await h.user('map-closer');
+    await h.member(co.id, closer.id, ['custody.view', 'custody.manage', 'custody.close']);
+    await closer.client.login();
+    expect((await closer.client.req('PUT', '/custody/account-mapping', { account_id: co.custodyGl })).status).toBe(403);
+    expect((await closer.client.req('GET', '/custody/account-mapping')).json.can_edit).toBe(false);
+    const accountant = await h.user('map-acct');
+    await h.member(co.id, accountant.id, ['custody.view', 'accounting.chart.edit']);
+    await accountant.client.login();
+    expect((await accountant.client.req('GET', '/custody/account-mapping')).json.can_edit).toBe(true);
     const ok = await mapAccount(co, co.custodyGl);
     expect(ok.status, JSON.stringify(ok.json)).toBe(200);
     expect(ok.json.mapping).toMatchObject({ account_id: co.custodyGl, valid: true });
@@ -186,7 +196,9 @@ describeDatabase('custody accounting controls (PostgreSQL)', () => {
     // posted journals are never rewritten when the mapping is later touched; changing it after posting is refused
     expect((await mapAccount(co, co.custodyGl)).status).toBe(200);
     const spare = await h.account(co.id, 'post-CUST2', 'asset', 'current_asset');
-    expect((await mapAccount(co, spare)).status).toBe(409);
+    const locked = await mapAccount(co, spare);
+    expect(locked.status).toBe(409);
+    expect(locked.json.error).toBe('The custody ledger account cannot be changed because custody journals have already been posted for this company');
     expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND status='posted' AND source_type LIKE 'custody_%'", [co.id])).toBe(3);
   });
 

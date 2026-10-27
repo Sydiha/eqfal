@@ -3,7 +3,7 @@
 --    or back-filled); holder_user_id of existing rows is left exactly as stored.
 -- 2) custody_account_mappings: the company's explicitly configured employee-advances/custody ledger account (one per company; the accountant chooses it).
 --    No account is created, inferred from a name, or hardcoded. Eligibility (active, asset, current_asset) is enforced by the service and at journal posting.
--- No capability is added (custody.view / custody.close are reused). No journal, bank match, allocation or settlement row is touched.
+-- No capability is added (custody.view / custody.close / accounting.chart.edit are reused). No journal, bank match, allocation or settlement row is touched.
 -- Rollback (only while no custody_account_mappings row exists and no custody row has a recipient): DROP TABLE custody_account_mappings;
 -- ALTER TABLE custody_advances DROP CONSTRAINT custody_advances_recipient_member_fk, DROP COLUMN recipient_user_id.
 

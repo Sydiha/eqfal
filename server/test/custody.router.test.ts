@@ -54,6 +54,8 @@ describe('Custody authorization and request boundary',()=>{
     expect((await request(app).delete(`/api/custodies/${CUSTODY}/funding`).send({reason:'x'})).status).toBe(403);
     ctx(['custody.close']);
     expect((await request(app).delete(`/api/custodies/${CUSTODY}/funding`).send({})).status).toBe(400);
+    expect((await request(app).put('/api/custody/account-mapping').send({account_id:TX})).status).toBe(403);
+    ctx(['accounting.chart.edit']);
     expect((await request(app).put('/api/custody/account-mapping').send({account_id:'bad'})).status).toBe(400);
     ctx(['custody.manage']);
     expect((await request(app).put('/api/custody/account-mapping').send({account_id:TX})).status).toBe(403);

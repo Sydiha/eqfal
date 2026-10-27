@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { resolveBankLedgerAccount } from './personal-payment-posting';
+import { toCents } from '../banking/bank-reconciliation-core';
 import { JournalPostingValidationError } from './journal-posting-errors';
 import type { OperationalSource } from './operational-sources';
 
@@ -35,13 +36,15 @@ export async function assertCustodyJournalControls(client: Runner, companyId: st
   const lines = (await client.query<{ account_id: string; debit: string; credit: string; n: string }>(
     `SELECT account_id, SUM(debit)::numeric(18,2)::text debit, SUM(credit)::numeric(18,2)::text credit, COUNT(*)::text n
        FROM journal_lines WHERE journal_entry_id=$1 AND company_id=$2 GROUP BY account_id`, [journalId, companyId])).rows;
-  const amount = Number(source.amount);
+  const amount = toCents(source.amount);
+  const zero = (v: string) => toCents(v) === 0n;
+  const is = (v: string, n: bigint) => toCents(v) === n;
   const custody = lines.find((l) => l.account_id === custodyAccount);
   if (source.source_type === 'custody_allocation') {
-    if (!custody || Number(custody.debit) !== 0 || Number(custody.credit) !== amount) {
+    if (!custody || !zero(custody.debit) || !is(custody.credit, amount)) {
       throw fail('Custody allocation journal must credit the custody ledger account by exactly the allocation amount');
     }
-    if (lines.some((l) => l.account_id !== custodyAccount && Number(l.credit) !== 0)) {
+    if (lines.some((l) => l.account_id !== custodyAccount && !zero(l.credit))) {
       throw fail('Custody allocation journal may only debit the expense side and credit the custody ledger account');
     }
     return;
@@ -53,10 +56,10 @@ export async function assertCustodyJournalControls(client: Runner, companyId: st
   if (bankLedger === custodyAccount) throw fail('The custody ledger account must differ from the bank ledger account');
   const funding = source.source_type === 'custody_funding';
   const bank = lines.find((l) => l.account_id === bankLedger);
-  const exact = lines.length === 2 && !!custody && !!bank && Number(custody.n) === 1 && Number(bank.n) === 1
+  const exact = lines.length === 2 && !!custody && !!bank && custody.n === '1' && bank.n === '1'
     && (funding
-      ? Number(custody.debit) === amount && Number(custody.credit) === 0 && Number(bank.credit) === amount && Number(bank.debit) === 0
-      : Number(custody.credit) === amount && Number(custody.debit) === 0 && Number(bank.debit) === amount && Number(bank.credit) === 0);
+      ? is(custody.debit, amount) && zero(custody.credit) && is(bank.credit, amount) && zero(bank.debit)
+      : is(custody.credit, amount) && zero(custody.debit) && is(bank.debit, amount) && zero(bank.credit));
   if (!exact) {
     throw fail(funding
       ? 'Custody funding journal must debit the custody ledger account and credit the linked bank ledger account by exactly the funded amount'
