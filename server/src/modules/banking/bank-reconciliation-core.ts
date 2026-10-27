@@ -24,18 +24,19 @@ export const AGED_OUTSTANDING_DAYS = 10;
 /**
  * One definition of an unresolved bank transaction, shared by the monthly and annual closing counts (alias `t` = bank_transactions).
  * Resolved only by a ledger-bearing relationship (settlement, custody movement, posted partner transaction). A bare `reconciliation_status`
- * never counts as accounting completion (sales-purchases-ledger-coverage contract).
+ * never counts as accounting completion (sales-purchases-ledger-coverage contract). Document settlements (R9: one or several allocations)
+ * resolve the transaction only when they explain its whole absolute amount; an unallocated remainder keeps it unresolved.
  */
 export const UNRESOLVED_BANK_TRANSACTION_SQL = `NOT (
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
         OR EXISTS(SELECT 1 FROM personal_payment_reimbursements pr WHERE pr.company_id=t.company_id AND pr.bank_transaction_id=t.id AND pr.journal_entry_id IS NOT NULL)
-        OR EXISTS(SELECT 1 FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document')
+        OR COALESCE((SELECT SUM(s.amount) FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document'),0)=ABS(t.amount) AND t.amount<>0
       )`;
 
 export type OutstandingItem = {
-  journal_entry_id: string; accounting_date: string; description: string; bank_transaction_id: string; bank_transaction_date: string;
+  journal_entry_id: string; journal_entry_ids?: string[]; accounting_date: string; description: string; bank_transaction_id: string; bank_transaction_date: string;
   kind: 'deposit_in_transit' | 'outstanding_payment'; amount: string; days_after_period_end: number; aged: boolean;
 };
 export type RejectedEvidence = { journal_entry_id: string; bank_transaction_id: string; reason: 'amount_or_direction_mismatch' | 'duplicate_evidence'; journal_net: string; bank_amount: string };
@@ -87,30 +88,30 @@ export async function lockBankAccountReconciliation(client: PoolClient, companyI
 }
 
 type CandidateRow = { id: string; display_name: string; currency_code: string };
-type EvidenceRow = { journal_id: string; accounting_date: string; description: string; bank_transaction_id: string; bank_transaction_date: string; bank_amount: string; net: string };
+type EvidenceRow = { journal_id: string; kind: string | null; accounting_date: string; description: string; bank_transaction_id: string; bank_transaction_date: string; bank_amount: string; net: string };
 
 const EVIDENCE_SQL = `WITH src AS (
-  SELECT j.id journal_id, s.bank_transaction_id
+  SELECT j.id journal_id, s.bank_transaction_id, 'document_settlement'::text kind
     FROM journal_entries j JOIN document_settlements s ON s.id=j.source_id AND s.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='document_settlement'
   UNION ALL
-  SELECT j.id, s.bank_transaction_id
+  SELECT j.id, s.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN obligation_settlements s ON s.id=j.source_id AND s.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='obligation_settlement'
   UNION ALL
-  SELECT j.id, m.bank_transaction_id
+  SELECT j.id, m.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN bank_transaction_matches m ON m.id=j.source_id AND m.company_id=j.company_id AND m.match_type=j.source_type
    WHERE j.company_id=$1 AND j.source_type IN ('custody_funding','custody_return')
   UNION ALL
-  SELECT j.id, p.bank_transaction_id
+  SELECT j.id, p.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN partner_transactions p ON p.id=j.source_id AND p.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='partner_transaction' AND p.status='posted' AND p.bank_transaction_id IS NOT NULL
   UNION ALL
-  SELECT j.id, r.bank_transaction_id
+  SELECT j.id, r.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN personal_payment_reimbursements r ON r.id=j.source_id AND r.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='personal_payment_reimbursement'
 )
-SELECT j.id journal_id, j.accounting_date::text, j.description, bt.id bank_transaction_id, bt.transaction_date::text bank_transaction_date,
+SELECT j.id journal_id, src.kind, j.accounting_date::text, j.description, bt.id bank_transaction_id, bt.transaction_date::text bank_transaction_date,
        bt.amount::text bank_amount,
        (SELECT COALESCE(SUM(l.debit-l.credit),0) FROM journal_lines l WHERE l.journal_entry_id=j.id AND l.company_id=j.company_id AND l.account_id=$3)::text net
   FROM src
@@ -167,8 +168,18 @@ async function evaluateAccount(db: Queryable, companyId: string, bank: Candidate
   const rejected: RejectedEvidence[] = [];
   let deposits = 0n;
   let payments = 0n;
-  const evidenceRows = (await db.query<EvidenceRow>(EVIDENCE_SQL, [companyId, bank.id, link.account_id, periodEnd])).rows;
-  // One imported bank row can offset only one GL entry. If several posted entries claim the same row (the schema should prevent it), none of them is trusted.
+  const rawRows = (await db.query<EvidenceRow>(EVIDENCE_SQL, [companyId, bank.id, link.account_id, periodEnd])).rows;
+  // R9: the allocations of one bank row are several document-settlement journals; together they are one piece of evidence (their nets summed).
+  const grouped = new Map<string, EvidenceRow[]>();
+  for (const row of rawRows) grouped.set(row.bank_transaction_id, [...(grouped.get(row.bank_transaction_id) ?? []), row]);
+  const evidenceRows: Array<EvidenceRow & { journal_ids: string[] }> = [];
+  for (const rows of grouped.values()) {
+    if (rows.length > 1 && rows.every(r => r.kind === 'document_settlement')) {
+      const first = rows[0]!;
+      evidenceRows.push({ ...first, accounting_date: rows.map(r => r.accounting_date).sort().at(-1)!, net: fromCents(rows.reduce((n, r) => n + toCents(r.net), 0n)), journal_ids: rows.map(r => r.journal_id) });
+    } else for (const row of rows) evidenceRows.push({ ...row, journal_ids: [row.journal_id] });
+  }
+  // One imported bank row can offset only one GL entry (or one group of allocations). If several other entries claim the same row, none is trusted.
   const claims = new Map<string, number>();
   for (const row of evidenceRows) claims.set(row.bank_transaction_id, (claims.get(row.bank_transaction_id) ?? 0) + 1);
   for (const row of evidenceRows) {
@@ -188,7 +199,7 @@ async function evaluateAccount(db: Queryable, companyId: string, bank: Candidate
     if (aged && !warnings.includes('outstanding_aged')) warnings.push('outstanding_aged');
     if (net > 0n) deposits += net; else payments += -net;
     items.push({
-      journal_entry_id: row.journal_id, accounting_date: row.accounting_date, description: row.description, bank_transaction_id: row.bank_transaction_id,
+      journal_entry_id: row.journal_id, ...(row.journal_ids.length > 1 ? { journal_entry_ids: row.journal_ids } : {}), accounting_date: row.accounting_date, description: row.description, bank_transaction_id: row.bank_transaction_id,
       bank_transaction_date: row.bank_transaction_date, kind: net > 0n ? 'deposit_in_transit' : 'outstanding_payment', amount: fromCents(net > 0n ? net : -net),
       days_after_period_end: days, aged,
     });

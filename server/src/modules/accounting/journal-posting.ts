@@ -10,7 +10,7 @@ import { verifyCarryforwardReview } from '../fiscal-years/fiscal-year-carryforwa
 import { assertLedgerSourceAuthority, assertFiscalYearNotInCutoverPath, assertCutoverPostingContext } from './ledger-source-authority';
 import { assertFiscalYearOpen, FiscalYearClosedError } from './fiscal-year-posting.guard';
 import { partnerJournalIsExact, partnerReversalJournalIsExact } from './partner-transaction-posting';
-import { isPersonalPaymentSourceType, personalPaymentJournalIsExact, personalReimbursementJournalIsExact } from './personal-payment-posting';
+import { isPersonalPaymentSourceType, personalPaymentJournalIsExact, personalReimbursementJournalIsExact, resolveBankLedgerAccount } from './personal-payment-posting';
 
 export { JournalPostingValidationError, JournalPostingNotFoundError, JournalPostingConflictError, OpeningBalanceJournalBlockedError, LedgerSourceAuthorityBlockedError };
 export { FiscalYearClosedError };
@@ -81,6 +81,32 @@ async function assertOpeningBalanceReviewContext(
   if (carry) {
     throw new OpeningBalanceJournalBlockedError(CARRYFORWARD_RECONCILIATION_CODE,
       `Carry-forward opening balance does not reconcile with the closing balances of the originating fiscal year (${carry.reason})`, carry.mismatches);
+  }
+}
+
+/**
+ * D2 / R9: a document-settlement journal must move the bank ledger account that is linked to the settlement's bank account on the transaction date,
+ * in the bank transaction's direction (receipt = net debit, payment = net credit), by exactly the allocation amount. Each allocation of a bank
+ * transaction is checked on its own, so the allocations of one bank row together move the bank account by the bank amount. Already posted journals
+ * are never re-checked.
+ */
+async function assertDocumentSettlementBankLine(client: PoolClient, companyId: string, journalId: string, source: OperationalSource): Promise<void> {
+  const bankAccountId = source.context?.['bank_account_id'];
+  const bankAmount = source.context?.['bank_amount'];
+  if (typeof bankAccountId !== 'string' || typeof bankAmount !== 'string') {
+    throw new JournalPostingValidationError('Document settlement bank account cannot be determined');
+  }
+  const ledgerAccountId = await resolveBankLedgerAccount(client, companyId, bankAccountId, source.accounting_date, true);
+  if (!ledgerAccountId) {
+    throw new JournalPostingValidationError('Document settlement bank account is not linked to an active bank ledger account on the transaction date');
+  }
+  const row = (await client.query<{ ok: boolean }>(
+    `SELECT COALESCE(SUM(debit-credit),0)::numeric(18,2) = (CASE WHEN $4::numeric < 0 THEN -1 ELSE 1 END * $5::numeric)::numeric(18,2) ok
+       FROM journal_lines WHERE journal_entry_id=$1 AND company_id=$2 AND account_id=$3`,
+    [journalId, companyId, ledgerAccountId, bankAmount, source.amount],
+  )).rows[0];
+  if (row?.ok !== true) {
+    throw new JournalPostingValidationError('Document settlement journal must debit (receipt) or credit (payment) the linked bank ledger account by the settlement amount');
   }
 }
 
@@ -235,6 +261,10 @@ export async function postJournalInTransaction(
           'Periodic adjustment journal must use the configured balance-sheet and P&L accounts',
         );
       }
+    }
+
+    if (journal.source_type === 'document_settlement') {
+      await assertDocumentSettlementBankLine(client, companyId, id, operationalSource);
     }
 
     if (journal.source_type === 'partner_transaction' && !(await partnerJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {

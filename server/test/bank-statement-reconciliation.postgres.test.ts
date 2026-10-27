@@ -227,7 +227,8 @@ describeDatabase('bank statement reconciliation (PostgreSQL)', () => {
     const mismatch = await setup('timingmis');
     await link(mismatch);
     await glEntry(mismatch, '2026-01-05', '1500.00', 'in');
-    const odd = await bankTx(mismatch, '2026-02-03', '-200.00');
+    // R9 (migration 100): a settlement can never exceed its bank row, so the mismatch is a partial allocation (250 of 300)
+    const odd = await bankTx(mismatch, '2026-02-03', '-300.00');
     await glEntry(mismatch, '2026-01-31', '250.00', 'out', odd);
     await confirmedStatement(mismatch, '1500.00');
     const result = await preview(mismatch);

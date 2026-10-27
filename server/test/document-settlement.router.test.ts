@@ -53,7 +53,7 @@ describe('Document settlement rules',()=>{
     const client=makeClient((sql)=>{
       if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[approved]};
-      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',amount:'-99999999999999999.99'}]};
       if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:'0'}]};
       if(sql.includes('INSERT INTO document_settlements'))return{rows:[settlement]};
@@ -74,7 +74,7 @@ describe('Document settlement rules',()=>{
     const client=makeClient((sql)=>{
       if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[hugeApproved]};
-      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',amount:'-99999999999999999.99'}]};
       if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:'9999999999999999.98'}]};
       if(sql.includes('INSERT INTO document_settlements'))return{rows:[hugeSettlement]};
@@ -93,7 +93,7 @@ describe('Document settlement rules',()=>{
 
   it('rejects settlement when document is not approved',async()=>{
     setContext(['payment.settle']);
-    const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[{...approved,status:'needs_review'}]};return{rows:[]};});
+    const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[{...approved,status:'needs_review'}]};if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',amount:'100.00'}]};return{rows:[]};});
     mocks.connect.mockResolvedValue(client);
     expect((await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'10.00'})).status).toBe(409);
   });
@@ -103,7 +103,7 @@ describe('Document settlement rules',()=>{
     const client=makeClient((sql)=>{
       if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[approved]};
-      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',amount:'-99999999999999999.99'}]};
       if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:'80'}]};
       return{rows:[]};
@@ -118,7 +118,7 @@ describe('Document settlement rules',()=>{
     const client=makeClient((sql,params)=>{
       if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[{...approved,total_amount:'1150.00'}]};
-      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01',amount:'-99999999999999999.99'}]};
       if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:obligations.get('obligation-a')!.settled}]};
       if(sql.includes("FROM obligations WHERE document_id=$1")){expect(params).toEqual([DOC,'co-a']);return{rows:[obligations.get('obligation-a')]};}
@@ -134,7 +134,7 @@ describe('Document settlement rules',()=>{
 
   it('rejects settlement above a linked document obligation remaining amount',async()=>{
     setContext(['payment.settle']);
-    const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[approved]};if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};if(sql.includes('SUM(amount)'))return{rows:[{total:'40.00'}]};if(sql.includes("FROM obligations WHERE document_id=$1"))return{rows:[{id:'ob-a',original_amount:'50.00'}]};return{rows:[]};});
+    const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[approved]};if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01',amount:'-99999999999999999.99'}]};if(sql.includes('FROM bank_transaction_matches'))return{rows:[{bank_transaction_id:TX,company_id:'co-a',document_id:DOC}]};if(sql.includes('SUM(amount)'))return{rows:[{total:'40.00'}]};if(sql.includes("FROM obligations WHERE document_id=$1"))return{rows:[{id:'ob-a',original_amount:'50.00'}]};return{rows:[]};});
     mocks.connect.mockResolvedValue(client);
     const res=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'20.00'});
     expect(res.status).toBe(409);expect(res.body.error).toMatch(/obligation remaining/i);
@@ -147,7 +147,7 @@ describe('Document settlement rules',()=>{
       if(sql==='BEGIN'||sql==='COMMIT')return{rows:[]};
       if(sql.includes('FROM documents'))return{rows:[approved]};
       if(sql.includes('SELECT * FROM document_settlements'))return{rows:[settlement]};
-      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01'}]};
+      if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',transaction_date:'2026-08-01',amount:'-99999999999999999.99'}]};
       if(sql.includes('SUM(amount)'))return{rows:[{total:'40'}]};
       return{rows:[]};
     });
