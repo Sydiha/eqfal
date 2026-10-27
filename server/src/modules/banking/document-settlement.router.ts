@@ -16,7 +16,7 @@ const AMOUNT_RE = /^\d{1,16}(?:\.\d{1,2})?$/;
 
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
 type DocumentRow = { id: string; company_id: string; status: string; total_amount: string | null; original_filename: string };
-type TransactionRow = { id: string; company_id: string; transaction_date: string };
+type TransactionRow = { id: string; company_id: string; transaction_date: string; amount: string };
 type MatchRow = { bank_transaction_id: string; company_id: string; document_id: string };
 type DocumentObligationRow = { id: string; original_amount: string };
 type SettlementRow = {
@@ -115,7 +115,7 @@ class DocumentSettlementRepository {
 
   async transaction(id: string, companyId: string, client: PoolClient, lock = false): Promise<TransactionRow | null> {
     const { rows } = await client.query<TransactionRow>(
-      `SELECT id,company_id,transaction_date::text FROM bank_transactions WHERE id=$1 AND company_id=$2${lock ? ' FOR UPDATE' : ''}`,
+      `SELECT id,company_id,transaction_date::text,amount::text FROM bank_transactions WHERE id=$1 AND company_id=$2${lock ? ' FOR UPDATE' : ''}`,
       [id, companyId],
     );
     return rows[0] ?? null;
@@ -134,6 +134,14 @@ class DocumentSettlementRepository {
     const { rows } = await db.query<{ total: string }>(
       'SELECT COALESCE(SUM(amount),0)::text AS total FROM document_settlements WHERE document_id=$1 AND company_id=$2',
       [documentId, companyId],
+    );
+    return rows[0]?.total ?? '0';
+  }
+
+  async transactionAllocatedTotal(transactionId: string, companyId: string, client: PoolClient): Promise<string> {
+    const { rows } = await client.query<{ total: string }>(
+      'SELECT COALESCE(SUM(amount),0)::text AS total FROM document_settlements WHERE bank_transaction_id=$1 AND company_id=$2',
+      [transactionId, companyId],
     );
     return rows[0]?.total ?? '0';
   }
@@ -226,19 +234,20 @@ export class DocumentSettlementService {
   async create(documentId: string, companyId: string, actor: string, transactionId: string, amount: string, note: string | null) {
     return this.tx((client) => this.createInTransaction(documentId, companyId, actor, transactionId, amount, note, client)).catch((error) => {
       if ((error as { code?: string }).code === '23505') throw new DocumentSettlementConflictError('Bank transaction already has a settlement');
+      if ((error as { code?: string }).code === '23514') throw new DocumentSettlementConflictError('Settlement amount exceeds an allowed limit');
       if ((error as { code?: string }).code === '23503') throw new DocumentSettlementConflictError('Settlement relationship is no longer valid');
       throw error;
     });
   }
 
   async createInTransaction(documentId: string, companyId: string, actor: string, transactionId: string, amount: string, note: string | null, client: PoolClient) {
+      // Lock order (every settlement write path): bank transaction first, then documents in ascending id order.
+      const transaction = await this.repo.transaction(transactionId, companyId, client, true);
+      if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
       const document = await this.repo.document(documentId, companyId, client, true);
       if (!document) throw new DocumentSettlementNotFoundError('Document not found');
       if (document.status !== 'approved') throw new DocumentSettlementConflictError('Document must be approved before settlement');
       if (document.total_amount === null) throw new DocumentSettlementConflictError('Document total amount is required before settlement');
-
-      const transaction = await this.repo.transaction(transactionId, companyId, client, true);
-      if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
       await assertAccountingDateWritable(companyId, transaction.transaction_date, client);
       if ((await client.query('SELECT 1 FROM obligation_settlements WHERE bank_transaction_id=$1', [transactionId])).rowCount) {
         throw new DocumentSettlementConflictError('Bank transaction already has an obligation settlement');
@@ -248,6 +257,9 @@ export class DocumentSettlementService {
 
       const before = moneyToCents(await this.repo.settledTotal(documentId, companyId, client));
       const requested = moneyToCents(amount);
+      const bankAmount = moneyToCents(transaction.amount.replace(/^-/, ''));
+      const allocated = moneyToCents(await this.repo.transactionAllocatedTotal(transactionId, companyId, client));
+      if (allocated + requested > bankAmount) throw new DocumentSettlementConflictError('Settlement amount exceeds bank transaction unallocated amount');
       const total = moneyToCents(document.total_amount);
       if (before + requested > total) throw new DocumentSettlementConflictError('Settlement amount exceeds document remaining amount');
       const obligation = await this.repo.linkedObligation(documentId, companyId, client);
@@ -271,12 +283,15 @@ export class DocumentSettlementService {
 
   async delete(documentId: string, settlementId: string, companyId: string, actor: string, reason: string) {
     return this.tx(async (client) => {
+      // Same lock order as creation: bank transaction, then document, then the settlement row.
+      const located = await this.repo.settlement(settlementId, documentId, companyId, client);
+      if (!located) throw new DocumentSettlementNotFoundError('Settlement not found');
+      const transaction = await this.repo.transaction(located.bank_transaction_id, companyId, client, true);
+      if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
       const document = await this.repo.document(documentId, companyId, client, true);
       if (!document) throw new DocumentSettlementNotFoundError('Document not found');
       const settlement = await this.repo.settlement(settlementId, documentId, companyId, client, true);
       if (!settlement) throw new DocumentSettlementNotFoundError('Settlement not found');
-      const transaction = await this.repo.transaction(settlement.bank_transaction_id, companyId, client, true);
-      if (!transaction) throw new DocumentSettlementNotFoundError('Bank transaction not found');
       await assertAccountingDateWritable(companyId, transaction.transaction_date, client);
       const before = moneyToCents(await this.repo.settledTotal(documentId, companyId, client));
       await this.repo.delete(settlementId, documentId, companyId, client);

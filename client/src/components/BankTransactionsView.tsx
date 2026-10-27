@@ -41,7 +41,7 @@ type CandidateDocument = {
   original_filename: string;
   linked_obligation: LinkedObligation | null;
 };
-type CandidateResponse = { transaction: { id: string; reconciliation_status: ReconciliationStatus }; match: Match | null; documents: CandidateDocument[] };
+type CandidateResponse = { transaction: { id: string; reconciliation_status: ReconciliationStatus }; match: Match | null; matches?: Match[]; allocated_amount?: string; unallocated_amount?: string; documents: CandidateDocument[] };
 
 type Props = { canView: boolean; canMatch: boolean; canReconcile: boolean; onUnauthorized: () => void };
 
@@ -82,6 +82,7 @@ const local = {
     statementTitle: 'حركات كشف الحساب البنكي', transactionsCount: (count: number) => `${count} حركة`, showing: (shown: number, total: number) => `إظهار ${shown} من ${total} حركة`, amountSar: 'المبلغ (ر.س)', matchStatus: 'حالة المطابقة', reset: 'إعادة تعيين', pagination: 'التنقل بين الصفحات', prevPage: 'الصفحة السابقة', nextPage: 'الصفحة التالية',
     selectedDetails: 'تفاصيل الحركة المحددة', bankData: 'بيانات البنك', actionsPanel: 'الإجراءات', pendingMetric: 'قيد المراجعة', matchedMetric: 'مطابق', unmatchedMetric: 'غير مطابق',
     statuses: { unmatched: 'غير مطابق', matched: 'قيد المراجعة', reconciled: 'مطابق' } as Record<ReconciliationStatus, string>,
+    allocationSummary: (documents: number, allocated: string, unallocated: string) => `موزعة على ${documents} مستند · الموزع ${allocated} · غير الموزع ${unallocated}`,
     toolbar: 'البحث وتصفية الحركات البنكية', searchTransactions: 'البحث في الحركات', searchPlaceholder: 'البيان أو المرجع أو المبلغ', reconciliation: 'حالة التسوية', allStatuses: 'كل الحالات', from: 'من تاريخ', to: 'إلى تاريخ', amountMin: 'الحد الأدنى للمبلغ', amountMax: 'الحد الأعلى للمبلغ', resultCount: (count: number) => `عدد النتائج: ${count}`, clearFilters: 'مسح عوامل التصفية', noResults: 'لا توجد حركات تطابق عوامل التصفية.',
   },
   en: {
@@ -94,6 +95,7 @@ const local = {
     statementTitle: 'Bank statement transactions', transactionsCount: (count: number) => `${count} transactions`, showing: (shown: number, total: number) => `Showing ${shown} of ${total} transactions`, amountSar: 'Amount (SAR)', matchStatus: 'Match status', reset: 'Reset', pagination: 'Pagination', prevPage: 'Previous page', nextPage: 'Next page',
     selectedDetails: 'Selected transaction details', bankData: 'Bank data', actionsPanel: 'Actions', pendingMetric: 'Matched', matchedMetric: 'Reconciled', unmatchedMetric: 'Unmatched',
     statuses: { unmatched: 'Unmatched', matched: 'Matched', reconciled: 'Reconciled' } as Record<ReconciliationStatus, string>,
+    allocationSummary: (documents: number, allocated: string, unallocated: string) => `Allocated to ${documents} documents · allocated ${allocated} · unallocated ${unallocated}`,
     toolbar: 'Search and filter bank transactions', searchTransactions: 'Search transactions', searchPlaceholder: 'Description, reference, or amount', reconciliation: 'Reconciliation status', allStatuses: 'All statuses', from: 'From date', to: 'To date', amountMin: 'Minimum amount', amountMax: 'Maximum amount', resultCount: (count: number) => `${count} results`, clearFilters: 'Clear filters', noResults: 'No transactions match the filters.',
   },
 };
@@ -321,6 +323,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       </div>
       <Group align="end"><TextInput label={t('banks.searchDocuments')} value={candidateSearch} onChange={e => setCandidateSearch(e.currentTarget.value)}/><Button variant="light" loading={matchBusy} onClick={() => void loadCandidates(matchTransaction, candidateSearch)}>{t('banks.search')}</Button></Group>
       {candidateData?.match && <Alert>{t('banks.currentMatch')}: {candidateData.match.document_id}</Alert>}
+      {candidateData?.matches && candidateData.matches.length > 0 && candidateData.allocated_amount !== undefined && <Text size="sm" c="dimmed" dir="auto">{s.allocationSummary(candidateData.matches.length, candidateData.allocated_amount, candidateData.unallocated_amount ?? '—')}</Text>}
       <div className="bank-match-candidates">
         {(candidateData?.documents ?? []).map(doc => {
           const selected = selectedDocument === doc.id;
