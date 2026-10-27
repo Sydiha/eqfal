@@ -1,41 +1,31 @@
 # EQFAL Session Handoff
 
-**Date:** 2026-10-23
-**Session:** T7 documentation and Phase 14 Row 4 reconciliation (docs only)
+**Date:** 2026-10-27
+**Session:** C6 — Phase C handoff & Phase D gap identification (docs only)
 
 ## Current Objective
-Maintain synchronized EQFAL project context with minimal token/credit usage
-
-## Current Task
-idle
+Record Phase C accurately and identify confirmed Phase D gaps without code changes.
 
 ## Completed This Session
-- T7.3/T7.4 results recorded in PROJECT_STATE.md and matrix §9; reports stored in `docs/evidence/t7/`; Row 4 kept `PARTIAL` (docs only, baseline `d2c32d4`)
-- Docs reconciled against main after Tasks 29–32 (Task 33, docs only)
-- Earlier: PR #307 merged (Phase 15D Purchases visual); PR #214 merged; PR #229 closed without merge (superseded by #231)
-- Open PRs: none at the time of Task 33 inspection (excluding the Task 33 PR itself)
-- Last reconciled main: `468cfac20d8a01f567dd4104d5d4669ecc78d345` (audit baseline; GitHub `main` is the source of truth)
+- Verified origin/main = `3bab615` (PR #505), clean tree.
+- PROJECT_STATE.md rewritten to current state; roadmap Phase C row, Phase D note, §14 gap matrix and change log updated.
+- Read-only Phase D audit vs code/migrations/tests. No tests, UAT or DB operations were run.
 
 ## Current Decisions
-- GitHub repository state is authoritative over conversation memory.
-- PROJECT_STATE.md stores current project state only.
-- SESSION_HANDOFF.md stores only the latest continuation point.
-- Project skills live under `.claude/skills/<skill>/SKILL.md`.
-- Default output language is Arabic, unless the Owner explicitly requests another language.
-- No GitHub Actions, paid APIs, new services, Replit work, auto-merge, Production or Staging changes.
-- Owner approval remains required for merge, architecture, database/schema, cost, production, destructive or governance decisions.
+- Phase C is NOT fully verified: no same-SHA operational acceptance evidence.
+- External accounting mode (mode 3) DEFERRED; migration 098 not authorized; extended opening-balance reconciliation DEFERRED.
+- Owner intends optional monthly close; implementation pending.
+- Optional CoA import / unified import navigation: requirement only, not in main.
 
-- Phase 14 per-row status lives only in `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9; Replit is runtime/manual verification only.
-
-## Operational Fallback
-If project skills are unavailable because the session starts outside the repository root, perform context-sync manually by reading PROJECT_STATE.md + SESSION_HANDOFF.md and verifying origin/main.
+## Open Items
+- Same-SHA TEST/UAT for Phase C. Migration 089–097 environment status unknown.
+- Phase D: G5 gov payment reference/period, G8 unregistered workers, one-bank-transaction-to-many-invoices limit (see roadmap §14).
 
 ## Next Exact Step
-Owner reviews the docs PR and decides Row 4: accept listed limits (PASS) or require a Replit TEST run
+Owner reviews C6 PR and chooses the next task (recommended: G5 design check, roadmap §14). No merge by Claude.
 
 ## Do Not Repeat
-- Do not redesign this workflow.
-- Do not reopen completed PR #214, #229, #307, #314, #315, #316, #317, or #318 work.
-- Do not reconsider GitHub Actions unless the Owner explicitly asks.
+- Do not reopen G1–G4 (T1–T3) or C4/C5 delivered work without evidence.
+- Do not start migration 098 without separate Owner authorization.
 
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-27

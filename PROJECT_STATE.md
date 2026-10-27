@@ -1,68 +1,59 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-27
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Last reconciled main:** `7013a2a8859f2984f0eec4790acb096a514eb36c` (squash of PR #426; GitHub `main` is the source of truth and may be ahead)
-- **Last merge:** PR #426 — Invoice VAT V1 (sales invoices), merged 2026-10-12
-- **CI status:** see GitHub checks on the merged commit (not restated here)
+- **Verified main HEAD at update time:** `3bab615b6380649274460990ca054e371fb0e805` (PR #505, C4-UI1). GitHub `main` is the source of truth and may be ahead.
+- **CI:** see GitHub checks on the commit (not restated here; not re-run in this docs task).
+- **Open PRs at update time:** #464 (docs, T1 UAT note; untouched) + the C6 docs PR.
+- Repo migrations: 001–097 present. Application status per environment is NOT verified here (see Migrations).
 
-## Phase Status
+## Phase Status (vocabulary: Implemented / Verified / Partial / Deferred / Not verified)
 | Phase | Status |
 |-------|--------|
-| 14 | IN PROGRESS / PARTIALLY VALIDATED |
-| 15 | PARTIALLY MERGED / IN PROGRESS |
+| B Users/Permissions | Implemented — not verified (no UAT) |
+| C Company setup & financial import | **Implemented in part; NOT fully verified; some items Deferred** (details below) |
+| D Operational cycle | Partial — see `docs/EQFAL_MASTER_ROADMAP.md` §14 gap matrix |
+| E Reporting/Closing | Partial |
+| F Final readiness | Not started |
 
-- Phase 14A merged. 14B is PARTIAL overall: row 5 PASS, rows 1–4 PARTIAL.
-- Rows 6, 8, 12, 14 PARTIAL from owner-supplied external evidence (chat-reported, not repository evidence); rows 15, 16, 17, 19, 23 PARTIAL; row 11 NOT RUN. Reconciled via PR #320, #391, #392.
-- **Per-row source of truth:** `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9. GitHub `main` is the repository source of truth; Replit is runtime/manual verification only.
+## Phase C Record (as of 3bab615)
+**Implemented (merged; code + CI tests only unless stated):**
+- Source Authority + mid-year Cutover (083–086, 091), full-year statements, supplements (S1/S2, #476/#477).
+- Opening balances: T1 partner attribution (#463, owner UAT on TEST passed per memory), T7.1–T7.4 import (#484–#485), retained-earnings carry-forward (P1 #494), closed-year classification lock (P2 #495), annual package V2 fingerprint (P3 #496).
+- Historical records (C5-P2..P5, #498–#501; migration 096): internal records, no ledger link.
+- Opening-balance integrity & reconciliation gate (C4-P2a #502), evidence exceptions (C4-P2b-1 migration 097 #503, UI #504), opening-balances UX redesign (C4-UI1 #505: 3 tabs, no migration).
+- Phase B finalization (#497, migration 095 display_name).
+
+**Approved fiscal-year operating modes (owner-approved definitions; per fiscal year):**
+1. Native / new company: EQFAL ledger is the source of truth (opening balance path).
+2. Migrated / cutover from external system: external reference before cutover date D, EQFAL ledger after D (Source Authority).
+3. External accounting (continuing): external system is the source; EQFAL holds approved TB copies only; no EQFAL journals in that year.
+- Today only modes 1 and 2 exist, implicitly (no mode declaration in code). Mode 3 is **DEFERRED — implementation not started**.
+- **Migration 098 (`fiscal_year_operating_modes`) is NOT authorized and NOT implemented.** Designs: `/mnt/project-files/audits/c5-p1…p4-2026-10-27/` (not in repo).
+- Extended opening-balance reconciliation: **DEFERRED**.
+- Optional chart-of-accounts import and unified import navigation: owner requirement recorded; **no implementation found in main (search of client/server)**.
+- Monthly closing policy: owner intends monthly close to be **optional**; the required `monthly_close_policy` implementation is **PENDING** (today monthly close remains required for annual close).
+
+**Not verified:** same-SHA operational acceptance tests (Replit TEST/UAT at `3bab615`) were not performed or evidenced. Phase C is therefore NOT marked fully verified.
+
+## Migrations (what is known)
+- 088 applied to Replit TEST only (memory, 2026-10-18). 089–097 application status on TEST/Staging/Production: **not verified**. Server applies pending migrations at start-up, so pulling main into an environment applies them; needs separate Owner approval.
+
+## Phase 14 / Invoice notes (older, unchanged)
+- Phase 14 per-row status: `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9; T7 evidence `docs/evidence/t7/`.
+- Invoice VAT V1/V2/V2.1 and adjustments V3.x are merged; operational activation and migration rollout are Owner decisions, not verified here.
 
 ## Current Task
-- **Status:** idle
-- **Branch:** —
-- **PR:** —
-
-## T7 Opening Balances Import (T7.1–T7.4)
-- T7.1 PDF suggestions (#484, `a767b1a`), T7.2 Excel/CSV opening-balance import (#485), merged; main at `d2c32d4425fcc74b5483552578bd4c7d5435ab6e` when T7.3/T7.4 ran. No migration for T7.2.
-- T7.3 (backend, PG): 68 existing tests + 5 temporary PG tests passed (as reported). T7.4 (UI+API): CSV/XLSX imports in AR RTL and EN LTR passed; opening journal 150,000.50 Dr = 150,000.50 Cr; Trial Balance reconciled; duplicate approval and stale item version rejected 409; audit verified.
-- Limits: isolated synthetic local PostgreSQL; Replit TEST not exercised; submit/approve via HTTP API, not button clicks; mobile not tested.
-- Phase 14 Row 4 stays `PARTIAL` (missing items in matrix §9). Evidence: `docs/evidence/t7/`.
-
-## Invoice VAT V1 (PR #426)
-- **Status:** code-complete and merged to main; NOT deployed and NOT activated.
-- Migration 066 has NOT been applied to the application database.
-- Invoice approval remains disabled (no route, capability or grant). Purchases with VAT stay blocked.
-- Evidence: isolated PostgreSQL 16 run 1518 passed / 1 skipped; CI `verify` green (PostgreSQL tests are skipped in CI). Replit same-SHA run not done.
-
-## Invoice VAT V2 (purchases, PR #428) and V2.1 (recoverability)
-- **V2:** merged to main (migration 067); purchase VAT = input VAT (VAT_INPUT asset debit per standard-rate group), immutable reviewed snapshot like V1.
-- **V2.1:** PR open (migration 068), awaiting Owner review. Owner policy 2026-10-12, expense purchases only: non-recoverable input VAT is capitalized into the expense; partial recovery splits (recoverable -> VAT_INPUT, rest -> expense). Recovery is explicit per standard line (`fully_recoverable` | `non_recoverable` | `partially_recoverable` + explicit percent, 0 < p < 100); never inferred or defaulted. Asset purchases remain unsupported.
-- Migrations 066, 067 and 068 have NOT been applied to the application database. Invoice approval remains disabled. Replit same-SHA run not done.
-
-## Last Completed Task
-- **Task:** Invoice VAT V1 (sales), PR #426, squash `7013a2a8859f2984f0eec4790acb096a514eb36c`. Earlier: Task 32 — Phase 14 evidence reconciliation (docs only), PRs #391 and #392
-- **Recent merged UX/admin work:** Task 29 Admin & Audit usability (#383–#385); Task 30 Accounting master data UX (#386), 30A Chart of Accounts edit-mode fix (#387, #388), 30B bilingual account names (#389); Task 31 final visual cleanup (#390)
-- **SHA:** `7013a2a8859f2984f0eec4790acb096a514eb36c`
-
-## Open PRs
-- None
+- **C6** docs-only: Phase C handoff + Phase D gap identification (this PR). No code.
 
 ## Open Blockers
-- None confirmed
-
-## Remaining Areas
-- Unfinished Phase 14 runtime validation/evidence (rows NOT RUN or PARTIAL in the matrix).
-- Stale GitHub Issue reconciliation/hygiene.
-- Phase 13 conditional modules (deferred).
-- Any residual Phase 15 items the Owner identifies (recent UX packs are merged; no residual list is recorded).
+- None confirmed.
 
 ## Next Exact Step
-- Owner review of the Invoice VAT V2.1 PR. Next development task (V3: credit/debit notes, cancellation) only when the Owner orders it.
-
-## Attention Points
-- Phase 15 readiness must be verified before future Phase 15 merges.
+- Owner reviews the C6 docs PR, then decides: same-SHA TEST/UAT for Phase C, and whether to start the recommended Phase D task (roadmap §14).
 
 ---
-*Updated by Claude Code during task execution. Keep under 100 lines.*
+*Keep under 100 lines.*
