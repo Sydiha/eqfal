@@ -203,6 +203,10 @@ describeDatabase('one bank transaction, several document allocations (PostgreSQL
     expect(await unresolved(co, tx)).toBe(true);
     expect((await co.owner.client.req('POST', `/bank-transactions/${tx}/reconciliation`, { status: 'matched' })).status).toBe(200);
     expect((await co.owner.client.req('DELETE', `/bank-transactions/${tx}/match`)).status).toBe(200);
+    // the unmatch audit records the document matches that existed before deletion
+    const audit = await h.q<{ before_data: { document_ids: string[] } }>("SELECT before_data FROM audit_log WHERE company_id=$1 AND action='bank_transaction.unmatch' AND entity_id=$2", [co.id, tx]);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.before_data.document_ids).toEqual([a]);
   });
 
   it('serializes concurrent allocations and mixed legacy/new writes without deadlocks or over-allocation', async () => {
