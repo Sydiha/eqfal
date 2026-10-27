@@ -14,8 +14,8 @@ Record Phase C accurately and identify confirmed Phase D gaps without code chang
 ## Current Decisions
 - Phase C is NOT fully verified: no same-SHA operational acceptance evidence.
 - External accounting mode (mode 3) DEFERRED; migration 098 not authorized; extended opening-balance reconciliation DEFERRED.
-- Owner intends optional monthly close; implementation pending.
-- Optional CoA import / unified import navigation: requirement only, not in main.
+- Owner intends optional monthly close in all three modes; NOT implemented; must not weaken annual financial readiness.
+- CoA import / unified import navigation: deferred optional enhancements, not Phase C blockers; not in main.
 
 ## Open Items
 - Same-SHA TEST/UAT for Phase C. Migration 089–097 environment status unknown.

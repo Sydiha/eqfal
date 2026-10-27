@@ -34,8 +34,8 @@
 - Today only modes 1 and 2 exist, implicitly (no mode declaration in code). Mode 3 is **DEFERRED — implementation not started**.
 - **Migration 098 (`fiscal_year_operating_modes`) is NOT authorized and NOT implemented.** Designs: `/mnt/project-files/audits/c5-p1…p4-2026-10-27/` (not in repo).
 - Extended opening-balance reconciliation: **DEFERRED**.
-- Optional chart-of-accounts import and unified import navigation: owner requirement recorded; **no implementation found in main (search of client/server)**.
-- Monthly closing policy: owner intends monthly close to be **optional**; the required `monthly_close_policy` implementation is **PENDING** (today monthly close remains required for annual close).
+- Chart-of-accounts import and unified import navigation: **DEFERRED optional enhancements**, not Phase C completion blockers. No implementation found in main (search of client/server).
+- Monthly closing policy: owner intends monthly close to be **optional in all three operating modes**; **NOT implemented** (PENDING). It must not weaken annual financial readiness requirements (annual close gates must still run over the full year).
 
 **Not verified:** same-SHA operational acceptance tests (Replit TEST/UAT at `3bab615`) were not performed or evidenced. Phase C is therefore NOT marked fully verified.
 
