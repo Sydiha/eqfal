@@ -154,6 +154,27 @@ export function assertExceptionsCoverIncomplete(evaluation: EvidenceEvaluation, 
   return accepted;
 }
 
+/**
+ * C4-UI1: read-only display-name lookup for the accepting/revoking users. One parameterized query for all ids (no N+1), limited to users
+ * who hold a membership in THIS company so the page never exposes anyone outside the tenant. Only users.display_name is returned (never
+ * the email); a missing user, a user outside the company or a user without a display name is simply absent from the map.
+ */
+export async function loadUserDisplayNames(client: PoolClient, companyId: string, userIds: Array<string | null | undefined>): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((x): x is string => !!x))];
+  if (ids.length === 0) return new Map();
+  const { rows } = await client.query<{ id: string; display_name: string | null }>(
+    `SELECT u.id, u.display_name FROM users u
+       WHERE u.id = ANY($2::uuid[]) AND u.display_name IS NOT NULL AND btrim(u.display_name) <> ''
+         AND EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.company_id = $1)`,
+    [companyId, ids],
+  );
+  return new Map(rows.map(r => [r.id, r.display_name!.trim()]));
+}
+
+export function withDisplayNames(rows: ExceptionRow[], names: Map<string, string>) {
+  return rows.map(e => ({ ...e, accepted_by_name: names.get(e.accepted_by) ?? null, ended_by_name: e.ended_by ? names.get(e.ended_by) ?? null : null }));
+}
+
 export const exceptionAuditView = (e: ExceptionRow) => ({
   id: e.id, issue_key: e.issue_key, issue_code: e.issue_code, section: e.section, item_id: e.item_id, reason: e.reason,
   accepted_by: e.accepted_by, accepted_at: e.accepted_at, evidence_fingerprint: e.evidence_fingerprint,

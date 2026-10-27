@@ -126,6 +126,24 @@ describeDatabase('opening balance evidence exceptions (PostgreSQL)', () => {
     review: await h.q('SELECT status,version,journal_entry_id FROM opening_balance_reviews WHERE company_id=$1', [co.id]),
   });
 
+  it('C4-UI1: returns the accepting user display name (read-only, company-scoped) and a null fallback; accepted_by stays the UUID', async () => {
+    const co = await prepared('nm');
+    const bank = issueOf(await list(co), 'OB_BANK_AGGREGATE_ONLY');
+    expect((await post(co, [entry(bank)])).status).toBe(201);
+    // No display name set: null, never the email or the UUID.
+    let ex = (await list(co)).json.exceptions[0];
+    expect(ex.accepted_by).toBe(co.manager.id);
+    expect(ex.accepted_by_name).toBeNull();
+    await h.q("UPDATE users SET display_name='Nora Al-Shehri' WHERE id=$1", [co.manager.id]);
+    ex = (await list(co)).json.exceptions[0];
+    expect(ex).toMatchObject({ accepted_by: co.manager.id, accepted_by_name: 'Nora Al-Shehri', ended_by_name: null });
+    expect(JSON.stringify(ex)).not.toContain('@');
+    // A user who no longer belongs to this company is not resolved (no cross-tenant directory exposure).
+    await h.q('DELETE FROM memberships WHERE user_id=$1 AND company_id=$2', [co.manager.id, co.id]);
+    ex = (await list(co, co.owner)).json.exceptions[0];
+    expect(ex.accepted_by_name).toBeNull();
+  });
+
   it('accepts an incomplete-evidence issue with identity, fingerprint and reason, never changes the classification, and revokes with a reason', async () => {
     const co = await prepared('acc');
     const l = await list(co);

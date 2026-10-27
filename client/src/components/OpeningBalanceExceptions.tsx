@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog } from './Dialog';
 import './OpeningBalanceExceptions.css';
 
@@ -12,10 +13,14 @@ type Detail = Record<string, string>;
 type ReconIssue = { code: string; class: Klass; section: string; item_id?: string; detail?: Detail };
 type Recon = { status: Status; blocking: boolean; issues: ReconIssue[] };
 type ExIssue = ReconIssue & { issue_key: string; evidence_fingerprint: string; acceptable: boolean; acceptance: 'none' | 'accepted_unverified' | 'stale'; exception_id?: string };
-type ExRow = { id: string; issue_code: string; section: string; item_id: string | null; reason: string; accepted_by: string; accepted_at: string; status: 'active' | 'superseded' | 'revoked'; acknowledged_difference: string | null; ended_at: string | null; end_reason: string | null };
+type ExRow = { id: string; issue_code: string; section: string; item_id: string | null; reason: string; accepted_by: string; accepted_by_name?: string | null; ended_by_name?: string | null; accepted_at: string; status: 'active' | 'superseded' | 'revoked'; acknowledged_difference: string | null; ended_at: string | null; end_reason: string | null };
 type Exceptions = { required_count: number; accepted_unverified_count: number; stale_count: number; issues: ExIssue[]; exceptions: ExRow[] };
 export type ApprovalGate = { blocked: boolean };
-type Props = { yearId: string; reviewStatus: string; canAccept: boolean; lang: 'ar' | 'en'; reloadToken: number; describeItem: (id: string) => string; onUnauthorized: () => void; onGate: (g: ApprovalGate) => void };
+// C4-UI1: structured, read-only view of why the evidence gate is closed. Built only from the /reconciliation and /exceptions responses.
+export type ReadinessBlocker = { key: string; kind: 'blocked' | 'mismatch' | 'none' | 'stale' | 'gate_failed' | 'gate_checking'; code?: string; item_id?: string | null; section?: string; findingId?: string; acceptable?: boolean };
+export type Readiness = { blockers: ReadinessBlocker[]; blocking: boolean; failed: boolean };
+export const describeIssueCode = (lang: 'ar' | 'en', code: string) => TEXT[lang].codes[code] ?? code;
+type Props = { yearId: string; reviewStatus: string; canAccept: boolean; lang: 'ar' | 'en'; reloadToken: number; describeItem: (id: string) => string; onUnauthorized: () => void; onGate: (g: ApprovalGate) => void; onReadiness?: (r: Readiness) => void; hideGate?: boolean; historyHost?: HTMLElement | null };
 
 const REASON_MIN = 10, REASON_MAX = 1000;
 const meaningful = (v: string) => v.length <= REASON_MAX && v.replace(/\s/g, '').length >= REASON_MIN;
@@ -40,6 +45,7 @@ const TEXT = {
     acceptTitle: 'Accept this finding', revokeTitle: 'Revoke this acceptance', reasonLabel: 'Reason (at least 10 characters)', reasonHint: 'Explain why this can be carried into the opening balance without full evidence.',
     revokeHint: 'Explain why the acceptance is withdrawn.', ackLabel: (v: string) => `I acknowledge that the unexplained difference of ${v} stays in the opening balance and is not verified.`,
     notVerified: 'Accepting records your decision and reason. It does not verify the balance, and the item stays "Accepted — not verified".', confirmAccept: 'Accept — not verified', confirmRevoke: 'Revoke acceptance', cancel: 'Cancel', working: 'Saving…',
+    unavailable: 'User unavailable', endedBy: 'Ended by', fullHistory: 'Exception acceptance history', noHistory: 'No acceptances recorded yet.',
     gateTitle: 'Final approval is unavailable', gateBlocking: 'Blocked or mismatched findings must be corrected first; they cannot be accepted.', gateMissing: (n: number) => `${n} finding(s) still need an accepted reason.`, gateStale: (n: number) => `${n} accepted exception(s) are stale and must be accepted again.`, gateOk: 'All required findings are accepted. Approval is available to authorized approvers; accepted items remain not verified.',
     gateChecking: 'Evidence is being checked. Approval stays unavailable until the check completes.', gateFailed: 'Evidence could not be verified, so final approval is unavailable. Retry the evidence review.', gateDraft: 'Findings can be accepted only after the review is submitted (in review).', viewOnly: 'You can view these findings but you do not have permission to accept or revoke.', needReviewState: 'Acceptance and revocation are available only while the review is in review.',
     errors: { FORBIDDEN: 'You do not have permission to accept or revoke evidence exceptions.', OB_EXCEPTION_REVIEW_STATE: 'Exceptions can be changed only while the review is in review.', OB_EXCEPTION_REASON_REQUIRED: 'Enter a meaningful reason of at least 10 characters.', OB_EXCEPTION_NOT_ELIGIBLE: 'This finding cannot be accepted.', OB_EXCEPTION_STALE: 'The evidence changed. The list was refreshed; review the new figures.', OB_EXCEPTION_DIFFERENCE_ACK_REQUIRED: 'The displayed difference must be acknowledged.', OB_EXCEPTION_ALREADY_ACTIVE: 'This finding is already accepted.', OB_EXCEPTION_NOT_ACTIVE: 'This exception is no longer active.', OB_EXCEPTION_NOT_FOUND: 'Exception not found.', OB_EXCEPTION_ISSUE_NOT_FOUND: 'This finding no longer exists. The list was refreshed.', FISCAL_YEAR_CLOSED: 'The fiscal year is closed.', generic: 'The change could not be saved.' } as Record<string, string>,
@@ -67,6 +73,7 @@ const TEXT = {
     acceptTitle: 'قبول هذه الملاحظة', revokeTitle: 'سحب هذا القبول', reasonLabel: 'السبب (10 أحرف على الأقل)', reasonHint: 'اشرح لماذا يمكن ترحيل هذا الرصيد إلى الأرصدة الافتتاحية دون دليل كامل.',
     revokeHint: 'اشرح سبب سحب القبول.', ackLabel: (v: string) => `أُقرّ بأن الفرق غير المبرَّر البالغ ${v} يبقى ضمن الرصيد الافتتاحي وأنه غير موثّق.`,
     notVerified: 'القبول يسجّل قرارك وسببك فقط. لا يوثّق الرصيد، ويبقى البند «مقبول — غير موثّق».', confirmAccept: 'قبول — غير موثّق', confirmRevoke: 'سحب القبول', cancel: 'إلغاء', working: 'جارٍ الحفظ…',
+    unavailable: 'مستخدم غير متاح', endedBy: 'أنهاه', fullHistory: 'سجل قبول الاستثناءات', noHistory: 'لا توجد استثناءات مقبولة بعد.',
     gateTitle: 'الاعتماد النهائي غير متاح', gateBlocking: 'يجب تصحيح الملاحظات المحجوبة أو غير المتطابقة أولاً؛ ولا يمكن قبولها.', gateMissing: (n: number) => `${n} ملاحظة ما زالت تحتاج إلى قبول مع سبب.`, gateStale: (n: number) => `${n} استثناء مقبول أصبح قديماً ويجب قبوله مجدداً.`, gateOk: 'كل الملاحظات المطلوبة مقبولة. الاعتماد متاح للمعتمدين المخوّلين، وتبقى البنود المقبولة غير موثّقة.',
     gateChecking: 'جارٍ فحص الأدلة. يبقى الاعتماد غير متاح حتى يكتمل الفحص.', gateFailed: 'تعذر التحقق من الأدلة، لذا الاعتماد النهائي غير متاح. أعد محاولة مراجعة الأدلة.', gateDraft: 'يمكن قبول الملاحظات فقط بعد إرسال المراجعة (قيد المراجعة).', viewOnly: 'يمكنك عرض هذه الملاحظات، لكن ليست لديك صلاحية القبول أو السحب.', needReviewState: 'القبول والسحب متاحان فقط أثناء حالة «قيد المراجعة».',
     errors: { FORBIDDEN: 'ليست لديك صلاحية قبول استثناءات الأدلة أو سحبها.', OB_EXCEPTION_REVIEW_STATE: 'يمكن تغيير الاستثناءات فقط أثناء حالة «قيد المراجعة».', OB_EXCEPTION_REASON_REQUIRED: 'أدخل سبباً واضحاً من 10 أحرف على الأقل.', OB_EXCEPTION_NOT_ELIGIBLE: 'لا يمكن قبول هذه الملاحظة.', OB_EXCEPTION_STALE: 'تغيّر الدليل. تم تحديث القائمة؛ راجع الأرقام الجديدة.', OB_EXCEPTION_DIFFERENCE_ACK_REQUIRED: 'يجب الإقرار بالفرق المعروض.', OB_EXCEPTION_ALREADY_ACTIVE: 'هذه الملاحظة مقبولة بالفعل.', OB_EXCEPTION_NOT_ACTIVE: 'هذا الاستثناء لم يعد فعّالاً.', OB_EXCEPTION_NOT_FOUND: 'الاستثناء غير موجود.', OB_EXCEPTION_ISSUE_NOT_FOUND: 'لم تعد هذه الملاحظة موجودة. تم تحديث القائمة.', FISCAL_YEAR_CLOSED: 'السنة المالية مغلقة.', generic: 'تعذر حفظ التغيير.' } as Record<string, string>,
@@ -86,9 +93,14 @@ async function call(url: string, init: RequestInit, onUnauthorized: () => void) 
   if (!r.ok) { let code = ''; try { code = ((await r.json()) as { code?: string }).code ?? ''; } catch { /* body is optional */ } throw new ApiErr(r.status, code || (r.status === 403 ? 'FORBIDDEN' : 'generic')); }
   return r.json();
 }
-const when = (v: string) => v.slice(0, 16).replace('T', ' ');
+// The API returns timestamptz text ("2026-10-26 08:00:00+00"); show it in the company's Riyadh time, localized, with Latin digits.
+const when = (v: string, lang: 'ar' | 'en' = 'en') => {
+  const d = new Date(v.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00'));
+  if (Number.isNaN(d.getTime())) return v;
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-u-ca-gregory-nu-latn' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }).format(d);
+};
 
-export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang, reloadToken, describeItem, onUnauthorized, onGate }: Props) {
+export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang, reloadToken, describeItem, onUnauthorized, onGate, onReadiness, hideGate = false, historyHost = null }: Props) {
   const t = TEXT[lang];
   const [recon, setRecon] = useState<Recon | null>(null);
   const [ex, setEx] = useState<Exceptions | null>(null);
@@ -128,6 +140,15 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
   const gateBlocked = loading || failed || !ex || !recon || validatedKey !== key || blocking || missing > 0 || stale > 0;
   useEffect(() => { onGate({ blocked: gateBlocked }); }, [gateBlocked]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onGate({ blocked: true }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const blockers: ReadinessBlocker[] = failed ? [{ key: 'gate_failed', kind: 'gate_failed' }]
+    : (loading || validatedKey !== key || !ex || !recon) ? [{ key: 'gate_checking', kind: 'gate_checking' }]
+    : [
+      ...recon.issues.filter(i => i.class !== 'incomplete_evidence').map((i, n) => ({ key: `r-${n}`, kind: i.class as 'blocked' | 'mismatch', code: i.code, item_id: i.item_id ?? null, section: i.section, findingId: `ob-r-${n}` })),
+      ...ex.issues.filter(i => i.acceptance !== 'accepted_unverified').map(i => ({ key: `e-${i.issue_key}`, kind: (i.acceptance === 'stale' ? 'stale' : 'none') as 'stale' | 'none', code: i.code, item_id: i.item_id ?? null, section: i.section, findingId: `ob-e-${i.issue_key}`, acceptable: i.acceptable })),
+    ];
+  const readinessSig = JSON.stringify([blockers, blocking, failed]);
+  useEffect(() => { onReadiness?.({ blockers, blocking, failed }); }, [readinessSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onReadiness?.({ blockers: [{ key: 'gate_checking', kind: 'gate_checking' }], blocking: false, failed: false }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeDialog = () => { if (busy) return; setDialog(null); setReason(''); setAck(false); setDialogError(null); };
   const open = (d: NonNullable<typeof dialog>) => { setReason(''); setAck(false); setDialogError(null); setDialog(d); };
@@ -160,6 +181,7 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
     const text = k === 'reference' ? (t.refVal[v] ?? v) : AMOUNT_KEYS.includes(k) ? group(v) : v;
     return <div key={k}><dt>{t.d[k]}</dt><dd><bdi dir="ltr" className={AMOUNT_KEYS.includes(k) ? 'ob-amount' : undefined}>{text}</bdi></dd></div>;
   });
+  const who = (r: { accepted_by_name?: string | null }) => r.accepted_by_name ? <bdi dir="auto">{r.accepted_by_name}</bdi> : <em>{t.unavailable}</em>;
   const itemLine = (id?: string | null) => id ? describeItem(id) : t.noItem;
   const codeText = (c: string) => t.codes[c] ?? c;
 
@@ -174,6 +196,17 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
   const canAct = canAccept && inReview;
   const tone = status === 'verified' ? 'ok' : status === 'incomplete_evidence' ? 'warn' : 'bad';
 
+  const histItem = (e: ExRow) => <li key={e.id}>
+    <div className="ob-ex__row"><span className="ob-badge ob-badge--neutral">{e.status === 'active' ? t.state.accepted_unverified : t.ended[e.status]}</span><strong>{codeText(e.issue_code)}</strong></div>
+    <p className="ob-muted">{t.section[e.section] ?? e.section} · {t.item}: {itemLine(e.item_id)}</p>
+    <dl className="ob-ex__detail ob-ex__audit">
+      <div><dt>{t.by}</dt><dd>{who(e)}</dd></div><div><dt>{t.at}</dt><dd><bdi>{when(e.accepted_at, lang)}</bdi></dd></div>
+      <div className="ob-ex__reason"><dt>{t.reason}</dt><dd><bdi dir="auto">{e.reason}</bdi></dd></div>
+      {e.ended_at && <div><dt>{t.endedAt}</dt><dd><bdi>{when(e.ended_at, lang)}</bdi></dd></div>}
+      {e.ended_by_name && <div><dt>{t.endedBy}</dt><dd><bdi dir="auto">{e.ended_by_name}</bdi></dd></div>}
+      {e.end_reason && <div className="ob-ex__reason"><dt>{t.endReason}</dt><dd><bdi dir="auto">{e.end_reason}</bdi></dd></div>}
+    </dl>
+  </li>;
   return <section className="ob-card ob-ex" aria-labelledby="ob-ex-title">
     <div className="ob-ex__head"><h3 id="ob-ex-title">{t.title}</h3><span className="ob-muted">{t.status}</span><span className={`ob-badge ob-badge--${tone}`}>{t.st[status]}</span></div>
     <p className="ob-muted">{t.stHelp[status]}</p>
@@ -184,7 +217,7 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
 
     {unfixable.length > 0 && <div className="ob-ex__fix" role="group" aria-label={t.fixTitle}>
       <h4>{t.fixTitle}</h4>
-      <ul>{unfixable.map((i, n) => <li key={`${i.code}-${i.item_id ?? n}`}>
+      <ul>{unfixable.map((i, n) => <li key={`${i.code}-${i.item_id ?? n}`} id={`ob-r-${recon.issues.indexOf(i)}`} data-finding={`ob-r-${recon.issues.indexOf(i)}`} tabIndex={-1}>
         <div className="ob-ex__row"><span className={`ob-badge ob-badge--${i.class === 'blocked' ? 'bad' : 'warn'}`}>{t.st[i.class]}</span><strong>{codeText(i.code)}</strong></div>
         <p className="ob-muted">{t.section[i.section] ?? i.section} · {t.item}: {itemLine(i.item_id)}</p>
         <dl className="ob-ex__detail">{detailRows(i.detail)}</dl>
@@ -193,16 +226,16 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
 
     {ex.issues.length > 0 && <ul className="ob-ex__list">{ex.issues.map(i => {
       const row = i.exception_id ? active.get(i.exception_id) : undefined;
-      return <li key={i.issue_key} className={`ob-ex__issue ob-ex__issue--${i.acceptance}`}>
+      return <li key={i.issue_key} id={`ob-e-${i.issue_key}`} data-finding={`ob-e-${i.issue_key}`} tabIndex={-1} className={`ob-ex__issue ob-ex__issue--${i.acceptance}`}>
         <div className="ob-ex__row"><span className={`ob-badge ob-badge--${i.acceptance === 'accepted_unverified' ? 'neutral' : 'warn'}`}>{t.state[i.acceptance]}</span><strong>{codeText(i.code)}</strong></div>
         <p className="ob-muted">{t.section[i.section] ?? i.section} · {t.item}: {itemLine(i.item_id)}</p>
         <dl className="ob-ex__detail">{detailRows(i.detail)}</dl>
         {i.acceptance === 'stale' && <p className="ob-ex__stale" role="note">{t.staleHelp}</p>}
         {row && <dl className="ob-ex__detail ob-ex__audit">
-          <div><dt>{t.by}</dt><dd><bdi dir="ltr">{row.accepted_by}</bdi></dd></div>
-          <div><dt>{t.at}</dt><dd><bdi dir="ltr">{when(row.accepted_at)}</bdi></dd></div>
+          <div><dt>{t.by}</dt><dd>{who(row)}</dd></div>
+          <div><dt>{t.at}</dt><dd><bdi>{when(row.accepted_at, lang)}</bdi></dd></div>
           {row.acknowledged_difference && <div><dt>{t.ack}</dt><dd><bdi dir="ltr" className="ob-amount">{group(row.acknowledged_difference)}</bdi></dd></div>}
-          <div className="ob-ex__reason"><dt>{t.reason}</dt><dd>{row.reason}</dd></div>
+          <div className="ob-ex__reason"><dt>{t.reason}</dt><dd><bdi dir="auto">{row.reason}</bdi></dd></div>
         </dl>}
         {canAct && i.acceptable && <div className="ob-ex__actions">
           {i.acceptance !== 'accepted_unverified' && <button type="button" className="primary" onClick={() => open({ kind: 'accept', issue: i })}>{i.acceptance === 'stale' ? t.reaccept : t.accept}</button>}
@@ -211,19 +244,13 @@ export function OpeningBalanceExceptions({ yearId, reviewStatus, canAccept, lang
       </li>;
     })}</ul>}
 
-    {ended.length > 0 && <details className="ob-ex__history"><summary>{t.history} (<bdi dir="ltr">{ended.length}</bdi>)</summary>
-      <ul>{ended.map(e => <li key={e.id}>
-        <div className="ob-ex__row"><span className="ob-badge ob-badge--neutral">{t.ended[e.status]}</span><strong>{codeText(e.issue_code)}</strong></div>
-        <p className="ob-muted">{t.section[e.section] ?? e.section} · {t.item}: {itemLine(e.item_id)}</p>
-        <dl className="ob-ex__detail ob-ex__audit">
-          <div><dt>{t.by}</dt><dd><bdi dir="ltr">{e.accepted_by}</bdi></dd></div><div><dt>{t.at}</dt><dd><bdi dir="ltr">{when(e.accepted_at)}</bdi></dd></div>
-          <div className="ob-ex__reason"><dt>{t.reason}</dt><dd>{e.reason}</dd></div>
-          {e.ended_at && <div><dt>{t.endedAt}</dt><dd><bdi dir="ltr">{when(e.ended_at)}</bdi></dd></div>}
-          {e.end_reason && <div className="ob-ex__reason"><dt>{t.endReason}</dt><dd>{e.end_reason}</dd></div>}
-        </dl>
-      </li>)}</ul></details>}
+    {historyHost
+      ? createPortal(<section aria-labelledby="ob-ex-hist-title"><h3 id="ob-ex-hist-title">{t.fullHistory}</h3>
+        {ex.exceptions.length === 0 ? <p className="ob-muted">{t.noHistory}</p> : <ul className="ob-ex__list">{ex.exceptions.map(histItem)}</ul>}</section>, historyHost)
+      : ended.length > 0 && <details className="ob-ex__history"><summary>{t.history} (<bdi dir="ltr">{ended.length}</bdi>)</summary>
+        <ul>{ended.map(histItem)}</ul></details>}
 
-    {inReview && <div className={`ob-ex__gate ob-ex__gate--${gateBlocked ? 'blocked' : 'ok'}`} role="status">
+    {inReview && !hideGate && <div className={`ob-ex__gate ob-ex__gate--${gateBlocked ? 'blocked' : 'ok'}`} role="status">
       {gateBlocked ? <><strong>{t.gateTitle}</strong><ul>
         {(loading || validatedKey !== key) && <li>{t.gateChecking}</li>}{blocking && <li>{t.gateBlocking}</li>}{missing > 0 && <li>{t.gateMissing(missing)}</li>}{stale > 0 && <li>{t.gateStale(stale)}</li>}
       </ul></> : <span>{t.gateOk}</span>}
