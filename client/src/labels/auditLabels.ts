@@ -30,7 +30,7 @@ const ACTIONS: Record<string, Pair> = {
   'bank_transaction.match': ['Match bank transaction', 'مطابقة معاملة بنكية'], 'bank_transaction.reconcile': ['Reconcile bank transaction', 'تسوية معاملة بنكية'],
   'bank_transaction.reopen_reconciliation': ['Reopen bank reconciliation', 'إعادة فتح تسوية بنكية'], 'bank_transaction.unmatch': ['Unmatch bank transaction', 'إلغاء مطابقة معاملة بنكية'],
   'counterparty.create': ['Create counterparty', 'إنشاء طرف مقابل'],
-  'custody.close': ['Close custody', 'إغلاق عهدة'], 'custody.create': ['Create custody', 'إنشاء عهدة'], 'custody.reopen': ['Reopen custody', 'إعادة فتح عهدة'],
+  'custody.close': ['Close custody', 'إغلاق عهدة'], 'custody.create': ['Create custody', 'إنشاء عهدة'], 'custody.funding.unlink': ['Unlink custody funding', 'فك ربط تمويل العهدة'], 'custody.account_mapping.set': ['Set custody ledger account', 'تحديد حساب العهدة في الدفتر'], 'custody.reopen': ['Reopen custody', 'إعادة فتح عهدة'],
   'custody.document.allocate': ['Allocate document to custody', 'تخصيص مستند لعهدة'], 'custody.document.remove': ['Remove document from custody', 'إزالة مستند من عهدة'],
   'custody.return.link': ['Link custody return', 'ربط إرجاع عهدة'], 'custody.return.unlink': ['Unlink custody return', 'فك ربط إرجاع عهدة'],
   'document_vat_review.create': ['Create document VAT review', 'إنشاء مراجعة ضريبة مستند'], 'document_vat_review.update': ['Update document VAT review', 'تعديل مراجعة ضريبة مستند'],
