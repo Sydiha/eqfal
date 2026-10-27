@@ -12,6 +12,7 @@ const COMPANY = '11111111-1111-4111-8111-111111111111';
 const ACTOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CUSTODY = '22222222-2222-4222-8222-222222222222';
 const TX = '33333333-3333-4333-8333-333333333333';
+const RECIPIENT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const DOC = '44444444-4444-4444-8444-444444444444';
 
 const custody = (status: 'open' | 'closed' = 'open') => ({
@@ -55,6 +56,17 @@ function summaryHandler(options: { funding?: string; allocated?: string; returne
 beforeEach(() => { audit.mockReset(); audit.mockResolvedValue({}); });
 
 describe('CustodyService behavioural rules', () => {
+  it('rejects a recipient who is not an active member and writes nothing', async () => {
+    const { pool, query } = makePool((sql) => {
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.includes('FROM bank_transactions') && sql.includes('FOR UPDATE')) return { rows: [tx('-100.00')] };
+      return { rows: [] };
+    });
+    await expect(new CustodyService(pool).create(COMPANY, ACTOR, TX, null, RECIPIENT)).rejects.toThrow('active member');
+    expect(query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO custody_advances'), expect.anything());
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it('creates custody only from an outbound active-company transaction and locks it', async () => {
     const handler: Handler = (sql, params) => {
       if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] };
@@ -63,7 +75,8 @@ describe('CustodyService behavioural rules', () => {
         return { rows: [tx('-100.00')] };
       }
       if (sql.includes('FROM bank_transaction_matches') && sql.includes('bank_transaction_id=$1')) return { rows: [] };
-      if (sql.startsWith('INSERT INTO custody_advances')) return { rows: [custody()] };
+      if (sql.includes('FROM memberships')) return { rows: [{ '?column?': 1 }] };
+      if (sql.startsWith('INSERT INTO custody_advances')) { expect(params).toEqual([COMPANY, RECIPIENT, 'ops', ACTOR]); return { rows: [custody()] }; }
       if (sql.startsWith('INSERT INTO bank_transaction_matches') || sql.startsWith('UPDATE bank_transactions')) return { rows: [] };
       if (sql.includes("m.match_type='custody_funding'")) return { rows: [{ ...tx('-100.00', 'matched'), amount: '-100.00' }] };
       if (sql.includes("m.match_type='custody_return'") && sql.includes('SUM(t.amount)')) return { rows: [{ total: '0' }] };
@@ -73,11 +86,11 @@ describe('CustodyService behavioural rules', () => {
       return { rows: [] };
     };
     const { pool, query } = makePool(handler);
-    const result = await new CustodyService(pool).create(COMPANY, ACTOR, TX, 'ops');
+    const result = await new CustodyService(pool).create(COMPANY, ACTOR, TX, 'ops', RECIPIENT);
     expect(result.funded_amount).toBe('100.00');
     expect(result.remaining_amount).toBe('100.00');
     expect(query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'), [TX, COMPANY]);
-    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'custody.create', company_id: COMPANY }), expect.anything());
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'custody.create', company_id: COMPANY, after_data: expect.objectContaining({ holder_user_id: RECIPIENT, recipient_user_id: RECIPIENT, created_by_user_id: ACTOR }) }), expect.anything());
   });
 
   it('returns safe not-found semantics for a bank transaction outside the active company', async () => {
@@ -86,7 +99,7 @@ describe('CustodyService behavioural rules', () => {
       if (sql.includes('FROM bank_transactions')) { expect(params).toEqual([TX, COMPANY]); return { rows: [] }; }
       return { rows: [] };
     });
-    await expect(new CustodyService(pool).create(COMPANY, ACTOR, TX, null)).rejects.toThrow('Bank transaction not found');
+    await expect(new CustodyService(pool).create(COMPANY, ACTOR, TX, null, RECIPIENT)).rejects.toThrow('Bank transaction not found');
     expect(query).not.toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['co-b']));
   });
 
@@ -98,7 +111,7 @@ describe('CustodyService behavioural rules', () => {
         if (sql.includes('FROM bank_transaction_matches')) return { rows: mode === 'matched' ? [{ id: 'm' }] : [] };
         return { rows: [] };
       });
-      await expect(new CustodyService(pool).create(COMPANY, ACTOR, TX, null)).rejects.toThrow(mode === 'inbound' ? 'outbound bank transaction' : 'already matched');
+      await expect(new CustodyService(pool).create(COMPANY, ACTOR, TX, null, RECIPIENT)).rejects.toThrow(mode === 'inbound' ? 'outbound bank transaction' : 'already matched');
     }
   });
 

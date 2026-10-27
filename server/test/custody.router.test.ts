@@ -48,9 +48,23 @@ describe('Custody authorization and request boundary',()=>{
     expect(mocks.connect).not.toHaveBeenCalled();
   });
 
+  it('requires an explicit recipient to create custody and a reason plus custody.close to unlink funding',async()=>{
+    ctx(['custody.manage']);
+    expect((await request(app).post('/api/custodies').send({bank_transaction_id:TX})).status).toBe(400);
+    expect((await request(app).delete(`/api/custodies/${CUSTODY}/funding`).send({reason:'x'})).status).toBe(403);
+    ctx(['custody.close']);
+    expect((await request(app).delete(`/api/custodies/${CUSTODY}/funding`).send({})).status).toBe(400);
+    expect((await request(app).put('/api/custody/account-mapping').send({account_id:TX})).status).toBe(403);
+    ctx(['accounting.chart.edit']);
+    expect((await request(app).put('/api/custody/account-mapping').send({account_id:'bad'})).status).toBe(400);
+    ctx(['custody.manage']);
+    expect((await request(app).put('/api/custody/account-mapping').send({account_id:TX})).status).toBe(403);
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
+
   it('does not accept client company_id as part of create input',async()=>{
     ctx(['custody.manage']);
-    const r=await request(app).post('/api/custodies').send({bank_transaction_id:TX,company_id:'co-b'});
+    const r=await request(app).post('/api/custodies').send({bank_transaction_id:TX,recipient_user_id:TX,company_id:'co-b'});
     expect(r.status).toBe(400);
     expect(mocks.connect).not.toHaveBeenCalled();
   });

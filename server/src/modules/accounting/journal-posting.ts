@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
+import { assertCustodyJournalControls } from './custody-posting';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
@@ -266,6 +267,8 @@ export async function postJournalInTransaction(
     if (journal.source_type === 'document_settlement') {
       await assertDocumentSettlementBankLine(client, companyId, id, operationalSource);
     }
+
+    await assertCustodyJournalControls(client, companyId, id, operationalSource);
 
     if (journal.source_type === 'partner_transaction' && !(await partnerJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
       throw new JournalPostingValidationError('Partner transaction journal must use the configured partner and cash/bank accounts');
