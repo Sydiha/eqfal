@@ -23,7 +23,7 @@ type MatchType = 'document' | 'custody_funding' | 'custody_return';
 type BankTransaction = { id:string; company_id:string; reconciliation_status:ReconciliationStatus; reconciled_by_user_id:string|null; reconciled_at:Date|null; transaction_date:string; amount:string };
 type MatchRow = { id:string; company_id:string; bank_transaction_id:string; document_id:string|null; custody_id:string|null; match_type:MatchType; matched_by_user_id:string; matched_at:Date; note:string|null };
 type LinkedObligation = { id:string; direction:'receivable'|'payable'; counterparty:string; original_amount:string; settled_amount:string; remaining_amount:string; state:'open'|'partial'|'settled'|'cancelled' };
-type CandidateDocument = { id:string; status:string; document_type:string|null; counterparty_name:string|null; document_date:string|null; reference_number:string|null; total_amount:string|null; original_filename:string; linked_obligation:LinkedObligation|null };
+type CandidateDocument = { id:string; status:string; document_type:string|null; counterparty_name:string|null; document_date:string|null; reference_number:string|null; total_amount:string|null; original_filename:string; settled_amount?:string; remaining_amount?:string|null; linked_obligation:LinkedObligation|null };
 
 export class BankReconciliationNotFoundError extends Error {}
 export class BankReconciliationConflictError extends Error {}
@@ -50,6 +50,8 @@ class BankReconciliationRepository{
  async document(id:string,companyId:string,client?:PoolClient):Promise<CandidateDocument|null>{const db=client??this.db;const{rows}=await db.query<CandidateDocument>('SELECT id,status,document_type,counterparty_name,document_date,reference_number,total_amount,original_filename FROM documents WHERE id=$1 AND company_id=$2',[id,companyId]);return rows[0]??null;}
  async custody(id:string,companyId:string,client?:PoolClient){const db=client??this.db;const{rows}=await db.query<{id:string}>('SELECT id FROM custody_advances WHERE id=$1 AND company_id=$2',[id,companyId]);return rows[0]??null;}
  async candidates(companyId:string,search:string):Promise<CandidateDocument[]>{const term=search.trim().slice(0,100);const params:unknown[]=[companyId];let filter="d.status IN ('needs_review','approved')";if(term){params.push(`%${term}%`);filter+=` AND (d.original_filename ILIKE $2 OR COALESCE(d.counterparty_name,'') ILIKE $2 OR COALESCE(d.reference_number,'') ILIKE $2)`;}const{rows}=await this.db.query<CandidateDocument>(`SELECT d.id,d.status,d.document_type,d.counterparty_name,d.document_date::text,d.reference_number,d.total_amount::text,d.original_filename,
+ COALESCE(ds.settled_amount,0)::text AS settled_amount,
+ CASE WHEN d.total_amount IS NULL THEN NULL ELSE GREATEST(d.total_amount-COALESCE(ds.settled_amount,0),0)::text END AS remaining_amount,
  CASE WHEN o.id IS NULL THEN NULL ELSE json_build_object(
   'id',o.id,'direction',o.direction,'counterparty',c.name,'original_amount',o.original_amount::text,
   'settled_amount',COALESCE(ds.settled_amount,0)::text,
@@ -60,7 +62,7 @@ class BankReconciliationRepository{
  LEFT JOIN obligations o ON o.document_id=d.id AND o.company_id=d.company_id AND o.source_type='document'
  LEFT JOIN counterparties c ON c.id=o.counterparty_id AND c.company_id=o.company_id
  LEFT JOIN LATERAL (SELECT COALESCE(SUM(s.amount),0) settled_amount FROM document_settlements s WHERE s.document_id=d.id AND s.company_id=d.company_id) ds ON true
- WHERE d.company_id=$1 AND ${filter} ORDER BY CASE WHEN d.status='approved' THEN 0 ELSE 1 END,d.document_date DESC NULLS LAST,d.created_at DESC LIMIT 50`,params);return rows;}
+ WHERE d.company_id=$1 AND ${filter} AND (d.total_amount IS NULL OR d.total_amount>COALESCE(ds.settled_amount,0)) ORDER BY CASE WHEN d.status='approved' THEN 0 ELSE 1 END,d.document_date DESC NULLS LAST,d.created_at DESC LIMIT 50`,params);return rows;}
  async createMatch(input:{companyId:string;transactionId:string;documentId:string;actor:string;note:string|null},client:PoolClient):Promise<MatchRow>{const{rows}=await client.query<MatchRow>(`INSERT INTO bank_transaction_matches(company_id,bank_transaction_id,document_id,custody_id,match_type,matched_by_user_id,note) VALUES($1,$2,$3,NULL,'document',$4,$5) RETURNING *`,[input.companyId,input.transactionId,input.documentId,input.actor,input.note]);return rows[0]!;}
  async deleteMatch(transactionId:string,companyId:string,client:PoolClient){await client.query('DELETE FROM bank_transaction_matches WHERE bank_transaction_id=$1 AND company_id=$2',[transactionId,companyId]);}
  async setStatus(transactionId:string,companyId:string,status:ReconciliationStatus,actor:string|null,client:PoolClient){await client.query(`UPDATE bank_transactions SET reconciliation_status=$3,reconciled_by_user_id=CASE WHEN $3='reconciled' THEN $4::uuid ELSE NULL END,reconciled_at=CASE WHEN $3='reconciled' THEN NOW() ELSE NULL END WHERE id=$1 AND company_id=$2`,[transactionId,companyId,status,actor]);}
