@@ -119,6 +119,33 @@ describeDatabase('one bank transaction, several document allocations (PostgreSQL
     expect(await unresolved(co, tx)).toBe(false);
   });
 
+  it('lists document remaining amounts, hides fully settled documents and rejects re-settlement via another bank row (UAT R9 limit)', async () => {
+    const co = await setup('limit');
+    const a = await doc(co, '60.00');
+    const b = await doc(co, '40.00');
+    const c = await doc(co, '50.00');
+    const tx1 = await bankTx(co, '2026-01-20', '100.00');
+    expect((await allocate(co, tx1, [[a, '60.00'], [b, '40.00']])).status).toBe(201);     // G: 60 + 40 against one 100 row
+    expect((await allocate(co, tx1, [[c, '1.00']])).status).toBe(409);                    // F: above the bank row remaining
+    const tx2 = await bankTx(co, '2026-01-21', '100.00');
+    const part = await allocate(co, tx2, [[c, '20.00']]);
+    expect(part.status).toBe(201);
+    const list = (await co.owner.client.req('GET', `/bank-transactions/${tx2}/match-candidates`)).json.documents as Array<{ id: string; total_amount: string; settled_amount: string; remaining_amount: string }>;
+    expect(list.find(d => d.id === c)).toMatchObject({ total_amount: '50.00', settled_amount: '20.00', remaining_amount: '30.00' });   // B
+    expect(list.find(d => d.id === a)).toBeUndefined();                                    // C
+    expect(list.find(d => d.id === b)).toBeUndefined();
+    const d = await doc(co, '75.00');
+    const tx3 = await bankTx(co, '2026-01-22', '100.00');
+    const fresh = (await co.owner.client.req('GET', `/bank-transactions/${tx3}/match-candidates`)).json.documents as Array<{ id: string; remaining_amount: string }>;
+    expect(fresh.find(x => x.id === d)?.remaining_amount).toBe('75.00');                  // A
+    const before = await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1', [co.id]);
+    const rej = await allocate(co, tx3, [[a, '1.00']]);                                    // D
+    expect(rej.status).toBe(409);
+    expect(await settlementsOf(tx3)).toHaveLength(0);                                      // E
+    expect(await h.count('SELECT COUNT(*)::text n FROM bank_transaction_matches WHERE bank_transaction_id=$1', [tx3])).toBe(0);
+    expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1', [co.id])).toBe(before);
+  });
+
   it('prevents over-allocation of the bank transaction and of each document, in the service and in the database', async () => {
     const co = await setup('over');
     const a = await doc(co, '600.00');

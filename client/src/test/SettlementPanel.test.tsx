@@ -73,4 +73,18 @@ describe('SettlementPanel',()=>{
     expect(await screen.findByText('The allocation exceeds the unallocated amount')).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'Save allocations'})).toBeDisabled();
   });
+  it('shows the real document remaining amount and blocks an amount above it',async()=>{
+    const tx={id:TX,transaction_date:'2026-01-20',description:'Receipt',bank_reference:'R1',amount:'1000.00',reconciliation_status:'unmatched'};
+    const data=candidates('0.00','1000.00');
+    Object.assign(data.documents[0]!,{remaining_amount:'25.00'});
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/bank-transactions'?new Response(JSON.stringify({transactions:[tx]}),{status:200}):new Response(JSON.stringify(data),{status:200})));
+    renderPanel({canView:true,canSettle:true,onUnauthorized:vi.fn()});
+    fireEvent.click((await screen.findAllByLabelText('Matched bank transaction'))[0]!);
+    fireEvent.click(await screen.findByText(/Receipt/));
+    expect(await screen.findByText('25.00')).toBeInTheDocument();
+    expect(screen.queryByText('600.00')).not.toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('Settlement amount a.pdf'),{target:{value:'26'}});
+    expect(await screen.findByText('An amount exceeds the document remaining amount')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Save allocations'})).toBeDisabled();
+  });
 });
