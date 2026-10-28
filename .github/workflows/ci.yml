@@ -42,6 +42,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The backup/restore round-trip tests spawn pg_dump/pg_restore from PATH and restore into the postgres:16 service.
+      # A newer client than the server writes `SET transaction_timeout` (PostgreSQL 17+), which a 16 server rejects, so pin the client to 16.
+      - name: Install PostgreSQL 16 client tools
+        run: |
+          echo "Runner default: $(pg_restore --version 2>&1 || echo none)"
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/16/bin/pg_dump --version
+          /usr/lib/postgresql/16/bin/pg_restore --version
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
