@@ -56,6 +56,7 @@ const TEXT = {
     asOf: 'As of', payersEmpty: 'No payers registered.', displayName: 'Display name', payableAccount: 'Payable account (liability)', partnerLink: 'Partner (uses current account)', member: 'Company member (optional)',
     addPayer: 'Add payer', mappingMissing: 'Mapping missing', active: 'Active', inactive: 'Inactive', deactivate: 'Deactivate', activate: 'Activate', none: 'None',
     statuses: { draft: 'Draft', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected' } as Record<Status, string>,
+    settleLabel: 'Reimbursement',
     settle: { none: 'Not reimbursed', partial: 'Partly reimbursed', full: 'Fully reimbursed' } as Record<string, string>,
     errors: {
       PERSONAL_PAYMENT_MAPPING_MISSING: 'The payer has no valid account mapping. Fix the mapping before approving.',
@@ -83,6 +84,7 @@ const TEXT = {
     asOf: 'كما في', payersEmpty: 'لا يوجد دافعون مسجلون.', displayName: 'الاسم', payableAccount: 'حساب الذمة (التزامات)', partnerLink: 'الشريك (يستخدم حسابه الجاري)', member: 'عضو في الشركة (اختياري)',
     addPayer: 'إضافة دافع', mappingMissing: 'الربط المحاسبي ناقص', active: 'نشط', inactive: 'غير نشط', deactivate: 'إيقاف', activate: 'تفعيل', none: 'لا يوجد',
     statuses: { draft: 'مسودة', submitted: 'مرسلة', approved: 'معتمدة', rejected: 'مرفوضة' } as Record<Status, string>,
+    settleLabel: 'الاسترداد',
     settle: { none: 'غير مستردة', partial: 'مستردة جزئياً', full: 'مستردة بالكامل' } as Record<string, string>,
     errors: {
       PERSONAL_PAYMENT_MAPPING_MISSING: 'لا يوجد ربط محاسبي صالح للدافع. أصلح الربط قبل الاعتماد.',
@@ -225,7 +227,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
           <thead><tr><th>{L.payer}</th><th>{L.purpose}</th><th>{L.date}</th><th>{L.amount}</th><th>{L.status}</th><th>{L.outstanding}</th><th>{L.actions}</th></tr></thead>
           <tbody>{payments.map(p => <tr key={p.id}>
             <td data-label={L.payer}>{p.payer_name}<small> {p.payer_kind === 'partner' ? L.partner : L.employee}</small></td><td data-label={L.purpose}>{p.purpose}{p.rejection_reason && <small> — {p.rejection_reason}</small>}</td><td data-label={L.date}>{p.payment_date}</td><td data-label={L.amount}>{money(p.amount)}</td>
-            <td data-label={L.status}><StatusBadge status={p.status}>{L.statuses[p.status]}</StatusBadge>{p.status === 'approved' && <small> {L.settle[p.settlement_status ?? 'none']}</small>}</td>
+            <td data-label={L.status}><div className="pp-status"><StatusBadge status={p.status}>{L.statuses[p.status]}</StatusBadge>{p.status === 'approved' && <small data-label={L.settleLabel}> {L.settle[p.settlement_status ?? 'none']}</small>}</div></td>
             <td data-label={L.outstanding}>{p.status === 'approved' ? money(p.outstanding_amount) : '—'}</td>
             <td className="pp-actions" data-label={L.actions}>
               {p.status === 'draft' && can('personal_payment.create') && <><button type="button" onClick={() => void openForm(p)}>{L.edit}</button><button type="button" disabled={busy} onClick={() => void act(() => api(`/api/personal-payments/${p.id}?version=${p.version}`, { method: 'DELETE' }, onUnauthorized))}>{L.remove}</button></>}
