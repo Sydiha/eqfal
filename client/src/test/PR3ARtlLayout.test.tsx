@@ -34,3 +34,19 @@ describe('PR-3A mobile layout rules', () => {
     expect(c).toMatch(/\.ob-sub bdi\{unicode-bidi:isolate;overflow-wrap:anywhere\}/);
   });
 });
+
+describe('PR-3B settlement panel mobile layout', () => {
+  it('drops the forced table min-width and stacks rows with labelled cells on narrow screens', () => {
+    const c = css('banking-workspace.css');
+    expect(c).toMatch(/@media\(max-width:58em\)\{\s*\.settlement-scroll\{--table-min-width:0!important\}/);
+    expect(c).toMatch(/\.settlement-stack td::before\{content:attr\(data-label\)/);
+    expect(c).toMatch(/\.settlement-form-row\{flex-direction:column/);
+  });
+  it('labels every allocation and history cell so no value or action loses its caption', () => {
+    const src = readFileSync(resolve(__dirname, '../components/SettlementPanel.tsx'), 'utf8');
+    expect((src.match(/data-label=/g) ?? []).length).toBe(8);
+    expect(src).toContain('settlement-stack--alloc');
+    expect(src).toContain('settlement-stack--history');
+    expect(src.match(/settlement-form-row/g)?.length).toBe(2);
+  });
+});
