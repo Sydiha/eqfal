@@ -47,7 +47,7 @@ const en = {
     switchAriaLabel: 'Switch active company',
     switching: 'Switching company…',
   },
-  common: { cancel: 'Cancel', close: 'Close', save: 'Save', confirm: 'Confirm', retry: 'Try again' },
+  common: { cancel: 'Cancel', close: 'Close', save: 'Save', confirm: 'Confirm', retry: 'Try again', loading: 'Loading…' },
   journalReversal: {
     button: 'Reverse journal', title: 'Reverse this posted journal?', confirm: 'Reverse journal', date: 'Reversal date', reason: 'Reason for the reversal',
     confirmation: 'A new, separate journal is posted with debit and credit swapped and linked to this one. The original journal stays unchanged in the books and in the audit trail. The reversal date must fall in an open period and cannot be before the original date.',

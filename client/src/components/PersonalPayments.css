@@ -36,6 +36,9 @@
   .personal-payments .pp-table tr { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; background: #fff; }
   .personal-payments .pp-table td { display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr); gap: 8px; align-items: baseline; min-width: 0; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
   .personal-payments .pp-table td::before { content: attr(data-label); color: var(--text-muted, #667085); font-size: .78rem; font-weight: 600; }
+  .personal-payments .pp-status { display: grid; gap: 4px; min-width: 0; }
+  .personal-payments .pp-status > small { display: grid; grid-template-columns: minmax(0, auto) 1fr; gap: 6px; align-items: baseline; }
+  .personal-payments .pp-status > small::before { content: attr(data-label) ':'; font-weight: 600; }
   .personal-payments .pp-table td.pp-actions { display: flex; flex-wrap: wrap; gap: 6px; white-space: normal; padding-block-start: 8px; border-block-start: 1px solid var(--border, #d9dee7); }
   .personal-payments .pp-table td.pp-actions::before { flex-basis: 100%; }
   .personal-payments .pp-table td.pp-actions button { flex: 1 1 auto; margin: 0; }
