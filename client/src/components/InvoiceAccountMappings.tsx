@@ -79,31 +79,36 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
       : t('invoiceMappings.reasonType', { actual: typeName(row.account.account_type), required: typeName(row.required_account_type) });
   };
 
+  const optionsFor = (row: Mapping) => row.eligible_accounts.filter((a) => a.id !== row.account?.id);
+  const selectedFor = (row: Mapping) => optionsFor(row).find((a) => a.id === (choice[row.key] ?? '')) ?? null;
+
   const actions = (row: Mapping) => {
     const name = keyName(row.key);
-    const selectedId = choice[row.key] ?? '';
-    const options = row.eligible_accounts.filter((a) => a.id !== row.account?.id);
-    const selected = options.find((a) => a.id === selectedId) ?? null;
+    const options = optionsFor(row);
+    const selected = selectedFor(row);
+    const selectedId = selected?.id ?? '';
     const rowBusy = busy?.key === row.key;
     const locked = busy !== null;
+    const hintId = `mapping-save-hint-${row.key}`;
     return <div className="invoice-mappings__actions">
       {options.length === 0
         ? <p className={`invoice-mappings__note${row.status === 'configured' ? '' : ' is-warning'}`} data-testid={`mapping-no-eligible-${row.key}`}>
           {row.status === 'configured' ? t('invoiceMappings.noAlternative', { type: typeName(row.required_account_type) }) : t('invoiceMappings.noEligible', { type: typeName(row.required_account_type) })}</p>
-        : <select className="invoice-mappings__select" aria-label={t('invoiceMappings.chooseFor', { name })} value={selected ? selectedId : ''} onChange={(e) => setChoice({ ...choice, [row.key]: e.target.value })} disabled={locked}>
+        : <select className="invoice-mappings__select" aria-label={t('invoiceMappings.chooseFor', { name })} value={selectedId} onChange={(e) => setChoice({ ...choice, [row.key]: e.target.value })} disabled={locked}>
           <option value="">{t('invoiceMappings.chooseAccount')}</option>
           {options.map((a) => <option key={a.id} value={a.id}>{optionLabel(a)}</option>)}
         </select>}
+      {selected && !rowBusy && <span className="badge invoice-mappings__unsaved" data-testid={`mapping-unsaved-${row.key}`}>{t('invoiceMappings.unsaved')}</span>}
       {selected && <div className="invoice-mappings__compare" data-testid={`mapping-compare-${row.key}`}>
         {row.account && <><div><span className="invoice-mappings__compare-label">{t('invoiceMappings.from')}</span>{accountLabel(row.account)}</div><span className="invoice-mappings__arrow" aria-hidden="true">→</span></>}
         <div><span className="invoice-mappings__compare-label">{t('invoiceMappings.to')}</span>{accountLabel(selected)}{!row.account && <small>{t('invoiceMappings.firstTime')}</small>}</div>
       </div>}
       <div className="invoice-mappings__buttons">
-        {options.length > 0 && <button type="button" className="primary invoice-mappings__save" aria-label={t('invoiceMappings.saveFor', { name })} disabled={!selected || locked} onClick={() => void send(row, 'PUT')}>
+        {options.length > 0 && <button type="button" className="primary invoice-mappings__save" aria-label={t('invoiceMappings.saveFor', { name })} disabled={!selected || locked} aria-describedby={options.length > 0 && !selected && !locked ? hintId : undefined} onClick={() => void send(row, 'PUT')}>
           {rowBusy && busy.method === 'PUT' ? <><span className="invoice-mappings__spinner" aria-hidden="true" />{t('invoiceMappings.saving')}</> : t('invoiceMappings.save')}</button>}
         {row.account && <button type="button" className="invoice-mappings__clear" aria-label={t('invoiceMappings.clearFor', { name })} disabled={locked} onClick={() => setConfirmClear(row)}>
           {rowBusy && busy.method === 'DELETE' ? <><span className="invoice-mappings__spinner" aria-hidden="true" />{t('invoiceMappings.clearing')}</> : t('invoiceMappings.clear')}</button>}
-        {selected && !rowBusy && <span className="badge invoice-mappings__unsaved" data-testid={`mapping-unsaved-${row.key}`}>{t('invoiceMappings.unsaved')}</span>}
+        {options.length > 0 && !selected && !locked && <small id={hintId} className="invoice-mappings__save-hint">{t('invoiceMappings.saveDisabledHint')}</small>}
       </div>
     </div>;
   };
@@ -124,7 +129,7 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
       <ul className="invoice-mappings__rows" aria-labelledby={`invoice-mappings-${section}`}>
         {rows.filter((r) => r.section === section).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).map((row) => {
           const why = reason(row);
-          return <li key={row.key} className={`invoice-mappings__row is-${row.status}`} data-testid={`mapping-${row.key}`} aria-busy={busy?.key === row.key || undefined}>
+          return <li key={row.key} className={`invoice-mappings__row is-${row.status}${canManage && selectedFor(row) ? ' is-modified' : ''}`} data-testid={`mapping-${row.key}`} aria-busy={busy?.key === row.key || undefined}>
             <div className="invoice-mappings__role">
               <strong>{keyName(row.key)}</strong>
               <span className="invoice-mappings__muted">{t('invoiceMappings.requiredType')}: {typeName(row.required_account_type)}</span>
