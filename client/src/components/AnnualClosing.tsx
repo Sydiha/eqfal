@@ -8,6 +8,7 @@ import { useDateContext } from '../context/DateContext';
 import { ExportButtons } from './ExportButtons';
 import { useActiveCompanyName } from '../context/CompanyContext';
 import { annualClosingExport, annualPackageExport, generatedStamp, packageCutoverLines } from '../export/reportExport';
+import { formatDisplayDate } from '../date-format';
 import './AnnualClosing.css';
 
 type FiscalYear = { id: string; name: string; start_date: string; end_date: string };
@@ -113,7 +114,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
     rows:shownManifest.map(item=>({name:sectionName(item),state:status(item.status),source:sourceLabel(item.source),blockers:item.blockers.map(blockerLabel).join(isArabic?'، ':', ')})),cutover:cutoverLines}):null;
   return <section className="panel annual-closing-view" aria-labelledby="annual-closing-title">
     <header className="ac-header"><h1 id="annual-closing-title">{t('annualClosing.title')}</h1><p>{t('annualClosing.description')}</p></header>
-    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{selectedYear.start_date} – {selectedYear.end_date}</bdi></span>}</div>
+    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{formatDisplayDate(selectedYear.start_date,i18n.language).replace(/\u200f/g,'')} – {formatDisplayDate(selectedYear.end_date,i18n.language).replace(/\u200f/g,'')}</bdi></span>}</div>
     {loading && <p role="status">{t('annualClosing.loading')}</p>}{error && <p role="alert">{error}</p>}
     {result && <>
       <div className="ac-tabs" role="tablist" aria-label={t('annualClosing.title')}>{tabs.map(([key,label])=><button key={key} type="button" role="tab" id={`ac-tab-${key}`} aria-selected={tab===key} aria-controls={`ac-panel-${key}`} className={tab===key?'ac-tab ac-tab--active':'ac-tab'} onClick={()=>setTab(key)}>{t(label)}</button>)}</div>
