@@ -6,6 +6,7 @@ import { useActiveCompanyName } from '../context/CompanyContext';
 import { agingExport, generatedStamp } from '../export/reportExport';
 import './ObligationsAging.css';
 import { formatMoney } from '../money-format';
+import { formatDisplayDateLtr } from '../date-format';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
 type AgingItem = { obligation_id: string; counterparty_name: string; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
@@ -75,7 +76,7 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
       </form>
       <ExportButtons language={i18n.language} document={exportDoc} landscape />
     </div>
-    <div className="workspace-tabs ob-aging__sides" role="tablist" aria-label={L.sides}>
+    <div className="workspace-tabs workspace-tabs--segmented ob-aging__sides" role="tablist" aria-label={L.sides}>
       {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => setSide(key)}>{L[key]}</button>)}
     </div>
     {state === 'loading' && <WorkspaceState>{L.loading}</WorkspaceState>}
@@ -88,15 +89,15 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
       {data.items.length === 0
         ? <WorkspaceState kind="empty">{L.empty}</WorkspaceState>
         : <div className="table-wrap ob-aging__table"><table>
-          <thead><tr><th>{L.counterparty}</th><th>{L.dueOn}</th><th>{L.daysOverdue}</th><th>{L.bucket}</th><th>{L.outstanding}</th></tr></thead>
+          <thead><tr><th>{L.counterparty}</th><th>{L.dueOn}</th><th>{L.daysOverdue}</th><th>{L.bucket}</th><th className="ob-aging__amount">{L.outstanding}</th></tr></thead>
           <tbody>{data.items.map((item) => <tr key={item.obligation_id}>
-            <td dir="auto" data-label={L.counterparty}>{item.counterparty_name}</td>
-            <td data-label={L.dueOn}><span dir="ltr">{item.due_on ?? L.noDue}</span></td>
+            <td data-label={L.counterparty}><bdi dir="auto">{item.counterparty_name}</bdi></td>
+            <td data-label={L.dueOn}>{item.due_on ? <span dir="ltr">{formatDisplayDateLtr(item.due_on, i18n.language)}</span> : L.noDue}</td>
             <td data-label={L.daysOverdue}><span dir="ltr">{item.days_overdue}</span></td>
             <td data-label={L.bucket}>{L.buckets[item.bucket]}</td>
-            <td data-label={L.outstanding}><span dir="ltr">{fmt(item.outstanding_amount)}</span></td>
+            <td className="ob-aging__amount" data-label={L.outstanding}><span className="fin-amount">{fmt(item.outstanding_amount)}</span></td>
           </tr>)}</tbody>
-          <tfoot><tr><th scope="row" colSpan={4}>{L.total}</th><th><span dir="ltr">{fmt(data.total_outstanding)}</span></th></tr></tfoot>
+          <tfoot><tr><th scope="row" colSpan={4}>{L.total}</th><td className="ob-aging__amount"><span className="fin-amount">{fmt(data.total_outstanding)}</span></td></tr></tfoot>
         </table></div>}
     </>}
   </section>;

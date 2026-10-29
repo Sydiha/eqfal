@@ -9,3 +9,13 @@
 .bank-statement-reconciliation .bsr-table th,.bank-statement-reconciliation .bsr-table td{text-align:start;vertical-align:middle;overflow-wrap:anywhere}
 .bank-statement-reconciliation .bsr-ltr{display:inline-block;unicode-bidi:isolate;direction:ltr;white-space:nowrap;font-variant-numeric:tabular-nums}
 .bank-statement-reconciliation .bsr-text{unicode-bidi:isolate}
+/* Outstanding items: amounts at the end of the column; labelled rows on phones instead of a horizontally scrolled table. */
+.bank-statement-reconciliation .bsr-items .bsr-items__amount{text-align:end}
+.bank-statement-reconciliation [id^=bsr-]:focus{outline:none}
+@media(max-width:48em){
+  .bank-statement-reconciliation .bsr-items thead{display:none}
+  .bank-statement-reconciliation .bsr-items,.bank-statement-reconciliation .bsr-items tbody,.bank-statement-reconciliation .bsr-items tr{display:block;width:100%}
+  .bank-statement-reconciliation .bsr-items tr{padding:8px 0;border-block-end:1px solid var(--border)}
+  .bank-statement-reconciliation .bsr-items td{display:flex;justify-content:space-between;gap:12px;padding:3px 0!important;border:0!important;text-align:start!important}
+  .bank-statement-reconciliation .bsr-items td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
+}
