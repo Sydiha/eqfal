@@ -22,3 +22,8 @@
   .ob-aging__table td[data-label]{display:grid;grid-template-columns:minmax(0,40%) minmax(0,1fr);gap:8px;align-items:baseline}
   .ob-aging__table td[data-label]::before{content:attr(data-label);color:var(--muted,#6b7280);font-size:.78rem;font-weight:600}
 }
+/* Amounts align to the end of their column; the grand total is the strongest row of the table, not the weakest. */
+.ob-aging__table .ob-aging__amount{text-align:end}
+.ob-aging__table tfoot th,.ob-aging__table tfoot td{padding-block:12px;border-block-start:2px solid var(--text,#0b1d3a);color:var(--text,#0b1d3a);font-size:.95rem;font-weight:800}
+.ob-aging__bucket--total dd{font-size:1.05rem}
+@media (max-width:48em){.ob-aging__table .ob-aging__amount{text-align:start}.ob-aging__table tfoot tr{display:flex;justify-content:space-between;gap:8px;border-block-start:2px solid var(--text,#0b1d3a)}.ob-aging__table tfoot th,.ob-aging__table tfoot td{border:0}}

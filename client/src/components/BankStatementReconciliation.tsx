@@ -2,6 +2,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { readQueryParameter } from '../navigation/queryState';
+import { formatMoney } from '../money-format';
+import { formatDisplayDateLtr } from '../date-format';
 import './BankStatementReconciliation.css';
 
 type Mode = 'off' | 'warn' | 'enforce';
@@ -36,7 +38,7 @@ const copy = {
     calc: 'Reconciliation', stmt: 'Statement closing balance', dit: 'Deposits in transit', op: 'Outstanding payments', adjBank: 'Adjusted bank balance', gl: 'Ledger balance (all posted lines)',
     diff: 'Unexplained difference', items: 'Evidence-backed outstanding items', kind: 'Type', amount: 'Amount', glDate: 'Ledger date', bankDate: 'Bank date', aged: 'Older than 10 days',
     deposit_in_transit: 'Deposit in transit', outstanding_payment: 'Outstanding payment', none: 'None', rejected: 'Evidence rejected (amount or direction differs from the bank row)',
-    bankOnly: 'Bank rows without an accounting entry yet', zero: 'Tolerance is exactly zero. No manual adjustments are possible.',
+    bankOnly: 'Bank rows without an accounting entry yet', goLink: 'Link the ledger account', goStatement: 'Enter the statement balance', unknownDiff: 'Cannot be calculated yet', reconciledHint: 'Adjusted bank balance equals the ledger balance.', problemHint: 'Explain or correct the difference before closing.', unknownHint: 'Resolve the items below to calculate the difference.', settingsTitle: 'Closing check settings', zero: 'Tolerance is exactly zero. No manual adjustments are possible.',
     problemLabels: { unmapped: 'Bank account is not linked to a ledger account', statement_missing: 'No confirmed statement balance for this date', currency_mismatch: 'Bank currency differs from the company currency',
       currency_unverified: 'No approved accounting profile gives the company currency', difference_unexplained: 'Difference is not explained by evidenced items' } as Record<string, string>,
     warningLabels: { outstanding_aged: 'An outstanding item is older than 10 days', bank_only_items: 'Bank rows exist without an accounting entry' } as Record<string, string>,
@@ -70,7 +72,7 @@ const copy = {
     calc: 'المطابقة', stmt: 'الرصيد الختامي للكشف', dit: 'إيداعات في الطريق', op: 'مدفوعات معلقة', adjBank: 'رصيد البنك المعدّل', gl: 'رصيد الدفتر (كل القيود المرحّلة)',
     diff: 'الفرق غير المفسَّر', items: 'بنود معلقة مثبتة بدليل', kind: 'النوع', amount: 'المبلغ', glDate: 'تاريخ القيد', bankDate: 'تاريخ البنك', aged: 'أقدم من 10 أيام',
     deposit_in_transit: 'إيداع في الطريق', outstanding_payment: 'دفعة معلقة', none: 'لا يوجد', rejected: 'أدلة مرفوضة (المبلغ أو الاتجاه يخالف حركة البنك)',
-    bankOnly: 'حركات بنكية بلا قيد محاسبي بعد', zero: 'حد التسامح صفر تماماً. لا توجد تسويات يدوية.',
+    bankOnly: 'حركات بنكية بلا قيد محاسبي بعد', goLink: 'اربط حساب الدفتر', goStatement: 'أدخل رصيد الكشف', unknownDiff: 'لا يمكن احتسابه بعد', reconciledHint: 'رصيد البنك المعدّل يساوي رصيد الدفتر.', problemHint: 'فسّر الفرق أو صحّحه قبل الإقفال.', unknownHint: 'عالج البنود أدناه ليُحتسب الفرق.', settingsTitle: 'إعدادات فحص الإقفال', zero: 'حد التسامح صفر تماماً. لا توجد تسويات يدوية.',
     problemLabels: { unmapped: 'الحساب البنكي غير مربوط بحساب في الدفتر', statement_missing: 'لا يوجد رصيد كشف معتمد لهذا التاريخ', currency_mismatch: 'عملة البنك تخالف عملة الشركة',
       currency_unverified: 'لا يوجد ملف محاسبي معتمد يحدد عملة الشركة', difference_unexplained: 'الفرق غير مفسَّر ببنود مثبتة' } as Record<string, string>,
     warningLabels: { outstanding_aged: 'بند معلق أقدم من 10 أيام', bank_only_items: 'توجد حركات بنكية بلا قيد محاسبي' } as Record<string, string>,
@@ -214,60 +216,68 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     {error && <Alert color="red" role="alert">{error}</Alert>}
     {!canManageStatements && !canConfirmStatements && !canManageSettings && <Text size="sm" c="dimmed">{s.noPermission}</Text>}
 
-    <Card withBorder><Group justify="space-between" align="end" wrap="wrap">
-      <div><Title order={3} size="h4">{s.mode}</Title><Badge color={settings.mode === 'enforce' ? 'red' : settings.mode === 'warn' ? 'yellow' : 'gray'}>{s.modes[settings.mode]}</Badge>
-        {settings.enforce_from && <Text size="sm" c="dimmed"> {s.effective}: {settings.enforce_from}</Text>}</div>
-      {canManageSettings && <form onSubmit={saveSettings} noValidate><Group align="end">
-        <NativeSelect label={s.mode} value={mode} onChange={e => setMode(e.currentTarget.value as Mode)} data={(['off', 'warn', 'enforce'] as Mode[]).map(m => ({ value: m, label: s.modes[m] }))}/>
-        {mode === 'enforce' && <TextInput type="date" dir="ltr" label={s.effective} value={enforceFrom} onChange={e => setEnforceFrom(e.currentTarget.value)} error={fieldErrors['enforceFrom']} required/>}
-        <Button type="submit">{s.save}</Button></Group></form>}
+    <Card withBorder><Group align="end" wrap="wrap" justify="space-between">
+      <Group align="end" wrap="wrap">
+        <NativeSelect label={s.account} value={bankId} onChange={e => setBankId(e.currentTarget.value)} data={accounts.map(a => ({ value: a.id, label: `${a.display_name} (${a.currency_code})` }))}/>
+        <TextInput type="date" dir="ltr" label={s.periodEnd} value={periodEnd} onChange={e => setPeriodEnd(e.currentTarget.value)}/>
+        <Button variant="default" onClick={() => void calculate()}>{s.load}</Button>
+      </Group>
+      <Group gap="xs"><Text size="sm" c="dimmed">{s.mode}:</Text><Badge color={settings.mode === 'enforce' ? 'red' : settings.mode === 'warn' ? 'yellow' : 'gray'}>{s.modes[settings.mode]}</Badge>{settings.enforce_from && <Text size="sm" c="dimmed">{s.effective}: <span dir="ltr">{formatDisplayDateLtr(settings.enforce_from, i18n.language)}</span></Text>}</Group>
     </Group></Card>
 
-    <Card withBorder><Group align="end" wrap="wrap">
-      <NativeSelect label={s.account} value={bankId} onChange={e => setBankId(e.currentTarget.value)} data={accounts.map(a => ({ value: a.id, label: `${a.display_name} (${a.currency_code})` }))}/>
-      <TextInput type="date" dir="ltr" label={s.periodEnd} value={periodEnd} onChange={e => setPeriodEnd(e.currentTarget.value)}/>
-      <Button variant="default" onClick={() => void calculate()}>{s.load}</Button>
-    </Group></Card>
-
-    {result && <Card withBorder><Stack gap="sm">
-      <Group justify="space-between"><Title order={3} size="h4">{s.calc}</Title>
-        {result.reconciled ? <Badge color="green">{s.ok}</Badge> : <Badge color={problemKind === s.blocker ? 'red' : 'yellow'}>{problemKind}</Badge>}</Group>
-      <Table><Table.Tbody>
-        <Table.Tr><Table.Td>{s.stmt}</Table.Td><Table.Td dir="ltr">{result.statement_closing_balance ?? '—'}</Table.Td></Table.Tr>
-        <Table.Tr><Table.Td>+ {s.dit}</Table.Td><Table.Td dir="ltr">{result.deposits_in_transit}</Table.Td></Table.Tr>
-        <Table.Tr><Table.Td>− {s.op}</Table.Td><Table.Td dir="ltr">{result.outstanding_payments}</Table.Td></Table.Tr>
-        <Table.Tr><Table.Td fw={700}>{s.adjBank}</Table.Td><Table.Td dir="ltr" fw={700}>{result.adjusted_bank_balance ?? '—'}</Table.Td></Table.Tr>
-        <Table.Tr><Table.Td fw={700}>{s.gl}</Table.Td><Table.Td dir="ltr" fw={700}>{result.gl_balance ?? '—'}</Table.Td></Table.Tr>
-        <Table.Tr><Table.Td fw={700}>{s.diff}</Table.Td><Table.Td dir="ltr" fw={700} c={result.difference && result.difference !== '0.00' ? 'red' : undefined}>{result.difference ?? '—'}</Table.Td></Table.Tr>
-      </Table.Tbody></Table>
+    {result && (() => {
+      const known = result.difference !== null;
+      const problem = known && !result.reconciled;
+      const tone = !known ? 'is-unknown' : problem ? 'is-problem' : 'is-ok';
+      const severity = problemKind === s.blocker ? 'red' : 'yellow';
+      const goTo = (id: string) => { const el = document.getElementById(id); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.focus({ preventScroll: true }); };
+      return <Card withBorder><Stack gap="md">
+      <div className="bsr-result__status"><Title order={3} size="h4">{s.calc}</Title>
+        {result.reconciled ? <Badge color="green">{s.ok}</Badge> : <Badge color={severity}>{problemKind}</Badge>}</div>
+      <div className="bsr-result">
+        <dl className="fin-headline"><dt className="fin-headline__label">{s.diff}</dt><dd className={`fin-headline__value ${tone}`}>{known ? formatMoney(result.difference) : s.unknownDiff}</dd>
+          <dd className="fin-headline__hint">{!known ? s.unknownHint : problem ? s.problemHint : s.reconciledHint}</dd></dl>
+        <dl className="fin-summary">
+          <div><dt>{s.stmt}</dt><dd>{formatMoney(result.statement_closing_balance)}</dd></div>
+          <div><dt>+ {s.dit}</dt><dd>{formatMoney(result.deposits_in_transit)}</dd></div>
+          <div><dt>− {s.op}</dt><dd>{formatMoney(result.outstanding_payments)}</dd></div>
+          <div className="is-subtotal"><dt>{s.adjBank}</dt><dd>{formatMoney(result.adjusted_bank_balance)}</dd></div>
+          <div className="is-subtotal"><dt>{s.gl}</dt><dd>{formatMoney(result.gl_balance)}</dd></div>
+          <div className={`is-total${problem ? ' is-problem' : ''}`}><dt>{s.diff}</dt><dd>{formatMoney(result.difference)}</dd></div>
+        </dl>
+      </div>
       <Text size="xs" c="dimmed">{s.zero}</Text>
-      {result.problems.map(p => <Alert key={p} color={problemKind === s.blocker ? 'red' : 'yellow'} title={problemKind}>{s.problemLabels[p] ?? p}</Alert>)}
-      {result.warnings.map(w => <Alert key={w} color="yellow" title={s.warning}>{s.warningLabels[w] ?? w}{w === 'bank_only_items' ? ` (${result.bank_only_count}) · ${s.bankOnly}` : ''}</Alert>)}
+      {result.problems.length > 0 && <Alert color={severity} title={problemKind}><ul className="fin-notice-list">{result.problems.map(p => <li key={p}>{s.problemLabels[p] ?? p}</li>)}</ul>
+        {(result.problems.includes('unmapped') || result.problems.includes('statement_missing')) && <Group gap="xs" mt="sm">
+          {result.problems.includes('unmapped') && <Button size="xs" variant="default" onClick={() => goTo('bsr-links')}>{s.goLink}</Button>}
+          {result.problems.includes('statement_missing') && <Button size="xs" variant="default" onClick={() => goTo('bsr-statements')}>{s.goStatement}</Button>}
+        </Group>}</Alert>}
+      {result.warnings.length > 0 && <Alert color="yellow" title={s.warning}><ul className="fin-notice-list">{result.warnings.map(w => <li key={w}>{s.warningLabels[w] ?? w}{w === 'bank_only_items' ? ` (${result.bank_only_count}) · ${s.bankOnly}` : ''}</li>)}</ul></Alert>}
       {result.rejected_evidence.length > 0 && <Alert color="orange">{s.rejected}: {result.rejected_evidence.length}</Alert>}
       <Title order={4} size="h5">{s.items}</Title>
-      {result.outstanding_items.length === 0 ? <Text c="dimmed">{s.none}</Text> : <Table.ScrollContainer minWidth={560}><Table><Table.Thead><Table.Tr>
-        <Table.Th>{s.kind}</Table.Th><Table.Th>{s.glDate}</Table.Th><Table.Th>{s.bankDate}</Table.Th><Table.Th>{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
-        {result.outstanding_items.map(i => <Table.Tr key={i.journal_entry_id}><Table.Td>{s[i.kind]}</Table.Td><Table.Td dir="ltr">{i.accounting_date}</Table.Td>
-          <Table.Td dir="ltr">{i.bank_transaction_date}{i.aged && <Badge ms="xs" color="yellow">{s.aged}</Badge>}</Table.Td><Table.Td dir="ltr">{i.amount}</Table.Td></Table.Tr>)}
+      {result.outstanding_items.length === 0 ? <Text c="dimmed">{s.none}</Text> : <Table.ScrollContainer minWidth={0} className="bsr-items-scroll"><Table className="bsr-items">
+        <Table.Thead><Table.Tr><Table.Th>{s.kind}</Table.Th><Table.Th>{s.glDate}</Table.Th><Table.Th>{s.bankDate}</Table.Th><Table.Th className="bsr-items__amount">{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
+        {result.outstanding_items.map(i => <Table.Tr key={i.journal_entry_id}><Table.Td data-label={s.kind}>{s[i.kind]}</Table.Td><Table.Td data-label={s.glDate}><span dir="ltr">{formatDisplayDateLtr(i.accounting_date, i18n.language)}</span></Table.Td>
+          <Table.Td data-label={s.bankDate}><span dir="ltr">{formatDisplayDateLtr(i.bank_transaction_date, i18n.language)}</span>{i.aged && <Badge ms="xs" color="yellow">{s.aged}</Badge>}</Table.Td><Table.Td className="bsr-items__amount" data-label={s.amount}><span className="fin-amount">{formatMoney(i.amount)}</span></Table.Td></Table.Tr>)}
       </Table.Tbody></Table></Table.ScrollContainer>}
-    </Stack></Card>}
+    </Stack></Card>; })()}
 
-    <Card withBorder><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
-      {activeLink ? <Group><Text dir="auto">{ledgerName(activeLink.account_id)} · {activeLink.valid_from}</Text>
-        {canManageLinks && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link: activeLink })}>{s.endLink} ({periodEnd})</Button>}</Group> : <Text c="dimmed">{s.unlinked}</Text>}
+    <Card withBorder id="bsr-links" tabIndex={-1}><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
+      {activeLink ? <Group><Text><bdi dir="auto">{ledgerName(activeLink.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(activeLink.valid_from, i18n.language)}</span></Text>
+        {canManageLinks && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link: activeLink })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group> : <Text c="dimmed">{s.unlinked}</Text>}
       {canManageLinks && !activeLink && <form onSubmit={addLink} noValidate><Group align="end">
         <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
         <TextInput type="date" dir="ltr" label={s.validFrom} value={validFrom} onChange={e => setValidFrom(e.currentTarget.value)} error={fieldErrors['validFrom']} required/>
         <Button type="submit">{s.link}</Button></Group></form>}
     </Stack></Card>
 
-    <Card withBorder><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
+    <Card withBorder id="bsr-statements" tabIndex={-1}><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
       {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={640}><Table className="bsr-table">
         <colgroup><col className="bsr-col-ref"/><col className="bsr-col-period"/><col className="bsr-col-closing"/><col className="bsr-col-status"/><col className="bsr-col-actions"/></colgroup>
         <Table.Thead><Table.Tr>
         <Table.Th>{s.ref}</Table.Th><Table.Th>{s.period}</Table.Th><Table.Th>{s.closing}</Table.Th><Table.Th>{s.status}</Table.Th><Table.Th>{s.actions}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
         {bankStatements.map(st => <Table.Tr key={st.id}><Table.Td><bdi dir="auto" className="bsr-text">{st.statement_ref}</bdi>{st.replacement_reason && <Text size="xs" c="dimmed"><bdi dir="auto">{st.replacement_reason}</bdi></Text>}</Table.Td>
-          <Table.Td><bdi dir="ltr" className="bsr-ltr">{st.period_start} → {st.period_end}</bdi></Table.Td><Table.Td><bdi dir="ltr" className="bsr-ltr">{st.closing_balance} {st.currency_code}</bdi></Table.Td><Table.Td>{statusBadge(st.status)}</Table.Td>
+          <Table.Td><bdi dir="ltr" className="bsr-ltr">{formatDisplayDateLtr(st.period_start, i18n.language)} → {formatDisplayDateLtr(st.period_end, i18n.language)}</bdi></Table.Td><Table.Td><bdi dir="ltr" className="bsr-ltr">{formatMoney(st.closing_balance)} {st.currency_code}</bdi></Table.Td><Table.Td>{statusBadge(st.status)}</Table.Td>
           <Table.Td><Group gap="xs" justify="flex-start">
             {st.status === 'draft' && canConfirmStatements && <Button size="xs" onClick={() => setPending({ kind: 'confirm', st })}>{s.confirm}</Button>}
             {st.status === 'draft' && canManageStatements && <Button size="xs" color="red" variant="subtle" onClick={() => setPending({ kind: 'delete', st })}>{s.remove}</Button>}
@@ -288,5 +298,14 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
           {replacing && <Button variant="default" onClick={() => { setReplacing(null); setReason(''); }}>×</Button>}
         </Group></Stack></form>}
     </Stack></Card>
+
+    <Card withBorder><Group justify="space-between" align="end" wrap="wrap">
+      <div><Title order={3} size="h4">{s.settingsTitle}</Title><Badge color={settings.mode === 'enforce' ? 'red' : settings.mode === 'warn' ? 'yellow' : 'gray'}>{s.modes[settings.mode]}</Badge>
+        {settings.enforce_from && <Text size="sm" c="dimmed"> {s.effective}: <span dir="ltr">{formatDisplayDateLtr(settings.enforce_from, i18n.language)}</span></Text>}</div>
+      {canManageSettings && <form onSubmit={saveSettings} noValidate><Group align="end">
+        <NativeSelect label={s.mode} value={mode} onChange={e => setMode(e.currentTarget.value as Mode)} data={(['off', 'warn', 'enforce'] as Mode[]).map(m => ({ value: m, label: s.modes[m] }))}/>
+        {mode === 'enforce' && <TextInput type="date" dir="ltr" label={s.effective} value={enforceFrom} onChange={e => setEnforceFrom(e.currentTarget.value)} error={fieldErrors['enforceFrom']} required/>}
+        <Button type="submit">{s.save}</Button></Group></form>}
+    </Group></Card>
   </Stack>;
 }

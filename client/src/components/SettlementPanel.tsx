@@ -3,6 +3,7 @@ import { Alert, Button, Card, Group, NumberInput, Select, Stack, Table, Text, Te
 import { useTranslation } from 'react-i18next';
 import { transactionOptionLabel } from './bankTransactionLabel';
 import { formatMoney } from '../money-format';
+import { formatDisplayDateLtr } from '../date-format';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 
 type Transaction = { id:string; transaction_date:string; description:string|null; bank_reference:string|null; amount:string; reconciliation_status:'unmatched'|'matched'|'reconciled' };
@@ -60,7 +61,7 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
   };
   useEffect(()=>{if(!canView)return;void load(null,{list:true});return()=>{seq.current++;};},[canView]);
   // After a failed reload the list may be outdated: only the selected transaction stays visible (so retry keeps its id) and nothing else can be picked.
-  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:transactionOptionLabel(t)})),[transactions,listStale,selectedTx]);
+  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:transactionOptionLabel(t,i18n.language)})),[transactions,listStale,selectedTx,i18n.language]);
 
   const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');setError('');setRefreshFailed(null);if(!value){seq.current++;setBusy(false);return;}await load(value,{list:false});};
   const retry=()=>void load(selectedTx,{list:true,afterSave:refreshFailed==='afterSave'});
@@ -88,11 +89,11 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
       <div className="banking-metrics-grid">
         <div><span>{s.bankAmount}</span><strong dir="ltr">{formatMoney(candidates.transaction.amount)}</strong></div>
         <div><span>{s.allocated}</span><strong dir="ltr">{formatMoney(candidates.allocated_amount??'0.00')}</strong></div>
-        <div><span>{s.unallocated}</span><strong dir="ltr">{formatMoney(candidates.unallocated_amount)}</strong></div>
+        <div className={unallocatedCents>0?'is-key':undefined}><span>{s.unallocated}</span><strong dir="ltr">{formatMoney(candidates.unallocated_amount)}</strong></div>
         <div><span>{s.matchedDocuments}</span><strong dir="ltr">{candidates.matches?.length??0}</strong></div>
       </div>
       {unallocatedCents>0&&(allocationRows.length===0?<Text c="dimmed">{s.noCandidates}</Text>:<form onSubmit={allocate}><Stack gap="sm">
-        <Table.ScrollContainer minWidth={640} className="settlement-scroll"><Table className="settlement-stack settlement-stack--alloc"><Table.Thead><Table.Tr><Table.Th>{s.document}</Table.Th><Table.Th>{s.counterparty}</Table.Th><Table.Th>{s.remaining}</Table.Th><Table.Th>{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{allocationRows.map(d=><Table.Tr key={d.id}><Table.Td data-label={s.document}><Text size="sm"><bdi dir="ltr">{d.original_filename}</bdi></Text></Table.Td><Table.Td data-label={s.counterparty}><Text dir="auto" size="sm">{d.counterparty_name||'—'}</Text></Table.Td><Table.Td dir="ltr" data-label={s.remaining}>{formatMoney(d.remaining_amount??d.linked_obligation?.remaining_amount??d.total_amount)}</Table.Td><Table.Td data-label={s.amount}><NumberInput hideControls aria-label={`${s.amount} ${d.original_filename}`} value={allocations[d.id]??''} onChange={v=>setAllocations(a=>({...a,[d.id]:v}))} min={0} max={d.remaining_amount!=null?Number(d.remaining_amount):undefined} clampBehavior="none" decimalScale={2} disabled={busy}/></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>
+        <Table.ScrollContainer minWidth={640} className="settlement-scroll"><Table className="settlement-stack settlement-stack--alloc"><Table.Thead><Table.Tr><Table.Th>{s.document}</Table.Th><Table.Th>{s.counterparty}</Table.Th><Table.Th>{s.remaining}</Table.Th><Table.Th>{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{allocationRows.map(d=><Table.Tr key={d.id}><Table.Td data-label={s.document}><Text size="sm"><bdi dir="auto">{d.original_filename}</bdi></Text></Table.Td><Table.Td data-label={s.counterparty}><Text dir="auto" size="sm">{d.counterparty_name||'—'}</Text></Table.Td><Table.Td dir="ltr" data-label={s.remaining}>{formatMoney(d.remaining_amount??d.linked_obligation?.remaining_amount??d.total_amount)}</Table.Td><Table.Td data-label={s.amount}><NumberInput hideControls aria-label={`${s.amount} ${d.original_filename}`} value={allocations[d.id]??''} onChange={v=>setAllocations(a=>({...a,[d.id]:v}))} min={0} max={d.remaining_amount!=null?Number(d.remaining_amount):undefined} clampBehavior="none" decimalScale={2} disabled={busy}/></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>
         {allocationTotal>unallocatedCents&&<Alert color="red">{s.allocationExceeds}</Alert>}
         {docOver&&<Alert color="red">{s.docExceeds}</Alert>}
         <Group align="end" grow className="settlement-form-row"><div><Text size="sm" c="dimmed">{s.allocationTotal}</Text><Text fw={700} dir="ltr">{formatMoney((allocationTotal/100).toFixed(2))}</Text></div><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy} disabled={docOver||allocationTotal<=0||allocationTotal>unallocatedCents}>{s.allocate}</Button></Group>
@@ -101,15 +102,15 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
     {summary&&<div className="banking-selected-operation"><Stack gap="md">
       <Text fw={700}>{s.selectedTitle}</Text>
       <div className="banking-metrics-grid">
-        <div><span>{s.document}</span><strong><bdi dir="ltr">{summary.document.original_filename}</bdi></strong></div>
+        <div><span>{s.document}</span><strong><bdi dir="auto">{summary.document.original_filename}</bdi></strong></div>
         <div><span>{s.status}</span><strong>{s[summary.payment_status]}</strong></div>
         <div><span>{s.total}</span><strong dir="ltr">{formatMoney(summary.document.total_amount)}</strong></div>
         <div><span>{s.settled}</span><strong dir="ltr">{formatMoney(summary.settled_amount)}</strong></div>
-        <div><span>{s.remaining}</span><strong dir="ltr">{formatMoney(summary.remaining_amount)}</strong></div>
+        <div className="is-key"><span>{s.remaining}</span><strong dir="ltr">{formatMoney(summary.remaining_amount)}</strong></div>
       </div>
       {canSettle&&summary.document.status==='approved'&&summary.remaining_amount!==null&&Number(summary.remaining_amount)>0&&<form onSubmit={create} className="banking-inline-form"><Group align="end" grow className="settlement-form-row"><NumberInput hideControls label={s.amount} value={amount} onChange={setAmount} min={0.01} decimalScale={2} required/><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy}>{s.create}</Button></Group></form>}
       <div className="banking-subsection"><Title order={3} size="h4">{s.history}</Title>
-        {summary.settlements.length===0?<Text c="dimmed">{s.none}</Text>:<Table.ScrollContainer minWidth={700} className="settlement-scroll"><Table className="settlement-stack settlement-stack--history"><Table.Thead><Table.Tr><Table.Th>{s.transaction}</Table.Th><Table.Th>{s.amount}</Table.Th><Table.Th>{s.note}</Table.Th>{canSettle&&<Table.Th>{s.delete}</Table.Th>}</Table.Tr></Table.Thead><Table.Tbody>{summary.settlements.map(x=><Table.Tr key={x.id}><Table.Td data-label={s.transaction}><span>{x.transaction_date} · <bdi>{x.transaction_description||x.bank_reference||x.bank_transaction_id}</bdi></span></Table.Td><Table.Td dir="ltr" data-label={s.amount}>{formatMoney(x.amount)}</Table.Td><Table.Td dir="auto" data-label={s.note}>{x.note||'—'}</Table.Td>{canSettle&&<Table.Td data-label={s.delete}><Group align="end" className="settlement-delete-row"><TextInput aria-label={s.reason} placeholder={s.reason} value={reason} onChange={e=>setReason(e.currentTarget.value)} maxLength={500}/><Button color="red" variant="light" onClick={()=>void remove(x.id)} disabled={!reason.trim()} loading={busy}>{s.deleteAction}</Button></Group></Table.Td>}</Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
+        {summary.settlements.length===0?<Text c="dimmed">{s.none}</Text>:<Table.ScrollContainer minWidth={700} className="settlement-scroll"><Table className="settlement-stack settlement-stack--history"><Table.Thead><Table.Tr><Table.Th>{s.transaction}</Table.Th><Table.Th>{s.amount}</Table.Th><Table.Th>{s.note}</Table.Th>{canSettle&&<Table.Th>{s.delete}</Table.Th>}</Table.Tr></Table.Thead><Table.Tbody>{summary.settlements.map(x=><Table.Tr key={x.id}><Table.Td data-label={s.transaction}><span><span dir="ltr">{formatDisplayDateLtr(x.transaction_date,i18n.language)}</span> · <bdi dir="auto">{x.transaction_description||x.bank_reference||s.transaction}</bdi></span></Table.Td><Table.Td dir="ltr" data-label={s.amount}>{formatMoney(x.amount)}</Table.Td><Table.Td dir="auto" data-label={s.note}>{x.note||'—'}</Table.Td>{canSettle&&<Table.Td data-label={s.delete}><Group align="end" className="settlement-delete-row"><TextInput aria-label={s.reason} placeholder={s.reason} value={reason} onChange={e=>setReason(e.currentTarget.value)} maxLength={500}/><Button color="red" variant="light" onClick={()=>void remove(x.id)} disabled={!reason.trim()} loading={busy}>{s.deleteAction}</Button></Group></Table.Td>}</Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
       </div>
     </Stack></div>}
   </Stack></Card>;

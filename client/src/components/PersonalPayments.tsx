@@ -51,7 +51,7 @@ const TEXT = {
     projected: 'Projected: nothing has been posted yet.', posted: 'Posted accounts.', history: 'History',
     blocked: 'Approval is currently blocked:', confirmReview: 'I have reviewed this payment, its document and the accounts above.', none2: '—',
     submit: 'Submit', approve: 'Approve', reject: 'Reject', reopen: 'Reopen as draft', remove: 'Delete', reimburse: 'Reimburse', reason: 'Rejection reason', confirmReject: 'Confirm rejection',
-    bankTx: 'Company bank outflow', record: 'Record reimbursement', noBank: 'No eligible bank outflow.', empty: 'No personal payments yet.', loading: 'Loading…', error: 'Unable to load personal payments.',
+    bankTx: 'Company bank outflow', record: 'Record reimbursement', noBank: 'No eligible bank outflow.', empty: 'No personal payments yet.', emptyHint: 'Record an expense that a manager, employee or partner paid personally; it is reviewed before it affects the books.', payablesEmpty: 'No amounts are owed to payers.', loading: 'Loading…', error: 'Unable to load personal payments.',
     forbidden: 'You do not have permission to view personal payments.', employee: 'Employee / manager', partner: 'Partner (current account)', owed: 'Owed to payer', approvedTotal: 'Approved',
     asOf: 'As of', payersEmpty: 'No payers registered.', displayName: 'Display name', payableAccount: 'Payable account (liability)', partnerLink: 'Partner (uses current account)', member: 'Company member (optional)',
     addPayer: 'Add payer', mappingMissing: 'Mapping missing', active: 'Active', inactive: 'Inactive', deactivate: 'Deactivate', activate: 'Activate', none: 'None',
@@ -79,7 +79,7 @@ const TEXT = {
     projected: 'متوقَّع: لم يُرحَّل شيء بعد.', posted: 'الحسابات المرحَّلة.', history: 'السجل',
     blocked: 'الاعتماد متوقف حالياً:', confirmReview: 'راجعتُ هذه الدفعة ومستندها والحسابات أعلاه.', none2: '—',
     submit: 'إرسال للمراجعة', approve: 'اعتماد', reject: 'رفض', reopen: 'إعادة فتحها كمسودة', remove: 'حذف', reimburse: 'استرداد', reason: 'سبب الرفض', confirmReject: 'تأكيد الرفض',
-    bankTx: 'حركة صرف من بنك الشركة', record: 'تسجيل الاسترداد', noBank: 'لا توجد حركة بنكية مؤهلة.', empty: 'لا توجد مدفوعات شخصية بعد.', loading: 'جارٍ التحميل…', error: 'تعذّر تحميل المدفوعات الشخصية.',
+    bankTx: 'حركة صرف من بنك الشركة', record: 'تسجيل الاسترداد', noBank: 'لا توجد حركة بنكية مؤهلة.', empty: 'لا توجد مدفوعات شخصية بعد.', emptyHint: 'سجّل مصروفًا دفعه مدير أو موظف أو شريك من ماله الخاص؛ يُراجَع قبل أن يؤثر في الدفاتر.', payablesEmpty: 'لا توجد مبالغ مستحقة للدافعين.', loading: 'جارٍ التحميل…', error: 'تعذّر تحميل المدفوعات الشخصية.',
     forbidden: 'لا تملك صلاحية عرض المدفوعات الشخصية.', employee: 'موظف / مدير', partner: 'شريك (الحساب الجاري)', owed: 'مستحق للدافع', approvedTotal: 'المعتمد',
     asOf: 'كما في', payersEmpty: 'لا يوجد دافعون مسجلون.', displayName: 'الاسم', payableAccount: 'حساب الذمة (التزامات)', partnerLink: 'الشريك (يستخدم حسابه الجاري)', member: 'عضو في الشركة (اختياري)',
     addPayer: 'إضافة دافع', mappingMissing: 'الربط المحاسبي ناقص', active: 'نشط', inactive: 'غير نشط', deactivate: 'إيقاف', activate: 'تفعيل', none: 'لا يوجد',
@@ -204,11 +204,11 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
   return (
     <section className="personal-payments" aria-labelledby="pp-title">
       <header><h2 id="pp-title">{L.title}</h2><p>{L.intro}</p></header>
-      <div className="workspace-tabs" role="tablist">{tabs}</div>
+      <div className="workspace-tabs workspace-tabs--segmented" role="tablist">{tabs}</div>
       {message && <div className="pp-message" role="alert">{message}</div>}
 
       {tab === 'payments' && <>
-        {can('personal_payment.create') && !form && <button type="button" className="primary pp-primary" onClick={() => void openForm()}>{L.newPayment}</button>}
+        {can('personal_payment.create') && !form && payments.length > 0 && <button type="button" className="primary pp-primary" onClick={() => void openForm()}>{L.newPayment}</button>}
         {form && lookups && <form className="pp-form" onSubmit={saveForm}>
           <label>{L.payer}<select required value={form.payer_id} onChange={e => set('payer_id', e.target.value)}><option value="">{L.select}</option>{lookups.payers.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select></label>
           <label>{L.treatment}<select value={form.treatment} onChange={e => set('treatment', e.target.value)}><option value="new_expense">{L.newExpense}</option><option value="existing_obligation">{L.existingObligation}</option></select></label>
@@ -223,7 +223,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
           <label>{L.purpose}<input required maxLength={500} value={form.purpose} onChange={e => set('purpose', e.target.value)} /></label>
           <div className="pp-actions"><button type="submit" className="primary pp-primary" disabled={busy}>{L.save}</button><button type="button" onClick={() => setForm(null)}>{L.cancel}</button></div>
         </form>}
-        {payments.length === 0 ? <WorkspaceState kind="empty">{L.empty}</WorkspaceState> : <div className="responsive-table"><table className="pp-table">
+        {payments.length === 0 ? (form ? null : <div className="fin-empty" role="status"><strong>{L.empty}</strong><span>{L.emptyHint}</span>{can('personal_payment.create') && <button type="button" className="primary" onClick={() => void openForm()}>{L.newPayment}</button>}</div>) : <div className="responsive-table"><table className="pp-table">
           <thead><tr><th>{L.payer}</th><th>{L.purpose}</th><th>{L.date}</th><th>{L.amount}</th><th>{L.status}</th><th>{L.outstanding}</th><th>{L.actions}</th></tr></thead>
           <tbody>{payments.map(p => <tr key={p.id}>
             <td data-label={L.payer}>{p.payer_name}<small> {p.payer_kind === 'partner' ? L.partner : L.employee}</small></td><td data-label={L.purpose}>{p.purpose}{p.rejection_reason && <small> — {p.rejection_reason}</small>}</td><td data-label={L.date}>{p.payment_date}</td><td data-label={L.amount}>{money(p.amount)}</td>
@@ -277,7 +277,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
           <div className="pp-actions"><button type="submit" className="pp-primary" disabled={busy || !reimbursing.chosen}>{L.record}</button><button type="button" onClick={() => setReimbursing(null)}>{L.cancel}</button></div></form>}
       </>}
 
-      {tab === 'payables' && (!payables || payables.payers.length === 0 ? <WorkspaceState kind="empty">{L.empty}</WorkspaceState> : <div className="responsive-table"><table>
+      {tab === 'payables' && (!payables || payables.payers.length === 0 ? <WorkspaceState kind="empty">{L.payablesEmpty}</WorkspaceState> : <div className="responsive-table"><table>
         <caption>{L.asOf} {payables.as_of}</caption>
         <thead><tr><th>{L.payer}</th><th>{L.approvedTotal}</th><th>{L.reimbursed}</th><th>{L.owed}</th></tr></thead>
         <tbody>{payables.payers.map(p => <tr key={p.payer_id}><td>{p.payer_name}<small> {p.payer_kind === 'partner' ? L.partner : L.employee}</small></td><td>{money(p.approved_amount)}</td><td>{money(p.reimbursed_amount)}</td><td>{money(p.outstanding_amount)}</td></tr>)}</tbody></table></div>)}

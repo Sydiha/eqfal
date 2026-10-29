@@ -59,3 +59,40 @@
   .bank-import-history td>bdi{display:block}
   :root[dir=rtl] .bank-import-history td>bdi{text-align:right}
 }
+/* Custody: header with status, governing remaining amount beside its calculation, compact tables, corrections set apart. */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.banking-custody-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px 16px}
+.banking-custody-status{display:inline-flex;align-items:center;min-height:26px;padding:2px 10px;border-radius:999px;background:var(--primary-soft);color:#0a5a4b;font-size:.8rem;font-weight:700}
+.banking-custody-status.is-ready_to_close{background:#fff8e6;color:#6f4a00}
+.banking-custody-status.is-closed{background:#eef2f3;color:#5b6873}
+.banking-custody-balance{display:grid;grid-template-columns:minmax(160px,auto) minmax(0,460px);align-items:start;gap:16px 40px}
+.custody-table .custody-table__amount{text-align:end}
+.custody-table .custody-table__action{width:1%;white-space:nowrap;text-align:end}
+.banking-custody-danger{display:grid;justify-items:start;gap:6px;margin-block-start:14px;padding-block-start:12px;border-block-start:1px dashed var(--border)}
+@media(max-width:48em){
+  .banking-custody-balance{grid-template-columns:1fr}
+  .banking-custody-create{flex-direction:column;align-items:stretch}
+  .banking-custody-create>*{max-width:none!important}
+  .custody-table thead{display:none}
+  .custody-table,.custody-table tbody,.custody-table tr{display:block;width:100%}
+  .custody-table tr{padding:10px 0;border-block-end:1px solid var(--border)}
+  .custody-table td{display:flex;justify-content:space-between;gap:12px;padding:4px 0!important;border:0!important;text-align:start!important}
+  .custody-table td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
+  .custody-table .custody-table__action{width:auto;justify-content:flex-end}
+}
+/* Statement reconciliation: result first (governing difference + calculation), one notice per severity. */
+.bsr-result{display:grid;grid-template-columns:minmax(180px,auto) minmax(0,460px);align-items:start;gap:16px 40px}
+.bsr-result__status{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+@media(max-width:48em){.bsr-result{grid-template-columns:1fr}}
+/* Settlement allocation: the unallocated amount governs the step, so it is the visually strongest metric. */
+.banking-metrics-grid>div.is-key{border-color:var(--brand-teal)!important;background:var(--primary-soft)!important}
+.banking-metrics-grid>div.is-key strong{font-size:1.15rem}
+.banking-metrics-grid>div.is-attention{border-color:#f0dca8!important;background:#fff8e6!important}
+/* Bank match dialog: transaction summary, search on one row, compact candidates. */
+.bank-match-summary__meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;color:var(--muted);font-size:.86rem}
+.bank-match-summary__amount{font-size:1.15rem;font-weight:800}
+.bank-match-search{display:flex;align-items:flex-end;gap:8px}
+.bank-match-search>:first-child{flex:1 1 auto;min-width:0}
+.bank-match-candidate__obligation .fin-muted{font-size:.78rem}
+.bank-match-candidate__state{display:inline-flex;padding:1px 8px;border-radius:999px;background:var(--primary-soft);color:#0a5a4b;font-size:.72rem;font-weight:700}
+.bank-match-current{display:grid;gap:2px}

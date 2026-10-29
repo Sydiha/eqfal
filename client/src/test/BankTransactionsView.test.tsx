@@ -30,7 +30,7 @@ describe('BankTransactionsView', () => {
     render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'Match'}));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Sale')).toBeInTheDocument();expect(screen.getByText('Customer A with a complete counterparty name')).toBeInTheDocument();expect(screen.getByText('1234567890.00')).toBeInTheDocument();expect(screen.getByText('partial')).toBeInTheDocument();expect(screen.getByText(/Remaining amount:/)).toHaveTextContent('1000.00');expect(screen.getByText('SALE-A')).toBeInTheDocument();
+    expect(screen.getByText('Sale')).toBeInTheDocument();expect(screen.getByText('Customer A with a complete counterparty name')).toBeInTheDocument();expect(screen.getByText('1,234,567,890.00')).toBeInTheDocument();expect(screen.getByText('Partly settled')).toBeInTheDocument();expect(screen.getByText(/Remaining amount:/)).toHaveTextContent('1,000.00');expect(screen.getByText('SALE-A')).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('textbox',{name:'Search documents'}),{target:{value:'SALE-A'}});
     fireEvent.click(screen.getByRole('button',{name:'Search'}));
@@ -38,7 +38,7 @@ describe('BankTransactionsView', () => {
 
     const confirm=screen.getByRole('button',{name:'Confirm match'});
     expect(confirm).toBeDisabled();
-    const documentRow=screen.getByRole('button',{name:/Sale.*Customer A with a complete counterparty name.*1234567890\.00/s});
+    const documentRow=screen.getByRole('button',{name:/Sale.*Customer A with a complete counterparty name.*1,234,567,890\.00/s});
     expect(documentRow).toHaveAttribute('aria-pressed','false');
     fireEvent.click(documentRow);
     expect(documentRow).toHaveAttribute('aria-pressed','true');

@@ -103,7 +103,7 @@ describe('BankStatementReconciliation', () => {
     renderIt({ canManageSettings: true });
     await screen.findByText('Draft');   // initial load finished: it would otherwise overwrite the mode chosen below
     await screen.findByText('Reconciled');
-    const select = (await screen.findAllByRole('combobox'))[0]!;
+    const select = await screen.findByRole('combobox', { name: 'Closing check' });
     fireEvent.change(select, { target: { value: 'enforce' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     expect(await screen.findByText('This field is required')).toBeTruthy();
@@ -159,9 +159,9 @@ describe('BankStatementReconciliation', () => {
     table.querySelectorAll('th, td').forEach(cell => expect(cell.getAttribute('dir')).toBeNull());
     const first = rows[0]!.querySelectorAll('td');
     expect(first[1]!.querySelector('bdi')?.getAttribute('dir')).toBe('ltr');
-    expect(first[1]!.textContent).toBe('2026-01-01 → 2026-01-31');
+    expect(first[1]!.textContent).toBe('01/01/2026 → 31/01/2026');
     expect(first[2]!.querySelector('bdi')?.getAttribute('dir')).toBe('ltr');
-    expect(first[2]!.textContent).toBe('1000.00 SAR');
+    expect(first[2]!.textContent).toBe('1,000.00 SAR');
     expect(first[0]!.querySelector('bdi')?.getAttribute('dir')).toBe('auto');
   });
 });

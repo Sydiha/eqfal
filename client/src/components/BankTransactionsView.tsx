@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
@@ -78,11 +78,11 @@ const local = {
     date: 'التاريخ', descriptionLabel: 'البيان', amount: 'المبلغ', status: 'الحالة', action: 'الإجراء',
     reference: 'المرجع البنكي', balance: 'الرصيد الجاري', details: 'التفاصيل', hideDetails: 'إخفاء التفاصيل',
     refresh: 'تحديث', empty: 'لا توجد حركات بنكية', error: 'تعذر تحميل الحركات البنكية',
-    documentType: 'نوع المستند', counterparty: 'الطرف المقابل', total: 'المبلغ الإجمالي', obligation: 'الذمة المرتبطة', remaining: 'المبلغ المتبقي', noObligation: 'لا توجد',
+    documentType: 'نوع المستند', counterparty: 'الطرف المقابل', total: 'المبلغ الإجمالي', obligation: 'الذمة المرتبطة', remaining: 'المبلغ المتبقي', noObligation: 'لا توجد ذمة مرتبطة', obligationStates: { open: 'مفتوحة', partial: 'مسددة جزئيًا', settled: 'مسددة', cancelled: 'ملغاة' } as Record<LinkedObligation['state'], string>, linkedDocument: 'المستند المرتبط بهذه الحركة', linkedUnknown: 'مستند مرتبط (غير ظاهر في نتائج البحث الحالية)', outflow: 'صرف', inflow: 'قبض',
     statementTitle: 'حركات كشف الحساب البنكي', transactionsCount: (count: number) => `${count} حركة`, showing: (shown: number, total: number) => `إظهار ${shown} من ${total} حركة`, amountSar: 'المبلغ (ر.س)', matchStatus: 'حالة المطابقة', reset: 'إعادة تعيين', pagination: 'التنقل بين الصفحات', prevPage: 'الصفحة السابقة', nextPage: 'الصفحة التالية',
     selectedDetails: 'تفاصيل الحركة المحددة', bankData: 'بيانات البنك', actionsPanel: 'الإجراءات', pendingMetric: 'قيد المراجعة', matchedMetric: 'مطابق', unmatchedMetric: 'غير مطابق',
     statuses: { unmatched: 'غير مطابق', matched: 'قيد المراجعة', reconciled: 'مطابق' } as Record<ReconciliationStatus, string>,
-    allocationSummary: (documents: number, allocated: string, unallocated: string) => `موزعة على ${documents} مستند · الموزع ${allocated} · غير الموزع ${unallocated}`,
+    allocationSummary: (documents: number, allocated: string, unallocated: string) => `موزعة على ${documents} مستند · الموزع ${formatDecimal(allocated)} · غير الموزع ${formatDecimal(unallocated)}`,
     toolbar: 'البحث وتصفية الحركات البنكية', searchTransactions: 'البحث في الحركات', searchPlaceholder: 'البيان أو المرجع أو المبلغ', reconciliation: 'حالة التسوية', allStatuses: 'كل الحالات', from: 'من تاريخ', to: 'إلى تاريخ', amountMin: 'الحد الأدنى للمبلغ', amountMax: 'الحد الأعلى للمبلغ', resultCount: (count: number) => `عدد النتائج: ${count}`, clearFilters: 'مسح عوامل التصفية', noResults: 'لا توجد حركات تطابق عوامل التصفية.',
   },
   en: {
@@ -91,11 +91,11 @@ const local = {
     date: 'Date', descriptionLabel: 'Description', amount: 'Amount', status: 'Status', action: 'Action',
     reference: 'Bank reference', balance: 'Running balance', details: 'Details', hideDetails: 'Hide details',
     refresh: 'Refresh', empty: 'No bank transactions', error: 'Unable to load bank transactions',
-    documentType: 'Document type', counterparty: 'Counterparty', total: 'Total amount', obligation: 'Linked obligation', remaining: 'Remaining amount', noObligation: 'None',
+    documentType: 'Document type', counterparty: 'Counterparty', total: 'Total amount', obligation: 'Linked obligation', remaining: 'Remaining amount', noObligation: 'No linked obligation', obligationStates: { open: 'Open', partial: 'Partly settled', settled: 'Settled', cancelled: 'Cancelled' } as Record<LinkedObligation['state'], string>, linkedDocument: 'Document matched to this transaction', linkedUnknown: 'Matched document (not in the current search results)', outflow: 'Outflow', inflow: 'Inflow',
     statementTitle: 'Bank statement transactions', transactionsCount: (count: number) => `${count} transactions`, showing: (shown: number, total: number) => `Showing ${shown} of ${total} transactions`, amountSar: 'Amount (SAR)', matchStatus: 'Match status', reset: 'Reset', pagination: 'Pagination', prevPage: 'Previous page', nextPage: 'Next page',
     selectedDetails: 'Selected transaction details', bankData: 'Bank data', actionsPanel: 'Actions', pendingMetric: 'Matched', matchedMetric: 'Reconciled', unmatchedMetric: 'Unmatched',
     statuses: { unmatched: 'Unmatched', matched: 'Matched', reconciled: 'Reconciled' } as Record<ReconciliationStatus, string>,
-    allocationSummary: (documents: number, allocated: string, unallocated: string) => `Allocated to ${documents} documents · allocated ${allocated} · unallocated ${unallocated}`,
+    allocationSummary: (documents: number, allocated: string, unallocated: string) => `Allocated to ${documents} documents · allocated ${formatDecimal(allocated)} · unallocated ${formatDecimal(unallocated)}`,
     toolbar: 'Search and filter bank transactions', searchTransactions: 'Search transactions', searchPlaceholder: 'Description, reference, or amount', reconciliation: 'Reconciliation status', allStatuses: 'All statuses', from: 'From date', to: 'To date', amountMin: 'Minimum amount', amountMax: 'Maximum amount', resultCount: (count: number) => `${count} results`, clearFilters: 'Clear filters', noResults: 'No transactions match the filters.',
   },
 };
@@ -316,29 +316,29 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
       </div>
     </DetailPane>}</DataWorkspace>}
 
-    {matchTransaction && <Dialog title={t('banks.matchDialog')} busy={matchBusy} onClose={closeMatch}><Stack gap="md">
+    {matchTransaction && <Dialog title={t('banks.matchDialog')} busy={matchBusy} onClose={closeMatch} size="wide" className="bank-match-dialog"><Stack gap="md">
       <div className="bank-match-summary">
-        <Text fw={700} dir="auto">{matchTransaction.description || '—'}</Text>
-        <Group gap="xs"><Badge variant="light"><span dir="ltr">{displayDate(matchTransaction.transaction_date)}</span></Badge><Badge variant="light"><span dir="ltr">{formatMoney(matchTransaction.amount, matchTransaction.currency_code)}</span></Badge></Group>
+        <Text fw={700}><bdi dir="auto">{matchTransaction.description || matchTransaction.bank_reference || '—'}</bdi></Text>
+        <div className="bank-match-summary__meta"><span className={`fin-amount bank-match-summary__amount ${matchTransaction.amount.startsWith('-') ? 'is-out' : 'is-in'}`}>{formatMoney(matchTransaction.amount, matchTransaction.currency_code)}</span><span>{matchTransaction.amount.startsWith('-') ? s.outflow : s.inflow}</span><span dir="ltr">{displayDate(matchTransaction.transaction_date)}</span>{matchTransaction.bank_reference && <bdi dir="ltr">{matchTransaction.bank_reference}</bdi>}</div>
       </div>
-      <Group align="end"><TextInput label={t('banks.searchDocuments')} value={candidateSearch} onChange={e => setCandidateSearch(e.currentTarget.value)}/><Button variant="light" loading={matchBusy} onClick={() => void loadCandidates(matchTransaction, candidateSearch)}>{t('banks.search')}</Button></Group>
-      {candidateData?.match && <Alert>{t('banks.currentMatch')}: {candidateData.match.document_id}</Alert>}
+      {candidateData?.match ? (() => { const linked = candidateData.documents.find(doc => doc.id === candidateData.match!.document_id); return <Alert title={s.linkedDocument}><div className="bank-match-current">{linked ? <><strong><bdi dir="auto">{linked.reference_number || linked.original_filename}</bdi></strong><span><bdi dir="auto">{linked.counterparty_name || '—'}</bdi> · <span className="fin-amount">{linked.total_amount ? formatAmount(linked.total_amount) : '—'}</span></span></> : <span>{s.linkedUnknown}</span>}{candidateData.match!.note && <span className="fin-muted"><bdi dir="auto">{candidateData.match!.note}</bdi></span>}</div></Alert>; })()
+        : <form className="bank-match-search" onSubmit={e => { e.preventDefault(); void loadCandidates(matchTransaction, candidateSearch); }}><TextInput label={t('banks.searchDocuments')} value={candidateSearch} onChange={e => setCandidateSearch(e.currentTarget.value)}/><Button type="submit" variant="default" loading={matchBusy}>{t('banks.search')}</Button></form>}
       {candidateData?.matches && candidateData.matches.length > 0 && candidateData.allocated_amount !== undefined && <Text size="sm" c="dimmed" dir="auto">{s.allocationSummary(candidateData.matches.length, candidateData.allocated_amount, candidateData.unallocated_amount ?? '—')}</Text>}
       <div className="bank-match-candidates">
         {(candidateData?.documents ?? []).map(doc => {
           const selected = selectedDocument === doc.id;
           return <button type="button" key={doc.id} className={`bank-match-candidate ${selected ? 'is-selected' : ''}`} aria-pressed={selected} onClick={() => !candidateData?.match && setSelectedDocument(doc.id)} disabled={Boolean(candidateData?.match)}>
             <span className="bank-match-candidate__type"><small>{s.documentType}</small><strong>{doc.document_type ? t(`documents.intake.types.${doc.document_type}`) : '—'}</strong></span>
-            <span className="bank-match-candidate__counterparty"><small>{s.counterparty}</small><strong dir="auto">{doc.counterparty_name || '—'}</strong></span>
-            <span className="bank-match-candidate__total"><small>{s.total}</small><strong dir="ltr">{doc.total_amount || '—'}</strong></span>
-            <span className="bank-match-candidate__reference" dir="auto">{doc.reference_number || doc.original_filename}</span>
-            <span className="bank-match-candidate__obligation"><small>{s.obligation}</small>{doc.linked_obligation ? <><Badge size="sm" variant="light">{doc.linked_obligation.state}</Badge><small>{s.remaining}: <b dir="ltr">{doc.linked_obligation.remaining_amount}</b></small></> : <strong>{s.noObligation}</strong>}</span>
+            <span className="bank-match-candidate__counterparty"><small>{s.counterparty}</small><strong><bdi dir="auto">{doc.counterparty_name || '—'}</bdi></strong></span>
+            <span className="bank-match-candidate__total"><small>{s.total}</small><strong dir="ltr">{doc.total_amount ? formatAmount(doc.total_amount) : '—'}</strong></span>
+            <span className="bank-match-candidate__reference"><bdi dir="auto">{doc.reference_number || doc.original_filename}</bdi></span>
+            <span className="bank-match-candidate__obligation"><small>{s.obligation}</small>{doc.linked_obligation ? <><span className="bank-match-candidate__state">{s.obligationStates[doc.linked_obligation.state] ?? doc.linked_obligation.state}</span><small>{s.remaining}: <b className="fin-amount">{formatAmount(doc.linked_obligation.remaining_amount)}</b></small></> : <span className="fin-muted">{s.noObligation}</span>}</span>
             <span className="bank-match-candidate__check" aria-hidden="true">✓</span>
           </button>;
         })}
       </div>
-      <TextInput label={t('banks.matchNote')} value={matchNote} onChange={e => setMatchNote(e.currentTarget.value)} maxLength={500} disabled={Boolean(candidateData?.match)}/>
-      <Group justify="flex-end"><Button variant="default" onClick={closeMatch} disabled={matchBusy}>{t('common.close')}</Button>{canMatch && !candidateData?.match && <Button onClick={() => void createMatch()} loading={matchBusy} disabled={!selectedDocument}>{t('banks.confirmMatch')}</Button>}</Group>
+      {!candidateData?.match && <TextInput label={t('banks.matchNote')} value={matchNote} onChange={e => setMatchNote(e.currentTarget.value)} maxLength={500}/>}
+      <div className="modal-actions"><Button variant="default" onClick={closeMatch} disabled={matchBusy}>{t('common.close')}</Button>{canMatch && !candidateData?.match && <Button onClick={() => void createMatch()} loading={matchBusy} disabled={!selectedDocument}>{t('banks.confirmMatch')}</Button>}</div>
     </Stack></Dialog>}
   </section>;
 }

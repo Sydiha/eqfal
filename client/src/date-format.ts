@@ -28,3 +28,8 @@ export function formatDisplayDateTime(value: string | null | undefined, language
     minute: '2-digit',
   }).format(date);
 }
+
+// Same date without the bidi marks Intl inserts for Arabic, for use inside an LTR-isolated run (numbers, ranges, option labels).
+export function formatDisplayDateLtr(value: string | null | undefined, language: string) {
+  return formatDisplayDate(value, language).replace(/[‎‏]/g, '');
+}

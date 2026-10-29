@@ -49,3 +49,47 @@ body>.modal-backdrop{z-index:1000}
 .counterparty-form label{display:grid;gap:6px}
 .counterparty-form__actions{display:flex;justify-content:flex-end;padding-block-start:4px}
 @media(max-width:48em){.counterparty-form__actions button{width:100%}}
+
+/* Financial workspace patterns (presentation only), shared by banking, custody and obligations screens. */
+/* Result summary: one governing amount, then the calculation as label/amount rows in a column of bounded width. */
+.fin-headline{display:grid;gap:2px;margin:0}.fin-headline dd{margin:0}
+.fin-headline__label{color:var(--muted);font-size:.82rem;font-weight:600}
+.fin-headline__value{font-size:1.6rem;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;unicode-bidi:isolate;direction:ltr;justify-self:start}
+.fin-headline__value.is-ok{color:var(--success)}.fin-headline__value.is-problem{color:var(--danger)}.fin-headline__value.is-unknown{color:var(--muted)}
+.fin-headline__hint{color:var(--muted);font-size:.82rem}
+.fin-summary{display:grid;width:100%;max-width:460px;margin:0;padding:0}
+.fin-summary>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:9px 0;border-block-end:1px solid var(--border)}
+.fin-summary dt{min-width:0;color:var(--text)}
+.fin-summary dd{margin:0;font-variant-numeric:tabular-nums;white-space:nowrap;unicode-bidi:isolate;direction:ltr}
+.fin-summary .is-subtotal dt,.fin-summary .is-subtotal dd{font-weight:700}
+.fin-summary .is-total{border-block-start:2px solid var(--text);border-block-end:0}
+.fin-summary .is-total dt,.fin-summary .is-total dd{font-weight:800}
+.fin-summary .is-problem dd{color:var(--danger)}
+.fin-amount{font-variant-numeric:tabular-nums;white-space:nowrap;unicode-bidi:isolate;direction:ltr}
+.fin-amount.is-out{color:var(--danger)}.fin-amount.is-in{color:var(--success)}
+.fin-muted{color:var(--muted)}
+.fin-notice-list{margin:4px 0 0;padding-inline-start:18px;display:grid;gap:4px}
+/* Empty state with one next step. */
+.fin-empty{display:grid;justify-items:center;gap:8px;padding:24px 16px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center;color:var(--muted)}
+.fin-empty strong{color:var(--text)}
+/* Page-level views (underline) versus in-page switches (segmented), so nested tab rows no longer look alike. */
+.workspace-tabs.ob-approved__views{display:flex;flex-wrap:wrap;gap:4px;border-block-end:1px solid var(--border)}
+.workspace-tabs.ob-approved__views>button[role=tab]{min-height:42px;margin-block-end:-1px;padding:8px 14px;border:0;border-block-end:2px solid transparent;border-radius:0;background:transparent;color:var(--muted);font-weight:600;box-shadow:none}
+.workspace-tabs.ob-approved__views>button[role=tab][aria-selected=true]{border-block-end-color:var(--primary);color:var(--text);font-weight:700}
+.workspace-tabs.workspace-tabs--segmented{display:inline-flex;flex-wrap:wrap;justify-self:start;align-self:flex-start;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--app-bg)}
+.workspace-tabs.workspace-tabs--segmented>button[role=tab]{min-height:34px;padding:4px 14px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-weight:600;box-shadow:none}
+.workspace-tabs.workspace-tabs--segmented>button[role=tab][aria-selected=true]{background:var(--surface);color:var(--text);font-weight:700;box-shadow:0 1px 3px rgba(11,29,58,.12)}
+.workspace-tabs>button[role=tab]:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* Counterparty manager: one row per party (name + type/status, then compact actions); delete is separated at the end. */
+.counterparty-manager li{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;gap:8px 12px}
+.counterparty-manager li>span:last-child{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:6px}
+.counterparty-manager li>span:last-child button{min-height:34px;padding:4px 12px;font-size:.86rem}
+.counterparty-manager li>span:last-child button.danger{margin-inline-start:auto;border-color:transparent;background:transparent;color:var(--danger)}
+.counterparty-manager li>span:last-child button.danger:hover{background:#fff6f6;border-color:#efcaca}
+.counterparty-manager li.is-inactive>span:first-child strong{color:var(--muted)}
+.counterparty-manager .counterparty-manager__status{display:inline-flex;align-items:center;gap:6px}
+.counterparty-manager .counterparty-manager__status.is-inactive{color:var(--warning)}
+@media(max-width:48em){.counterparty-manager li{grid-template-columns:1fr}.counterparty-manager li>span:last-child{justify-content:flex-start}.counterparty-manager li>span:last-child button{flex:0 1 auto}}
+/* Dialog footer: secondary action first, primary last, aligned to the end; stacked full width on phones. */
+.counterparty-form .modal-actions,.bank-match-dialog .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:48em){.counterparty-form .modal-actions,.bank-match-dialog .modal-actions{flex-direction:column-reverse}.counterparty-form .modal-actions button,.bank-match-dialog .modal-actions button{width:100%}}

@@ -32,7 +32,7 @@ describe('AR/AP aging report view', () => {
     expect(within(buckets).getByText('31–60 days').nextSibling).toHaveTextContent('180.00');
     expect(within(buckets).getByText('Total outstanding').nextSibling).toHaveTextContent('1,400.00');
     const row = screen.getByText('Customer A').closest('tr')!;
-    expect(row).toHaveTextContent('2026-05-30');
+    expect(row).toHaveTextContent('30/05/2026');
     expect(row).toHaveTextContent('31');
     expect(screen.getByText('Customer B').closest('tr')).toHaveTextContent('No due date');
     // Exports were added in the Reports Export Wave (Owner-approved); see ReportExport.test.tsx.
