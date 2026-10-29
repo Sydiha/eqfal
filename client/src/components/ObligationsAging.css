@@ -13,3 +13,12 @@
 .ob-aging__table td,.ob-aging__table th{font-variant-numeric:tabular-nums}
 @media (max-width:64em){.ob-aging__buckets{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:48em){.ob-aging__buckets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* One toolbar: the date filter and the exports sit together instead of in separate rows. */
+.ob-aging__head{flex-direction:column;align-items:flex-start;gap:4px}
+.ob-aging__toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.ob-aging__toolbar .export-buttons,.ob-aging__toolbar>div:not(.ob-aging__form){margin:0}
+@media (max-width:48em){
+  .ob-aging__toolbar{flex-direction:column;align-items:stretch}
+  .ob-aging__table td[data-label]{display:grid;grid-template-columns:minmax(0,40%) minmax(0,1fr);gap:8px;align-items:baseline}
+  .ob-aging__table td[data-label]::before{content:attr(data-label);color:var(--muted,#6b7280);font-size:.78rem;font-weight:600}
+}
