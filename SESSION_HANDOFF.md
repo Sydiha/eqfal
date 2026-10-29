@@ -1,15 +1,15 @@
 # EQFAL Session Handoff
 
-**Date:** 2026-10-27
-**Session:** C6 — Phase C handoff & Phase D gap identification (docs only)
+**Date:** 2026-10-29
+**Session:** Docs sync through PR #519 (docs only)
 
 ## Current Objective
-Record Phase C accurately and identify confirmed Phase D gaps without code changes.
+Sync state files with main@4564c8b; no code changes.
 
 ## Completed This Session
-- Verified origin/main = `3bab615` (PR #505), clean tree.
-- PROJECT_STATE.md rewritten to current state; roadmap Phase C row, Phase D note, §14 gap matrix and change log updated.
-- Read-only Phase D audit vs code/migrations/tests. No tests, UAT or DB operations were run.
+- Verified origin/main = `4564c8b` (PR #519).
+- Documented #506–#519 and remaining issues in PROJECT_STATE.md. Roadmap untouched.
+- No tests, UAT, DB operations or deployments were run.
 
 ## Current Decisions
 - Phase C is NOT fully verified: no same-SHA operational acceptance evidence.
@@ -18,14 +18,15 @@ Record Phase C accurately and identify confirmed Phase D gaps without code chang
 - CoA import / unified import navigation: deferred optional enhancements, not Phase C blockers; not in main.
 
 ## Open Items
-- Same-SHA TEST/UAT for Phase C. Migration 089–097 environment status unknown.
-- Phase D: G5 gov payment reference/period, G8 unregistered workers, one-bank-transaction-to-many-invoices limit (see roadmap §14).
+- Same-SHA TEST/UAT for Phase C and #506–#519. Migrations 089–097 and 099–101 environment status unknown. Production/Staging not deployed.
+- Flaky OpeningBalanceReview test; literal-message error mappings; WHT mobile table; localization cleanup (see PROJECT_STATE.md).
 
 ## Next Exact Step
-Owner reviews C6 PR and chooses the next task (recommended: G5 design check, roadmap §14). No merge by Claude.
+Owner reviews this docs PR, then chooses next task (UAT at current SHA or a remaining issue). No merge by Claude.
 
 ## Do Not Repeat
+- Do not redo #506–#519 (G5, R9, Q5, PR-2A..4B delivered).
 - Do not reopen G1–G4 (T1–T3) or C4/C5 delivered work without evidence.
 - Do not start migration 098 without separate Owner authorization.
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-29

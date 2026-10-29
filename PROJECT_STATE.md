@@ -1,14 +1,14 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-29
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Verified main HEAD at update time:** `3bab615b6380649274460990ca054e371fb0e805` (PR #505, C4-UI1). GitHub `main` is the source of truth and may be ahead.
+- **Verified main HEAD at update time:** `4564c8b` (PR #519, PR-4B). GitHub `main` is the source of truth and may be ahead.
 - **CI:** see GitHub checks on the commit (not restated here; not re-run in this docs task).
-- **Open PRs at update time:** #464 (docs, T1 UAT note; untouched) + the C6 docs PR.
-- Repo migrations: 001–097 present. Application status per environment is NOT verified here (see Migrations).
+- **Open PRs at update time:** #464 (docs, T1 UAT note; untouched) + this docs-sync PR.
+- Repo migrations: 001–097 and 099–101 present (098 intentionally absent; reserved, NOT authorized). Application status per environment is NOT verified here (see Migrations).
 
 ## Phase Status (vocabulary: Implemented / Verified / Partial / Deferred / Not verified)
 | Phase | Status |
@@ -39,21 +39,44 @@
 
 **Not verified:** same-SHA operational acceptance tests (Replit TEST/UAT at `3bab615`) were not performed or evidenced. Phase C is therefore NOT marked fully verified.
 
+## Work Delivered After Phase C (#506–#519, all merged to main)
+Implementation + CI only. No Production/Staging deployment was performed as part of this PR workflow; no operational verification at these SHAs.
+- #506 docs C6 Phase C handoff + Phase D gap matrix.
+- #507 D1/G5: optional government payment reference + period on obligation settlements (migration 099, additive).
+- #508 D2/R9: one bank transaction settling several documents (migration 100).
+- #509 D4/Q5: custody ledger-account controls, actual recipient, funding unlink (migration 101).
+- #510 R9 allocation candidates use real document remaining amount; fully settled documents hidden. #512 SettlementPanel refreshes after create/remove.
+- #511 CI: PostgreSQL client tools pinned to 16 (matches postgres:16 service).
+- #513 PR-2A actionable AR/EN error messages in five financial screens (UI only).
+- #514 PR-2B stable `code` on confirmed 409s (settlements, bank, opening balances, annual package; `requireAll` 403 `FORBIDDEN`). No migration.
+- #515 PR-3A, #516 PR-3B, #517 PR-3C, #518 PR-4A, #519 PR-4B: RTL/mobile/localization UI fixes (SettlementPanel cards, AnnualClosing tabs/dates, Obligations cards, banking tabs, WHT Arabic terms, LTR filenames; Add Item form state and missing bank currency guard). Frontend only.
+
+## Known Remaining Issues (not fixed)
+- **Flaky test:** `OpeningBalanceReview.test.tsx > calls the approve endpoint only when balanced` failed once in CI on an unrelated commit, passed on re-run; cause not established. `Accounting.chart-edit-mode` also reported flaky. Investigate as a real timing issue if it recurs.
+- **Literal-message error mappings:** server error codes in #514 (`banking-error-codes.ts`, `OB_CONFLICT_CODES`, `ANNUAL_PACKAGE_CONFLICT_CODES`) are keyed by exact English message text; changing a message silently drops its code. Uncovered: obligation version/create/update conflicts, custody, bank import, "match is invalid"/"no longer valid", JournalPosting.
+- **WHT mobile table:** the mocked-data UI audit found a remaining mobile table issue on WHT; production behavior is unverified. Earlier items: WHT raw English values in Arabic UI, classification panel bilingual line in locked CSS.
+- **Deferred localization architecture cleanup:** not started; needs separate Owner approval.
+- **Readiness gaps (from record):** see Migrations and Phase Status; same-SHA TEST/UAT not evidenced for Phase C or #506–#519.
+
+## Completed Implementation vs Production Verification
+- Completed = merged to main with CI (verify, Vercel preview) green.
+- NOT verified: Replit TEST/UAT at current SHA; application status of migrations 099–101 on any environment is unverified; Production and Staging deployment was not performed as part of this PR workflow.
+
 ## Migrations (what is known)
-- 088 applied to Replit TEST only (memory, 2026-10-18). 089–097 application status on TEST/Staging/Production: **not verified**. Server applies pending migrations at start-up, so pulling main into an environment applies them; needs separate Owner approval.
+- 088 applied to Replit TEST only (memory, 2026-10-18). 089–097 and 099–101 application status on TEST/Staging/Production: **not verified**. `git pull` alone does not execute migrations; server startup may apply pending migrations. Applying them in an environment needs separate Owner approval.
 
 ## Phase 14 / Invoice notes (older, unchanged)
 - Phase 14 per-row status: `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9; T7 evidence `docs/evidence/t7/`.
 - Invoice VAT V1/V2/V2.1 and adjustments V3.x are merged; operational activation and migration rollout are Owner decisions, not verified here.
 
 ## Current Task
-- **C6** docs-only: Phase C handoff + Phase D gap identification (this PR). No code.
+- Docs-only sync of state files through #519 (this PR). No code.
 
 ## Open Blockers
 - None confirmed.
 
 ## Next Exact Step
-- Owner reviews the C6 docs PR, then decides: same-SHA TEST/UAT for Phase C, and whether to start the recommended Phase D task (roadmap §14).
+- Owner reviews this docs PR, then decides: same-SHA TEST/UAT for Phase C, and whether to start the recommended Phase D task (roadmap §14).
 
 ---
 *Keep under 100 lines.*
