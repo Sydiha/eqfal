@@ -68,8 +68,8 @@
  .annual-closing-view .table-wrap tbody{display:table-row-group}
  .annual-closing-view .table-wrap tr{display:table-row;margin:0;padding:0;border:0;border-radius:0}
  .annual-closing-view .table-wrap td{display:table-cell;padding:8px 12px;border-top:1px solid var(--ac-border);white-space:nowrap}
- .annual-closing-view .ac-tabs{flex-wrap:wrap}
- .annual-closing-view .ac-tab{flex:none;padding:0 12px;white-space:nowrap}
+ .annual-closing-view .ac-tabs{flex-wrap:nowrap}
+ .annual-closing-view .ac-tab{flex:1 1 0;min-width:0;height:auto;min-height:36px;padding:4px 6px;white-space:normal;text-align:center;line-height:1.3}
 }
 /* PR-3A: domain and manifest tables become stacked rows on phones (no hidden horizontal scroll). */
 @media (max-width:800px){

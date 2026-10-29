@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { transactionOptionLabel } from '../components/bankTransactionLabel';
+import { formatDisplayDate } from '../date-format';
 
 const strip = (s: string) => s.replace(/[⁦⁨⁩]/g, '');
 const css = (name: string) => readFileSync(resolve(__dirname, '../components', name), 'utf8');
@@ -48,5 +49,28 @@ describe('PR-3B settlement panel mobile layout', () => {
     expect(src).toContain('settlement-stack--alloc');
     expect(src).toContain('settlement-stack--history');
     expect(src.match(/settlement-form-row/g)?.length).toBe(2);
+  });
+});
+
+describe('PR-3C RTL polish', () => {
+  const read = (name: string) => readFileSync(resolve(__dirname, '../components', name), 'utf8');
+  it('isolates mixed-direction obligation names and references with bdi dir=auto', () => {
+    const o = read('Obligations.tsx');
+    expect(o).toContain('<bdi dir="auto">{referenceOf(selected)}</bdi>');
+    expect(o).toContain('<bdi dir="auto">{selected.counterparty_name}</bdi>');
+    expect(o).toContain('<bdi dir="auto">{referenceOf(o)}</bdi>');
+    expect(o.match(/<bdi dir="auto">\{o\.counterparty_name\}<\/bdi>/g)?.length).toBe(2);
+  });
+  it('keeps annual closing tabs in one scrollable row on phones', () => {
+    const c = css('AnnualClosing.css');
+    expect(c).toMatch(/\.ac-tabs\{flex-wrap:nowrap\}/);
+    expect(c).toMatch(/\.ac-tab\{flex:1 1 0;min-width:0/);
+      });
+  it('formats the fiscal-year range with formatDisplayDate', () => {
+    const a = read('AnnualClosing.tsx');
+    expect(a).toContain('formatDisplayDate(selectedYear.start_date,i18n.language)');
+    expect(a).toContain('formatDisplayDate(selectedYear.end_date,i18n.language)');
+    expect(formatDisplayDate('2026-01-01', 'en')).toBe('01/01/2026');
+    expect(formatDisplayDate('2026-12-31', 'ar').replace(/\u200f/g, '')).toBe('31/12/2026');
   });
 });
