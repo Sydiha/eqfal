@@ -93,13 +93,13 @@ describe('SettlementPanel',()=>{
     const money=(cents:number)=>(cents/100).toFixed(2);
     // Minimal stateful server: one 100.00 bank transaction matched to one 100.00 document.
     function makeServer(seed:{settled?:number}={}){
-      const st={settled:seed.settled??0,failList:false,log:[] as string[],settlements:[] as Array<{id:string;amount:string}>};
+      const st={settled:seed.settled??0,failList:false,omitUnallocated:false,log:[] as string[],settlements:[] as Array<{id:string;amount:string}>};
       if(st.settled)st.settlements.push({id:'s0',amount:money(st.settled)});
       const json=(b:unknown,status=200)=>new Response(JSON.stringify(b),{status});
       const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{
         const method=init?.method??'GET'; st.log.push(`${method} ${url}`);
         if(url==='/api/bank-transactions')return st.failList?json({error:'boom'},500):json({transactions:[{id:TX,transaction_date:'2026-01-20',description:'Receipt',bank_reference:'R1',amount:'100.00',reconciliation_status:st.settled>=10000?'reconciled':'matched'}]});
-        if(url.endsWith('/match-candidates'))return json({transaction:{id:TX,amount:'100.00',reconciliation_status:'matched'},match:{document_id:DOC},matches:[{document_id:DOC}],allocated_amount:money(st.settled),unallocated_amount:money(10000-st.settled),documents:[]});
+        if(url.endsWith('/match-candidates'))return json({transaction:{id:TX,amount:'100.00',reconciliation_status:'matched'},match:{document_id:DOC},matches:[{document_id:DOC}],allocated_amount:money(st.settled),...(st.omitUnallocated?{}:{unallocated_amount:money(10000-st.settled)}),documents:[]});
         if(url===`/api/documents/${DOC}/settlements`&&method==='GET')return json({document:{id:DOC,status:'approved',original_filename:'inv.pdf',total_amount:'100.00'},settled_amount:money(st.settled),remaining_amount:money(10000-st.settled),payment_status:st.settled===0?'unpaid':st.settled>=10000?'paid':'partially_paid',settlements:st.settlements.map(x=>({id:x.id,bank_transaction_id:TX,amount:x.amount,created_at:'2026-01-20',note:null,transaction_date:'2026-01-20',transaction_description:'Receipt',bank_reference:'R1',transaction_amount:'100.00'}))});
         if(url===`/api/documents/${DOC}/settlements`&&method==='POST'){const cents=Math.round(Number(JSON.parse(String(init!.body)).amount)*100);st.settled+=cents;st.settlements.push({id:`s${st.settlements.length+1}`,amount:money(cents)});return json({},201);}
         if(method==='DELETE'){const id=url.split('/').pop()!;const gone=st.settlements.find(x=>x.id===id)!;st.settled-=Math.round(Number(gone.amount)*100);st.settlements=st.settlements.filter(x=>x.id!==id);return json({});}
@@ -110,6 +110,7 @@ describe('SettlementPanel',()=>{
     }
     const select=async()=>{fireEvent.click((await screen.findAllByLabelText('Matched bank transaction'))[0]!);fireEvent.click(await screen.findByText(/Receipt/));await screen.findByText('Selected payment');};
     const metric=(label:string)=>screen.getByText(label,{selector:'span'}).parentElement!.querySelector('strong')!.textContent;
+    const txInput=()=>screen.getAllByLabelText('Matched bank transaction').find(e=>e.tagName==='INPUT') as HTMLInputElement;
     const amountInput=()=>screen.getByLabelText(/Settlement amount/) as HTMLInputElement;
     const posts=(log:string[])=>log.filter(l=>l.startsWith('POST ')).length;
 
@@ -168,6 +169,35 @@ describe('SettlementPanel',()=>{
       await waitFor(()=>expect(metric('Settled')).toBe('40.00'));
       expect(posts(st.log)).toBe(1);
       expect(screen.queryByText(/could not be refreshed/)).not.toBeInTheDocument();
+    });
+
+    it('leaves the default amount empty when the server does not confirm the unallocated amount',async()=>{
+      const {st}=makeServer();
+      st.omitUnallocated=true;
+      renderPanel({canView:true,canSettle:true,onUnauthorized:vi.fn()});
+      await select();
+      expect(amountInput().value).toBe('');
+      expect(metric('Remaining')).toBe('100.00');
+    });
+
+    it('locks the transaction list after a failed refresh, keeps the selection for retry, and unlocks after a successful reload',async()=>{
+      const {st}=makeServer();
+      renderPanel({canView:true,canSettle:true,onUnauthorized:vi.fn()});
+      await select();
+      fireEvent.change(amountInput(),{target:{value:'40'}});
+      st.failList=true;
+      fireEvent.click(screen.getByRole('button',{name:'Record settlement'}));
+      await screen.findByText(/could not be refreshed/);
+      const field=txInput();
+      expect(field).toBeDisabled();
+      expect(field.value).toMatch(/Receipt/);
+      st.failList=false;
+      fireEvent.click(screen.getByRole('button',{name:'Retry'}));
+      await waitFor(()=>expect(metric('Settled')).toBe('40.00'));
+      const after=txInput();
+      expect(after).not.toBeDisabled();
+      expect(after.value).toMatch(/Receipt/);
+      expect(posts(st.log)).toBe(1);
     });
 
     it('drops a stale response that arrives after a newer load',async()=>{

@@ -26,7 +26,7 @@ const strings={
 export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
   const {i18n}=useTranslation(); const s=i18n.language==='ar'?strings.ar:strings.en;
   const [transactions,setTransactions]=useState<Transaction[]>([]); const [selectedTx,setSelectedTx]=useState<string|null>(null); const [documentId,setDocumentId]=useState<string|null>(null); const [summary,setSummary]=useState<Summary|null>(null);
-  const [refreshFailed,setRefreshFailed]=useState<'load'|'afterSave'|null>(null); const seq=useRef(0);
+  const [refreshFailed,setRefreshFailed]=useState<'load'|'afterSave'|null>(null); const [listStale,setListStale]=useState(false); const seq=useRef(0);
   const [candidates,setCandidates]=useState<MatchResponse|null>(null); const [allocations,setAllocations]=useState<Record<string,number|string>>({});
   const [amount,setAmount]=useState<number|string>(''); const [note,setNote]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
 
@@ -38,26 +38,27 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
     try{
       const list=opts.list?(await api<{transactions:Transaction[]}>('/api/bank-transactions',undefined,onUnauthorized)).transactions.filter(t=>canSettle||t.reconciliation_status!=='unmatched'):transactions;
       const keep=txId&&list.some(t=>t.id===txId)?txId:null;
-      if(!keep){if(!live())return;setTransactions(list);setSelectedTx(null);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');return;}
+      if(!keep){if(!live())return;setListStale(false);setTransactions(list);setSelectedTx(null);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');return;}
       const match=await api<MatchResponse>(`/api/bank-transactions/${keep}/match-candidates`,undefined,onUnauthorized);
       const docId=match.match?.document_id??null;
       const data=docId?await api<Summary>(`/api/documents/${docId}/settlements`,undefined,onUnauthorized):null;
       if(!live())return;
-      const tx=list.find(t=>t.id===keep);
-      const available=match.unallocated_amount!=null?toCents(match.unallocated_amount):tx?Math.abs(toCents(tx.amount)):NaN;
+      const available=match.unallocated_amount!=null&&match.unallocated_amount!==''?toCents(match.unallocated_amount):NaN;
       const remaining=data&&data.remaining_amount!==null?toCents(data.remaining_amount):NaN;
       const next=Math.min(available,remaining);
-      setTransactions(list);setSelectedTx(keep);setCandidates(match);setDocumentId(docId);setSummary(data);setAllocations({});setAmount(Number.isFinite(next)&&next>0?next/100:'');
+      setListStale(false);setTransactions(list);setSelectedTx(keep);setCandidates(match);setDocumentId(docId);setSummary(data);setAllocations({});setAmount(Number.isFinite(next)&&next>0?next/100:'');
       if(!docId&&!canSettle)setError(s.select);
     }catch(e){
       if(!live())return;
       setCandidates(null);setDocumentId(null);setSummary(null);setAllocations({});setAmount('');
+      if(opts.list)setListStale(true);
       setRefreshFailed(opts.afterSave?'afterSave':'load');
       setError(opts.afterSave?s.savedRefreshFailed:(e instanceof Error?e.message:s.error));
     }finally{if(live())setBusy(false);}
   };
   useEffect(()=>{if(!canView)return;void load(null,{list:true});return()=>{seq.current++;};},[canView]);
-  const options=useMemo(()=>transactions.map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions]);
+  // After a failed reload the list may be outdated: only the selected transaction stays visible (so retry keeps its id) and nothing else can be picked.
+  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions,listStale,selectedTx]);
 
   const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');setError('');setRefreshFailed(null);if(!value){seq.current++;setBusy(false);return;}await load(value,{list:false});};
   const retry=()=>void load(selectedTx,{list:true,afterSave:refreshFailed==='afterSave'});
@@ -77,7 +78,7 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
     <div className="banking-section-heading"><Title order={2} size="h3">{s.title}</Title><Text c="dimmed">{s.description}</Text></div>
     {error&&<Alert color={refreshFailed==='afterSave'?'yellow':'red'} role="alert"><Group justify="space-between" align="center" wrap="nowrap"><span>{error}</span>{refreshFailed&&<Button size="compact-sm" variant="default" onClick={retry} loading={busy}>{s.retry}</Button>}</Group></Alert>}
     <div className="banking-operation-card">
-      <Select label={s.transaction} placeholder={s.select} data={options} value={selectedTx} onChange={v=>void choose(v)} searchable clearable disabled={busy}/>
+      <Select label={s.transaction} placeholder={s.select} data={options} value={selectedTx} onChange={v=>void choose(v)} searchable clearable disabled={busy||listStale}/>
       {transactions.length===0&&!error&&<div className="banking-empty-guidance"><Text fw={700}>{s.emptyTitle}</Text><Text size="sm" c="dimmed">{s.emptyHelp}</Text></div>}
     </div>
     {candidates&&canSettle&&candidates.transaction.reconciliation_status!=='reconciled'&&<div className="banking-selected-operation"><Stack gap="md">
