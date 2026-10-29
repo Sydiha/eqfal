@@ -145,4 +145,13 @@ describe('BankTransactionsView', () => {
     expect(screen.getByRole('searchbox', { name: 'Search transactions' })).toHaveValue('BANK-NEG');
     expect(screen.getByText('Vendor payment بيان')).toBeInTheDocument();
   });
+
+  it('never renders the word undefined when currency_code is missing or null',async()=>{
+    const base={transaction_date:'2026-08-01',description:'Row',bank_reference:null,amount:'-350.00',running_balance:'12500.00',reconciliation_status:'unmatched'};
+    renderTransactions([{...base,id:'a',description:'Missing cur'},{...base,id:'b',description:'Null cur',currency_code:null},{...base,id:'c',description:'USD cur',currency_code:'USD'}]);
+    await screen.findByText('Missing cur');
+    expect(document.body.textContent).not.toMatch(/undefined|null/);
+    expect(screen.getAllByText(/350\.00/).length).toBeGreaterThan(0);
+    expect(document.body.textContent).toMatch(/350\.00 USD/);
+  });
 });

@@ -59,13 +59,13 @@ function displayDate(value: string) {
   return match ? `${match[1]}/${match[2]}/${match[3]}` : raw || '—';
 }
 
-function formatMoney(amount: string, currency: string) {
-  return `${formatDecimal(amount)} ${currency}`;
+function formatMoney(amount: string, currency?: string | null) {
+  return currency ? `${formatDecimal(amount)} ${currency}` : formatDecimal(amount);
 }
 
-function formatAmount(amount: string, currency: string) {
+function formatAmount(amount: string, currency?: string | null) {
   const value = formatDecimal(amount);
-  return currency === 'SAR' ? value : `${value} ${currency}`;
+  return !currency || currency === 'SAR' ? value : `${value} ${currency}`;
 }
 
 const PAGE_SIZE = 10;
@@ -299,7 +299,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
             <dt>{s.amount}</dt><dd dir="ltr">{formatMoney(selectedTransaction.amount, selectedTransaction.currency_code)}</dd>
             <dt>{s.descriptionLabel}</dt><dd dir="auto">{selectedTransaction.description || '—'}</dd>
             <dt>{s.reference}</dt><dd dir="ltr">{selectedTransaction.bank_reference || '—'}</dd>
-            <dt>{s.balance}</dt><dd dir="ltr">{selectedTransaction.running_balance ?? '—'} {selectedTransaction.currency_code}</dd>
+            <dt>{s.balance}</dt><dd dir="ltr">{selectedTransaction.running_balance ?? '—'}{selectedTransaction.currency_code ? ` ${selectedTransaction.currency_code}` : ''}</dd>
             <dt>{s.status}</dt><dd><span className={`bank-status bank-status--${selectedTransaction.reconciliation_status}`}>{statusLabel(selectedTransaction.reconciliation_status)}</span></dd>
           </dl>
         </div>
