@@ -51,6 +51,7 @@ describe('InvoiceAccountMappings', () => {
     expect(screen.getByTestId('mapping-readonly')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByText('Choose an account to enable Save.')).toBeNull();
   });
 
   it('lists missing then invalid then configured within each section, and names them in the summary', async () => {
@@ -71,6 +72,8 @@ describe('InvoiceAccountMappings', () => {
     const missing = await screen.findByTestId('mapping-sales_revenue');
     expect(within(missing).getByText('Missing')).toHaveClass('incomplete');
     expect(missing).toHaveTextContent('No account set yet');
+    expect(missing).toHaveTextContent('cannot be approved until an account is set.');
+    expect(missing.textContent).not.toMatch(/No account is set/);
     const inactive = screen.getByTestId('mapping-payable');
     expect(within(inactive).getByText('Invalid')).toHaveClass('rejected');
     expect(inactive).toHaveTextContent('Inactive');
@@ -113,11 +116,19 @@ describe('InvoiceAccountMappings', () => {
     expect(select.value).toBe('');
     const save = within(row).getByRole('button', { name: 'Save Sales revenue' });
     expect(save).toBeDisabled();
+    const hint = within(row).getByText('Choose an account to enable Save.');
+    expect(save).toHaveAttribute('aria-describedby', hint.id);
+    expect(hint).not.toHaveAttribute('role');
+    expect(row).not.toHaveClass('is-modified');
     fireEvent.change(select, { target: { value: 'r1' } });
+    expect(row).toHaveClass('is-modified');
+    expect(within(row).queryByText('Choose an account to enable Save.')).toBeNull();
+    expect(save).not.toHaveAttribute('aria-describedby');
     expect(screen.getByTestId('mapping-compare-sales_revenue')).toHaveTextContent('This account will be set for the first time.');
     fireEvent.click(save);
     await waitFor(() => expect(calls).toContain('PUT /api/invoice-account-mappings/sales_revenue'));
     expect(body).toEqual({ account_id: 'r1' });
+    await waitFor(() => expect(screen.getByTestId('mapping-sales_revenue')).not.toHaveClass('is-modified'));
     expect(await screen.findByTestId('mapping-notice')).toHaveTextContent('Sales revenue saved.');
   });
 
@@ -133,8 +144,11 @@ describe('InvoiceAccountMappings', () => {
     expect(compare).toHaveTextContent('Current1100 — Receivables');
     expect(compare).toHaveTextContent('Selected1150 — Other receivables');
     expect(screen.getByTestId('mapping-unsaved-receivable')).toHaveTextContent('Unsaved change');
+    expect(select.nextElementSibling).toBe(screen.getByTestId('mapping-unsaved-receivable'));
+    expect(row).toHaveClass('is-modified');
     fireEvent.change(select, { target: { value: '' } });
     expect(screen.queryByTestId('mapping-compare-receivable')).toBeNull();
+    expect(row).not.toHaveClass('is-modified');
   });
 
   it('shows progress on the affected row and blocks every other save/clear until the request completes', async () => {
