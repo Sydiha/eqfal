@@ -19,3 +19,4 @@
   .bank-statement-reconciliation .bsr-items td{display:flex;justify-content:space-between;gap:12px;padding:3px 0!important;border:0!important;text-align:start!important}
   .bank-statement-reconciliation .bsr-items td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
 }
+@media(max-width:48em){.bank-statement-reconciliation .bsr-items td{flex-wrap:wrap}.bank-statement-reconciliation .bsr-items .mantine-Badge-root{max-width:100%;height:auto;white-space:normal}.bank-statement-reconciliation .bsr-items .mantine-Badge-label{white-space:normal;overflow:visible}}

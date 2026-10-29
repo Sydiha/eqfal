@@ -52,7 +52,7 @@ body>.modal-backdrop{z-index:1000}
 
 /* Financial workspace patterns (presentation only), shared by banking, custody and obligations screens. */
 /* Result summary: one governing amount, then the calculation as label/amount rows in a column of bounded width. */
-.fin-headline{display:grid;gap:2px;margin:0}
+.fin-headline{display:grid;gap:2px;margin:0}.fin-headline dd{margin:0}
 .fin-headline__label{color:var(--muted);font-size:.82rem;font-weight:600}
 .fin-headline__value{font-size:1.6rem;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;unicode-bidi:isolate;direction:ltr;justify-self:start}
 .fin-headline__value.is-ok{color:var(--success)}.fin-headline__value.is-problem{color:var(--danger)}.fin-headline__value.is-unknown{color:var(--muted)}
