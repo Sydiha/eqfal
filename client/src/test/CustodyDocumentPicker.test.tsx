@@ -17,7 +17,7 @@ describe('CustodyDocumentPicker', () => {
   it('lists eligible documents with reference, supplier, date, amount and currency, and selects one without any UUID field', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok({ documents: [DOC] })));
     const { props } = renderPicker();
-    const option = await screen.findByRole('option');
+    const option = await screen.findByRole('button', { name: /INV-77|Acme|بلا/ });
     expect(option).toHaveTextContent('INV-77');
     expect(option).toHaveTextContent('Acme Supplies');
     expect(option).toHaveTextContent('250.00');
@@ -62,7 +62,7 @@ describe('CustodyDocumentPicker', () => {
     await i18n.changeLanguage('ar');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok({ documents: [{ ...DOC, reference_number: null, counterparty_name: null, document_date: null }] })));
     renderPicker({ language: 'ar' });
-    const option = await screen.findByRole('option');
+    const option = await screen.findByRole('button', { name: /INV-77|Acme|بلا/ });
     expect(option).toHaveTextContent('بلا مورد');
     expect(option).toHaveTextContent('بلا تاريخ');
   });

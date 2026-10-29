@@ -61,12 +61,12 @@ export function CustodyDocumentPicker({ custodyId, currency, language, refreshKe
   return (
     <div className="custody-doc-picker">
       <TextInput label={s.label} placeholder={s.search} value={query} onChange={e => setQuery(e.currentTarget.value)} maxLength={100} rightSection={loading ? <Loader size="xs" /> : undefined} autoComplete="off" />
-      <div className="custody-doc-picker__list" role="listbox" aria-label={s.label} aria-busy={loading}>
+      <div className="custody-doc-picker__list" role="group" aria-label={s.label} aria-busy={loading}>
         {error && <Alert color="red" role="alert">{error}</Alert>}
         {loading && <Text size="sm" c="dimmed" role="status">{s.loading}</Text>}
         {!loading && !error && docs.length === 0 && <Text size="sm" c="dimmed" role="status">{s.empty}</Text>}
         {!error && docs.map(d => (
-          <button type="button" role="option" aria-selected={false} key={d.id} className="custody-doc-picker__item custody-doc-picker__option" onClick={() => onSelect(d)}>{describe(d)}</button>
+          <button type="button" key={d.id} className="custody-doc-picker__item custody-doc-picker__option" onClick={() => onSelect(d)}>{describe(d)}</button>
         ))}
       </div>
     </div>
