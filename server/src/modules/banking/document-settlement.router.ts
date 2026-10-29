@@ -1,4 +1,5 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
+import { bankingConflictBody } from './banking-error-codes';
 import { Pool, PoolClient } from 'pg';
 import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
@@ -315,7 +316,7 @@ function handleError(error: unknown, res: Response): boolean {
   if (error instanceof DocumentSettlementValidationError) { res.status(400).json({ error: error.message }); return true; }
   if (error instanceof DocumentSettlementNotFoundError) { res.status(404).json({ error: error.message }); return true; }
   if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return true; }
-  if (error instanceof DocumentSettlementConflictError) { res.status(409).json({ error: error.message }); return true; }
+  if (error instanceof DocumentSettlementConflictError) { res.status(409).json(bankingConflictBody(error.message)); return true; }
   return false;
 }
 

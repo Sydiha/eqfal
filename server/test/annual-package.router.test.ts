@@ -30,3 +30,25 @@ describe('annual package router capabilities',()=>{
     ['approve','/approve',{version:1,note:null},'annual_close.package.approve','approve'],
   ])('enforces the backend %s capability independently',async(_label,path,body,capability,method)=>{expect((await post(path,body)).status).toBe(403);expect(mocks[method as keyof typeof mocks]).not.toHaveBeenCalled();mocks.capabilities=[capability];expect((await post(path,body)).status).not.toBe(403);expect(mocks[method as keyof typeof mocks]).toHaveBeenCalled();});
 });
+
+describe('annual package conflict codes (PR-2B)',()=>{
+  beforeEach(()=>{mocks.capabilities=['annual_close.package.finalize','annual_close.package.snapshot.create','annual_close.package.handoff'];});
+  it.each([
+    ['finalize','/finalize','Package was modified','ANNUAL_PACKAGE_STALE_VERSION'],
+    ['snapshot create','/snapshots','Package is not the current draft','ANNUAL_PACKAGE_NOT_DRAFT'],
+    ['handoff','/handoff','Only the current finalized package can be handed off','ANNUAL_PACKAGE_NOT_FINALIZED'],
+    ['handoff','/handoff','Only the current finalized package can be reviewed','ANNUAL_PACKAGE_INVALID_TRANSITION'],
+  ])('%s keeps 409 and message and adds the code',async(_l,path,message,code)=>{
+    const method=path==='/finalize'?mocks.finalize:path==='/snapshots'?mocks.snapshot:mocks.handoff;
+    method.mockReset().mockRejectedValue(new (await import('../src/modules/annual-closing/annual-package.service')).AnnualPackageConflictError(message));
+    const res=await post(path,{version:1});
+    expect(res.status).toBe(409);expect(res.body).toEqual({error:message,code});
+  });
+  it('keeps an explicit service code and leaves unmapped messages code-free',async()=>{
+    const {AnnualPackageConflictError}=await import('../src/modules/annual-closing/annual-package.service');
+    mocks.finalize.mockReset().mockRejectedValue(Object.assign(new AnnualPackageConflictError('closed first'),{code:'ANNUAL_PACKAGE_FISCAL_YEAR_NOT_CLOSED'}));
+    expect((await post('/finalize',{version:1})).body.code).toBe('ANNUAL_PACKAGE_FISCAL_YEAR_NOT_CLOSED');
+    mocks.finalize.mockReset().mockRejectedValue(new AnnualPackageConflictError('Something else'));
+    expect((await post('/finalize',{version:1})).body).toEqual({error:'Something else'});
+  });
+});

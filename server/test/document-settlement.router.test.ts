@@ -95,7 +95,7 @@ describe('Document settlement rules',()=>{
     setContext(['payment.settle']);
     const client=makeClient((sql)=>{if(sql==='BEGIN'||sql==='ROLLBACK')return{rows:[]};if(sql.includes('FROM documents'))return{rows:[{...approved,status:'needs_review'}]};if(sql.includes('FROM bank_transactions'))return{rows:[{id:TX,company_id:'co-a',amount:'100.00'}]};return{rows:[]};});
     mocks.connect.mockResolvedValue(client);
-    expect((await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'10.00'})).status).toBe(409);
+    const notApproved=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'10.00'});expect(notApproved.status).toBe(409);expect(notApproved.body).toEqual({error:'Document must be approved before settlement',code:'DOCUMENT_NOT_APPROVED'});
   });
 
   it('rejects over-settlement against remaining document amount',async()=>{
@@ -109,7 +109,7 @@ describe('Document settlement rules',()=>{
       return{rows:[]};
     });
     mocks.connect.mockResolvedValue(client);
-    expect((await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'30.00'})).status).toBe(409);
+    const over=await request(app).post(`/api/documents/${DOC}/settlements`).send({bank_transaction_id:TX,amount:'30.00'});expect(over.status).toBe(409);expect(over.body.code).toMatch(/^SETTLEMENT_EXCEEDS_/);expect(over.body.error).toMatch(/exceeds/);
   });
 
   it('settles only the obligation linked by document id when equal-value documents coexist',async()=>{
