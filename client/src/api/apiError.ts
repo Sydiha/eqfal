@@ -169,3 +169,17 @@ export function findingMessage(kind: 'blockers' | 'warnings', finding: ApiFindin
   const text = t(key, { count: finding.count ?? 0 });
   return text === key ? t(`errors.${kind}.unknown`, { count: finding.count ?? 0 }) : text;
 }
+
+/**
+ * Message for any failure a screen catches: a localized message for a known code (or network /
+ * 403 / 503), otherwise the screen's localized `fallback`. Raw backend text is never returned.
+ * A 401 returns '' because the session handler already redirects.
+ */
+export function screenErrorMessage(reason: unknown, t: Translate, fallback: string): string {
+  const error = toApiError(reason);
+  if (error.status === 401) return '';
+  const known = apiErrorMessage(error, t);
+  if (known) return known;
+  if (error.status === 403) return t('errors.FORBIDDEN');
+  return fallback;
+}
