@@ -58,7 +58,7 @@ describe('PR-3C RTL polish', () => {
     const o = read('Obligations.tsx');
     expect(o).toContain('<bdi dir="auto">{referenceOf(selected)}</bdi>');
     expect(o).toContain('<bdi dir="auto">{selected.counterparty_name}</bdi>');
-    expect(o).toContain('<bdi dir="auto">{referenceOf(o)}</bdi>');
+    expect(o).toContain("<bdi dir={o.document_id&&o.original_filename?'ltr':'auto'}>{referenceOf(o)}</bdi>"); // PR-4B: stored filenames render LTR so the extension stays last
     expect(o.match(/<bdi dir="auto">\{o\.counterparty_name\}<\/bdi>/g)?.length).toBe(1);
     expect(o).toContain('aria-label={`${L.view} ${o.counterparty_name}`}');
     expect(o.match(/aria-label=\{`[^`]*`\}/g)?.some(l => /<bdi/.test(l))).toBe(false);

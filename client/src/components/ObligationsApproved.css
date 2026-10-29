@@ -75,3 +75,24 @@
 .ob-approved__return{margin:0 0 .75rem}
 .ob-approved__ineligible{margin:.5rem 0;font-size:.8125rem}.ob-approved__ineligible ul{list-style:none;margin:.35rem 0 0;padding:0;display:grid;gap:.4rem}.ob-approved__ineligible li{display:grid;gap:.1rem;overflow-wrap:anywhere}.ob-approved__ineligible small{color:var(--ob-muted)}
 .ob-approved__rejected{color:var(--danger,#b42318);font-size:.8125rem}
+/* PR-4B: on phones the 9-column register becomes labelled cards (every value and action stays visible). */
+@media(max-width:52em){
+ .ob-approved__table-frame{overflow:visible;border:0}
+ .ob-approved__table,.ob-approved__table tbody,.ob-approved__table tfoot{display:block;min-width:0;width:100%}
+ .ob-approved__table colgroup{display:none}
+ .ob-approved__table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ .ob-approved__table tbody{display:flex;flex-direction:column;gap:8px}
+ .ob-approved__table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;padding:10px 12px;border:1px solid var(--ob-border);border-radius:10px;background:#fff}
+ .ob-approved__table tbody tr:nth-child(even){background:#fff}
+ .ob-approved__table tbody tr.is-selected{background:rgba(0,184,148,.08);border-color:var(--ob-primary)}
+ .ob-approved__table tbody td{display:block;height:auto;min-width:0;padding:0;border:0;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+ .ob-approved__table tbody td.ob-approved__party-cell{grid-column:1/-1;padding-bottom:6px;border-bottom:1px solid var(--ob-border)}
+ .ob-approved__table tbody td[data-label]:not(.ob-approved__party-cell)::before{content:attr(data-label);display:block;color:var(--ob-muted);font-size:10px;font-weight:600}
+ .ob-approved__table tbody td.ob-approved__action-cell{grid-column:1/-1}
+ .ob-approved__table tbody td.ob-approved__action-cell .ob-approved__view{width:100%;min-height:36px}
+ .ob-approved__table tfoot tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;padding:10px 12px;border-radius:10px;background:#f1f5f9}
+ .ob-approved__table tfoot th{grid-column:1/-1;height:auto;padding:0;background:transparent}
+ .ob-approved__table tfoot td{display:block;height:auto;padding:0;background:transparent;overflow-wrap:anywhere}
+ .ob-approved__table tfoot td:empty{display:none}
+ .ob-approved__table tfoot td[data-label]::before{content:attr(data-label);display:block;color:var(--ob-muted);font-size:10px;font-weight:600}
+}

@@ -100,7 +100,7 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
     {summary&&<div className="banking-selected-operation"><Stack gap="md">
       <Text fw={700}>{s.selectedTitle}</Text>
       <div className="banking-metrics-grid">
-        <div><span>{s.document}</span><strong dir="auto">{summary.document.original_filename}</strong></div>
+        <div><span>{s.document}</span><strong><bdi dir="ltr">{summary.document.original_filename}</bdi></strong></div>
         <div><span>{s.status}</span><strong>{s[summary.payment_status]}</strong></div>
         <div><span>{s.total}</span><strong dir="ltr">{summary.document.total_amount??'—'}</strong></div>
         <div><span>{s.settled}</span><strong dir="ltr">{summary.settled_amount}</strong></div>
