@@ -36,3 +36,16 @@ input[type="date"],input[type="number"],input[type="email"]{direction:ltr}
 .modal--wide{width:min(100%,760px)}
 /* The app header (Mantine AppShell.Header) sits at z-index 100; dialogs must be above it, never under or beside it. */
 body>.modal-backdrop{z-index:1000}
+
+/* Counterparty manager: name and status on top, one aligned action row below (edit, enable/disable, delete); buttons wrap as whole words. */
+.counterparty-manager li{flex-direction:column;align-items:stretch}
+.counterparty-manager li>span:first-child{min-width:0}
+.counterparty-manager li>span:first-child strong{overflow-wrap:anywhere}
+.counterparty-manager li>span:last-child{flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:8px}
+.counterparty-manager li>span:last-child button{white-space:nowrap}
+@media(max-width:48em){.counterparty-manager li>span:last-child{justify-content:stretch}.counterparty-manager li>span:last-child button{flex:1 1 auto}}
+/* Create / edit counterparty form: spaced fields and a primary Save aligned to the end. */
+.counterparty-form{display:grid;gap:16px}
+.counterparty-form label{display:grid;gap:6px}
+.counterparty-form__actions{display:flex;justify-content:flex-end;padding-block-start:4px}
+@media(max-width:48em){.counterparty-form__actions button{width:100%}}

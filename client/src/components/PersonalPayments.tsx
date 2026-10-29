@@ -206,7 +206,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
       {message && <div className="pp-message" role="alert">{message}</div>}
 
       {tab === 'payments' && <>
-        {can('personal_payment.create') && !form && <button type="button" className="pp-primary" onClick={() => void openForm()}>{L.newPayment}</button>}
+        {can('personal_payment.create') && !form && <button type="button" className="primary pp-primary" onClick={() => void openForm()}>{L.newPayment}</button>}
         {form && lookups && <form className="pp-form" onSubmit={saveForm}>
           <label>{L.payer}<select required value={form.payer_id} onChange={e => set('payer_id', e.target.value)}><option value="">{L.select}</option>{lookups.payers.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select></label>
           <label>{L.treatment}<select value={form.treatment} onChange={e => set('treatment', e.target.value)}><option value="new_expense">{L.newExpense}</option><option value="existing_obligation">{L.existingObligation}</option></select></label>
@@ -219,15 +219,15 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
           <label>{L.date}<input required type="date" value={form.payment_date} onChange={e => set('payment_date', e.target.value)} /></label>
           <label>{L.amount}<input required inputMode="decimal" value={form.amount} onChange={e => set('amount', e.target.value)} /></label>
           <label>{L.purpose}<input required maxLength={500} value={form.purpose} onChange={e => set('purpose', e.target.value)} /></label>
-          <div className="pp-actions"><button type="submit" className="pp-primary" disabled={busy}>{L.save}</button><button type="button" onClick={() => setForm(null)}>{L.cancel}</button></div>
+          <div className="pp-actions"><button type="submit" className="primary pp-primary" disabled={busy}>{L.save}</button><button type="button" onClick={() => setForm(null)}>{L.cancel}</button></div>
         </form>}
-        {payments.length === 0 ? <WorkspaceState kind="empty">{L.empty}</WorkspaceState> : <div className="responsive-table"><table>
+        {payments.length === 0 ? <WorkspaceState kind="empty">{L.empty}</WorkspaceState> : <div className="responsive-table"><table className="pp-table">
           <thead><tr><th>{L.payer}</th><th>{L.purpose}</th><th>{L.date}</th><th>{L.amount}</th><th>{L.status}</th><th>{L.outstanding}</th><th>{L.actions}</th></tr></thead>
           <tbody>{payments.map(p => <tr key={p.id}>
-            <td>{p.payer_name}<small> {p.payer_kind === 'partner' ? L.partner : L.employee}</small></td><td>{p.purpose}{p.rejection_reason && <small> — {p.rejection_reason}</small>}</td><td>{p.payment_date}</td><td>{money(p.amount)}</td>
-            <td><StatusBadge status={p.status}>{L.statuses[p.status]}</StatusBadge>{p.status === 'approved' && <small> {L.settle[p.settlement_status ?? 'none']}</small>}</td>
-            <td>{p.status === 'approved' ? money(p.outstanding_amount) : '—'}</td>
-            <td className="pp-actions">
+            <td data-label={L.payer}>{p.payer_name}<small> {p.payer_kind === 'partner' ? L.partner : L.employee}</small></td><td data-label={L.purpose}>{p.purpose}{p.rejection_reason && <small> — {p.rejection_reason}</small>}</td><td data-label={L.date}>{p.payment_date}</td><td data-label={L.amount}>{money(p.amount)}</td>
+            <td data-label={L.status}><StatusBadge status={p.status}>{L.statuses[p.status]}</StatusBadge>{p.status === 'approved' && <small> {L.settle[p.settlement_status ?? 'none']}</small>}</td>
+            <td data-label={L.outstanding}>{p.status === 'approved' ? money(p.outstanding_amount) : '—'}</td>
+            <td className="pp-actions" data-label={L.actions}>
               {p.status === 'draft' && can('personal_payment.create') && <><button type="button" onClick={() => void openForm(p)}>{L.edit}</button><button type="button" disabled={busy} onClick={() => void act(() => api(`/api/personal-payments/${p.id}?version=${p.version}`, { method: 'DELETE' }, onUnauthorized))}>{L.remove}</button></>}
               {p.status === 'draft' && can('personal_payment.submit') && <button type="button" disabled={busy} onClick={() => void post(p.id, 'submit')}>{L.submit}</button>}
               {p.status === 'submitted' && can('personal_payment.review') && <button type="button" disabled={busy} onClick={() => void openReview(p)}>{L.review}</button>}

@@ -23,3 +23,21 @@
   .personal-payments .pp-review-actions { flex-direction: column-reverse; }
   .personal-payments .pp-review-actions button { width: 100%; }
 }
+/* Primary action: normal-size teal button at the start of the section, not a full-width bar. */
+.personal-payments .pp-primary { justify-self: start; width: auto; }
+.personal-payments .pp-table td, .personal-payments .pp-table th { vertical-align: top; }
+.personal-payments .pp-table td.pp-actions { display: table-cell; white-space: nowrap; }
+.personal-payments .pp-table td.pp-actions button { margin-inline-end: 6px; margin-block-end: 4px; white-space: nowrap; }
+@media (max-width: 48em) {
+  .personal-payments .responsive-table { overflow: visible; }
+  .personal-payments .pp-table, .personal-payments .pp-table tbody { display: block; width: 100%; min-width: 0; }
+  .personal-payments .pp-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .personal-payments .pp-table tbody { display: flex; flex-direction: column; gap: 10px; }
+  .personal-payments .pp-table tr { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; background: #fff; }
+  .personal-payments .pp-table td { display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr); gap: 8px; align-items: baseline; min-width: 0; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
+  .personal-payments .pp-table td::before { content: attr(data-label); color: var(--text-muted, #667085); font-size: .78rem; font-weight: 600; }
+  .personal-payments .pp-table td.pp-actions { display: flex; flex-wrap: wrap; gap: 6px; white-space: normal; padding-block-start: 8px; border-block-start: 1px solid var(--border, #d9dee7); }
+  .personal-payments .pp-table td.pp-actions::before { flex-basis: 100%; }
+  .personal-payments .pp-table td.pp-actions button { flex: 1 1 auto; margin: 0; }
+}
+@media (max-width: 48em) { .personal-payments .pp-table td.pp-actions:not(:has(button)) { display: none; } }

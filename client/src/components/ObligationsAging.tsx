@@ -66,13 +66,15 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
   return <section className="ob-aging" aria-labelledby="ob-aging-title">
     <div className="ob-aging__head">
       <h2 id="ob-aging-title">{L.title}</h2>
+      <p className="ob-aging__note">{L.note}</p>
+    </div>
+    <div className="ob-aging__toolbar">
       <form className="ob-aging__form" onSubmit={submit}>
         <label><span>{L.asOf}</span><input type="date" required value={asOf} onChange={(e) => setAsOf(e.target.value)} /></label>
         <button className="primary" disabled={state === 'loading' || !asOf}>{L.run}</button>
       </form>
+      <ExportButtons language={i18n.language} document={exportDoc} landscape />
     </div>
-    <p className="ob-aging__note">{L.note}</p>
-    <ExportButtons language={i18n.language} document={exportDoc} landscape />
     <div className="workspace-tabs ob-aging__sides" role="tablist" aria-label={L.sides}>
       {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => setSide(key)}>{L[key]}</button>)}
     </div>
@@ -88,11 +90,11 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
         : <div className="table-wrap ob-aging__table"><table>
           <thead><tr><th>{L.counterparty}</th><th>{L.dueOn}</th><th>{L.daysOverdue}</th><th>{L.bucket}</th><th>{L.outstanding}</th></tr></thead>
           <tbody>{data.items.map((item) => <tr key={item.obligation_id}>
-            <td dir="auto">{item.counterparty_name}</td>
-            <td><span dir="ltr">{item.due_on ?? L.noDue}</span></td>
-            <td><span dir="ltr">{item.days_overdue}</span></td>
-            <td>{L.buckets[item.bucket]}</td>
-            <td><span dir="ltr">{fmt(item.outstanding_amount)}</span></td>
+            <td dir="auto" data-label={L.counterparty}>{item.counterparty_name}</td>
+            <td data-label={L.dueOn}><span dir="ltr">{item.due_on ?? L.noDue}</span></td>
+            <td data-label={L.daysOverdue}><span dir="ltr">{item.days_overdue}</span></td>
+            <td data-label={L.bucket}>{L.buckets[item.bucket]}</td>
+            <td data-label={L.outstanding}><span dir="ltr">{fmt(item.outstanding_amount)}</span></td>
           </tr>)}</tbody>
           <tfoot><tr><th scope="row" colSpan={4}>{L.total}</th><th><span dir="ltr">{fmt(data.total_outstanding)}</span></th></tr></tfoot>
         </table></div>}
