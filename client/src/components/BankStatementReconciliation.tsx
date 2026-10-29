@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { DateTextInput } from './DateInput';
 import { Alert, Badge, Button, Card, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { readQueryParameter } from '../navigation/queryState';
@@ -219,7 +220,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     <Card withBorder><Group align="end" wrap="wrap" justify="space-between">
       <Group align="end" wrap="wrap">
         <NativeSelect label={s.account} value={bankId} onChange={e => setBankId(e.currentTarget.value)} data={accounts.map(a => ({ value: a.id, label: `${a.display_name} (${a.currency_code})` }))}/>
-        <TextInput type="date" dir="ltr" label={s.periodEnd} value={periodEnd} onChange={e => setPeriodEnd(e.currentTarget.value)}/>
+        <DateTextInput label={s.periodEnd} value={periodEnd} onChange={setPeriodEnd}/>
         <Button variant="default" onClick={() => void calculate()}>{s.load}</Button>
       </Group>
       <Group gap="xs"><Text size="sm" c="dimmed">{s.mode}:</Text><Badge color={settings.mode === 'enforce' ? 'red' : settings.mode === 'warn' ? 'yellow' : 'gray'}>{s.modes[settings.mode]}</Badge>{settings.enforce_from && <Text size="sm" c="dimmed">{s.effective}: <span dir="ltr">{formatDisplayDateLtr(settings.enforce_from, i18n.language)}</span></Text>}</Group>
@@ -267,7 +268,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
         {canManageLinks && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link: activeLink })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group> : <Text c="dimmed">{s.unlinked}</Text>}
       {canManageLinks && !activeLink && <form onSubmit={addLink} noValidate><Group align="end">
         <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
-        <TextInput type="date" dir="ltr" label={s.validFrom} value={validFrom} onChange={e => setValidFrom(e.currentTarget.value)} error={fieldErrors['validFrom']} required/>
+        <DateTextInput label={s.validFrom} value={validFrom} onChange={setValidFrom} error={fieldErrors['validFrom']} required/>
         <Button type="submit">{s.link}</Button></Group></form>}
     </Stack></Card>
 
@@ -289,8 +290,8 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
         {replacing && <><Alert color="yellow">{s.replace}: {replacing.statement_ref}</Alert><TextInput label={s.reason} value={reason} onChange={e => setReason(e.currentTarget.value)} error={fieldErrors['reason']} maxLength={500} required/></>}
         <Group align="end" wrap="wrap">
           <TextInput name="ref" label={s.ref} defaultValue={replacing?.statement_ref ?? ''} error={fieldErrors['ref']} maxLength={100} required/>
-          <TextInput name="from" type="date" dir="ltr" error={fieldErrors['from']} label={s.from} defaultValue={replacing?.period_start ?? ''} required/>
-          <TextInput name="to" type="date" dir="ltr" error={fieldErrors['to']} label={s.to} defaultValue={replacing?.period_end ?? periodEnd} required/>
+          <DateTextInput name="from" error={fieldErrors['from']} label={s.from} defaultValue={replacing?.period_start ?? ''} required/>
+          <DateTextInput name="to" error={fieldErrors['to']} label={s.to} defaultValue={replacing?.period_end ?? periodEnd} required/>
           <TextInput name="opening" dir="ltr" error={fieldErrors['opening']} label={s.opening} inputMode="decimal" defaultValue={replacing?.opening_balance ?? ''}/>
           <TextInput name="closing" dir="ltr" error={fieldErrors['closing']} label={s.closing} inputMode="decimal" defaultValue={replacing?.closing_balance ?? ''} required/>
           <TextInput name="note" label={s.note} maxLength={500}/>
@@ -304,7 +305,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
         {settings.enforce_from && <Text size="sm" c="dimmed"> {s.effective}: <span dir="ltr">{formatDisplayDateLtr(settings.enforce_from, i18n.language)}</span></Text>}</div>
       {canManageSettings && <form onSubmit={saveSettings} noValidate><Group align="end">
         <NativeSelect label={s.mode} value={mode} onChange={e => setMode(e.currentTarget.value as Mode)} data={(['off', 'warn', 'enforce'] as Mode[]).map(m => ({ value: m, label: s.modes[m] }))}/>
-        {mode === 'enforce' && <TextInput type="date" dir="ltr" label={s.effective} value={enforceFrom} onChange={e => setEnforceFrom(e.currentTarget.value)} error={fieldErrors['enforceFrom']} required/>}
+        {mode === 'enforce' && <DateTextInput label={s.effective} value={enforceFrom} onChange={setEnforceFrom} error={fieldErrors['enforceFrom']} required/>}
         <Button type="submit">{s.save}</Button></Group></form>}
     </Group></Card>
   </Stack>;

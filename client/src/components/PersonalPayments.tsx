@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import './PersonalPayments.css';
 import { formatMoney } from '../money-format';
+import { DateInput } from './DateInput';
 
 // Personal expense payments made on behalf of the company: draft -> submit -> approve/reject -> reimbursement.
 // Presentation only: payer mapping, balanced journals, closed periods, duplicate prevention and permissions are all enforced by the server.
@@ -218,7 +219,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
               <label>{L.expenseAccount}<select required value={form.expense_account_id} onChange={e => set('expense_account_id', e.target.value)}><option value="">{L.select}</option>{lookups.expense_accounts?.map(a => <option key={a.id} value={a.id}>{a.code} {a.name}</option>)}</select></label>
             </>
             : <label>{L.obligation}<select required value={form.obligation_id} onChange={e => set('obligation_id', e.target.value)}><option value="">{L.select}</option>{lookups.obligations?.map(o => <option key={o.id} value={o.id}>{o.counterparty_name} — {money(o.outstanding)} ({o.recognized_on})</option>)}</select></label>}
-          <label>{L.date}<input required type="date" value={form.payment_date} onChange={e => set('payment_date', e.target.value)} /></label>
+          <label>{L.date}<DateInput required value={form.payment_date} onChange={v => set('payment_date', v)} /></label>
           <label>{L.amount}<input required inputMode="decimal" value={form.amount} onChange={e => set('amount', e.target.value)} /></label>
           <label>{L.purpose}<input required maxLength={500} value={form.purpose} onChange={e => set('purpose', e.target.value)} /></label>
           <div className="pp-actions"><button type="submit" className="primary pp-primary" disabled={busy}>{L.save}</button><button type="button" onClick={() => setForm(null)}>{L.cancel}</button></div>

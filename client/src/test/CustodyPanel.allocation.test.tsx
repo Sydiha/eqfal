@@ -67,4 +67,21 @@ describe('CustodyPanel document allocation', () => {
     expect(posts(calls)).toHaveLength(0);
     expect(calls.some(c => c.url === '/api/custodies/c-b/eligible-documents?q=')).toBe(true);
   });
+
+  it('shows an actionable localized message when the document period is closed and keeps the selection', async () => {
+    setup(() => json({ error: 'Accounting period is closed', code: 'ACCOUNTING_PERIOD_CLOSED' }, 409));
+    await pickDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/accounting period of this document's date is closed/i);
+    expect(alert).toHaveTextContent(/reopen/i);
+    expect(alert).not.toHaveTextContent('Accounting period is closed');
+    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+  });
+
+  it('labels the allocation amount with the funding currency', async () => {
+    setup(() => json({}, 201));
+    await pickDocument();
+    expect(screen.getAllByText('SAR').length).toBeGreaterThan(0);
+  });
 });

@@ -93,3 +93,9 @@ body>.modal-backdrop{z-index:1000}
 /* Dialog footer: secondary action first, primary last, aligned to the end; stacked full width on phones. */
 .counterparty-form .modal-actions,.bank-match-dialog .modal-actions{display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:48em){.counterparty-form .modal-actions,.bank-match-dialog .modal-actions{flex-direction:column-reverse}.counterparty-form .modal-actions button,.bank-match-dialog .modal-actions button{width:100%}}
+
+/* DateInput: year-first text entry; the error line sits under the field and keeps the page direction. */
+.date-input{direction:ltr;text-align:start;font-variant-numeric:tabular-nums}
+.date-input[aria-invalid="true"]{border-color:var(--mantine-color-red-6,#c92a2a);outline-color:var(--mantine-color-red-6,#c92a2a)}
+.date-input__error{display:block;color:var(--mantine-color-red-7,#c92a2a);font-size:.8125rem;line-height:1.4;overflow-wrap:anywhere}
+.date-input__sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
