@@ -172,3 +172,16 @@ describe('T7.2 opening-balance bulk import', () => {
     expect(state.items).toBe(0);
   });
 });
+
+describe('PR-2B review lifecycle conflict codes', () => {
+  it('adds OB_REVIEW_NOT_DRAFT when submitting a review that is not a draft, keeping 409 and the message', async () => {
+    setCtx(['opening_balance.submit']); state.review = { id: 'r1', status: 'in_review' };
+    const res = await request(app).post(`/api/opening-balances/${FY}/submit-review`).send({});
+    expect(res.status).toBe(409); expect(res.body).toEqual({ error: 'Only draft can be submitted', code: 'OB_REVIEW_NOT_DRAFT' });
+  });
+  it('adds OB_REVIEW_NOT_IN_REVIEW when approving a draft review', async () => {
+    setCtx(['opening_balance.approve']); state.review = { id: 'r1', status: 'draft' };
+    const res = await request(app).post(`/api/opening-balances/${FY}/approve`).send({});
+    expect(res.status).toBe(409); expect(res.body).toEqual({ error: 'Only in-review opening balance can be approved', code: 'OB_REVIEW_NOT_IN_REVIEW' });
+  });
+});
