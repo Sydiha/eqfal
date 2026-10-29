@@ -71,6 +71,18 @@
  .annual-closing-view .ac-tabs{flex-wrap:wrap}
  .annual-closing-view .ac-tab{flex:none;padding:0 12px;white-space:nowrap}
 }
+/* PR-3A: domain and manifest tables become stacked rows on phones (no hidden horizontal scroll). */
+@media (max-width:800px){
+ .annual-closing-view .table-wrap.ac-stack{overflow-x:visible;border:0}
+ .annual-closing-view .table-wrap.ac-stack table{display:block;min-width:0;width:100%}
+ .annual-closing-view .table-wrap.ac-stack thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ .annual-closing-view .table-wrap.ac-stack tbody{display:flex;flex-direction:column;gap:8px}
+ .annual-closing-view .table-wrap.ac-stack tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:8px 12px;border:1px solid var(--ac-border);border-radius:8px}
+ .annual-closing-view .table-wrap.ac-stack td{display:block;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+ .annual-closing-view .table-wrap.ac-stack td:first-child{grid-column:1/-1;font-weight:600}
+ .annual-closing-view .table-wrap.ac-stack td:not(:first-child)::before{content:attr(data-label) ": ";color:var(--ac-muted);font-size:11px;font-weight:400}
+ .annual-closing-view .table-wrap.ac-stack td.ac-next{grid-column:1/-1}
+}
 @media (max-width:720px){
  .annual-closing-view .ac-summary{row-gap:12px}
  .annual-closing-view .ac-summary article{padding:4px 12px}

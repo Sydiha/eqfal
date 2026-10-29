@@ -157,3 +157,13 @@
 .opening-balance-view .ob-history-host ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
 .opening-balance-view .ob-history-host li{border:1px solid var(--ob-border);border-radius:8px;padding:10px;min-width:0}
 .opening-balance-view .ob-history-host h3{margin:0}
+/* PR-3A: long unbroken references (IBAN, bank refs) wrap inside the cell instead of pushing the card off-screen. Value is unchanged; bdi keeps its own direction. */
+.opening-balance-view .ob-table td{min-width:0;overflow-wrap:anywhere}
+.opening-balance-view .ob-table td>*{min-width:0;max-width:100%}
+.opening-balance-view .ob-table .ob-sub{display:block;overflow-wrap:anywhere;word-break:break-word}
+.opening-balance-view .ob-table .ob-sub bdi{unicode-bidi:isolate;overflow-wrap:anywhere}
+@media (max-width:760px){
+ /* the 760px min-width of the wider-phone table layout must not survive once rows are cards */
+ .opening-balance-view .ob-table table{min-width:0;width:100%}
+ .opening-balance-view .ob-table tr{min-width:0}
+}

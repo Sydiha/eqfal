@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Group, NumberInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
+import { transactionOptionLabel } from './bankTransactionLabel';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 
 type Transaction = { id:string; transaction_date:string; description:string|null; bank_reference:string|null; amount:string; reconciliation_status:'unmatched'|'matched'|'reconciled' };
@@ -58,7 +59,7 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
   };
   useEffect(()=>{if(!canView)return;void load(null,{list:true});return()=>{seq.current++;};},[canView]);
   // After a failed reload the list may be outdated: only the selected transaction stays visible (so retry keeps its id) and nothing else can be picked.
-  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions,listStale,selectedTx]);
+  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:transactionOptionLabel(t)})),[transactions,listStale,selectedTx]);
 
   const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');setError('');setRefreshFailed(null);if(!value){seq.current++;setBusy(false);return;}await load(value,{list:false});};
   const retry=()=>void load(selectedTx,{list:true,afterSave:refreshFailed==='afterSave'});
