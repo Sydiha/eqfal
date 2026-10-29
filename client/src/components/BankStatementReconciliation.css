@@ -11,7 +11,7 @@
 .bank-statement-reconciliation .bsr-text{unicode-bidi:isolate}
 /* Outstanding items: amounts at the end of the column; labelled rows on phones instead of a horizontally scrolled table. */
 .bank-statement-reconciliation .bsr-items .bsr-items__amount{text-align:end}
-.bank-statement-reconciliation [id^=bsr-]:focus{outline:none}
+.bank-statement-reconciliation #bsr-links:focus,.bank-statement-reconciliation #bsr-statements:focus{outline:2px solid var(--primary);outline-offset:2px}
 @media(max-width:48em){
   .bank-statement-reconciliation .bsr-items thead{display:none}
   .bank-statement-reconciliation .bsr-items,.bank-statement-reconciliation .bsr-items tbody,.bank-statement-reconciliation .bsr-items tr{display:block;width:100%}
