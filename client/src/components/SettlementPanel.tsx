@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Group, NumberInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 
@@ -19,35 +19,66 @@ async function api<T>(url:string,init?:RequestInit,onUnauthorized?:()=>void):Pro
 }
 
 const strings={
-  en:{title:'Payment settlements',description:'Record how much of an approved document is settled by an already-matched bank transaction.',transaction:'Matched bank transaction',document:'Document',total:'Total',settled:'Settled',remaining:'Remaining',status:'Payment status',unpaid:'Unpaid',partially_paid:'Partially paid',paid:'Paid',amount:'Settlement amount',note:'Note',create:'Record settlement',history:'Settlement history',none:'No settlement records',delete:'Delete',reason:'Deletion reason',deleteAction:'Delete settlement',error:'Unable to load payment settlements',select:'Select a bank transaction matched to a document',emptyTitle:'No eligible matched transaction yet',emptyHelp:'Match a bank transaction to an approved document first. It will then appear here for settlement.',selectedTitle:'Selected payment',allocateTitle:'Allocate to several documents',allocateHelp:'One bank transaction can settle several approved documents of the same counterparty. Any unallocated amount keeps the transaction open for closing.',bankAmount:'Bank amount',allocated:'Allocated',unallocated:'Unallocated',allocationTotal:'This allocation',allocate:'Save allocations',matchedDocuments:'Allocated documents',noCandidates:'No approved documents are available for this transaction',allocationExceeds:'The allocation exceeds the unallocated amount',docExceeds:'An amount exceeds the document remaining amount',counterparty:'Counterparty'},
-  ar:{title:'تسويات المدفوعات',description:'تسجيل الجزء المسدد من مستند معتمد بواسطة حركة بنكية تمت مطابقتها مسبقًا.',transaction:'الحركة البنكية المطابقة',document:'المستند',total:'الإجمالي',settled:'المسدد',remaining:'المتبقي',status:'حالة السداد',unpaid:'غير مسدد',partially_paid:'مسدد جزئيًا',paid:'مسدد',amount:'مبلغ التسوية',note:'ملاحظة',create:'تسجيل تسوية',history:'سجل التسويات',none:'لا توجد تسويات',delete:'حذف',reason:'سبب الحذف',deleteAction:'حذف التسوية',error:'تعذر تحميل تسويات المدفوعات',select:'اختر حركة بنكية مطابقة لمستند',emptyTitle:'لا توجد حركة مؤهلة للتسوية حاليًا',emptyHelp:'طابق حركة بنكية مع مستند معتمد أولًا، وبعدها ستظهر هنا لتسجيل التسوية.',selectedTitle:'التسوية المحددة',allocateTitle:'توزيع الحركة على عدة مستندات',allocateHelp:'يمكن لحركة بنكية واحدة أن تسدد عدة مستندات معتمدة لنفس الطرف المقابل. أي مبلغ غير موزع يُبقي الحركة مفتوحة عند الإقفال.',bankAmount:'مبلغ الحركة',allocated:'الموزع',unallocated:'غير الموزع',allocationTotal:'هذا التوزيع',allocate:'حفظ التوزيع',matchedDocuments:'المستندات الموزع عليها',noCandidates:'لا توجد مستندات معتمدة متاحة لهذه الحركة',allocationExceeds:'التوزيع يتجاوز المبلغ غير الموزع',docExceeds:'مبلغ يتجاوز المتبقي من المستند',counterparty:'الطرف المقابل'}
+  en:{title:'Payment settlements',description:'Record how much of an approved document is settled by an already-matched bank transaction.',transaction:'Matched bank transaction',document:'Document',total:'Total',settled:'Settled',remaining:'Remaining',status:'Payment status',unpaid:'Unpaid',partially_paid:'Partially paid',paid:'Paid',amount:'Settlement amount',note:'Note',create:'Record settlement',history:'Settlement history',none:'No settlement records',delete:'Delete',reason:'Deletion reason',deleteAction:'Delete settlement',error:'Unable to load payment settlements',select:'Select a bank transaction matched to a document',emptyTitle:'No eligible matched transaction yet',emptyHelp:'Match a bank transaction to an approved document first. It will then appear here for settlement.',selectedTitle:'Selected payment',allocateTitle:'Allocate to several documents',allocateHelp:'One bank transaction can settle several approved documents of the same counterparty. Any unallocated amount keeps the transaction open for closing.',bankAmount:'Bank amount',allocated:'Allocated',unallocated:'Unallocated',allocationTotal:'This allocation',allocate:'Save allocations',matchedDocuments:'Allocated documents',noCandidates:'No approved documents are available for this transaction',allocationExceeds:'The allocation exceeds the unallocated amount',docExceeds:'An amount exceeds the document remaining amount',counterparty:'Counterparty',retry:'Retry',savedRefreshFailed:'The change was saved, but the screen could not be refreshed. Retry to load the latest status; the previous values are hidden because they may be outdated.'},
+  ar:{title:'تسويات المدفوعات',description:'تسجيل الجزء المسدد من مستند معتمد بواسطة حركة بنكية تمت مطابقتها مسبقًا.',transaction:'الحركة البنكية المطابقة',document:'المستند',total:'الإجمالي',settled:'المسدد',remaining:'المتبقي',status:'حالة السداد',unpaid:'غير مسدد',partially_paid:'مسدد جزئيًا',paid:'مسدد',amount:'مبلغ التسوية',note:'ملاحظة',create:'تسجيل تسوية',history:'سجل التسويات',none:'لا توجد تسويات',delete:'حذف',reason:'سبب الحذف',deleteAction:'حذف التسوية',error:'تعذر تحميل تسويات المدفوعات',select:'اختر حركة بنكية مطابقة لمستند',emptyTitle:'لا توجد حركة مؤهلة للتسوية حاليًا',emptyHelp:'طابق حركة بنكية مع مستند معتمد أولًا، وبعدها ستظهر هنا لتسجيل التسوية.',selectedTitle:'التسوية المحددة',allocateTitle:'توزيع الحركة على عدة مستندات',allocateHelp:'يمكن لحركة بنكية واحدة أن تسدد عدة مستندات معتمدة لنفس الطرف المقابل. أي مبلغ غير موزع يُبقي الحركة مفتوحة عند الإقفال.',bankAmount:'مبلغ الحركة',allocated:'الموزع',unallocated:'غير الموزع',allocationTotal:'هذا التوزيع',allocate:'حفظ التوزيع',matchedDocuments:'المستندات الموزع عليها',noCandidates:'لا توجد مستندات معتمدة متاحة لهذه الحركة',allocationExceeds:'التوزيع يتجاوز المبلغ غير الموزع',docExceeds:'مبلغ يتجاوز المتبقي من المستند',counterparty:'الطرف المقابل',retry:'إعادة المحاولة',savedRefreshFailed:'تم حفظ التغيير، لكن تعذر تحديث الشاشة. أعد المحاولة لتحميل أحدث حالة؛ أُخفيت القيم السابقة لأنها قد تكون قديمة.'}
 };
 
 export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
   const {i18n}=useTranslation(); const s=i18n.language==='ar'?strings.ar:strings.en;
   const [transactions,setTransactions]=useState<Transaction[]>([]); const [selectedTx,setSelectedTx]=useState<string|null>(null); const [documentId,setDocumentId]=useState<string|null>(null); const [summary,setSummary]=useState<Summary|null>(null);
+  const [refreshFailed,setRefreshFailed]=useState<'load'|'afterSave'|null>(null); const [listStale,setListStale]=useState(false); const seq=useRef(0);
   const [candidates,setCandidates]=useState<MatchResponse|null>(null); const [allocations,setAllocations]=useState<Record<string,number|string>>({});
   const [amount,setAmount]=useState<number|string>(''); const [note,setNote]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
 
-  useEffect(()=>{if(!canView)return;void api<{transactions:Transaction[]}>('/api/bank-transactions',undefined,onUnauthorized).then(x=>setTransactions(x.transactions.filter(t=>canSettle||t.reconciliation_status!=='unmatched'))).catch(e=>setError(e instanceof Error?e.message:s.error));},[canView]);
-  const options=useMemo(()=>transactions.map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions]);
+  const toCents=(v:unknown)=>Math.round(Number(v)*100);
+  // Every load gets a ticket; a response whose ticket is no longer current is dropped, and state is committed only after all requests of the load succeeded.
+  const load=async(txId:string|null,opts:{list:boolean;afterSave?:boolean})=>{
+    const ticket=++seq.current; const live=()=>ticket===seq.current;
+    setBusy(true); setError(''); setRefreshFailed(null);
+    try{
+      const list=opts.list?(await api<{transactions:Transaction[]}>('/api/bank-transactions',undefined,onUnauthorized)).transactions.filter(t=>canSettle||t.reconciliation_status!=='unmatched'):transactions;
+      const keep=txId&&list.some(t=>t.id===txId)?txId:null;
+      if(!keep){if(!live())return;setListStale(false);setTransactions(list);setSelectedTx(null);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');return;}
+      const match=await api<MatchResponse>(`/api/bank-transactions/${keep}/match-candidates`,undefined,onUnauthorized);
+      const docId=match.match?.document_id??null;
+      const data=docId?await api<Summary>(`/api/documents/${docId}/settlements`,undefined,onUnauthorized):null;
+      if(!live())return;
+      const available=match.unallocated_amount!=null&&match.unallocated_amount!==''?toCents(match.unallocated_amount):NaN;
+      const remaining=data&&data.remaining_amount!==null?toCents(data.remaining_amount):NaN;
+      const next=Math.min(available,remaining);
+      setListStale(false);setTransactions(list);setSelectedTx(keep);setCandidates(match);setDocumentId(docId);setSummary(data);setAllocations({});setAmount(Number.isFinite(next)&&next>0?next/100:'');
+      if(!docId&&!canSettle)setError(s.select);
+    }catch(e){
+      if(!live())return;
+      setCandidates(null);setDocumentId(null);setSummary(null);setAllocations({});setAmount('');
+      if(opts.list)setListStale(true);
+      setRefreshFailed(opts.afterSave?'afterSave':'load');
+      setError(opts.afterSave?s.savedRefreshFailed:(e instanceof Error?e.message:s.error));
+    }finally{if(live())setBusy(false);}
+  };
+  useEffect(()=>{if(!canView)return;void load(null,{list:true});return()=>{seq.current++;};},[canView]);
+  // After a failed reload the list may be outdated: only the selected transaction stays visible (so retry keeps its id) and nothing else can be picked.
+  const options=useMemo(()=>transactions.filter(t=>!listStale||t.id===selectedTx).map(t=>({value:t.id,label:`${t.transaction_date} · ${t.description||t.bank_reference||t.id} · ${t.amount}`})),[transactions,listStale,selectedTx]);
 
-  const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setError('');if(!value)return;setBusy(true);try{const match=await api<MatchResponse>(`/api/bank-transactions/${value}/match-candidates`,undefined,onUnauthorized);setCandidates(match);if(!match.match?.document_id){if(!canSettle)throw new Error(s.select);return;}setDocumentId(match.match.document_id);const data=await api<Summary>(`/api/documents/${match.match.document_id}/settlements`,undefined,onUnauthorized);setSummary(data);const tx=transactions.find(t=>t.id===value);if(tx&&data.remaining_amount!==null)setAmount(Math.min(Math.abs(Number(tx.amount)),Number(data.remaining_amount)));}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
+  const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');setError('');setRefreshFailed(null);if(!value){seq.current++;setBusy(false);return;}await load(value,{list:false});};
+  const retry=()=>void load(selectedTx,{list:true,afterSave:refreshFailed==='afterSave'});
   const allocationTotal=Object.values(allocations).reduce<number>((n,v)=>n+Math.round(Number(v||0)*100),0);
   const unallocatedCents=Math.round(Number(candidates?.unallocated_amount??0)*100);
-  const allocationRows=(candidates?.documents??[]).filter(d=>d.status==='approved');
+  const allocationRows=(candidates?.documents??[]).filter(d=>d.status==='approved'&&!(d.remaining_amount!=null&&toCents(d.remaining_amount)<=0));
   const docOver=allocationRows.some(d=>d.remaining_amount!=null&&Math.round(Number(allocations[d.id]||0)*100)>Math.round(Number(d.remaining_amount)*100));
-  const allocate=async(event:FormEvent)=>{event.preventDefault();if(!selectedTx)return;const rows=Object.entries(allocations).filter(([,v])=>Number(v)>0).map(([document_id,v])=>({document_id,amount:Number(v).toFixed(2)}));if(!rows.length)return;setBusy(true);setError('');try{await api(`/api/bank-transactions/${selectedTx}/allocations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({allocations:rows,note:note||undefined})},onUnauthorized);setNote('');const value=selectedTx;await choose(value);}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
-  const refresh=async()=>{if(!documentId)return;setSummary(await api<Summary>(`/api/documents/${documentId}/settlements`,undefined,onUnauthorized));};
-  const create=async(event:FormEvent)=>{event.preventDefault();if(!documentId||!selectedTx||!amount)return;setBusy(true);setError('');try{await api(`/api/documents/${documentId}/settlements`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bank_transaction_id:selectedTx,amount:String(amount),note:note||undefined})},onUnauthorized);setNote('');await refresh();}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
-  const remove=async(id:string)=>{if(!documentId||!reason.trim())return;setBusy(true);setError('');try{await api(`/api/documents/${documentId}/settlements/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason.trim()})},onUnauthorized);setReason('');await refresh();}catch(e){setError(e instanceof Error?e.message:s.error);}finally{setBusy(false);}};
+  // Mutations never retry themselves: after a successful save only the read requests are repeated (see load/retry).
+  const mutate=async(request:()=>Promise<unknown>)=>{const txId=selectedTx;setBusy(true);setError('');setRefreshFailed(null);try{await request();}catch(e){setError(e instanceof Error?e.message:s.error);setBusy(false);return;}setNote('');setReason('');await load(txId,{list:true,afterSave:true});};
+  const post=(url:string,method:string,body:unknown)=>api(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},onUnauthorized);
+  const allocate=async(event:FormEvent)=>{event.preventDefault();if(!selectedTx)return;const rows=Object.entries(allocations).filter(([,v])=>Number(v)>0).map(([document_id,v])=>({document_id,amount:Number(v).toFixed(2)}));if(!rows.length)return;await mutate(()=>post(`/api/bank-transactions/${selectedTx}/allocations`,'POST',{allocations:rows,note:note||undefined}));};
+  const create=async(event:FormEvent)=>{event.preventDefault();if(!documentId||!selectedTx||!amount)return;await mutate(()=>post(`/api/documents/${documentId}/settlements`,'POST',{bank_transaction_id:selectedTx,amount:String(amount),note:note||undefined}));};
+  const remove=async(id:string)=>{if(!documentId||!reason.trim())return;await mutate(()=>post(`/api/documents/${documentId}/settlements/${id}`,'DELETE',{reason:reason.trim()}));};
 
   if(!canView)return null;
   return <Card withBorder padding="lg" className="banking-settlement-panel"><Stack gap="lg">
     <div className="banking-section-heading"><Title order={2} size="h3">{s.title}</Title><Text c="dimmed">{s.description}</Text></div>
-    {error&&<Alert color="red" role="alert">{error}</Alert>}
+    {error&&<Alert color={refreshFailed==='afterSave'?'yellow':'red'} role="alert"><Group justify="space-between" align="center" wrap="nowrap"><span>{error}</span>{refreshFailed&&<Button size="compact-sm" variant="default" onClick={retry} loading={busy}>{s.retry}</Button>}</Group></Alert>}
     <div className="banking-operation-card">
-      <Select label={s.transaction} placeholder={s.select} data={options} value={selectedTx} onChange={v=>void choose(v)} searchable clearable disabled={busy}/>
+      <Select label={s.transaction} placeholder={s.select} data={options} value={selectedTx} onChange={v=>void choose(v)} searchable clearable disabled={busy||listStale}/>
       {transactions.length===0&&!error&&<div className="banking-empty-guidance"><Text fw={700}>{s.emptyTitle}</Text><Text size="sm" c="dimmed">{s.emptyHelp}</Text></div>}
     </div>
     {candidates&&canSettle&&candidates.transaction.reconciliation_status!=='reconciled'&&<div className="banking-selected-operation"><Stack gap="md">
