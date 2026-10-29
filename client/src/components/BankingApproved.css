@@ -140,3 +140,27 @@
   .bank-recon__pagination{flex-direction:column;align-items:flex-start}
   .banking-approved .banking-core--accounts thead th:nth-child(n+2),.banking-approved .banking-core--accounts tbody td:nth-child(n+2){width:auto}
 }
+
+/* PR-4B mobile: compact header, one scrollable tab row, tighter status strip and filters. */
+@media(max-width:58em){
+  .banking-approved{gap:10px}
+  .banking-approved__tabs.banking-workspace__tabs{padding:6px 8px;gap:4px}
+  .banking-approved__arrow{width:14px;height:14px}
+  .banking-approved__tabs [role=tablist]{flex-wrap:nowrap;justify-content:flex-start;gap:6px;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:var(--b-soft) transparent;-webkit-overflow-scrolling:touch}
+  .banking-approved__tabs [role=tablist]::-webkit-scrollbar{height:4px}
+  .banking-approved__tabs [role=tablist]::-webkit-scrollbar-thumb{border-radius:4px;background:var(--b-soft)}
+  .banking-approved__tabs [role=tab]{flex:none;min-height:36px;padding:6px 12px;font-size:13px}
+  .banking-approved__header h1{font-size:18px}
+  .banking-approved__header>div{gap:2px}
+  .banking-approved__header p{font-size:12px;line-height:1.5}
+  .bank-recon__status{gap:8px;padding:8px 10px}
+  .bank-recon .bank-transactions-view__summary.bank-recon__metrics{gap:6px 14px!important}
+  .bank-recon .bank-recon__refresh{align-self:flex-start;min-height:32px}
+  .bank-recon .bank-recon__toolbar.shared-workspace-toolbar{padding:10px}
+}
+@media(max-width:38em){
+  .bank-recon__toolbar .shared-workspace-toolbar__filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .bank-recon__toolbar .shared-workspace-toolbar__filters label{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:3px;font-size:12px}
+  .bank-recon__toolbar .shared-workspace-toolbar__filters label:first-child{grid-column:1/-1}
+  .bank-recon__toolbar input[type=number],.bank-recon__toolbar input[type=date]{width:100%;min-width:0}
+}

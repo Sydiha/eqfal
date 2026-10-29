@@ -108,7 +108,7 @@ export function BankingWorkspace(props: Props) {
   return <Stack gap="md" className="banking-workspace banking-approved">
     <Tabs value={section} onChange={changeSection} variant="unstyled" className="banking-workspace__tabs banking-approved__tabs">
       <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
-      <Tabs.List aria-label={s.tabsLabel}>
+      <Tabs.List aria-label={s.tabsLabel} onFocus={event => event.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })}>
         <Tabs.Tab value="transactions"><i aria-hidden="true"/>{s.transactions}</Tabs.Tab>
         {props.canImport && <Tabs.Tab value="import"><i aria-hidden="true"/>{s.import}</Tabs.Tab>}
         <Tabs.Tab value="accounts"><i aria-hidden="true"/>{s.accounts}</Tabs.Tab>

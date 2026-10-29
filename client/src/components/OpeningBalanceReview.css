@@ -167,3 +167,9 @@
  .opening-balance-view .ob-table table{min-width:0;width:100%}
  .opening-balance-view .ob-table tr{min-width:0}
 }
+/* PR-4B: lighter phone density (spacing only; forms, values and actions unchanged). */
+@media (max-width:760px){
+ .opening-balance-view .ob-table tr{gap:0 12px;padding:8px 10px;margin-bottom:6px}
+ .opening-balance-view .ob-table td{padding:2px 0}
+ .opening-balance-view .ob-table td::before{font-size:10.5px;line-height:1.3}
+}
