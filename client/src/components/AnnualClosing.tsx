@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 import { Dialog } from './Dialog';
 import { TaxWorkpaper } from './TaxWorkpaper';
 import { WhtReviews } from './WhtReviews';
@@ -35,7 +36,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const [yearId, setYearId] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [packageResult,setPackageResult]=useState<PackageResult|null>(null);
   const [packageError,setPackageError]=useState('');
@@ -47,27 +48,27 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const [tab,setTab]=useState<'readiness'|'package'|'wht'>('readiness');
   useEffect(() => {
     if (!canView) return;
-    void fetch('/api/fiscal-years').then(async response => {
+    void fetch('/api/fiscal-years').catch(e => { throw toApiError(e); }).then(async response => {
       if (response.status === 401) { onUnauthorized(); return; }
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw await parseApiError(response);
       const data = await response.json() as { fiscalYears: FiscalYear[] };
       setYears(data.fiscalYears);
       // Use selected fiscal year from DateContext if available, otherwise use first
       setYearId(current => current || selectedFiscalYearId || data.fiscalYears[0]?.id || '');
-    }).catch(() => setError(true));
+    }).catch(e => setError(screenErrorMessage(e, t, t('annualClosing.error'))));
   }, [canView, onUnauthorized, selectedFiscalYearId]);
   useEffect(() => {
     if (!canView || !yearId) { setResult(null); return; }
     let cancelled = false;
-    setLoading(true); setError(false);
-    void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}`).then(async response => {
+    setLoading(true); setError('');
+    void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}`).catch(e => { throw toApiError(e); }).then(async response => {
       if (response.status === 401) { onUnauthorized(); return null; }
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw await parseApiError(response);
       return response.json() as Promise<Result>;
-    }).then(data => { if (data && !cancelled) setResult(data); }).catch(() => { if (!cancelled) setError(true); }).finally(() => { if (!cancelled) setLoading(false); });
+    }).then(data => { if (data && !cancelled) setResult(data); }).catch(e => { if (!cancelled) setError(screenErrorMessage(e, t, t('annualClosing.error'))); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [canView, onUnauthorized, yearId, refresh]);
-  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}let cancelled=false;void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw new Error();return response.json() as Promise<PackageResult>;}).then(data=>{if(data&&!cancelled)setPackageResult(data);}).catch(()=>{if(!cancelled){setPackageResult(null);setPackageError(t('annualClosing.packageLoadError'));}});return()=>{cancelled=true;};},[canViewPackage,onUnauthorized,refresh,t,yearId]);
+  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}let cancelled=false;void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).catch(e=>{throw toApiError(e);}).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw await parseApiError(response);return response.json() as Promise<PackageResult>;}).then(data=>{if(data&&!cancelled)setPackageResult(data);}).catch(e=>{if(!cancelled){setPackageResult(null);setPackageError(screenErrorMessage(e,t,t('annualClosing.packageLoadError')));}});return()=>{cancelled=true;};},[canViewPackage,onUnauthorized,refresh,t,yearId]);
   const isArabic=i18n.language.startsWith('ar');
   const sourceLabel=(source:string)=>isArabic?t(`annualClosing.package.sources.${source}`,{defaultValue:t('annualClosing.package.unknownSource')}):source;
   const blockerCode=(blocker:string)=>blocker.split(':').at(-1)??blocker;
@@ -78,7 +79,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const formatDateTime=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(date);};
   const blockedFinancialDomainCount=result?financialStatementDomainKeys.filter(key=>(result.domains[key]?.blocker_count??0)>0).length:0;
   const mutate=async(path:string,body:Record<string,unknown>)=>{if(mutatingRef.current)return;mutatingRef.current=true;setPackageBusy(true);try{await runMutate(path,body);}finally{mutatingRef.current=false;setPackageBusy(false);}};
-  const runMutate=async(path:string,body:Record<string,unknown>)=>{setPackageError('');setFinalizationBlockers([]);const response=await fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);if(!response){setPackageError(t('annualClosing.packageActionError'));setRefresh(value=>value+1);return;}if(response.status===401){onUnauthorized();return;}if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string;code?:string;blockers?:string[]};if(path==='/finalize'&&data.blockers?.length){setFinalizationBlockers(data.blockers);}else{setPackageError(data.code==='ANNUAL_PACKAGE_FISCAL_YEAR_NOT_CLOSED'?t('annualClosing.package.yearNotClosed'):data.error||t('annualClosing.packageActionError'));if(response.status===409)setRefresh(value=>value+1);}return;}setRefresh(value=>value+1);};
+  const runMutate=async(path:string,body:Record<string,unknown>)=>{setPackageError('');setFinalizationBlockers([]);const response=await fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(e=>e instanceof Error?e:null);if(!response||response instanceof Error){setPackageError(screenErrorMessage(response,t,t('annualClosing.packageActionError')));setRefresh(value=>value+1);return;}if(response.status===401){onUnauthorized();return;}if(!response.ok){const data=await response.clone().json().catch(()=>({})) as {blockers?:string[]};if(path==='/finalize'&&data.blockers?.length){setFinalizationBlockers(data.blockers);}else{const apiError=await parseApiError(response);setPackageError(apiError.code==='ANNUAL_PACKAGE_FISCAL_YEAR_NOT_CLOSED'?t('annualClosing.package.yearNotClosed'):screenErrorMessage(apiError,t,t('annualClosing.packageActionError')));if(response.status===409)setRefresh(value=>value+1);}return;}setRefresh(value=>value+1);};
   const openProfessionalDialog=(action:'review'|'approve')=>{setProfessionalNote('');setProfessionalAction(action);};
   const confirmProfessionalAction=()=>{if(!professionalAction||!packageResult?.package)return;const action=professionalAction;setProfessionalAction(null);void mutate(`/${action}`,{version:packageResult.package.version,note:professionalNote.trim()||null});};
   if (!canView) return <section className="panel"><p>{t('annualClosing.noAccess')}</p></section>;
@@ -113,7 +114,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   return <section className="panel annual-closing-view" aria-labelledby="annual-closing-title">
     <header className="ac-header"><h1 id="annual-closing-title">{t('annualClosing.title')}</h1><p>{t('annualClosing.description')}</p></header>
     <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{selectedYear.start_date} – {selectedYear.end_date}</bdi></span>}</div>
-    {loading && <p role="status">{t('annualClosing.loading')}</p>}{error && <p role="alert">{t('annualClosing.error')}</p>}
+    {loading && <p role="status">{t('annualClosing.loading')}</p>}{error && <p role="alert">{error}</p>}
     {result && <>
       <div className="ac-tabs" role="tablist" aria-label={t('annualClosing.title')}>{tabs.map(([key,label])=><button key={key} type="button" role="tab" id={`ac-tab-${key}`} aria-selected={tab===key} aria-controls={`ac-panel-${key}`} className={tab===key?'ac-tab ac-tab--active':'ac-tab'} onClick={()=>setTab(key)}>{t(label)}</button>)}</div>
       <div role="tabpanel" id="ac-panel-readiness" aria-labelledby="ac-tab-readiness" hidden={tab!=='readiness'} className="ac-panel">

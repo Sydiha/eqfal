@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
+import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 import { clearQueryParameters, readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 import { ExportButtons } from './ExportButtons';
 import { useActiveCompanyName } from '../context/CompanyContext';
@@ -46,11 +47,10 @@ type CandidateResponse = { transaction: { id: string; reconciliation_status: Rec
 type Props = { canView: boolean; canMatch: boolean; canReconcile: boolean; onUnauthorized: () => void };
 
 async function api<T>(url: string, init?: RequestInit, onUnauthorized?: () => void): Promise<T> {
-  const response = await fetch(url, init);
-  if (response.status === 401) { onUnauthorized?.(); throw new Error('unauthorized'); }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : `HTTP ${response.status}`);
-  return body as T;
+  const response = await fetch(url, init).catch((e) => { throw toApiError(e); });
+  if (response.status === 401) { onUnauthorized?.(); throw new ApiError({ status: 401 }); }
+  if (!response.ok) throw await parseApiError(response);
+  return await response.json().catch(() => ({})) as T;
 }
 
 function displayDate(value: string) {
@@ -143,7 +143,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     try {
       const data = await api<{ transactions: Transaction[] }>('/api/bank-transactions', undefined, onUnauthorized);
       setTransactions(data.transactions);
-    } catch (e) { setError(e instanceof Error ? e.message : s.error); }
+    } catch (e) { setError(screenErrorMessage(e, t, s.error)); }
     finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, [canView]);
@@ -184,7 +184,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     try {
       const data = await api<CandidateResponse>(`/api/bank-transactions/${transaction.id}/match-candidates${search ? `?search=${encodeURIComponent(search)}` : ''}`, undefined, onUnauthorized);
       setCandidateData(data); setSelectedDocument(data.match?.document_id ?? null);
-    } catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); setMatchTransaction(null); }
+    } catch (e) { setError(screenErrorMessage(e, t, t('banks.reconciliationError'))); setMatchTransaction(null); }
     finally { setMatchBusy(false); }
   };
   const closeMatch = () => {
@@ -196,19 +196,19 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
     try {
       await api(`/api/bank-transactions/${matchTransaction.id}/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: selectedDocument, note: matchNote || undefined }) }, onUnauthorized);
       setMatchBusy(false); closeMatch(); await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); setMatchBusy(false); }
+    } catch (e) { setError(screenErrorMessage(e, t, t('banks.reconciliationError'))); setMatchBusy(false); }
   };
   const unmatch = async (transaction: Transaction) => {
     setError('');
     try { await api(`/api/bank-transactions/${transaction.id}/match`, { method: 'DELETE' }, onUnauthorized); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); }
+    catch (e) { setError(screenErrorMessage(e, t, t('banks.reconciliationError'))); }
   };
   const setReconciliation = async (transaction: Transaction, status: 'matched' | 'reconciled') => {
     setError('');
     try {
       await api(`/api/bank-transactions/${transaction.id}/reconciliation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }, onUnauthorized);
       await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : t('banks.reconciliationError')); }
+    } catch (e) { setError(screenErrorMessage(e, t, t('banks.reconciliationError'))); }
   };
 
   // Export mirrors the filtered list on screen (all pages), never a refetch.

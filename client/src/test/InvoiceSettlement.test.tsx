@@ -169,6 +169,26 @@ describe('Obligation side: preselected settlement dialog',()=>{
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('The settlement was rejected');
   expect(screen.getByRole('dialog')).toBeInTheDocument();
  });
+ it.each([
+  ['ACCOUNTING_PERIOD_CLOSED',409,'This action is not allowed because the accounting period is closed.'],
+  ['FORBIDDEN',403,'You do not have permission for this action.'],
+])('shows the localized message for %s and never the raw server text',async(code,status,text)=>{
+  url();mock(data(),null,()=>json({error:'RAW SERVER TEXT',code},status));
+  render(<Obligations canView canCreateSettlement onUnauthorized={vi.fn()} onReturnToInvoice={vi.fn()}/>);
+  const dialog=await screen.findByRole('dialog',{name:'Record collection'});
+  fireEvent.change(within(dialog).getByLabelText('Bank transaction'),{target:{value:'b2'}});
+  fireEvent.click(within(dialog).getByRole('button',{name:'Save'}));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(text);
+  expect(screen.queryByText('RAW SERVER TEXT')).not.toBeInTheDocument();
+ });
+ it('reports a network failure while saving a settlement with the connection message',async()=>{
+  url();mock(data(),null,()=>{throw new TypeError('Failed to fetch');});
+  render(<Obligations canView canCreateSettlement onUnauthorized={vi.fn()} onReturnToInvoice={vi.fn()}/>);
+  const dialog=await screen.findByRole('dialog',{name:'Record collection'});
+  fireEvent.change(within(dialog).getByLabelText('Bank transaction'),{target:{value:'b2'}});
+  fireEvent.click(within(dialog).getByRole('button',{name:'Save'}));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not connect to the server');
+ });
  it('payable obligations say "Record payment" and accept only debits',async()=>{
   url();mock(data(ob({direction:'payable'})));
   render(<Obligations canView canCreateSettlement onUnauthorized={vi.fn()}/>);

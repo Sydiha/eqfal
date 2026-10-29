@@ -90,9 +90,10 @@ describe('OpeningBalanceReview',()=>{
   render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove onUnauthorized={vi.fn()}/>);await reviewTab();
   const yearGets=()=>fetchMock.mock.calls.filter(([u,i])=>u===`/api/opening-balances/${year.id}`&&i?.method!=='POST').length;
   fireEvent.click(await screen.findByRole('button',{name:'Approve opening balance'}));
-  expect(await screen.findByText('Only in-review opening balance can be approved')).toBeInTheDocument();
+  expect((await screen.findAllByText('Unable to load or update opening balances.')).length).toBeGreaterThan(0);
   await waitFor(()=>expect(yearGets()).toBe(2));
-  expect(screen.getByText('Only in-review opening balance can be approved')).toBeInTheDocument();
+  expect(screen.getAllByText('Unable to load or update opening balances.').length).toBeGreaterThan(0);
+  expect(screen.queryByText('Only in-review opening balance can be approved')).not.toBeInTheDocument();
  });
 
  it('invalidates the in-flight request synchronously when the fiscal year changes',async()=>{
