@@ -99,7 +99,8 @@
 @media (max-width:800px){
  .annual-closing-view .ac-header h1{font-size:22px}
  .annual-closing-view .ac-summary{padding:10px 0;row-gap:10px}
- .annual-closing-view .ac-count{font-size:28px;color:#c2410c}
+ .annual-closing-view .ac-count{font-size:28px}
+ .annual-closing-view .ac-count--blocked{color:#c2410c}
  .annual-closing-view .table-wrap.ac-stack tr.ac-row--blocked{border-color:#fdba74;border-inline-start:4px solid #c2410c;background:#fffaf5}
  .annual-closing-view .table-wrap.ac-stack tr:not(.ac-row--blocked){background:#fff;color:var(--ac-muted)}
  .annual-closing-view .table-wrap.ac-stack td.ac-next .ac-link{display:flex;width:100%;min-height:36px;align-items:center;justify-content:center;border:1px solid var(--ac-green);border-radius:8px;background:#ecfdf5;color:var(--ac-green)}

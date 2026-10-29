@@ -145,9 +145,10 @@
 @media(max-width:58em){
   .banking-approved{gap:10px}
   .banking-approved__tabs.banking-workspace__tabs{padding:6px 8px;gap:4px}
-  .banking-approved__arrow{display:none}
-  .banking-approved__tabs [role=tablist]{flex-wrap:nowrap;justify-content:flex-start;gap:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  .banking-approved__tabs [role=tablist]::-webkit-scrollbar{display:none}
+  .banking-approved__arrow{width:14px;height:14px}
+  .banking-approved__tabs [role=tablist]{flex-wrap:nowrap;justify-content:flex-start;gap:6px;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:var(--b-soft) transparent;-webkit-overflow-scrolling:touch}
+  .banking-approved__tabs [role=tablist]::-webkit-scrollbar{height:4px}
+  .banking-approved__tabs [role=tablist]::-webkit-scrollbar-thumb{border-radius:4px;background:var(--b-soft)}
   .banking-approved__tabs [role=tab]{flex:none;min-height:36px;padding:6px 12px;font-size:13px}
   .banking-approved__header h1{font-size:18px}
   .banking-approved__header>div{gap:2px}
