@@ -106,3 +106,11 @@
  .annual-closing-view .table-wrap.ac-stack td.ac-next .ac-link{display:flex;width:100%;min-height:36px;align-items:center;justify-content:center;border:1px solid var(--ac-green);border-radius:8px;background:#ecfdf5;color:var(--ac-green)}
  .annual-closing-view .ac-card{padding:10px}
 }
+.annual-closing-view .zakat-worksheet{display:flex;flex-direction:column;gap:12px;margin-block-start:16px;padding-block-start:12px;border-block-start:1px solid var(--ac-border)}
+.annual-closing-view .zakat-worksheet h3{margin:0 0 6px;font-size:13px;font-weight:600}
+.annual-closing-view .zakat-worksheet h4{margin:8px 0 4px;font-size:12px;font-weight:600}
+.annual-closing-view .zakat-worksheet form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
+.annual-closing-view .zakat-worksheet label{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:11px}
+.annual-closing-view .zakat-worksheet td select,.annual-closing-view .zakat-worksheet td input{max-inline-size:100%;min-inline-size:0}
+.annual-closing-view .zakat-worksheet .zw-badge{display:inline-block;padding:1px 8px;border-radius:8px;font-size:11px;background:#fef3c7;color:#92400e}
+.annual-closing-view .zakat-worksheet .zw-badge--confirmed{background:#ecfdf5;color:var(--ac-green)}
