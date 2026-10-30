@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   review: vi.fn(),
   submitReview: vi.fn(),
   updateIntake: vi.fn(),
+  reopen: vi.fn(),
   storageGet: vi.fn(),
 }));
 
@@ -38,13 +39,14 @@ vi.mock('../src/modules/documents/document.repository', () => ({
 vi.mock('../src/modules/documents/document.service', () => ({
   DocumentNotFoundError: class extends Error {},
   DocumentReviewConflictError: class extends Error { code: string; constructor(message?: string, code = 'DOCUMENT_STATE_CONFLICT') { super(message); this.code = code; } },
-  DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; updateIntake = mocks.updateIntake; },
+  DocumentService: class { upload = mocks.upload; review = mocks.review; submitReview = mocks.submitReview; updateIntake = mocks.updateIntake; reopen = mocks.reopen; },
 }));
 vi.mock('../src/storage/local.storage', () => ({
   LocalStorageAdapter: class { get = mocks.storageGet; },
 }));
 
 import { documentRouter } from '../src/modules/documents/document.router';
+import { StaleRevisionError } from '../src/shared/revision';
 import { DocumentNotFoundError, DocumentReviewConflictError } from '../src/modules/documents/document.service';
 
 const app = express();
@@ -207,6 +209,36 @@ describe('Document API security boundary', () => {
     const valid = await request(app).patch('/api/documents/doc-1/intake').set('If-Match', '"3"').send({ document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 });
     expect(valid.status).toBe(200);
     expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 }, expectedVersion: 3 });
+  });
+
+  it('reopens an incomplete document only with document.edit, a reason and the active company', async () => {
+    setContext(['document.submit', 'document.review']);
+    expect((await request(app).post('/api/documents/doc-1/reopen').send({ reason: 'x' })).status).toBe(403);
+    setContext(['document.edit']);
+    expect((await request(app).post('/api/documents/doc-1/reopen').set('Origin', 'https://evil.example').send({ reason: 'x' })).status).toBe(403);
+    for (const body of [{}, { reason: '  ' }, { reason: 5 }, { reason: 'x'.repeat(501) }]) {
+      const bad = await request(app).post('/api/documents/doc-1/reopen').send(body);
+      expect(bad.status).toBe(400); expect(bad.body.code).toBe('DOCUMENT_REOPEN_REASON_REQUIRED');
+    }
+    expect((await request(app).post('/api/documents/doc-1/reopen').set('If-Match', 'abc').send({ reason: 'x' })).status).toBe(400);
+    mocks.reopen.mockResolvedValue({ ...document, status: 'uploaded' });
+    const ok = await request(app).post('/api/documents/doc-1/reopen').set('If-Match', '"4"').send({ reason: ' fix total ', company_id: 'co-other' });
+    expect(ok.status).toBe(200);
+    expect(mocks.reopen).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', reason: 'fix total', expectedVersion: 4 });
+  });
+
+  it('maps reopen not-found, stale, missing revision and state conflicts', async () => {
+    setContext(['document.edit']);
+    mocks.reopen.mockRejectedValueOnce(new DocumentNotFoundError());
+    expect((await request(app).post('/api/documents/missing/reopen').send({ reason: 'x' })).status).toBe(404);
+    mocks.reopen.mockRejectedValueOnce(new StaleRevisionError('DOCUMENT_VERSION_CONFLICT'));
+    const stale = await request(app).post('/api/documents/doc-1/reopen').send({ reason: 'x' });
+    expect(stale.status).toBe(409); expect(stale.body.code).toBe('DOCUMENT_VERSION_CONFLICT');
+    mocks.reopen.mockRejectedValueOnce(new StaleRevisionError('REVISION_REQUIRED', 428));
+    expect((await request(app).post('/api/documents/doc-1/reopen').send({ reason: 'x' })).status).toBe(428);
+    mocks.reopen.mockRejectedValueOnce(new DocumentReviewConflictError('no'));
+    const conflict = await request(app).post('/api/documents/doc-1/reopen').send({ reason: 'x' });
+    expect(conflict.status).toBe(409); expect(conflict.body.code).toBe('DOCUMENT_STATE_CONFLICT');
   });
 
   it('enforces intake capability, same origin, validation, 404, and conflict', async () => {

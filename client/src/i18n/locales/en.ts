@@ -440,6 +440,7 @@ const en = {
       other: 'This document is referenced by another record and cannot be deleted.',
     },
     reviewConflict: 'This document has already been reviewed. Refresh and try again.',
+    reopenReason: 'Reason for reopening',
     reviewReason: 'Reason',
     reviewNote: 'Review note',
     reviewedAt: 'Reviewed at',
@@ -450,8 +451,8 @@ const en = {
       totalAmount: 'Total Amount', total_amount: 'Total Amount', note: 'Optional Note', intake_note: 'Optional Note', none: 'Not specified',
       save: 'Save Intake', saving: 'Saving…', error: 'Unable to save Intake.', types: { purchase: 'Purchase', expense: 'Expense', sale: 'Sale', other: 'Other' },
     },
-    reviewActions: { submit: 'Submit for review', approved: 'Approve', incomplete: 'Mark incomplete', rejected: 'Reject' },
-    dialogs: { approvedTitle: 'Approve document', approvedConfirmation: 'Confirm that this document is ready to approve.', incompleteTitle: 'Mark document incomplete', incompleteConfirmation: 'Explain what is missing before returning this document.', rejectedTitle: 'Reject document', rejectedConfirmation: 'Explain why this document must be rejected.' },
+    reviewActions: { submit: 'Submit for review', approved: 'Approve', incomplete: 'Mark incomplete', rejected: 'Reject', reopen: 'Reopen for editing' },
+    dialogs: { reopenTitle: 'Reopen document for editing', reopenConfirmation: 'Explain what you will correct. The document returns to the draft state so you can edit it and submit it for review again.', approvedTitle: 'Approve document', approvedConfirmation: 'Confirm that this document is ready to approve.', incompleteTitle: 'Mark document incomplete', incompleteConfirmation: 'Explain what is missing before returning this document.', rejectedTitle: 'Reject document', rejectedConfirmation: 'Explain why this document must be rejected.' },
     statuses: {
       uploaded: 'Uploaded',
       needs_review: 'Needs review',

@@ -28,6 +28,8 @@ export interface ReviewDocumentInput extends DocumentTransitionInput {
   note: string | null;
 }
 
+export interface ReopenDocumentInput extends DocumentTransitionInput { reason: string; expectedVersion?: number | null; }
+
 export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; expectedVersion?: number | null; }
 
 export class DocumentNotFoundError extends Error {}
@@ -220,6 +222,25 @@ export class DocumentService {
         action: 'document.intake_update', entity_type: 'document', entity_id: document.id,
         before_data: Object.fromEntries(changed.map((field) => [field, current[field]])),
         after_data: Object.fromEntries(changed.map((field) => [field, document[field]])),
+      }, client);
+      return document;
+    });
+  }
+
+  /** Recovery of an incomplete document (rejected stays terminal). Same guards as submit/intake: revision, period, status; reason is audited. */
+  async reopen(input: ReopenDocumentInput): Promise<DocumentRecord> {
+    return this.withTransaction(async (client) => {
+      const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+      if (!current) throw new DocumentNotFoundError('Document not found');
+      assertRevision(input.expectedVersion, current.version, 'DOCUMENT_VERSION_CONFLICT');
+      if (current.document_date) await assertAccountingDateWritable(input.companyId, current.document_date, client);
+      if (current.status !== 'incomplete') throw new DocumentReviewConflictError('Only an incomplete document can be reopened');
+      const document = await this.documents.reopen(input.documentId, input.companyId, client);
+      await this.audit.logEvent({
+        company_id: input.companyId, actor_user_id: input.actorUserId,
+        action: 'document.reopen', entity_type: 'document', entity_id: document.id,
+        before_data: { status: current.status },
+        after_data: { status: document.status, reopen_reason: input.reason },
       }, client);
       return document;
     });
