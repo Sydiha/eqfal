@@ -1,4 +1,5 @@
 export type FiscalYearStatus = 'open' | 'closed';
+export type MonthlyClosePolicy = 'required' | 'optional';
 
 export interface FiscalYear {
   id: string;
@@ -9,6 +10,7 @@ export interface FiscalYear {
   /** ISO date string — 'YYYY-MM-DD' */
   end_date: string;
   status: FiscalYearStatus;
+  monthly_close_policy: MonthlyClosePolicy;
   created_at: Date;
   updated_at: Date;
 }

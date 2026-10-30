@@ -8,7 +8,7 @@ export interface AnnualClosingDomain {
 }
 
 export interface AnnualClosingResponse {
-  fiscal_year: { id: string; start_date: string; end_date: string; status: string };
+  fiscal_year: { id: string; start_date: string; end_date: string; status: string; monthly_close_policy: 'required' | 'optional' };
   ready: boolean;
   blocker_count: number;
   domains: Record<string, AnnualClosingDomain>;

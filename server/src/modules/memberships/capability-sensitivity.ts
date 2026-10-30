@@ -53,6 +53,7 @@ const SENSITIVE_EXACT = new Set([
   'fiscal_year.carryforward.prepare',
   'fiscal_year.create',
   'fiscal_year.edit',
+  'fiscal_year.monthly_close_policy.manage',
   'invoice.cancel',
   'opening_balance.exception.accept',
   'document.delete',

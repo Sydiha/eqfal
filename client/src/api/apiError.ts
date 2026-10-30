@@ -13,6 +13,7 @@ export const PHASE1_ERROR_CODES = [
   'FISCAL_YEAR_OVERLAP',
   'FISCAL_YEAR_ALREADY_CLOSED',
   'FISCAL_YEAR_CLOSED_IMMUTABLE',
+  'MONTHLY_CLOSE_POLICY_LOCKED',
   'FISCAL_YEAR_CLOSED',
   'ACCOUNTING_PERIOD_CLOSED',
   'NO_ACTIVE_COMPANY',
@@ -71,7 +72,7 @@ export const FISCAL_YEAR_BLOCKER_CODES = [
 export const FISCAL_YEAR_WARNING_CODES = [
   'open_receivable_balance', 'open_payable_balance', 'zakat_tax_workpaper_not_ready',
   'wht_review_not_ready', 'partner_ownership_unconfirmed', 'vat_boundary_review',
-  'vat_profile_needs_review', 'annual_closing_package_not_approved',
+  'vat_profile_needs_review', 'annual_closing_package_not_approved', 'monthly_periods_left_open',
 ] as const;
 
 export class ApiError extends Error {

@@ -7,7 +7,8 @@ import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { CompanyReconciliation, UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
 
-type FiscalYear = { id: string; start_date: string; end_date: string; status: string };
+export type MonthlyClosePolicy = 'required' | 'optional';
+type FiscalYear = { id: string; start_date: string; end_date: string; status: string; monthly_close_policy: MonthlyClosePolicy };
 type CountRow = Record<string, string>;
 
 export class AnnualClosingNotFoundError extends Error {}
@@ -102,7 +103,7 @@ export class AnnualClosingService {
       ? " AND COALESCE(a.effective_to,'infinity'::date)>=$2 AND COALESCE(b.effective_to,'infinity'::date)>=$2"
       : '';
     const fiscalYear = (await this.db.query<FiscalYear & { cutover_to?: string | null }>(
-      `SELECT id,start_date::text,end_date::text,status,${CUTOVER_BOUNDS_SQL} FROM fiscal_years WHERE id=$1 AND company_id=$2`, [fiscalYearId, companyId],
+      `SELECT id,start_date::text,end_date::text,status,monthly_close_policy,${CUTOVER_BOUNDS_SQL} FROM fiscal_years WHERE id=$1 AND company_id=$2`, [fiscalYearId, companyId],
     )).rows[0];
     if (!fiscalYear) throw new AnnualClosingNotFoundError();
     const { start_date: start, end_date: end } = fiscalYear;
@@ -178,10 +179,13 @@ export class AnnualClosingService {
     const workpaper=(await this.db.query<{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:string}>(`SELECT w.accounting_profile_id,w.tax_path,w.workflow_status,w.professional_review_required,COUNT(a.id) FILTER (WHERE a.professional_review_required)::text unresolved FROM tax_working_papers w LEFT JOIN tax_working_paper_adjustments a ON a.workpaper_id=w.id AND a.company_id=w.company_id WHERE w.company_id=$1 AND w.fiscal_year_id=$2 GROUP BY w.id`,[companyId,fiscalYearId])).rows[0];
     const liveTaxWorkpaper=workpaper&&!bounded?await new TaxWorkpaperService(this.db as Pool).get(companyId,fiscalYearId):null;
     const taxPath=profile?({zakat_applicable:'zakat',income_tax_applicable:'income_tax',mixed:'mixed',needs_review:'needs_review'}[profile.tax_treatment]??'needs_review'):'needs_review';
-    const financialBlockers=missingPeriods+openPeriods+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
+    // Optional policy: open/missing months are reported (never hidden) but are not blockers. Individually closed months stay protected by the period guard.
+    const monthlyBlockers = fiscalYear.monthly_close_policy === 'optional' ? 0 : missingPeriods + openPeriods;
+    const financialBlockers=monthlyBlockers+Number(ledger.draft_journals)+unpostedSources+unbalanced+Number(general.documents)+Number(general.pending_depreciation)+Number(general.draft_assets)+Number(general.adjustments)+Number(general.opening_balances);
 
     const domains: Record<string, AnnualClosingDomain> = {
-      monthly_close: domain(missingPeriods + openPeriods, { expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods, ...(cut ? { external_periods: allPeriods.length - periods.length, cutover_date: cut.to_date } : {}) }),
+      // The policy key is present only for 'optional': a 'required' summary stays byte-identical to the pre-102 one, so existing package fingerprints do not drift.
+      monthly_close: domain(monthlyBlockers, { ...(fiscalYear.monthly_close_policy === 'optional' ? { monthly_close_policy: 'optional' } : {}), expected_periods: periods.length, missing_periods: missingPeriods, open_periods: openPeriods, closed_periods: periods.length - missingPeriods - openPeriods, ...(cut ? { external_periods: allPeriods.length - periods.length, cutover_date: cut.to_date } : {}) }),
       ledger: domain(Number(ledger.draft_journals) + unpostedSources + unbalanced, { draft_journals: Number(ledger.draft_journals), unposted_operational_sources: unpostedSources, trial_balance_unbalanced: Boolean(unbalanced), ...(cut ? { external_unposted_sources: externalUnposted } : {}) }),
       vat: domain(Number(vat.incomplete), { incomplete_periods: Number(vat.incomplete), boundary_review_periods: Number(vat.boundary) }, Number(vat.boundary) > 0),
       banking: domain(Number(general.banking) + reconciliation.blockers, { unresolved_transactions: Number(general.banking), reconciliation_mode: reconciliation.effective_mode, reconciliation_blockers: reconciliation.blockers, reconciliation_warnings: reconciliation.warnings, ...(externalGeneral ? { external_unresolved_transactions: Number(externalGeneral.banking) } : {}) }),

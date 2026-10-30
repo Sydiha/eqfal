@@ -22,6 +22,7 @@ const VIEW_CAPABILITY = 'fiscal_year.view';
 const CREATE_CAPABILITY = 'fiscal_year.create';
 const EDIT_CAPABILITY = 'fiscal_year.edit';
 const CLOSE_CAPABILITY = 'fiscal_year.close';
+const MONTHLY_POLICY_CAPABILITY = 'fiscal_year.monthly_close_policy.manage';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type ActiveAuthContext = AuthSessionContext & { activeCompanyId: string };
@@ -239,6 +240,35 @@ fiscalYearRouter.patch(
         input,
         context.user.id,
       );
+      res.status(200).json({ fiscalYear });
+    } catch (err) {
+      mapDomainError(err, res, next);
+    }
+  }),
+);
+
+fiscalYearRouter.put(
+  '/fiscal-years/:id/monthly-close-policy',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(VIEW_CAPABILITY),
+  requireCapability(MONTHLY_POLICY_CAPABILITY),
+  asyncRoute(async (req, res, next) => {
+    const body = req.body;
+    if (!isPlainObject(body) || !hasOnlyKeys(body, ['policy', 'reason']) || (body.policy !== 'required' && body.policy !== 'optional')
+      || (body.reason !== undefined && (typeof body.reason !== 'string' || body.reason.trim().length > 500))
+      || !UUID_RE.test(req.params.id)) {
+      res.status(400).json({ error: 'Invalid monthly close policy request' });
+      return;
+    }
+    const reason = typeof body.reason === 'string' ? body.reason.trim() || undefined : undefined;
+    const context = activeContext(req, res);
+    if (!context) return;
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const fiscalYear = await service.setMonthlyClosePolicy(req.params.id, context.activeCompanyId, body.policy, context.user.id, reason);
       res.status(200).json({ fiscalYear });
     } catch (err) {
       mapDomainError(err, res, next);

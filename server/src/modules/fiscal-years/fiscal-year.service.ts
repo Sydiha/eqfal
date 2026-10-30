@@ -3,6 +3,7 @@ import logger from '../../shared/logger';
 import { CompanyReconciliation, recordReconciliationSnapshots } from '../banking/bank-reconciliation-core';
 import {
   FiscalYear,
+  MonthlyClosePolicy,
   CreateFiscalYearInput,
   UpdateFiscalYearInput,
 } from './fiscal-year.types';
@@ -250,6 +251,47 @@ export class FiscalYearService {
       );
 
       logger.info({ fyId: id, companyId }, 'Fiscal year closed');
+      return updated;
+    });
+  }
+
+  /**
+   * Select the monthly closing policy of an OPEN fiscal year. The row is locked FOR UPDATE, the same lock closeFiscalYear takes first, so a
+   * concurrent annual close either commits before this call (policy then locked, 409) or waits for it and evaluates readiness with the new policy.
+   * No monthly period, journal or status is touched. A change to the same value is a no-op (no write, no audit).
+   */
+  async setMonthlyClosePolicy(
+    id: string,
+    companyId: string,
+    policy: MonthlyClosePolicy,
+    actorUserId: string,
+    reason?: string,
+  ): Promise<FiscalYear> {
+    return this.withTransaction(async (client) => {
+      const existing = await this.fyRepo.findByIdForUpdate(id, companyId, client);
+      if (!existing) throw new Error('Fiscal year not found or access denied');
+      if (existing.status === 'closed') {
+        throw new FiscalYearConflictError('MONTHLY_CLOSE_POLICY_LOCKED', `Fiscal year '${existing.name}' is closed; its monthly closing policy cannot change`);
+      }
+      if (existing.monthly_close_policy === policy) return existing;
+      const updated = (await client.query<FiscalYear>(
+        `UPDATE fiscal_years SET monthly_close_policy=$3, updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status='open' RETURNING *`,
+        [id, companyId, policy],
+      )).rows[0];
+      if (!updated) throw new Error('Fiscal year not found or access denied');
+      await this.auditRepo.logEvent(
+        {
+          company_id:    companyId,
+          actor_user_id: actorUserId,
+          action:        'fiscal_year.monthly_close_policy_change',
+          entity_type:   'fiscal_year',
+          entity_id:     id,
+          before_data:   { monthly_close_policy: existing.monthly_close_policy },
+          after_data:    { monthly_close_policy: policy },
+          reason:        reason ?? null,
+        },
+        client,
+      );
       return updated;
     });
   }
