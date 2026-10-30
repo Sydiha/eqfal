@@ -219,7 +219,8 @@ export class FiscalYearCarryforwardService {
       await client.query('BEGIN');
       const from = await loadYear(client, companyId, fromYearId, true);
       const to = await nextYear(client, companyId, from, true);
-      if (to) await assertAccountingDateWritable(companyId, to.start_date, client);
+      // A closed next year is reported by compute() as the NEXT_FISCAL_YEAR_CLOSED blocker; the writable guard covers the open-year case (closed first month).
+      if (to && to.status === 'open') await assertAccountingDateWritable(companyId, to.start_date, client);
       const retained = await retainedEarningsAccount(client, companyId, retainedAccountId);
       if ((await client.query('SELECT 1 FROM fiscal_year_carryforwards WHERE company_id=$1 AND (from_fiscal_year_id=$2 OR to_fiscal_year_id=$3)', [companyId, from.id, to?.id ?? null])).rowCount) {
         throw new CarryforwardBlockedError('CARRYFORWARD_ALREADY_PREPARED', 'A carry-forward was already prepared for these fiscal years');

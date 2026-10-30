@@ -245,7 +245,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict', code: err.code });
         return;
       }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
       throw err;
     }
   }),
@@ -270,7 +270,7 @@ documentRouter.patch(
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
       if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict', code: err.code }); return; }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
       throw err;
     }
   }),
@@ -325,7 +325,7 @@ documentRouter.post(
         res.status(409).json({ error: 'Document review conflict', code: err.code });
         return;
       }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
       throw err;
     }
   }),
@@ -415,7 +415,7 @@ documentRouter.delete(
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
       if (err instanceof DocumentDeleteBlockedError) { res.status(409).json({ error: 'Document cannot be deleted', code: 'DOCUMENT_DELETE_BLOCKED', reason: err.reason, dependency: err.dependency }); return; }
-      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
       throw err;
     }
   }),

@@ -20,7 +20,7 @@ class AccountingPool{
  readonly source={source_type:'obligation' as const,source_id:sourceId,accounting_date:'2026-08-01',amount:'50.00',description:'Obligation: Supplier',reference:null,context:{direction:'payable'}};
  connect=async()=>({query:this.query,release:()=>{this.released++}});
  query=async(sql:string,values:unknown[]=[]):Promise<{rows:any[];rowCount:number}>=>{
-  if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||sql.includes('pg_advisory_xact_lock'))return{rows:[],rowCount:0};
+  if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||sql.includes('pg_advisory_xact_lock')||sql.includes('closed-year-guard'))return{rows:[],rowCount:0};
   if(sql.includes('FROM monthly_close_periods'))return{rows:[],rowCount:0};
   if(sql.includes('SELECT d.id FROM asset_depreciation_entries')||sql.includes('SELECT d.id FROM asset_disposals')||sql.includes('SELECT s.id FROM periodic_adjustment_schedule'))return{rows:[],rowCount:0};
   if(sql.includes("SELECT id FROM obligations"))return values[0]===company?{rows:[{id:sourceId}],rowCount:1}:{rows:[],rowCount:0};

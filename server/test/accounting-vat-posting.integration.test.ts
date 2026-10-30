@@ -25,7 +25,7 @@ function postingPool(){
  const journal={id:journalId,company_id:company,fiscal_year_id:yearId,accounting_date:'2026-09-10',description:'Purchase recognition',reference:null,source_type:'obligation',source_id:sourceId,entry_type:'standard',status:'draft',created_by:actor,posted_by:null,posted_at:null,created_at:new Date(),updated_at:new Date()};
  const query=vi.fn(async(sql:string,args:unknown[]=[])=>{
   const q=sql.replace(/\s+/g,' ');commands.push(q);
-  if(q==='BEGIN'||q==='COMMIT'||q==='ROLLBACK'||q.includes('pg_advisory_xact_lock'))return result();
+  if(q==='BEGIN'||q==='COMMIT'||q==='ROLLBACK'||q.includes('pg_advisory_xact_lock')||q.includes('closed-year-guard'))return result();
   if(q.includes('FROM journal_entries WHERE id=$1 AND company_id=$2 FOR UPDATE'))return args[0]===journalId&&args[1]===company?result([journal]):result();
   if(q.includes('FROM fiscal_years WHERE id=$1 AND company_id=$2'))return result([{start_date:'2026-01-01',end_date:'2026-12-31'}]);
   if(q.includes('FROM monthly_close_periods'))return result();

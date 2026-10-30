@@ -21,7 +21,7 @@ const ctx = (req: Request) => getAuthenticatedContext(req)! as NonNullable<Retur
 
 function handle(error: unknown, res: Response): boolean {
   if (error instanceof BankStatementError) { res.status(error.status).json({ error: error.message, code: error.code }); return true; }
-  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return true; }
+  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: error.code }); return true; }
   return false;
 }
 const run = (fn: (s: BankStatementService, q: Request, r: Response) => Promise<void>): RequestHandler => asyncRoute(async (q, r) => {

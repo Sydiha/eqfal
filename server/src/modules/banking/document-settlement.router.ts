@@ -315,7 +315,7 @@ export class DocumentSettlementService {
 function handleError(error: unknown, res: Response): boolean {
   if (error instanceof DocumentSettlementValidationError) { res.status(400).json({ error: error.message }); return true; }
   if (error instanceof DocumentSettlementNotFoundError) { res.status(404).json({ error: error.message }); return true; }
-  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return true; }
+  if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: error.code }); return true; }
   if (error instanceof DocumentSettlementConflictError) { res.status(409).json(bankingConflictBody(error.message)); return true; }
   return false;
 }
