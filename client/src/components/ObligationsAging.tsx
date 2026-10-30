@@ -10,13 +10,14 @@ import { formatDisplayDateLtr } from '../date-format';
 import { DateInput } from './DateInput';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
-type AgingItem = { obligation_id: string; counterparty_name: string; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
-type AgingSide = { buckets: Array<{ bucket: Bucket; amount: string; count: number }>; total_outstanding: string; item_count: number; items: AgingItem[] };
+type AgingItem = { obligation_id: string; counterparty_name: string; counterparty_labor_relationship?: string | null; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
+type AgingSide = { buckets: Array<{ bucket: Bucket; amount: string; count: number }>; total_outstanding: string; item_count: number; labor_related_outstanding?: string; labor_related_count?: number; items: AgingItem[] };
 export type AgingReport = { as_of_date: string; receivables: AgingSide; payables: AgingSide };
 
 const labels = {
   ar: {
     title: 'تقرير أعمار الذمم', asOf: 'كما في تاريخ', run: 'تحديث التقرير', receivables: 'الذمم المدينة', payables: 'الذمم الدائنة',
+    labor: { labor_supply: 'شركة توريد عمالة', contractor: 'مقاول', individual: 'فرد', unresolved: 'علاقة غير محسومة' } as Record<string, string>, laborIncluded: 'منها: أطراف ذات علاقة عمالة (للتصنيف فقط، وليست رواتب)',
     sides: 'جهة التقرير', total: 'إجمالي المستحق', count: (n: number) => `${n} التزام`, loading: 'جارٍ تحميل التقرير…',
     error: 'تعذّر تحميل تقرير الأعمار.', retry: 'إعادة المحاولة', empty: 'لا توجد التزامات مؤكدة مستحقة في هذا التاريخ.',
     note: 'يشمل الالتزامات المؤكدة غير الملغاة بالرصيد المتبقي كما في التاريخ المحدد.',
@@ -25,6 +26,7 @@ const labels = {
   },
   en: {
     title: 'AR/AP aging report', asOf: 'As of', run: 'Run report', receivables: 'Receivables (AR)', payables: 'Payables (AP)',
+    labor: { labor_supply: 'Labor supply company', contractor: 'Contractor', individual: 'Individual', unresolved: 'Unresolved relationship' } as Record<string, string>, laborIncluded: 'Of which labor-related counterparties (classification only, not payroll)',
     sides: 'Report side', total: 'Total outstanding', count: (n: number) => `${n} ${n === 1 ? 'obligation' : 'obligations'}`, loading: 'Loading report…',
     error: 'Unable to load the aging report.', retry: 'Retry', empty: 'No confirmed obligations are outstanding on this date.',
     note: 'Includes confirmed, non-cancelled obligations at their remaining balance as of the selected date.',
@@ -92,13 +94,13 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
         : <div className="table-wrap ob-aging__table"><table>
           <thead><tr><th>{L.counterparty}</th><th>{L.dueOn}</th><th>{L.daysOverdue}</th><th>{L.bucket}</th><th className="ob-aging__amount">{L.outstanding}</th></tr></thead>
           <tbody>{data.items.map((item) => <tr key={item.obligation_id}>
-            <td data-label={L.counterparty}><bdi dir="auto">{item.counterparty_name}</bdi></td>
+            <td data-label={L.counterparty}><bdi dir="auto">{item.counterparty_name}</bdi>{item.counterparty_labor_relationship && <small className="ob-aging__labor"> · {L.labor[item.counterparty_labor_relationship] ?? item.counterparty_labor_relationship}</small>}</td>
             <td data-label={L.dueOn}>{item.due_on ? <span dir="ltr">{formatDisplayDateLtr(item.due_on, i18n.language)}</span> : L.noDue}</td>
             <td data-label={L.daysOverdue}><span dir="ltr">{item.days_overdue}</span></td>
             <td data-label={L.bucket}>{L.buckets[item.bucket]}</td>
             <td className="ob-aging__amount" data-label={L.outstanding}><span className="fin-amount">{fmt(item.outstanding_amount)}</span></td>
           </tr>)}</tbody>
-          <tfoot><tr><th scope="row" colSpan={4}>{L.total}</th><td className="ob-aging__amount"><span className="fin-amount">{fmt(data.total_outstanding)}</span></td></tr></tfoot>
+          <tfoot><tr><th scope="row" colSpan={4}>{L.total}</th><td className="ob-aging__amount"><span className="fin-amount">{fmt(data.total_outstanding)}</span></td></tr>{(data.labor_related_count ?? 0) > 0 && <tr><th scope="row" colSpan={4}>{L.laborIncluded}</th><td className="ob-aging__amount"><span className="fin-amount">{fmt(data.labor_related_outstanding ?? '0.00')}</span> <small>{L.count(data.labor_related_count ?? 0)}</small></td></tr>}</tfoot>
         </table></div>}
     </>}
   </section>;
