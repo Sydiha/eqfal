@@ -6,6 +6,7 @@ import { AnnualClosingDomain, AnnualClosingResponse, ReadinessState } from './an
 import { expectedMonthlyPeriods } from '../../shared/expected-monthly-periods';
 import { CompanyReconciliation, UNRESOLVED_BANK_TRANSACTION_SQL, evaluateCompanyBankReconciliation } from '../banking/bank-reconciliation-core';
 import { TaxWorkpaperService } from '../tax-working-papers/tax-working-paper.service';
+import { ZakatWorksheetService } from '../zakat-worksheets/zakat-worksheet.service';
 
 export type MonthlyClosePolicy = 'required' | 'optional';
 type FiscalYear = { id: string; start_date: string; end_date: string; status: string; monthly_close_policy: MonthlyClosePolicy };
@@ -21,7 +22,7 @@ export function domain(blockerCount: number, summary: AnnualClosingDomain['summa
   return { ready: blockerCount === 0, blocker_count: blockerCount, status, summary };
 }
 
-export function taxReadiness(taxPath:string, profileId:string|null, workpaper:{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:number;source_drift:boolean}|null, financialBlockers:number):AnnualClosingDomain {
+export function taxReadiness(taxPath:string, profileId:string|null, workpaper:{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:number;source_drift:boolean}|null, financialBlockers:number, zakatWorksheet:{revision_no:number;approved_snapshot_fingerprint:string;source_drift:boolean}|null=null):AnnualClosingDomain {
   const blockers:string[]=[];let status:ReadinessState='needs_review';
   if(taxPath==='needs_review'||!profileId)blockers.push('approved_profile_required');
   else if(!workpaper){status='not_started';blockers.push('workpaper_not_started');}
@@ -31,7 +32,9 @@ export function taxReadiness(taxPath:string, profileId:string|null, workpaper:{a
   else if(workpaper.workflow_status!=='approved')blockers.push('workpaper_not_approved');
   else if(workpaper.professional_review_required||workpaper.unresolved){blockers.push('professional_review_unresolved');}
   else status='ready';
-  return {ready:status==='ready',blocker_count:status==='blocked'?1:0,status,summary:{calculation_performed:false,workpaper_data_available:Boolean(workpaper),tax_path:taxPath,workpaper_status:workpaper?.workflow_status??'not_started',unresolved_professional_items:workpaper?.unresolved??0,blockers:blockers.join(',')}};
+  // G6-1: an approved Zakat worksheet is reported in the package, and drifting from its source blocks like the workpaper does. An open or absent worksheet adds nothing.
+  if(zakatWorksheet?.source_drift&&status!=='blocked'){status='blocked';blockers.push('zakat_worksheet_source_drift');}
+  return {ready:status==='ready',blocker_count:status==='blocked'?1:0,status,summary:{...(zakatWorksheet?{zakat_worksheet_revision:zakatWorksheet.revision_no,zakat_worksheet_snapshot_fingerprint:zakatWorksheet.approved_snapshot_fingerprint}:{}),calculation_performed:false,workpaper_data_available:Boolean(workpaper),tax_path:taxPath,workpaper_status:workpaper?.workflow_status??'not_started',unresolved_professional_items:workpaper?.unresolved??0,blockers:blockers.join(',')}};
 }
 
 type WhtProfile={effective_from:string;effective_to:string|null;wht_profile:string;has_non_resident_dealings:string};
@@ -178,6 +181,7 @@ export class AnnualClosingService {
     const whtReviews=(await this.db.query<{workflow_status:string;professional_review_required:boolean}>(`SELECT workflow_status,professional_review_required FROM wht_reviews WHERE company_id=$1 AND fiscal_year_id=$2`,[companyId,fiscalYearId])).rows;
     const workpaper=(await this.db.query<{accounting_profile_id:string|null;tax_path:string;workflow_status:string;professional_review_required:boolean;unresolved:string}>(`SELECT w.accounting_profile_id,w.tax_path,w.workflow_status,w.professional_review_required,COUNT(a.id) FILTER (WHERE a.professional_review_required)::text unresolved FROM tax_working_papers w LEFT JOIN tax_working_paper_adjustments a ON a.workpaper_id=w.id AND a.company_id=w.company_id WHERE w.company_id=$1 AND w.fiscal_year_id=$2 GROUP BY w.id`,[companyId,fiscalYearId])).rows[0];
     const liveTaxWorkpaper=workpaper&&!bounded?await new TaxWorkpaperService(this.db as Pool).get(companyId,fiscalYearId):null;
+    const zakatWorksheet=await new ZakatWorksheetService(this.db as Pool).packageSummary(companyId,fiscalYearId,this.db,!bounded);
     const taxPath=profile?({zakat_applicable:'zakat',income_tax_applicable:'income_tax',mixed:'mixed',needs_review:'needs_review'}[profile.tax_treatment]??'needs_review'):'needs_review';
     // Optional policy: open/missing months are reported (never hidden) but are not blockers. Individually closed months stay protected by the period guard.
     const monthlyBlockers = fiscalYear.monthly_close_policy === 'optional' ? 0 : missingPeriods + openPeriods;
@@ -195,7 +199,7 @@ export class AnnualClosingService {
       assets: domain(Number(general.pending_depreciation) + Number(general.draft_assets), { pending_depreciation: Number(general.pending_depreciation), draft_assets: Number(general.draft_assets), ...(externalGeneral ? { external_pending_depreciation: Number(externalGeneral.pending_depreciation), external_draft_assets: Number(externalGeneral.draft_assets) } : {}) }),
       adjustments: domain(Number(general.adjustments), { unresolved_adjustments: Number(general.adjustments), ...(externalGeneral ? { external_unresolved_adjustments: Number(externalGeneral.adjustments) } : {}) }),
       opening_balances: domain(Number(general.opening_balances), { unresolved_reviews: Number(general.opening_balances) }),
-      zakat: taxReadiness(taxPath,profile?.id??null,workpaper?{...workpaper,unresolved:Number(workpaper.unresolved),source_drift:Boolean(liveTaxWorkpaper?.source_drift)}:null,financialBlockers),
+      zakat: taxReadiness(taxPath,profile?.id??null,workpaper?{...workpaper,unresolved:Number(workpaper.unresolved),source_drift:Boolean(liveTaxWorkpaper?.source_drift)}:null,financialBlockers,zakatWorksheet),
       wht: whtReadiness(start,end,whtProfiles,whtReviews),
     };
     // S1: EQFAL holds no verified pre-cut-over history (cash flows, equity movements) yet, so a cut-over year's full-year statements package is
