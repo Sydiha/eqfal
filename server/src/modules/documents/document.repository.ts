@@ -108,4 +108,14 @@ export class DocumentRepository {
     );
     return rows[0]!;
   }
+
+  /** Recovery: an incomplete document returns to an editable state. Review metadata is kept as history until the next review overwrites it. */
+  async reopen(id: string, companyId: string, runner: QueryRunner): Promise<DocumentRecord> {
+    const { rows } = await runner.query<DocumentRecord>(
+      `UPDATE documents SET status = 'uploaded', updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 AND status = 'incomplete' RETURNING *, document_date::text`,
+      [id, companyId],
+    );
+    return rows[0]!;
+  }
 }

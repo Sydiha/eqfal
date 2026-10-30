@@ -300,3 +300,39 @@ describe('DocumentService intake', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
   });
 });
+
+describe('DocumentService reopen (incomplete recovery)', () => {
+  const incomplete = { ...record, status: 'incomplete' as const, version: 3, review_note: 'missing total', reviewed_by_user_id: 'r1' };
+  const run = (extra: object = {}) => new DocumentService(pool, storage).reopen({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u2', reason: 'Total corrected', expectedVersion: 3, ...extra });
+
+  it('reopens inside one locked transaction and audits actor, previous/new status and reason', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(incomplete as never);
+    vi.spyOn(DocumentRepository.prototype, 'reopen').mockResolvedValue({ ...incomplete, status: 'uploaded' } as never);
+    const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent').mockResolvedValue({} as never);
+    const result = await run();
+    expect(result.status).toBe('uploaded');
+    expect(DocumentRepository.prototype.findByIdForUpdate).toHaveBeenCalledWith('doc-1', 'co-a', client);
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'document.reopen', company_id: 'co-a', actor_user_id: 'u2', entity_id: 'doc-1', before_data: { status: 'incomplete' }, after_data: { status: 'uploaded', reopen_reason: 'Total corrected' } }), client);
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
+  });
+
+  it.each(['uploaded', 'needs_review', 'approved', 'rejected'] as const)('refuses %s (rejected stays terminal) without update or audit', async status => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue({ ...incomplete, status } as never);
+    const update = vi.spyOn(DocumentRepository.prototype, 'reopen'); const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent');
+    await expect(run()).rejects.toMatchObject({ code: 'DOCUMENT_STATE_CONFLICT' });
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK'); expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale or missing revision before changing anything', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(incomplete as never);
+    const update = vi.spyOn(DocumentRepository.prototype, 'reopen'); const audit = vi.spyOn(AuditLogRepository.prototype, 'logEvent');
+    await expect(run({ expectedVersion: 2 })).rejects.toMatchObject({ code: 'DOCUMENT_VERSION_CONFLICT', status: 409 });
+    await expect(run({ expectedVersion: null })).rejects.toMatchObject({ code: 'REVISION_REQUIRED', status: 428 });
+    expect(update).not.toHaveBeenCalled(); expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('is company scoped: a document outside the company is not found', async () => {
+    vi.spyOn(DocumentRepository.prototype, 'findByIdForUpdate').mockResolvedValue(null);
+    await expect(run()).rejects.toThrow('Document not found');
+  });
+});

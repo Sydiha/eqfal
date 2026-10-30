@@ -440,6 +440,7 @@ const ar = {
       other: 'هذا المستند مرتبط بسجل آخر ولا يمكن حذفه.',
     },
     reviewConflict: 'تمت مراجعة هذا المستند بالفعل. حدّث الصفحة وحاول مجددًا.',
+    reopenReason: 'سبب إعادة الفتح',
     reviewReason: 'السبب',
     reviewNote: 'ملاحظة المراجعة',
     reviewedAt: 'وقت المراجعة',
@@ -450,8 +451,8 @@ const ar = {
       totalAmount: 'المبلغ الإجمالي', total_amount: 'المبلغ الإجمالي', note: 'ملاحظة اختيارية', intake_note: 'ملاحظة اختيارية', none: 'غير محدد',
       save: 'حفظ بيانات الإدخال', saving: 'جارٍ الحفظ…', error: 'تعذر حفظ بيانات الإدخال.', types: { purchase: 'شراء', expense: 'مصروف', sale: 'بيع', other: 'أخرى' },
     },
-    reviewActions: { submit: 'إرسال للمراجعة', approved: 'اعتماد', incomplete: 'تحديد كناقص', rejected: 'رفض' },
-    dialogs: { approvedTitle: 'اعتماد المستند', approvedConfirmation: 'أكد أن المستند جاهز للاعتماد.', incompleteTitle: 'تحديد المستند كناقص', incompleteConfirmation: 'وضح البيانات الناقصة قبل إعادة المستند.', rejectedTitle: 'رفض المستند', rejectedConfirmation: 'وضح سبب رفض هذا المستند.' },
+    reviewActions: { submit: 'إرسال للمراجعة', approved: 'اعتماد', incomplete: 'تحديد كناقص', rejected: 'رفض', reopen: 'إعادة فتح للتعديل' },
+    dialogs: { reopenTitle: 'إعادة فتح المستند للتعديل', reopenConfirmation: 'وضح ما ستصحّحه. يعود المستند إلى حالة المسودة لتعدّل بياناته ثم ترسله للمراجعة مرة أخرى.', approvedTitle: 'اعتماد المستند', approvedConfirmation: 'أكد أن المستند جاهز للاعتماد.', incompleteTitle: 'تحديد المستند كناقص', incompleteConfirmation: 'وضح البيانات الناقصة قبل إعادة المستند.', rejectedTitle: 'رفض المستند', rejectedConfirmation: 'وضح سبب رفض هذا المستند.' },
     statuses: {
       uploaded: 'مرفوع',
       needs_review: 'يحتاج مراجعة',

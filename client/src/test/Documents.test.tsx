@@ -209,6 +209,53 @@ describe('Documents', () => {
     expect((await screen.findAllByText('Legacy Supplier')).length).toBeGreaterThan(0);
   });
 
+  describe('incomplete document recovery', () => {
+    const incomplete = { id: 'doc-1', version: 5, original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'incomplete', created_at: '2026-08-15T00:00:00Z', review_note: 'Total missing', reviewed_at: '2026-08-16T00:00:00Z', document_type: null, counterparty_id: null, counterparty_name: null, document_date: null, reference_number: null, total_amount: null, intake_note: null };
+
+    it('offers Reopen only to editors of an incomplete document', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ documents: [incomplete], counterparties: [] }), { status: 200 })));
+      const { unmount } = render(<Documents canEdit={false} canSubmit={false} canView canUpload={false} canReview canApprove onUnauthorized={vi.fn()} />);
+      await screen.findAllByText('invoice.pdf');
+      expect(screen.queryByRole('button', { name: 'Reopen for editing' })).not.toBeInTheDocument();
+      unmount();
+      render(<Documents canEdit canSubmit={false} canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+      expect(await screen.findByRole('button', { name: 'Reopen for editing' })).toBeInTheDocument();
+    });
+
+    it('requires a reason, then posts it with the revision in If-Match and reloads', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [incomplete], counterparties: [] }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ document: { ...incomplete, status: 'uploaded' } }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [{ ...incomplete, status: 'uploaded' }], counterparties: [] }), { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<Documents canEdit canSubmit canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Reopen for editing' }));
+      const form = screen.getByRole('button', { name: 'Confirm' }).closest('form')!;
+      fireEvent.submit(form);
+      expect(await screen.findByText('A reason is required.')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      fireEvent.change(form.querySelector('textarea')!, { target: { value: 'Total corrected' } });
+      fireEvent.submit(form);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      const [url, init] = fetchMock.mock.calls[1]!;
+      expect(url).toBe('/api/documents/doc-1/reopen');
+      expect(init).toEqual(expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'If-Match': '5' }), body: JSON.stringify({ reason: 'Total corrected' }) }));
+    });
+
+    it('shows the actionable stale-revision message on a 409', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ documents: [incomplete], counterparties: [] }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'x', code: 'DOCUMENT_VERSION_CONFLICT' }), { status: 409 }));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<Documents canEdit canSubmit canView canUpload={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Reopen for editing' }));
+      const form = screen.getByRole('button', { name: 'Confirm' }).closest('form')!;
+      fireEvent.change(form.querySelector('textarea')!, { target: { value: 'again' } });
+      fireEvent.submit(form);
+      expect(await screen.findByText(/changed by someone else/)).toBeInTheDocument();
+    });
+  });
+
   describe('coded errors (Task 35D Phase 2)', () => {
     const needsReviewDoc = { id: 'doc-1', original_filename: 'invoice.pdf', mime_type: 'application/pdf', size_bytes: 2048, status: 'needs_review', created_at: '2026-08-15T00:00:00Z', review_note: null, reviewed_at: null };
     const reviewFetch = (failure: () => Response | Promise<Response>) => vi.fn(async (_url: string, init?: RequestInit) => {

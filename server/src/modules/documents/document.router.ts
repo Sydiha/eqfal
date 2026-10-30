@@ -281,6 +281,35 @@ documentRouter.patch(
 );
 
 documentRouter.post(
+  '/documents/:id/reopen',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(EDIT_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    const reasonValue = req.body?.reason;
+    const reason = typeof reasonValue === 'string' ? reasonValue.trim() : '';
+    if (!reason || reason.length > 500) { res.status(400).json({ error: 'Invalid reopen reason', code: 'DOCUMENT_REOPEN_REASON_REQUIRED' }); return; }
+    const expectedVersion = readExpectedRevision(req, res);
+    if (expectedVersion === false) return;
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const document = await service.reopen({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, reason, expectedVersion });
+      res.status(200).json({ document });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof StaleRevisionError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
+      if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document reopen conflict', code: err.code }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
+      throw err;
+    }
+  }),
+);
+
+documentRouter.post(
   '/documents/:id/review',
   requireSameOrigin,
   requireAuth,
