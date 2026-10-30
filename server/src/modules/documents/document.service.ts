@@ -7,6 +7,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { DocumentFileCleanup } from './document-file-cleanup';
 import { DocumentRepository } from './document.repository';
 import { DocumentIntake, DocumentIntakeUpdate, DocumentRecord, DocumentReviewDecision, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
+import { DocumentChangeReasonRequiredError, DocumentFileReplaceError, FILE_REPLACEABLE_STATUSES, MAX_CHANGE_REASON, sensitiveChanges, wasReviewed } from './document-lifecycle';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 
 export interface UploadDocumentInput {
@@ -23,6 +24,8 @@ interface DocumentTransitionInput {
   actorUserId: string;
 }
 
+export interface SubmitDocumentInput extends DocumentTransitionInput { duplicateReason?: string | null; }
+
 export interface ReviewDocumentInput extends DocumentTransitionInput {
   decision: DocumentReviewDecision;
   note: string | null;
@@ -30,7 +33,11 @@ export interface ReviewDocumentInput extends DocumentTransitionInput {
 
 export interface ReopenDocumentInput extends DocumentTransitionInput { reason: string; expectedVersion?: number | null; }
 
-export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; expectedVersion?: number | null; }
+export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; expectedVersion?: number | null; changeReason?: string | null; }
+
+export interface ReplaceDocumentFileInput extends DocumentTransitionInput {
+  originalFilename: string; mimeType: string; data: Buffer; expectedVersion?: number | null; changeReason?: string | null;
+}
 
 export class DocumentNotFoundError extends Error {}
 export type DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT' | 'DOCUMENT_COUNTERPARTY_INVALID' | 'DOCUMENT_APPROVAL_DATA_INCOMPLETE';
@@ -171,7 +178,7 @@ export class DocumentService {
     }
   }
 
-  async submitReview(input: DocumentTransitionInput): Promise<DocumentRecord> {
+  async submitReview(input: SubmitDocumentInput): Promise<DocumentRecord> {
     return this.withTransaction(async (client) => {
       const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
       if (!current) throw new DocumentNotFoundError('Document not found');
@@ -188,7 +195,7 @@ export class DocumentService {
         entity_type: 'document',
         entity_id: document.id,
         before_data: { status: current.status },
-        after_data: { status: document.status },
+        after_data: { status: document.status, ...(input.duplicateReason ? { duplicate_reason: input.duplicateReason } : {}) },
       }, client);
       return document;
     });
@@ -215,16 +222,60 @@ export class DocumentService {
           ? Number(current[field]) !== Number(input.intake[field]) || (current[field] === null) !== (input.intake[field] === null)
           : current[field] !== input.intake[field]);
       if (changed.length === 0) return current;
+      // R6: once a document has been reviewed, changing its data needs a stated reason; the reason is audited next to the old and new values.
+      const reason = input.changeReason?.trim() || null;
+      if (wasReviewed(current) && sensitiveChanges(changed).length > 0 && (!reason || reason.length > MAX_CHANGE_REASON)) throw new DocumentChangeReasonRequiredError();
       const update = Object.fromEntries(changed.map((field) => [field, input.intake[field]])) as DocumentIntakeUpdate;
       const document = await this.documents.updateIntake(input.documentId, input.companyId, update, client);
       await this.audit.logEvent({
         company_id: input.companyId, actor_user_id: input.actorUserId,
         action: 'document.intake_update', entity_type: 'document', entity_id: document.id,
         before_data: Object.fromEntries(changed.map((field) => [field, current[field]])),
-        after_data: Object.fromEntries(changed.map((field) => [field, document[field]])),
+        after_data: { ...Object.fromEntries(changed.map((field) => [field, document[field]])), ...(reason && wasReviewed(current) ? { change_reason: reason } : {}) },
       }, client);
       return document;
     });
+  }
+
+  /**
+   * R6: replaces the file of a document that is still being prepared (uploaded or incomplete). The new file is written first under a fresh key, the row is
+   * switched inside the row-locked transaction, and the audit entry records the previous file (name, key, hash, size). No other table references a document's
+   * storage key, so no reference can break; the previous file is deliberately kept in storage as audit evidence and is never queued for deletion. If anything
+   * fails before commit the new file is removed and the document is untouched.
+   */
+  async replaceFile(input: ReplaceDocumentFileInput): Promise<DocumentRecord> {
+    const sha256 = crypto.createHash('sha256').update(input.data).digest('hex');
+    const storageKey = `${input.companyId}/${crypto.randomUUID()}`;
+    let written = false;
+    try {
+      return await this.withTransaction(async (client) => {
+        const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
+        if (!current) throw new DocumentNotFoundError('Document not found');
+        assertRevision(input.expectedVersion, current.version, 'DOCUMENT_VERSION_CONFLICT');
+        if (current.document_date) await assertAccountingDateWritable(input.companyId, current.document_date, client);
+        if (!FILE_REPLACEABLE_STATUSES.includes(current.status)) throw new DocumentFileReplaceError('DOCUMENT_FILE_REPLACE_NOT_ALLOWED');
+        if (current.sha256 === sha256) throw new DocumentFileReplaceError('DOCUMENT_FILE_UNCHANGED');
+        const reason = input.changeReason?.trim() || null;
+        if (wasReviewed(current) && (!reason || reason.length > MAX_CHANGE_REASON)) throw new DocumentChangeReasonRequiredError();
+        written = true;
+        await this.storage.put(storageKey, input.data);
+        const document = await this.documents.replaceFile(input.documentId, input.companyId, {
+          original_filename: input.originalFilename, mime_type: input.mimeType, size_bytes: input.data.length, storage_key: storageKey, sha256,
+        }, client);
+        await this.audit.logEvent({
+          company_id: input.companyId, actor_user_id: input.actorUserId,
+          action: 'document.file_replace', entity_type: 'document', entity_id: document.id,
+          before_data: { original_filename: current.original_filename, mime_type: current.mime_type, size_bytes: current.size_bytes, storage_key: current.storage_key, sha256: current.sha256 },
+          after_data: { original_filename: document.original_filename, mime_type: document.mime_type, size_bytes: document.size_bytes, storage_key: document.storage_key, sha256: document.sha256, ...(reason ? { change_reason: reason } : {}) },
+        }, client);
+        return document;
+      });
+    } catch (err) {
+      if (written) {
+        try { await this.storage.delete(storageKey); } catch (cleanupErr) { logger.error({ cleanupErr, storageKey }, 'Failed to clean orphaned replacement file'); }
+      }
+      throw err;
+    }
   }
 
   /** Recovery of an incomplete document (rejected stays terminal). Same guards as submit/intake: revision, period, status; reason is audited. */

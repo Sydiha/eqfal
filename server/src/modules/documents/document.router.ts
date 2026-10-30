@@ -19,6 +19,7 @@ import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.
 import crypto from 'crypto';
 import { readExpectedRevision, StaleRevisionError } from '../../shared/revision';
 import { extractInvoiceSuggestions } from './document-extraction';
+import { DocumentChangeReasonRequiredError, DocumentFileReplaceError, MAX_CHANGE_REASON, findDuplicateMatches } from './document-lifecycle';
 
 export const documentRouter = Router();
 
@@ -116,6 +117,22 @@ function isValidUpload(filename: string, mimeType: string, data: Buffer): boolea
   const extension = path.extname(filename).toLowerCase();
   if (!MIME_EXTENSIONS[mimeType]?.has(extension)) return false;
   return matchesMagic(mimeType, data);
+}
+
+/** Advisory only: a failed lookup must never fail the request that triggered it. */
+async function duplicateWarnings(document: { id: string; company_id: string; sha256: string; counterparty_id: string | null; counterparty_name: string | null; reference_number: string | null }) {
+  try {
+    return (await findDuplicateMatches(pool!, document.company_id, { documentId: document.id, sha256: document.sha256, counterparty_id: document.counterparty_id, counterparty_name: document.counterparty_name, reference_number: document.reference_number })) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function parseChangeReason(value: unknown): string | null | false {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') return false;
+  const reason = value.trim();
+  return reason.length > MAX_CHANGE_REASON ? false : reason || null;
 }
 
 const INTAKE_FIELDS = ['document_type', 'counterparty_id', 'counterparty_name', 'document_date', 'reference_number', 'total_amount', 'intake_note'] as const;
@@ -230,11 +247,26 @@ documentRouter.post(
     if (!context) return;
     const service = serviceOr503(res);
     if (!service) return;
+    // R6: a client that sends duplicate_check: 'warn' is told about a possible duplicate (same file, or same counterparty + reference number)
+    // before submission, and may resubmit with a duplicate_reason that is audited. Other callers keep the previous behaviour.
+    const duplicateReason = parseChangeReason(req.body?.duplicate_reason);
+    if (duplicateReason === false) { res.status(400).json({ error: 'Invalid duplicate reason', code: 'DOCUMENT_DUPLICATE_REASON_INVALID' }); return; }
+    if (req.body?.duplicate_check === 'warn' && !duplicateReason) {
+      const repository = repositoryOr503(res);
+      if (!repository) return;
+      const current = await repository.findById(req.params.id, context.activeCompanyId);
+      const duplicates = current ? await duplicateWarnings(current) : [];
+      if (duplicates.length) {
+        res.status(409).json({ error: 'Possible duplicate document', code: 'DOCUMENT_DUPLICATE_SUSPECTED', duplicate_count: duplicates.length, duplicates: context.capabilities.includes(VIEW_CAPABILITY) ? duplicates : [] });
+        return;
+      }
+    }
     try {
       const document = await service.submitReview({
         documentId: req.params.id,
         companyId: context.activeCompanyId,
         actorUserId: context.user.id,
+        ...(duplicateReason ? { duplicateReason } : {}),
       });
       res.status(200).json({ document });
     } catch (err) {
@@ -261,17 +293,21 @@ documentRouter.patch(
   asyncRoute(async (req, res) => {
     const context = activeContext(req, res);
     if (!context) return;
-    const intake = parseIntake(req.body);
+    const { change_reason: rawReason, ...intakeBody } = (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}) as Record<string, unknown>;
+    const changeReason = parseChangeReason(rawReason);
+    const intake = changeReason === false ? null : parseIntake(intakeBody);
     if (!intake) { res.status(400).json({ error: 'Invalid document intake' }); return; }
     const expectedVersion = readExpectedRevision(req, res);
     if (expectedVersion === false) return;
     const service = serviceOr503(res);
     if (!service) return;
     try {
-      const document = await service.updateIntake({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, intake, expectedVersion });
-      res.status(200).json({ document });
+      const document = await service.updateIntake({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, intake, expectedVersion, ...(changeReason ? { changeReason } : {}) });
+      const warnings = await duplicateWarnings(document);
+      res.status(200).json({ document, ...(warnings.length && context.capabilities.includes(VIEW_CAPABILITY) ? { duplicate_warnings: warnings } : {}) });
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof DocumentChangeReasonRequiredError) { res.status(400).json({ error: err.message, code: err.code }); return; }
       if (err instanceof StaleRevisionError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
       if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict', code: err.code }); return; }
       if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
@@ -399,6 +435,61 @@ documentRouter.get(
   }),
 );
 
+
+// R6: safe file replacement for a document that is still being prepared (uploaded or incomplete). Same upload validation as POST /documents,
+// If-Match revision protection, period guard, and an audit entry that keeps the previous file's details. Approved and rejected documents are never changed.
+documentRouter.put(
+  '/documents/:id/file',
+  requireSameOrigin,
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(EDIT_CAPABILITY),
+  parseUploadBody,
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) { res.status(404).json({ error: 'Document not found' }); return; }
+    const filename = decodeFilename(req.headers['x-file-name']);
+    const mimeType = String(req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!filename || !isValidUpload(filename, mimeType, data)) { res.status(400).json({ error: 'Invalid document upload' }); return; }
+    const changeReason = parseChangeReason(decodeFilename(req.headers['x-change-reason']) ?? undefined);
+    if (changeReason === false) { res.status(400).json({ error: 'Invalid change reason', code: 'DOCUMENT_CHANGE_REASON_REQUIRED' }); return; }
+    const expectedVersion = readExpectedRevision(req, res);
+    if (expectedVersion === false) return;
+    const service = serviceOr503(res);
+    if (!service) return;
+    try {
+      const document = await service.replaceFile({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, originalFilename: filename, mimeType, data, expectedVersion, changeReason });
+      const warnings = await duplicateWarnings(document);
+      res.status(200).json({ document, ...(warnings.length && context.capabilities.includes(VIEW_CAPABILITY) ? { duplicate_warnings: warnings } : {}) });
+    } catch (err) {
+      if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof StaleRevisionError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
+      if (err instanceof DocumentChangeReasonRequiredError) { res.status(400).json({ error: err.message, code: err.code }); return; }
+      if (err instanceof DocumentFileReplaceError) { res.status(409).json({ error: err.message, code: err.code }); return; }
+      if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
+      throw err;
+    }
+  }),
+);
+
+documentRouter.get(
+  '/documents/:id/duplicates',
+  requireAuth,
+  requireActiveCompany,
+  requireCapability(VIEW_CAPABILITY),
+  asyncRoute(async (req, res) => {
+    const context = activeContext(req, res);
+    if (!context) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) { res.status(404).json({ error: 'Document not found' }); return; }
+    const repository = repositoryOr503(res);
+    if (!repository) return;
+    const document = await repository.findById(req.params.id, context.activeCompanyId);
+    if (!document) { res.status(404).json({ error: 'Document not found' }); return; }
+    res.status(200).json({ duplicates: await duplicateWarnings(document) });
+  }),
+);
 
 // T7.1: editable field suggestions from a digital PDF's embedded text. Read-only: nothing is stored, audited as a change, posted or approved.
 // Needs document.view (the values disclose the file's content) and document.edit (suggestions only matter to someone who can change the intake). The response never carries raw PDF text.

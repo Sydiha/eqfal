@@ -33,6 +33,12 @@ export interface DocumentRecord extends DocumentIntake {
 
 export interface DocumentDuplicate { id: string; original_filename: string; status: DocumentStatus; created_at: Date; }
 
+/** R6: a possible duplicate of another document in the same company. `file` = identical file; `supplier_reference` = same counterparty and reference number. */
+export interface DocumentDuplicateMatch {
+  id: string; original_filename: string; status: DocumentStatus; created_at: Date;
+  document_date: string | null; reference_number: string | null; total_amount: string | null; match: 'file' | 'supplier_reference';
+}
+
 export interface DocumentCounterparty {
   id: string;
   name: string;

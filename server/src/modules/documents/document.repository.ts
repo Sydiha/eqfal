@@ -118,4 +118,14 @@ export class DocumentRepository {
     );
     return rows[0]!;
   }
+
+  /** R6: swaps the stored file of one document. The caller holds the row lock and has checked status, revision and period. */
+  async replaceFile(id: string, companyId: string, file: { original_filename: string; mime_type: string; size_bytes: number; storage_key: string; sha256: string }, runner: QueryRunner): Promise<DocumentRecord> {
+    const { rows } = await runner.query<DocumentRecord>(
+      `UPDATE documents SET original_filename = $3, mime_type = $4, size_bytes = $5, storage_key = $6, sha256 = $7, updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 RETURNING *, document_date::text`,
+      [id, companyId, file.original_filename, file.mime_type, file.size_bytes, file.storage_key, file.sha256],
+    );
+    return rows[0]!;
+  }
 }
