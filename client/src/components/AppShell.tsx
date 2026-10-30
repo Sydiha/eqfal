@@ -7,6 +7,7 @@ import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
 import { useDateContext } from '../context/DateContext';
 import { IconHome, IconSales, IconPurchases, IconDocuments, IconBanks, IconObligations, IconAccounting, IconOpeningBalances, IconPeriodicAdjustments, IconFixedAssets, IconVAT, IconMonthlyClose, IconAnnualClose, IconFiscalYears, IconPartners, IconCompanyProfile } from './EqfalIcons';
+import { actionableCount, useHomeAlerts } from './homeAlerts';
 import '../mobile.css';
 import '../visual-polish.css';
 import '../brand.css';
@@ -74,6 +75,9 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
   useEffect(close, [page, close]);
+  const homeAlerts = useHomeAlerts();
+  const bellCount = homeAlerts?.status === 'ready' ? actionableCount(homeAlerts.alerts) : 0;
+  const openAttention = () => { setPage('home'); window.setTimeout(() => document.getElementById('home-attention')?.scrollIntoView?.({ block: 'start' }), 0); };
   const [expandedGroups, setExpandedGroups] = useState<NavGroupId[]>(readExpandedGroups);
   const toggleGroup = (id: NavGroupId) => setExpandedGroups(current => {
     const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
@@ -198,9 +202,9 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
           </Group>
           <Box className="topbar-spacer" />
           <Group gap={10} wrap="nowrap" className="topbar-user-group">
-            <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={isAr ? 'المهام بانتظارك' : 'Tasks waiting for you'} onClick={() => setPage('home')}>
+            <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={bellCount > 0 ? (isAr ? `بانتظارك: ${bellCount} عنصر` : `Needs your attention: ${bellCount} items`) : (isAr ? 'المهام بانتظارك' : 'Tasks waiting for you')} onClick={openAttention}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-            </button>
+            {bellCount > 0 && <span className="topbar-bell-badge" data-testid="bell-count" aria-hidden="true">{bellCount > 99 ? '99+' : bellCount}</span>}</button>
             <UnstyledButton className="user-summary-link" aria-label={t('nav.account')} aria-current={page === 'account' ? 'page' : undefined} onClick={() => setPage('account')}>
               <Group gap={8} wrap="nowrap" className="user-summary">
                 <span className="user-avatar" aria-hidden="true">{userInitial}</span>

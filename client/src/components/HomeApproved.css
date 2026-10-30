@@ -957,3 +957,13 @@ tr.is-blocked .eqfal-home__area-icon { border-color: transparent; background: va
 .home__subtitle-range {
   white-space: nowrap;
 }
+
+.home__attention { margin: 16px 0; padding: 16px; border: 1px solid #e4e8ec; border-radius: 12px; background: #fff; }
+.home__attention-group + .home__attention-group { margin-top: 12px; }
+.home__attention-group-title { margin: 0 0 8px; font-size: 0.85rem; font-weight: 600; color: #475569; }
+.home__attention-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.home__attention-item { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px; border: 1px solid #e4e8ec; border-radius: 8px; background: #f8fafc; color: inherit; font: inherit; cursor: pointer; text-align: start; }
+.home__attention-item:hover { background: #f1f5f9; }
+.home__attention-count { min-width: 24px; padding: 0 6px; border-radius: 12px; background: #fee2e2; color: #b91c1c; font-weight: 700; text-align: center; }
+.home__attention-note { margin: 0; color: #475569; }
+@media (max-width: 640px) { .home__attention-list { flex-direction: column; } .home__attention-item { width: 100%; } }

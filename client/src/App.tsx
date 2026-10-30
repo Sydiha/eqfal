@@ -10,6 +10,7 @@ import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { useAuth, type AuthSession } from './context/AuthContext';
 import type { TFunction } from 'i18next';
 import { DateContextProvider } from './context/DateContext';
+import { HomeAlertsProvider } from './components/homeAlerts';
 
 type Period = {
   id: string;
@@ -147,7 +148,7 @@ export function headerRoleLabel(session: AuthSession, t: TFunction): string {
 }
 
 function AuthenticatedShell() {
-  const { logout, switchCompany, session } = useAuth();
+  const { logout, switchCompany, session, handleUnauthorized } = useAuth();
   const { t } = useTranslation();
   const [page, setPageState] = useState<Page>(pageFromUrl);
   const [documentEntry, setDocumentEntry] = useState<DocumentEntryContext | null>(null);
@@ -194,7 +195,7 @@ function AuthenticatedShell() {
   };
   const handleSwitch = async (id: string) => { setDocumentEntry(null); clearContextualQueryState(); return switchCompany(id); };
   const handlePeriodChange = (id: string) => { setSelectedPeriodId(id); };
-  return <AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} displayName={session!.user.displayName ?? null} roleLabel={headerRoleLabel(session!, t)} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} returnFromDocumentEntry={returnFromDocumentEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell>;
+  return <HomeAlertsProvider capabilities={session!.capabilities} companyId={session!.activeCompanyId || ''} onUnauthorized={handleUnauthorized}><AppShell page={page} setPage={navigate} capabilities={session!.capabilities} email={session!.user.email} displayName={session!.user.displayName ?? null} roleLabel={headerRoleLabel(session!, t)} onSwitch={handleSwitch} onLogout={logout}><CompanyContentForPage page={page} setPage={navigate} navigateToDiscovery={navigateToDiscovery} documentEntry={documentEntry} returnFromDocumentEntry={returnFromDocumentEntry} periods={periods} selectedPeriodId={selectedPeriodId} onSelectedPeriodChange={handlePeriodChange} onPeriodsLoad={setPeriods}/></AppShell></HomeAlertsProvider>;
 }
 
 function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEntry, returnFromDocumentEntry, periods, selectedPeriodId, onSelectedPeriodChange, onPeriodsLoad }: { page: Page; setPage: (page: Page) => void; navigateToDiscovery: (page: Page, parameters: Record<string, string>) => void; documentEntry: DocumentEntryContext | null; returnFromDocumentEntry: (entry: DocumentEntryContext) => void; periods: Period[]; selectedPeriodId: string | null; onSelectedPeriodChange: (id: string) => void; onPeriodsLoad: (p: Period[]) => void }) {

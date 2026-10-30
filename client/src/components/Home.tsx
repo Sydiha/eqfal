@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { formatDisplayDate } from "../date-format";
 import { isMonthOnlyPeriodId, MONTH_PERIOD_PREFIX, useDateContext } from "../context/DateContext";
 import { formatMoney, sumMoney } from '../money-format';
+import { isActionable, useHomeAlerts, visibleHomeAlerts, type HomeAlert } from "./homeAlerts";
 
 // Figma Home KPI and status icons (presentation only).
 const svgProps = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -109,6 +110,68 @@ type Props = {
   onSelectedPeriodChange?: (periodId: string) => void;
   onPeriodsLoad?: (p: Period[]) => void;
 };
+
+
+const ALERT_LABELS: Record<string, { ar: string; en: string }> = {
+  overdue_obligations: { ar: "التزامات متأخرة", en: "Overdue obligations" },
+  upcoming_obligations: { ar: "التزامات مستحقة خلال 30 يوماً", en: "Obligations due in 30 days" },
+  unconfirmed_obligations: { ar: "التزامات غير مؤكدة", en: "Unconfirmed obligations" },
+  documents_uploaded: { ar: "مستندات مرفوعة بانتظار المراجعة", en: "Uploaded documents awaiting review" },
+  documents_needs_review: { ar: "مستندات تحتاج مراجعة", en: "Documents needing review" },
+  documents_incomplete: { ar: "مستندات غير مكتملة", en: "Incomplete documents" },
+  bank_transactions_unmatched: { ar: "حركات بنكية غير مطابقة", en: "Unmatched bank transactions" },
+  bank_transactions_matched: { ar: "حركات بنكية مطابقة بانتظار التسوية", en: "Matched transactions awaiting reconciliation" },
+};
+
+function AttentionSection({ isArabic, navigateToDiscovery }: { isArabic: boolean; navigateToDiscovery: Props["navigateToDiscovery"] }) {
+  const state = useHomeAlerts();
+  const reload = state?.reload;
+  const settled = state?.status === "ready" || state?.status === "error";
+  // Refresh when returning to Home; the first load is already started by the provider.
+  useEffect(() => { if (settled) reload?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!state || state.status === "idle") return null;
+  const items = visibleHomeAlerts(state.alerts).filter((alert) => ALERT_LABELS[alert.key]);
+  const rank = (alert: HomeAlert) => (alert.class === "needs_action_now" ? 0 : 1);
+  const mine = items.filter((a) => isActionable(a) && a.ownership === "current_user").sort((a, b) => rank(a) - rank(b));
+  const team = items.filter((a) => isActionable(a) && a.ownership !== "current_user").sort((a, b) => rank(a) - rank(b));
+  const upcoming = items.filter((a) => !isActionable(a));
+  const groups = [
+    { id: "mine", title: isArabic ? "مسندة إليك" : "Assigned to you", rows: mine },
+    { id: "team", title: isArabic ? "بانتظار الفريق أو المحاسب" : "Waiting on team or accountant", rows: team },
+    { id: "upcoming", title: isArabic ? "قريباً" : "Coming up", rows: upcoming },
+  ].filter((g) => g.rows.length > 0);
+  let body;
+  if (state.status === "loading" && state.alerts.length === 0) body = <p role="status" className="home__attention-note">{isArabic ? "جارٍ تحميل العناصر…" : "Loading items…"}</p>;
+  else if (state.status === "denied") body = <p role="status" className="home__attention-note">{isArabic ? "ليست لديك صلاحية لعرض العناصر المطلوبة." : "You do not have permission to view action items."}</p>;
+  else if (state.status === "error") body = (
+    <p role="alert" className="home__attention-note">
+      {isArabic ? "تعذر تحميل العناصر." : "Could not load action items."}{" "}
+      <button type="button" className="home__action-button" onClick={state.reload}>{isArabic ? "إعادة المحاولة" : "Retry"}</button>
+    </p>
+  );
+  else if (groups.length === 0) body = <p role="status" className="home__attention-note">{isArabic ? "لا توجد عناصر بانتظارك حالياً." : "Nothing needs your attention right now."}</p>;
+  else body = groups.map((group) => (
+    <div key={group.id} className="home__attention-group">
+      <h3 className="home__attention-group-title">{group.title}</h3>
+      <ul className="home__attention-list">
+        {group.rows.map((alert) => (
+          <li key={alert.key}>
+            <button type="button" className="home__attention-item" data-alert-key={alert.key} onClick={() => navigateToDiscovery(alert.destination, alert.parameters)}>
+              <span className="home__attention-count">{alert.count}</span>
+              <span className="home__attention-label">{isArabic ? ALERT_LABELS[alert.key].ar : ALERT_LABELS[alert.key].en}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ));
+  return (
+    <section id="home-attention" className="home__attention" aria-labelledby="home-attention-title">
+      <h2 id="home-attention-title" className="home__section-title">{isArabic ? "بانتظارك" : "Needs Your Attention"}</h2>
+      {body}
+    </section>
+  );
+}
 
 const stripDirectionalMarks = (value: string) =>
   value.replace(/[؜‎‏]/g, "");
@@ -613,6 +676,8 @@ export function Home({
           </div>
         </section>
       )}
+
+      <AttentionSection isArabic={isArabic} navigateToDiscovery={navigateToDiscovery} />
 
       {canViewClose && !loading && !error && monthOnlySelected && (
         <p className="home__month-note" role="status">
