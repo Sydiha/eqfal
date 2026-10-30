@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Pool, PoolClient } from 'pg';
+import { VatService } from '../src/modules/vat/vat.router';
+import { lockFiscalYearCloseScope } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   AccountingFiscalYearClosedError,
@@ -115,5 +117,48 @@ describeDatabase('Closed fiscal year write guard with PostgreSQL', () => {
       await closer.query('COMMIT');
       expect(await write).toBeInstanceOf(AccountingFiscalYearClosedError);
     } finally { closer.release(); }
+  });
+
+  // Representative real write path that takes VAT keys: the closed-year check must happen before them (closer order: year row, VAT keys, months).
+  describe('VAT review write path (real service)', () => {
+    const vat = new VatService(pool);
+    const userId = randomUUID();
+    const pending = (taxDate: string) => ({ taxDate, status: 'pending' as const, treatment: null, taxable: null, vat: null, note: null, recoverability: undefined, recoverable: null, reason: null, version: undefined });
+    beforeAll(async () => { await pool.query("INSERT INTO users(id,email,password_hash) VALUES($1,$2,'x')", [userId, `fy-guard-${userId}@example.test`]); });
+    afterAll(async () => { try { await pool.query('DELETE FROM users WHERE id=$1', [userId]); } catch { /* disposable test database */ } });
+    async function purchase(companyId: string): Promise<string> {
+      return (await pool.query<{ id: string }>(
+        "INSERT INTO documents(company_id,uploaded_by_user_id,original_filename,mime_type,size_bytes,storage_key,sha256,status,document_type,document_date,total_amount) VALUES($1,$2,'p.pdf','application/pdf',10,$3,$4,'approved','purchase','2026-03-05','100.00') RETURNING id",
+        [companyId, userId, `k-${randomUUID()}`, randomUUID().replace(/-/g, '').padEnd(64, '0')])).rows[0]!.id;
+    }
+
+    it('saves a review in an open year and rejects it in a closed year with nothing written', async () => {
+      const co = await company();
+      const doc = await purchase(co.id);
+      await expect(vat.saveReview(co.id, userId, doc, pending('2026-03-10'))).resolves.toMatchObject({ document_id: doc });
+      await closeYear(co.fy2026);
+      await expect(vat.saveReview(co.id, userId, doc, pending('2026-03-11'))).rejects.toBeInstanceOf(AccountingFiscalYearClosedError);
+      const rows = (await pool.query<{ tax_date: string }>('SELECT tax_date::text FROM document_vat_reviews WHERE document_id=$1', [doc])).rows;
+      expect(rows.map(r => r.tax_date)).toEqual(['2026-03-10']);
+    });
+
+    it('does not hold VAT keys while waiting for a fiscal-year close, so the closer can take them (no deadlock)', async () => {
+      const co = await company();
+      const doc = await purchase(co.id);
+      const closer = await pool.connect();
+      try {
+        await closer.query('BEGIN');
+        await closer.query("SET LOCAL lock_timeout='3s'");
+        await closer.query('SELECT id FROM fiscal_years WHERE id=$1 FOR UPDATE', [co.fy2026]);
+        let settled = false;
+        const write = vat.saveReview(co.id, userId, doc, pending('2026-03-12')).catch(e => e).finally(() => { settled = true; });
+        await new Promise(resolve => setTimeout(resolve, 400));
+        expect(settled).toBe(false);
+        await lockFiscalYearCloseScope(closer, co.id, { start_date: '2026-01-01', end_date: '2026-12-31' } as never);
+        await closer.query("UPDATE fiscal_years SET status='closed' WHERE id=$1", [co.fy2026]);
+        await closer.query('COMMIT');
+        expect(await write).toBeInstanceOf(AccountingFiscalYearClosedError);
+      } finally { closer.release(); }
+    });
   });
 });

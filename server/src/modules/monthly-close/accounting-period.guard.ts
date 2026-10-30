@@ -49,7 +49,7 @@ export async function lockAccountingRange(companyId: string, start: AccountingDa
  * Independent closed-fiscal-year check. Reads every overlapping year FOR SHARE (start_date order) so a concurrent closeFiscalYear, which holds the
  * year row FOR UPDATE, serializes with the write. Called BEFORE the month advisory lock to keep the closer's lock order (year row, then months).
  */
-async function assertFiscalYearsOpen(companyId: string, start: string, end: string, client: PoolClient): Promise<void> {
+export async function assertFiscalYearsOpen(companyId: string, start: string, end: string, client: PoolClient): Promise<void> {
   const years = await client.query<{ status: string }>(
     `/* closed-year-guard */ SELECT status FROM fiscal_years WHERE company_id=$1 AND start_date <= $3::date AND end_date >= $2::date ORDER BY start_date FOR SHARE`,
     [companyId, start, end],
