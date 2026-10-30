@@ -191,6 +191,38 @@ describeDatabase('optional monthly closing policy (PostgreSQL)', () => {
     expect(fingerprint(optSection.summary)).not.toBe(fingerprint({ ...optSection.summary, monthly_close_policy: undefined }));
   });
 
+  it('missing monthly_close_periods rows: blocked under required, allowed and reported accurately under optional (readiness, close, package)', async () => {
+    const missing = async (w: World) => h.q("DELETE FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start IN ('2026-03-01','2026-09-01')", [w.fy]);
+    const annual = (w: World) => new AnnualClosingService(h.db).readiness(w.company, w.fy);
+
+    const req = await world(12);
+    await missing(req);
+    expect(await monthly(req)).toHaveLength(10);
+    const reqR = await annual(req);
+    expect(reqR.domains['monthly_close']).toMatchObject({ ready: false, blocker_count: 2, summary: { missing_periods: 2, open_periods: 0, closed_periods: 10 } });
+    expect((await readiness(req)).blockers).toContainEqual({ code: 'monthly_period_missing', count: 2 });
+    const reqSection = packageManifest(reqR).find((x) => x.section === 'monthly_close')!;
+    expect([reqSection.status, reqSection.blocker_count]).toEqual(['blocked', 2]);
+    expect(finalizationBlockers(packageManifest(reqR))).toContain('monthly_close:blocked');
+    expect(await tryClose(req)).toContain('monthly_period_missing');
+    expect((await status(req)).status).toBe('open');
+
+    const opt = await world(12, 'optional');
+    await missing(opt);
+    const optR = await annual(opt);
+    expect(optR.domains['monthly_close']).toMatchObject({ ready: true, blocker_count: 0, status: 'ready', summary: { monthly_close_policy: 'optional', expected_periods: 12, missing_periods: 2, open_periods: 0, closed_periods: 10 } });
+    const gate = await readiness(opt);
+    expect(gate.ready).toBe(true);
+    expect(gate.warnings).toContainEqual({ code: 'monthly_periods_left_open', count: 2 });
+    const optSection = packageManifest(optR).find((x) => x.section === 'monthly_close')!;
+    expect([optSection.status, optSection.blocker_count]).toEqual(['ready', 0]);
+    expect(optSection.summary).toMatchObject({ monthly_close_policy: 'optional', missing_periods: 2, closed_periods: 10 });
+    expect(finalizationBlockers(packageManifest(optR)).filter((x) => x.startsWith('monthly_close'))).toEqual([]);
+    expect(await tryClose(opt)).toEqual([]);
+    expect(await monthly(opt)).toHaveLength(10);
+    expect((await status(opt)).status).toBe('closed');
+  });
+
   it('concurrent policy change and annual close never close a year with open months under required', async () => {
     for (let i = 0; i < 4; i++) {
       const w = await world(3);
