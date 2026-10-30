@@ -42,6 +42,7 @@ const ERRORS: Record<string, { ar: string; en: string }> = {
   SUPPLEMENT_DRAFT_EXISTS: { ar: 'توجد مسودة لهذا النوع بالفعل.', en: 'A draft of this kind already exists.' },
   SUPPLEMENT_LINES_INVALID: { ar: 'بيانات غير صالحة (مبالغ بخانتين عشريتين، والمبرر 10 أحرف على الأقل).', en: 'Invalid data (two-decimal amounts; justification at least 10 characters).' },
   SUPPLEMENT_ACCOUNT_NOT_FOUND: { ar: 'حساب غير موجود في هذه الشركة.', en: 'An account does not exist in this company.' },
+  SUPPLEMENT_FISCAL_YEAR_CLOSED: { ar: 'لا يمكن اعتماد الملحق لأن السنة المالية لهذه الفترة مقفلة. الأرقام المقفلة لا تتغير.', en: 'The supplement cannot be approved because the fiscal year of this period is closed. Closed figures cannot change.' },
   SUPPLEMENT_CONCURRENT_CHANGE: { ar: 'تغيّر الإصدار المعتمد أثناء العملية. أعد المحاولة.', en: 'The approved version changed meanwhile. Try again.' },
 };
 

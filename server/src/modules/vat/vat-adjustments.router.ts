@@ -4,7 +4,7 @@ import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
-import { assertAccountingDateWritable, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
+import { AccountingPeriodClosedError, assertAccountingDateWritable, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
 
 export const vatAdjustmentsRouter=Router();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,7 +44,7 @@ export class VatAdjustmentService{
     const next=(await c.query<Adjustment>(`UPDATE vat_adjustments SET status=$3,reviewed_by_user_id=CASE WHEN $3='reviewed' THEN $4 ELSE reviewed_by_user_id END,reviewed_at=CASE WHEN $3='reviewed' THEN NOW() ELSE reviewed_at END,version=version+1,updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status=$5 AND version=$6 RETURNING *`,[id,company,target,actor,target==='reviewed'?'draft':'reviewed',old.version])).rows[0];if(!next)throw new VatAdjustmentConflictError('Adjustment was modified or already applied');await this.audit.logEvent({company_id:company,actor_user_id:actor,action:`vat_adjustment.${target==='reviewed'?'review':'apply'}`,entity_type:'vat_adjustment',entity_id:id,before_data:old as never,after_data:next as never},c);return next;});}
 }
 function service(res:Response){if(!pool){res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' });return null;}return new VatAdjustmentService(pool);}
-function handle(error:unknown,res:Response){if(error instanceof VatAdjustmentValidationError)res.status(400).json({error:error.message});else if(error instanceof VatAdjustmentNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatAdjustmentConflictError)res.status(409).json({error:error.message});else throw error;}
+function handle(error:unknown,res:Response){if(error instanceof VatAdjustmentValidationError)res.status(400).json({error:error.message});else if(error instanceof VatAdjustmentNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatAdjustmentConflictError)res.status(409).json({error:error.message});else if(error instanceof AccountingPeriodClosedError)res.status(409).json({error:error.message,code:error.code});else throw error;}
 vatAdjustmentsRouter.get('/vat-adjustments',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{const s=service(res);if(s)res.json(await s.list(context(req).activeCompanyId));}));
 vatAdjustmentsRouter.get('/vat-adjustments/:id',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new VatAdjustmentValidationError('Invalid request');const s=service(res);if(s)res.json(await s.get(context(req).activeCompanyId,req.params.id));}catch(e){handle(e,res);}}));
 vatAdjustmentsRouter.post('/vat-adjustments',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('vat.review'),route(async(req,res)=>{try{const i=parseBody(req.body);if(!i)throw new VatAdjustmentValidationError('Invalid request');const s=service(res);if(s)res.status(201).json(await s.create(context(req).activeCompanyId,context(req).user.id,i as never));}catch(e){handle(e,res);}}));

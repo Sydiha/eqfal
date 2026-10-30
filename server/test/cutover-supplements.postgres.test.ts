@@ -268,6 +268,23 @@ describeDatabase('cut-over historical supplements (PostgreSQL)', () => {
     expect(await h.count('SELECT COUNT(*) n FROM cutover_supplement_versions WHERE company_id=$1', [other.id])).toBe(0);
   });
 
+  it('refuses approval and supersession once the fiscal year is closed: 409, versions and audit untouched; drafts stay possible', async () => {
+    const co = await setup('closedfy');
+    const v1 = await approved(co, 'equity', equityBody(co));
+    const d2 = await createDraft(co, 'equity', equityBody(co, { evidence_reference: 'Corrected resolutions' }));
+    expect(d2.status).toBe(201);
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [co.fy]);
+    const auditBefore = await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id]);
+    const res = await approve(co, d2.json.version.id, d2.json.version.row_version);
+    expect([res.status, res.json.code]).toEqual([409, 'SUPPLEMENT_FISCAL_YEAR_CLOSED']);
+    const rows = await h.q<{ id: string; status: string }>('SELECT id,status FROM cutover_supplement_versions WHERE company_id=$1 AND kind=$2 ORDER BY version_no', [co.id, 'equity']);
+    expect(rows.map((r) => r.status)).toEqual(['approved', 'draft']);
+    expect(rows[0]!.id).toBe(v1.id);
+    expect(await h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1', [co.id])).toBe(auditBefore);
+    // Drafts do not change any figure, so they can still be voided in a closed year.
+    expect((await co.owner.client.req('POST', `${base(co)}/${d2.json.version.id}/void`, { confirm: true, expected_row_version: d2.json.version.row_version, reason: 'closed year cleanup' })).status).toBe(200);
+  });
+
   it('a failure after the predecessor was superseded rolls back both version transitions and every audit row', async () => {
     const co = await setup('rollback');
     const v1 = await approved(co, 'equity', equityBody(co));

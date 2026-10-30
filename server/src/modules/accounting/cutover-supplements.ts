@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { AccountingPeriodClosedError, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
 import { LedgerSourceAuthorityError, LedgerSourceAuthorityNotFoundError } from './ledger-source-authority';
 
 /**
@@ -283,6 +284,7 @@ export async function loadSupplementStatus(db: Queryable, companyId: string, fis
 
 const translate = (error: unknown): never => {
   if (error instanceof LedgerSourceAuthorityError || error instanceof LedgerSourceAuthorityNotFoundError) throw error;
+  if (error instanceof AccountingPeriodClosedError) throw new SupplementValidationError('SUPPLEMENT_FISCAL_YEAR_CLOSED');
   const e = error as { message?: string; code?: string; constraint?: string };
   if (e.code === '23505' && e.constraint === 'cutover_supplement_one_draft_uidx') throw new SupplementValidationError('SUPPLEMENT_DRAFT_EXISTS');
   if (e.code === '23505' && (e.constraint === 'cutover_supplement_one_approved_uidx' || e.constraint === 'cutover_supplement_versions_authority_id_kind_version_no_key')) throw new SupplementValidationError('SUPPLEMENT_CONCURRENT_CHANGE');
@@ -415,6 +417,8 @@ export class CutoverSupplementService {
     return this.tx(companyId, async (c) => {
       const authority = await loadAuthority(c, companyId, authorityId, true);
       if (authority.status !== 'active') throw new SupplementValidationError('SUPPLEMENT_AUTHORITY_NOT_ACTIVE');
+      // Approval (and the supersession it performs) changes the statements of every year the range touches: refuse once any of them is closed.
+      await assertFiscalYearsOpen(companyId, authority.from_date, authority.to_date, c);
       const v = await this.lockVersion(c, companyId, authorityId, versionId, expected);
       const lines = await loadLines(c, companyId, versionId);
       const ctx = await loadEvaluationContext(c, companyId, authority);

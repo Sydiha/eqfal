@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
-import { AccountingPeriodClosedError, lockAccountingRange } from '../monthly-close/accounting-period.guard';
+import { AccountingPeriodClosedError, assertFiscalYearsOpen, lockAccountingRange } from '../monthly-close/accounting-period.guard';
 import { lockVatPeriodScope } from '../vat/vat.router';
 import { FiscalYearClosedError } from './fiscal-year-posting.guard';
 import { JournalPostingConflictError, JournalPostingValidationError } from './journal-posting-errors';
@@ -244,7 +244,8 @@ export class LedgerCutoverService {
       if (!when.month_end) throw new CutoverValidationError('CUTOVER_DATE_NOT_MONTH_END');
       if (range.to_date > when.today) throw new CutoverValidationError('CUTOVER_DATE_IN_FUTURE');
 
-      // Lock order (same as fiscal-year close): VAT keys, then accounting month keys ascending.
+      // Lock order (same as fiscal-year close): fiscal-year row(s) FOR SHARE first (a concurrent close holds it FOR UPDATE), then VAT keys, then accounting month keys ascending.
+      await assertFiscalYearsOpen(companyId, range.from_date, range.to_date, client);
       await lockVatPeriodScope(companyId, range.from_date, range.to_date, client);
       await lockAccountingRange(companyId, range.from_date, range.to_date, client);
 
