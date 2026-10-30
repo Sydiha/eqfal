@@ -1,82 +1,83 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-29
+**Last updated:** 2026-10-30
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Verified main HEAD at update time:** `4564c8b` (PR #519, PR-4B). GitHub `main` is the source of truth and may be ahead.
-- **CI:** see GitHub checks on the commit (not restated here; not re-run in this docs task).
-- **Open PRs at update time:** #464 (docs, T1 UAT note; untouched) + this docs-sync PR.
-- Repo migrations: 001–097 and 099–101 present (098 intentionally absent; reserved, NOT authorized). Application status per environment is NOT verified here (see Migrations).
+- **Verified main HEAD at update time:** `a5723c5` (PR #529, G8). GitHub `main` is the source of truth and may be ahead.
+- **CI:** see GitHub checks on the commit (not restated; not re-run in this docs task).
+- Repo migrations: 001–097 and 099–103 present (098 intentionally absent; reserved, NOT authorized).
+- Vocabulary: Implemented / Verified / Partial / Deferred / Pending UAT / Unknown. Code merged + CI green is NOT functional UAT.
 
-## Phase Status (vocabulary: Implemented / Verified / Partial / Deferred / Not verified)
+## Phase Status
 | Phase | Status |
 |-------|--------|
-| B Users/Permissions | Implemented — not verified (no UAT) |
-| C Company setup & financial import | **Implemented in part; NOT fully verified; some items Deferred** (details below) |
-| D Operational cycle | Partial — see `docs/EQFAL_MASTER_ROADMAP.md` §14 gap matrix |
-| E Reporting/Closing | Partial |
+| B Users/Permissions | Implemented — Pending UAT |
+| C Company setup & financial import | Implemented in part; Pending UAT; mode 3 and extended reconciliation Deferred |
+| D Operational cycle | Implemented (G1–G3, G5, G8, R9, Q5) — all Pending UAT |
+| E Reporting/Closing | Partial (G6 zakat, G7 concurrency inventory open) |
 | F Final readiness | Not started |
 
-## Phase C Record (as of 3bab615)
-**Implemented (merged; code + CI tests only unless stated):**
-- Source Authority + mid-year Cutover (083–086, 091), full-year statements, supplements (S1/S2, #476/#477).
-- Opening balances: T1 partner attribution (#463, owner UAT on TEST passed per memory), T7.1–T7.4 import (#484–#485), retained-earnings carry-forward (P1 #494), closed-year classification lock (P2 #495), annual package V2 fingerprint (P3 #496).
-- Historical records (C5-P2..P5, #498–#501; migration 096): internal records, no ledger link.
-- Opening-balance integrity & reconciliation gate (C4-P2a #502), evidence exceptions (C4-P2b-1 migration 097 #503, UI #504), opening-balances UX redesign (C4-UI1 #505: 3 tabs, no migration).
-- Phase B finalization (#497, migration 095 display_name).
+## Delivered #506–#529 (all merged; implementation + CI only)
+- #506 docs C6. #507 G5 (mig 099). #508 R9 (mig 100). #509 Q5 (mig 101). #510/#512 R9 follow-ups.
+- #511 CI PG16 tools. #513 PR-2A error messages. #514 PR-2B stable 409 `code`.
+- #515–#519 RTL/mobile/localization UI (PR-3A..4B). #520 docs sync through #519.
+- #521 remaining UI fixes. #522 invoice mappings polish. #523 three UI defects (loading label, bank import errors, personal-payments status).
+- #524 unified presentation on 8 banking/obligations screens. #525 custody document picker (replaces typed ID). #526 UX polish (year-first dates, custody closed-period error, picker a11y).
+- #527 central period guards reject writes in a closed fiscal year (409 `FISCAL_YEAR_CLOSED`, no migration).
+- #528 optional monthly closing policy per fiscal year (mig 102; `fiscal_years.monthly_close_policy`). **Implemented, UAT pending.** Annual close must not be weakened.
+- #529 G8 optional labor-relationship classification on counterparties (mig 103; `counterparties.labor_relationship`). **Implemented, functional UAT pending.**
 
-**Approved fiscal-year operating modes (owner-approved definitions; per fiscal year):**
-1. Native / new company: EQFAL ledger is the source of truth (opening balance path).
-2. Migrated / cutover from external system: external reference before cutover date D, EQFAL ledger after D (Source Authority).
-3. External accounting (continuing): external system is the source; EQFAL holds approved TB copies only; no EQFAL journals in that year.
-- Today only modes 1 and 2 exist, implicitly (no mode declaration in code). Mode 3 is **DEFERRED — implementation not started**.
-- **Migration 098 (`fiscal_year_operating_modes`) is NOT authorized and NOT implemented.** Designs: `/mnt/project-files/audits/c5-p1…p4-2026-10-27/` (not in repo).
+## Migration Status (089–103)
+Replit TEST evidence: owner ran read-only queries; rows present in `_schema_migrations` (confirmed 2026-10-30). Other environments (Staging/Production): **UNKNOWN** unless noted.
+| Mig | Feature | Replit TEST | Other envs |
+|-----|---------|-------------|-----------|
+| 088 | Bank statement reconciliation (G3) | Applied (memory, 2026-10-18) | UNKNOWN |
+| 089 | Personal payments (G1/G2) | UNKNOWN | UNKNOWN |
+| 090 | Accounting profile correction | UNKNOWN | UNKNOWN |
+| 091 | Cutover historical supplements | UNKNOWN | UNKNOWN |
+| 092 | Invoice adjustment numbering | UNKNOWN | UNKNOWN |
+| 093 | Void approved unposted adjustment | UNKNOWN | UNKNOWN |
+| 094 | Invoice account mapping capabilities | UNKNOWN | UNKNOWN |
+| 095 | User display_name | UNKNOWN | UNKNOWN |
+| 096 | Historical records | **Applied (confirmed)** | UNKNOWN |
+| 097 | Opening-balance evidence exceptions | **Applied (confirmed)** | UNKNOWN |
+| 098 | Fiscal-year operating modes | Reserved — NOT authorized, not applied | Not applied |
+| 099 | Government payment details (G5) | **Applied (confirmed)** | UNKNOWN |
+| 100 | Multi-document bank allocations (R9) | **Applied (confirmed)** | UNKNOWN |
+| 101 | Custody controls (Q5) | **Applied (confirmed)** | UNKNOWN |
+| 102 | Monthly close policy | **Applied (confirmed, column present)** | UNKNOWN |
+| 103 | Counterparty labor relationship (G8) | **Applied (confirmed, column present)** | UNKNOWN |
+Note: server start applies pending migrations; applying in any environment needs separate Owner approval.
+
+## Deferred / Outstanding (preserved)
+- Operating mode 3 (external accounting, mig 098): **DEFERRED**, not started, not authorized.
 - Extended opening-balance reconciliation: **DEFERRED**.
-- Chart-of-accounts import and unified import navigation: **DEFERRED optional enhancements**, not Phase C completion blockers. No implementation found in main (search of client/server).
-- Monthly closing policy: owner intends monthly close to be **optional in all three operating modes**; **NOT implemented** (PENDING). It must not weaken annual financial readiness requirements (annual close gates must still run over the full year).
+- CoA import and unified import navigation: **DEFERRED** optional, not Phase C blockers.
+- G6 zakat calculation from statements: **PARTIAL** (manual base only); needs Owner policy.
+- G7 concurrency/versions: **PARTIAL**; full module inventory not done.
+- R6 documents, R8 role dashboards, R7/R10 backup/restore and env separation, R11/R12 operational acceptance: **UNVERIFIED / not started**.
+- #527 follow-ups: ledger-cutover lock order may deadlock with closeFiscalYear; no per-endpoint real-PG tests for all write paths.
+- Literal-message error mappings (#514) keyed by English text; flaky `OpeningBalanceReview` and `Accounting.chart-edit-mode` tests; WHT mobile table; localization cleanup (needs Owner approval).
 
-**Not verified:** same-SHA operational acceptance tests (Replit TEST/UAT at `3bab615`) were not performed or evidenced. Phase C is therefore NOT marked fully verified.
-
-## Work Delivered After Phase C (#506–#519, all merged to main)
-Implementation + CI only. No Production/Staging deployment was performed as part of this PR workflow; no operational verification at these SHAs.
-- #506 docs C6 Phase C handoff + Phase D gap matrix.
-- #507 D1/G5: optional government payment reference + period on obligation settlements (migration 099, additive).
-- #508 D2/R9: one bank transaction settling several documents (migration 100).
-- #509 D4/Q5: custody ledger-account controls, actual recipient, funding unlink (migration 101).
-- #510 R9 allocation candidates use real document remaining amount; fully settled documents hidden. #512 SettlementPanel refreshes after create/remove.
-- #511 CI: PostgreSQL client tools pinned to 16 (matches postgres:16 service).
-- #513 PR-2A actionable AR/EN error messages in five financial screens (UI only).
-- #514 PR-2B stable `code` on confirmed 409s (settlements, bank, opening balances, annual package; `requireAll` 403 `FORBIDDEN`). No migration.
-- #515 PR-3A, #516 PR-3B, #517 PR-3C, #518 PR-4A, #519 PR-4B: RTL/mobile/localization UI fixes (SettlementPanel cards, AnnualClosing tabs/dates, Obligations cards, banking tabs, WHT Arabic terms, LTR filenames; Add Item form state and missing bank currency guard). Frontend only.
-
-## Known Remaining Issues (not fixed)
-- **Flaky test:** `OpeningBalanceReview.test.tsx > calls the approve endpoint only when balanced` failed once in CI on an unrelated commit, passed on re-run; cause not established. `Accounting.chart-edit-mode` also reported flaky. Investigate as a real timing issue if it recurs.
-- **Literal-message error mappings:** server error codes in #514 (`banking-error-codes.ts`, `OB_CONFLICT_CODES`, `ANNUAL_PACKAGE_CONFLICT_CODES`) are keyed by exact English message text; changing a message silently drops its code. Uncovered: obligation version/create/update conflicts, custody, bank import, "match is invalid"/"no longer valid", JournalPosting.
-- **WHT mobile table:** the mocked-data UI audit found a remaining mobile table issue on WHT; production behavior is unverified. Earlier items: WHT raw English values in Arabic UI, classification panel bilingual line in locked CSS.
-- **Deferred localization architecture cleanup:** not started; needs separate Owner approval.
-- **Readiness gaps (from record):** see Migrations and Phase Status; same-SHA TEST/UAT not evidenced for Phase C or #506–#519.
-
-## Completed Implementation vs Production Verification
-- Completed = merged to main with CI (verify, Vercel preview) green.
-- NOT verified: Replit TEST/UAT at current SHA; application status of migrations 099–101 on any environment is unverified; Production and Staging deployment was not performed as part of this PR workflow.
-
-## Migrations (what is known)
-- 088 applied to Replit TEST only (memory, 2026-10-18). 089–097 and 099–101 application status on TEST/Staging/Production: **not verified**. `git pull` alone does not execute migrations; server startup may apply pending migrations. Applying them in an environment needs separate Owner approval.
-
-## Phase 14 / Invoice notes (older, unchanged)
-- Phase 14 per-row status: `docs/PHASE_14_FULL_CYCLE_VALIDATION_MATRIX.md` §9; T7 evidence `docs/evidence/t7/`.
-- Invoice VAT V1/V2/V2.1 and adjustments V3.x are merged; operational activation and migration rollout are Owner decisions, not verified here.
-
-## Current Task
-- Docs-only sync of state files through #519 (this PR). No code.
+## Pending UAT Checklist (functional, not performed)
+1. G1/G2 personal payment → approval → bank reimbursement → zero balance.
+2. G3 statement ending balance vs ledger; monthly/annual close integration.
+3. G5 government reference + period on settlement.
+4. R9 one bank transaction → several documents; remainder blocks close.
+5. Q5 custody controls, document picker, closed-period error.
+6. G8 labor-relationship set/clear/filter on counterparties; aging unaffected.
+7. #528 policy required vs optional; annual close gates still run over the full year.
+8. #527 write in closed FY rejected on documents, bank, VAT, assets, custody.
+9. Phase B: header identity, display name, role switch; company isolation.
+10. Phase C: opening balances, cutover, historical records at the same SHA.
 
 ## Open Blockers
-- None confirmed.
+- None confirmed in code. Owner decisions pending: UAT scope/SHA, rollout of migrations 089–095 status, zakat policy, mode 3 (098).
 
 ## Next Exact Step
-- Owner reviews this docs PR, then decides: same-SHA TEST/UAT for Phase C, and whether to start the recommended Phase D task (roadmap §14).
+- Owner reviews this docs PR, then chooses: run the UAT checklist on Replit TEST at main, or start a remaining item.
 
 ---
 *Keep under 100 lines.*
