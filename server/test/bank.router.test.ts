@@ -136,3 +136,21 @@ describe('Bank file parsing',()=>{
   it('supports UTF-16LE CSV with BOM',()=>{const data=Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from('Date,Amount\n2026-08-01,5.00\n2026-08-02,-1.00\n','utf16le')]);const table=parseBankFile('csv',data);expect(table.rows[0]?.[1]).toBe('5.00');});
   it('parses the first XLSX worksheet and tracks formula cells',()=>{const table=parseBankFile('xlsx',formulaXlsx());expect(table.headers).toEqual(['Date','Amount']);expect(table.rows[0]?.[1]).toBe(2);expect(table.formulaCells.has('0:1')).toBe(true);});
 });
+
+describe('Bank confirmation in a closed fiscal year',()=>{
+  it('returns 409 with the stable FISCAL_YEAR_CLOSED code and writes nothing',async()=>{
+    setContext(['bank.import']);mocks.storageGet.mockResolvedValue(csv);
+    const client=makeClient((sql)=>{
+      if(sql==='BEGIN'||sql==='ROLLBACK')return {rows:[]};
+      if(sql.includes('FROM bank_import_batches'))return {rows:[batch]};
+      if(sql.includes('FROM bank_accounts'))return {rows:[account]};
+      if(sql.includes('closed-year-guard'))return {rows:[{status:'closed'}],rowCount:1};
+      return {rows:[],rowCount:0};
+    });
+    mocks.connect.mockResolvedValue(client);
+    const res=await request(app).post('/api/bank-import-batches/b1/confirm');
+    expect(res.status).toBe(409);expect(res.body.code).toBe('FISCAL_YEAR_CLOSED');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO bank_transactions')||String(sql).includes('COMMIT'))).toBe(false);
+  });
+});

@@ -4,7 +4,7 @@ import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
-import { assertAccountingDateWritable, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
+import { AccountingPeriodClosedError, assertAccountingDateWritable, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
 import { CompanyAccountingProfileRepository } from '../company-accounting-profile/company-accounting-profile.repository';
 import { lockCompanyProfileShared } from '../company-accounting-profile/profile-locks';
 import { DOCUMENT_CARRIED_BY_APPROVED_INVOICE } from './vat-invoice';
@@ -103,7 +103,7 @@ export const VAT_ERROR_CODES:Record<string,string>={
  'VAT period is not closed':'VAT_PERIOD_NOT_CLOSED',
 };
 const withCode=(message:string)=>{const code=VAT_ERROR_CODES[message];return code?{error:message,code}:{error:message};};
-function handle(error:unknown,res:Response){if(error instanceof VatValidationError)res.status(400).json(withCode(error.message));else if(error instanceof VatNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatConflictError)res.status(409).json(withCode(error.message));else throw error;}
+function handle(error:unknown,res:Response){if(error instanceof VatValidationError)res.status(400).json(withCode(error.message));else if(error instanceof VatNotFoundError)res.status(404).json({error:'Not found'});else if(error instanceof VatConflictError)res.status(409).json(withCode(error.message));else if(error instanceof AccountingPeriodClosedError)res.status(409).json({error:error.message,code:error.code});else throw error;}
 vatRouter.get('/vat-periods',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{const value=service(res);if(value)res.json(await value.list(context(req).activeCompanyId));}));
 vatRouter.get('/vat-periods/:id',requireAuth,requireActiveCompany,requireCapability('vat.view'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new VatValidationError('Invalid request');const value=service(res);if(value)res.json(await value.get(context(req).activeCompanyId,req.params.id));}catch(error){handle(error,res)}}));
 vatRouter.post('/vat-periods',requireSameOrigin,requireAuth,requireActiveCompany,requireCapability('vat.close'),route(async(req,res)=>{try{const body=parseCreate(req.body);if(!body)throw new VatValidationError('Invalid request');const value=service(res);if(value)res.status(201).json(await value.create(context(req).activeCompanyId,context(req).user.id,body.fiscalYearId,body.start,body.end));}catch(error){handle(error,res)}}));

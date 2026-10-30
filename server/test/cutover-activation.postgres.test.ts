@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
 import { createHash } from 'node:crypto';
-import { getFiscalYearCloseReadiness } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
+import { getFiscalYearCloseReadiness, lockFiscalYearCloseScope } from '../src/modules/fiscal-years/fiscal-year-close-readiness';
 import { rewriteAsPreS1Activation } from './helpers/authority-fixture';
 
 // C1B-3b cut-over activation over real HTTP + PostgreSQL. Requires an isolated, disposable database (DATABASE_URL).
@@ -71,6 +71,41 @@ describeDatabase('cut-over activation (PostgreSQL)', () => {
     const r = (await h.q<{ cutover_journal_id: string; tb_reference: string; activated_by: string }>('SELECT cutover_journal_id,tb_reference,activated_by FROM ledger_source_authority WHERE id=$1', [id]))[0]!;
     expect([!!r.cutover_journal_id, r.tb_reference, r.activated_by]).toEqual([true, 'TB-2026-06', co.owner.id]);
     expect(await h.count("SELECT COUNT(*) n FROM audit_log WHERE company_id=$1 AND action='ledger_source_authority.activate'", [co.id])).toBe(1);
+  });
+
+  it('cutover waits on the fiscal-year row before taking VAT keys, so a concurrent year close cannot deadlock with it', async () => {
+    const co = await setup('lockord', { vat: 'registered' });
+    const id = await draft(co);
+    const closer = await h.db.connect();
+    try {
+      // The closer's own order: year row FOR UPDATE, then VAT keys, then accounting month keys.
+      await closer.query('BEGIN');
+      await closer.query('SELECT 1 FROM fiscal_years WHERE id=$1 FOR UPDATE', [co.fy]);
+      const pending = activate(co, id);
+      for (let i = 0; i < 100; i++) {
+        const waiting = await h.count("SELECT COUNT(*) n FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%closed-year-guard%'");
+        if (waiting) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      await lockFiscalYearCloseScope(closer, co.id, { id: co.fy, start_date: '2026-01-01', end_date: '2026-12-31' } as never);
+      await closer.query("UPDATE fiscal_years SET status='closed' WHERE id=$1", [co.fy]);
+      await closer.query('COMMIT');
+      const res = await pending;
+      expect([res.status, res.json.code]).toEqual([409, 'AUTHORITY_RANGE_CLOSED_PERIOD']);
+    } finally { closer.release(); }
+    expect(await status(id)).toBe('draft');
+    expect(await cutJournals(co)).toBe(0);
+  });
+
+  it('activation is refused in an already closed fiscal year; an open year still activates', async () => {
+    const closed = await setup('clsd');
+    const closedId = await draft(closed);
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [closed.fy]);
+    const res = await activate(closed, closedId);
+    expect([res.status, res.json.code]).toEqual([409, 'AUTHORITY_RANGE_CLOSED_PERIOD']);
+    expect(await cutJournals(closed)).toBe(0);
+    const open = await setup('opn');
+    expect((await activate(open, await draft(open))).status).toBe(201);
   });
 
   it('preview never persists and reports the real verdict plus warnings', async () => {
