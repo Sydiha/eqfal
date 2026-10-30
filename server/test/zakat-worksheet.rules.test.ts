@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateReadiness, fingerprintOf, toBps4, toCents, unsupportedPeriodReason, verifyOwnership, ZAKAT_TYPES, type GateRow, type OwnershipInputs } from '../src/modules/zakat-worksheets/zakat-worksheet.rules';
+import { evaluateReadiness, REQUIRED_BLOCKING_GATES, fingerprintOf, toBps4, toCents, unsupportedPeriodReason, verifyOwnership, ZAKAT_TYPES, type GateRow, type OwnershipInputs } from '../src/modules/zakat-worksheets/zakat-worksheet.rules';
 
 // G6-1 pure rules. No test here asserts a Zakat amount: the calculation is not implemented and its regulatory gates are unverified.
 const profile = { id: 'p', ownership_context: 'saudi_gcc_only', tax_treatment: 'zakat_applicable' };
@@ -76,13 +76,24 @@ describe('readiness', () => {
     { account_id: 'x2', code: '2', name: 'Zero', name_ar: null, statement_category: 'current_asset', account_type: 'asset', is_contra: false, amount_cents: '0' },
     { account_id: 'x3', code: '3', name: 'Rev', name_ar: null, statement_category: 'revenue', account_type: 'revenue', is_contra: false, amount_cents: '50' },
   ] };
-  const input = (over = {}) => ({ ownership: verifyOwnership(base()), periodReason: null, declarationsOk: true, balances, classifiedAccountIds: new Set(['x1']), balancesDrift: false, ownershipDrift: false, gates: [gate('B3', true), gate('B1', false)], ...over });
+  const input = (over = {}) => ({ ownership: verifyOwnership(base()), periodReason: null, declarationsOk: true, balances, classifiedAccountIds: new Set(['x1']), balancesDrift: false, ownershipDrift: false, gates: [...REQUIRED_BLOCKING_GATES.map((c) => gate(c, true)), gate('B1', false)], ...over });
   it('never reports an amount and keeps approval blocked while a blocking gate is unverified', () => {
     const r = evaluateReadiness(input());
-    expect(r).toMatchObject({ preparation_blockers: [], gate_blockers: ['B3'], can_submit: true, can_approve: false, calculation_performed: false, payable_amount: null, payable_amount_status: 'withheld_regulatory_gates' });
+    expect(r).toMatchObject({ preparation_blockers: [], gate_blockers: [...REQUIRED_BLOCKING_GATES].sort(), can_submit: true, can_approve: false, calculation_performed: false, payable_amount: null, payable_amount_status: 'withheld_regulatory_gates' });
   });
   it('allows approval only when every blocking gate is verified', () => {
-    expect(evaluateReadiness(input({ gates: [gate('B3', true, 'verified'), gate('B1', false)] })).can_approve).toBe(true);
+    expect(evaluateReadiness(input({ gates: [...REQUIRED_BLOCKING_GATES.map((c) => gate(c, true, 'verified')), gate('B1', false)] })).can_approve).toBe(true);
+  });
+  it('treats a missing, downgraded or unverified required gate row as blocking, so a data change alone cannot unlock approval', () => {
+    const verified = REQUIRED_BLOCKING_GATES.map((c) => gate(c, true, 'verified'));
+    expect(evaluateReadiness(input({ gates: verified.slice(1) })).can_approve).toBe(false);
+    expect(evaluateReadiness(input({ gates: [] })).gate_blockers).toEqual([...REQUIRED_BLOCKING_GATES].sort());
+    expect(evaluateReadiness(input({ gates: verified.map((g, i) => (i === 4 ? { ...g, blocks_approval: false, status: 'unverified' } : g)) })).can_approve).toBe(false);
+    expect(REQUIRED_BLOCKING_GATES).toContain('B9_reference_cases_approval');
+    expect(evaluateReadiness(input({ gates: verified })).payable_amount).toBeNull();
+  });
+  it('blocks submission while an investment deduction classification exists', () => {
+    expect(evaluateReadiness(input({ investmentClassifications: 1 })).preparation_blockers).toEqual(['unsupported_investment_deduction']);
   });
   it('requires classification only for non-zero balance-sheet accounts and reports each preparation blocker', () => {
     expect(evaluateReadiness(input({ classifiedAccountIds: new Set() })).preparation_blockers).toEqual(['unclassified_balance']);

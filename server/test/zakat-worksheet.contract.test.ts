@@ -42,6 +42,31 @@ describe('migration 105', () => {
     expect(migration).not.toMatch(/payable|zakat_due|zakat_amount/i);
     expect(migration).not.toMatch(/\bDROP\b|\bALTER TABLE\b/i);
     expect(migration.match(/INSERT INTO zakat_regulatory_gates[\s\S]*?;/)![0]).not.toMatch(/'verified'/);
-    for (const g of ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat']) expect(migration).toMatch(new RegExp(`'${g}'.*TRUE\\)`));
+    for (const g of ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval']) expect(migration).toMatch(new RegExp(`'${g}'.*TRUE\\)`));
+  });
+});
+
+import { taxReadiness } from '../src/modules/annual-closing/annual-closing.service';
+
+describe('Zakat worksheet and tax workpaper consistency in annual closing readiness', () => {
+  const wp = (over: object = {}) => ({ accounting_profile_id: 'p', tax_path: 'zakat', workflow_status: 'approved', professional_review_required: false, unresolved: 0, source_drift: false, ...over });
+  const zw = (over: object = {}) => ({ revision_no: 2, approved_snapshot_fingerprint: 'fp', source_drift: false, ...over });
+  it('leaves the workpaper outcome and package summary untouched when no approved worksheet exists', () => {
+    const r = taxReadiness('zakat', 'p', wp(), 0, null);
+    expect(r.status).toBe('ready');
+    expect(Object.keys(r.summary)).not.toContain('zakat_worksheet_revision');
+  });
+  it('reports the approved worksheet revision and fingerprint in the package summary', () => {
+    const r = taxReadiness('zakat', 'p', wp(), 0, zw());
+    expect(r).toMatchObject({ status: 'ready', summary: { zakat_worksheet_revision: 2, zakat_worksheet_snapshot_fingerprint: 'fp', calculation_performed: false } });
+  });
+  it('never makes an unapproved workpaper ready because a worksheet is approved', () => {
+    const r = taxReadiness('zakat', 'p', wp({ workflow_status: 'draft' }), 0, zw());
+    expect(r.ready).toBe(false); expect(r.summary.blockers).toContain('workpaper_not_approved');
+  });
+  it('blocks when an approved worksheet drifted from its sources, even with an approved workpaper', () => {
+    const r = taxReadiness('zakat', 'p', wp(), 0, zw({ source_drift: true }));
+    expect(r).toMatchObject({ status: 'blocked', ready: false });
+    expect(r.summary.blockers).toContain('zakat_worksheet_source_drift');
   });
 });

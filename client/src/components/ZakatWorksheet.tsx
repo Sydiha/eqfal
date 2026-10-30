@@ -6,7 +6,7 @@ import './ZakatWorksheet.css';
 // until the regulatory gates are verified by the company's qualified accountant.
 type Account = { account_id: string; code: string; name: string; name_ar: string | null; statement_category: string; amount_cents: string };
 type Classification = { id: string; account_id: string; zakat_type: string; reg_article: string; evidence_document_id: string | null; note: string | null };
-type Adjustment = { id: string; description: string; direction: 'add' | 'deduct'; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number };
+type Adjustment = { id: string; description: string; direction: 'add' | 'deduct'; professional_review_required?: boolean; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number };
 type Eligibility = { id: string; partner_id: string; partner_name: string; ownership_class: string; effective_from: string; effective_to: string | null; evidence_document_id: string; verification_status: string; entity_ultimate_ownership_note: string | null; version: number };
 type Gate = { code: string; title: string; blocks_approval: boolean; status: string; article_ref: string };
 type OwnershipPartner = { partner_id: string; name: string; ownership_bps4: string; eligibility: null | { ownership_class: string; evidence_document_id: string } };
@@ -101,7 +101,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   };
   const addAdjustment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
-    if (await ws('/adjustments', 'POST', { description: val(f, 'description'), direction: val(f, 'direction'), amount: val(f, 'amount'), reg_article: val(f, 'reg_article'), evidence_document_id: val(f, 'evidence_document_id'), evidence_note: val(f, 'evidence_note'), version: w!.version })) (e.target as HTMLFormElement).reset();
+    if (await ws('/adjustments', 'POST', { description: val(f, 'description'), direction: val(f, 'direction'), amount: val(f, 'amount'), reg_article: val(f, 'reg_article'), evidence_document_id: val(f, 'evidence_document_id'), evidence_note: val(f, 'evidence_note'), professional_review_required: f.get('professional_review_required') === 'on', version: w!.version })) (e.target as HTMLFormElement).reset();
   };
   const workflow = (name: string, extra: object = {}) => ws(`/${name}`, 'POST', { version: w!.version, ...extra });
 
@@ -132,7 +132,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
               <td className="zw-actions">
                 {e.verification_status === 'unconfirmed' && p.canConfirmOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => void call(`/api/zakat-eligibility/${e.id}/confirm`, 'POST', { version: e.version })}>{t('zakatWorksheet.confirm')}</button>}
                 {e.verification_status === 'unconfirmed' && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => void call(`/api/zakat-eligibility/${e.id}`, 'DELETE', { version: e.version })}>{t('zakatWorksheet.remove')}</button>}
-                {e.verification_status === 'confirmed' && !e.effective_to && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => { const d = window.prompt(t('zakatWorksheet.endDatePrompt'), data.ownership_live.as_of_date); if (d) void call(`/api/zakat-eligibility/${e.id}/end`, 'POST', { version: e.version, effective_to: d }); }}>{t('zakatWorksheet.end')}</button>}
+                {e.verification_status === 'confirmed' && !e.effective_to && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => { const d = window.prompt(t('zakatWorksheet.endDatePrompt'), data.ownership_live.as_of_date); if (!d) return; const why = window.prompt(t('zakatWorksheet.endReasonPrompt')); if (why && why.trim()) void call(`/api/zakat-eligibility/${e.id}/end`, 'POST', { version: e.version, effective_to: d, reason: why.trim() }); }}>{t('zakatWorksheet.end')}</button>}
               </td></tr>)}</tbody></table></div>}
         {p.canCreateOwnership && <form className="zw-form" onSubmit={(e) => void addEligibility(e)}>
           <label>{t('zakatWorksheet.partner')}<select name="partner_id" required>{data.ownership_live.partners.map((o) => <option key={o.partner_id} value={o.partner_id}>{o.name}</option>)}</select></label>
@@ -177,7 +177,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <h4>{t('zakatWorksheet.adjTitle')}</h4>
         {data.adjustments.length === 0 ? <p className="zw-muted">{t('zakatWorksheet.noAdjustments')}</p> :
           <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.description')}</th><th>{t('zakatWorksheet.direction')}</th><th>{t('zakatWorksheet.amount')}</th><th>{t('zakatWorksheet.article')}</th><th>{t('zakatWorksheet.evidence')}</th><th /></tr></thead>
-            <tbody>{data.adjustments.map((a) => <tr key={a.id}><td>{a.description}</td><td>{t(`zakatWorksheet.directions.${a.direction}`)}</td><td className="zw-num"><bdi>{a.amount}</bdi></td><td><bdi>{a.reg_article}</bdi></td><td>{a.evidence_document_id ? documents.find((d) => d.id === a.evidence_document_id)?.original_filename ?? t('zakatWorksheet.document') : a.evidence_note}</td>
+            <tbody>{data.adjustments.map((a) => <tr key={a.id}><td>{a.description}{a.professional_review_required && <> <span className="ac-badge ac-badge--warn">{t('zakatWorksheet.professionalReviewFlag')}</span></>}</td><td>{t(`zakatWorksheet.directions.${a.direction}`)}</td><td className="zw-num"><bdi>{a.amount}</bdi></td><td><bdi>{a.reg_article}</bdi></td><td>{a.evidence_document_id ? documents.find((d) => d.id === a.evidence_document_id)?.original_filename ?? t('zakatWorksheet.document') : a.evidence_note}</td>
               <td>{draft && p.canDeleteAdjustment && <button type="button" className="ac-btn" disabled={busy} onClick={() => void ws(`/adjustments/${a.id}`, 'DELETE', { version: w.version })}>{t('zakatWorksheet.delete')}</button>}</td></tr>)}</tbody></table></div>}
         {draft && p.canCreateAdjustment && <form className="zw-form" onSubmit={(e) => void addAdjustment(e)}>
           <label>{t('zakatWorksheet.description')}<input name="description" required maxLength={500} /></label>
@@ -186,6 +186,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           <label>{t('zakatWorksheet.article')}<input name="reg_article" required maxLength={100} /></label>
           <label>{t('zakatWorksheet.evidenceDoc')}{docSelect('evidence_document_id')}</label>
           <label>{t('zakatWorksheet.evidenceNote')}<input name="evidence_note" maxLength={2000} /></label>
+          <label className="zw-check"><input type="checkbox" name="professional_review_required" /> {t('zakatWorksheet.professionalReview')}</label>
           <button className="ac-btn ac-btn--primary" disabled={busy}>{t('zakatWorksheet.addAdjustment')}</button>
         </form>}
       </div>}

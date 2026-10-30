@@ -122,6 +122,9 @@ export function unclassifiedAccounts(balances: BalancesSnapshot | null, classifi
 
 export type GateRow = { code: string; title: string; article_ref: string; blocks_approval: boolean; status: string; verified_by_name: string | null; verified_on: string | null; verification_reference: string | null };
 
+/** Gates that must be verified before any calculation or approval is activated. Enforced in code even if a gate row is missing or downgraded in the database. */
+export const REQUIRED_BLOCKING_GATES = ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval'] as const;
+
 export type ReadinessInput = {
   ownership: OwnershipVerification;
   periodReason: string | null;
@@ -131,6 +134,7 @@ export type ReadinessInput = {
   balancesDrift: boolean;
   ownershipDrift: boolean;
   gates: GateRow[];
+  investmentClassifications?: number;
 };
 export type Readiness = {
   preparation_blockers: string[];
@@ -151,11 +155,16 @@ export function evaluateReadiness(i: ReadinessInput): Readiness {
   if (!i.balances) prep.add('balances_not_captured');
   const unclassified = unclassifiedAccounts(i.balances, i.classifiedAccountIds).length;
   if (unclassified > 0) prep.add('unclassified_balance');
+  if ((i.investmentClassifications ?? 0) > 0) prep.add('unsupported_investment_deduction');
   if (i.balancesDrift) prep.add('balances_source_drift');
   if (i.ownershipDrift) prep.add('ownership_source_drift');
-  const gateBlockers = i.gates.filter((g) => g.blocks_approval && g.status !== 'verified').map((g) => g.code).sort();
+  const byCode = new Map(i.gates.map((g) => [g.code, g]));
+  const gateBlockers = [...new Set([
+    ...REQUIRED_BLOCKING_GATES.filter((code) => byCode.get(code)?.status !== 'verified'),
+    ...i.gates.filter((g) => g.blocks_approval && g.status !== 'verified').map((g) => g.code),
+  ])].sort();
   const prepList = [...prep].sort();
-  const anyGateOpen = i.gates.some((g) => g.status !== 'verified');
+  const anyGateOpen = gateBlockers.length > 0 || i.gates.some((g) => g.status !== 'verified');
   return {
     preparation_blockers: prepList, gate_blockers: gateBlockers, unclassified_account_count: unclassified,
     can_submit: prepList.length === 0, can_approve: prepList.length === 0 && gateBlockers.length === 0,

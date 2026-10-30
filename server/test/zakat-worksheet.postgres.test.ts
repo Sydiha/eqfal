@@ -4,7 +4,7 @@ import { startHarness } from './helpers/http-pg';
 // G6-1 Zakat preparation workflow (real PostgreSQL, disposable DATABASE_URL only): eligibility evidence, ownership/balances snapshots,
 // accountant-confirmed classifications, revisions, permissions, tenant isolation, audit, immutability and the annual package summary.
 const describeDatabase = process.env['DATABASE_URL'] ? describe : describe.skip;
-const BLOCKING_GATES = ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat'];
+const BLOCKING_GATES = ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval'];
 
 describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
   let h: Awaited<ReturnType<typeof startHarness>>;
@@ -108,8 +108,14 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     const second = (await t.owner.client.req('POST', '/zakat-eligibility', { partner_id: t.partner, ownership_class: 'gcc_natural', effective_from: t.start, evidence_document_id: t.doc })).json.eligibility;
     const overlap = await t.owner.client.req('POST', `/zakat-eligibility/${second.id}/confirm`, { version: second.version });
     expect(overlap.status).toBe(409);
-    const ended = await t.owner.client.req('POST', `/zakat-eligibility/${row.id}/end`, { version: row.version, effective_to: '2025-06-30' });
+    const noReason = await t.owner.client.req('POST', `/zakat-eligibility/${row.id}/end`, { version: row.version, effective_to: '2025-06-30' });
+    expect(noReason.status).toBe(400);
+    await expect(h.q("UPDATE zakat_ownership_eligibility SET effective_to='2025-06-30' WHERE id=$1", [row.id])).rejects.toThrow(/requires a reason/);
+    const ended = await t.owner.client.req('POST', `/zakat-eligibility/${row.id}/end`, { version: row.version, effective_to: '2025-06-30', reason: 'Ownership transferred' });
     expect(ended.status).toBe(200);
+    expect(await audit(t.co, 'zakat_eligibility.end')).toBe(1);
+    expect((await h.q('SELECT reason FROM audit_log WHERE company_id=$1 AND action=$2', [t.co, 'zakat_eligibility.end']))[0].reason).toBe('Ownership transferred');
+    await expect(h.q("UPDATE zakat_ownership_eligibility SET end_reason='changed' WHERE id=$1", [row.id])).rejects.toThrow(/immutable/);
     expect((await get(t)).ownership_live.blockers).toContain('partner_eligibility_unconfirmed');
     expect(await audit(t.co, 'zakat_eligibility.confirm')).toBeGreaterThan(0);
   });
@@ -290,5 +296,20 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
       expect(String(drifted.summary['blockers'])).toContain('zakat_worksheet_source_drift');
       expect(taxReadiness('zakat', 'p', wk, 0, null).status).toBe('ready');
     } finally { await resetGates(); }
+  });
+
+  it('keeps regulatory gates from being deleted, downgraded or truncated, and flags investments and professional review', async () => {
+    await expect(h.q("DELETE FROM zakat_regulatory_gates WHERE code='B9_reference_cases_approval'")).rejects.toThrow(/cannot be deleted/);
+    await expect(h.q("UPDATE zakat_regulatory_gates SET blocks_approval=FALSE WHERE code='B3_rounding'")).rejects.toThrow(/stop blocking/);
+    await expect(h.q('TRUNCATE zakat_regulatory_gates')).rejects.toThrow(/truncated/);
+    await expect(h.q("UPDATE zakat_regulatory_gates SET status='verified' WHERE code='B0_amendment_1248'")).rejects.toThrow();
+    const t = await setup('adj9');
+    expect((await post(t, '', {})).status).toBe(201);
+    const noEvidence = await post(t, '/adjustments', { description: 'x', direction: 'add', amount: '1.00', reg_article: 'Art. 23', version: (await get(t)).worksheet.version, professional_review_required: true });
+    expect(noEvidence.json.code).toBe('ZAKAT_EVIDENCE_REQUIRED');
+    const ok = await post(t, '/adjustments', { description: 'x', direction: 'add', amount: '1.00', reg_article: 'Art. 23', evidence_note: 'Board minute 4', professional_review_required: true, version: (await get(t)).worksheet.version });
+    expect(ok.status).toBe(201);
+    expect((await get(t)).adjustments[0].professional_review_required).toBe(true);
+    expect(await audit(t.co, 'zakat_worksheet.adjustment.create')).toBe(1);
   });
 });

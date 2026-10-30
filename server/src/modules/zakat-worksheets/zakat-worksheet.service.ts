@@ -101,14 +101,14 @@ export class ZakatWorksheetService {
     const adjustments = (await r.query(`SELECT *, amount::text, created_at::text, updated_at::text FROM zakat_worksheet_adjustments WHERE company_id=$1 AND worksheet_id=$2 ORDER BY zakat_worksheet_adjustments.created_at, id`, [company, worksheetId])).rows;
     return { classifications, adjustments };
   }
-  private readiness(ws: Worksheet | null, own: { verification: OwnershipVerification; fingerprint: string; fy: { start_date: string; end_date: string } }, liveBalancesFp: string | null, classifiedIds: Set<string>, gates: GateRow[]) {
+  private readiness(ws: Worksheet | null, own: { verification: OwnershipVerification; fingerprint: string; fy: { start_date: string; end_date: string } }, liveBalancesFp: string | null, classifiedIds: Set<string>, gates: GateRow[], investmentClassifications = 0) {
     return evaluateReadiness({
       ownership: own.verification,
       periodReason: unsupportedPeriodReason(own.fy.start_date, own.fy.end_date),
       declarationsOk: Boolean(ws?.non_financing_confirmed && ws?.accounting_records_confirmed),
       balances: ws?.balances_snapshot ?? null, classifiedAccountIds: classifiedIds,
       balancesDrift: Boolean(ws && liveBalancesFp !== null && ws.balances_fingerprint !== liveBalancesFp),
-      ownershipDrift: Boolean(ws && ws.ownership_fingerprint !== own.fingerprint), gates,
+      ownershipDrift: Boolean(ws && ws.ownership_fingerprint !== own.fingerprint), gates, investmentClassifications,
     });
   }
 
@@ -123,7 +123,7 @@ export class ZakatWorksheetService {
       if (OPEN.includes(ws.status) || ws.status === 'approved') liveFp = (await this.captureBalances(company, year).catch(() => null))?.fingerprint ?? null;
       children = (await this.children(company, ws.id, this.db)) as typeof children;
     }
-    const readiness = this.readiness(ws, own, liveFp, new Set(children.classifications.map((c) => c.account_id)), gates);
+    const readiness = this.readiness(ws, own, liveFp, new Set(children.classifications.map((c) => c.account_id)), gates, (children.classifications as unknown as { zakat_type: string }[]).filter((c) => c.zakat_type === 'deductible_investment').length);
     return {
       scope: { fiscal_year: own.fy, unsupported_reason: unsupportedPeriodReason(own.fy.start_date, own.fy.end_date) },
       worksheet: ws, revisions: revisions.map((r) => ({ id: r.id, revision_no: r.revision_no, status: r.status, revision_reason: r.revision_reason, approved_at: r.approved_at })),
@@ -243,20 +243,20 @@ export class ZakatWorksheetService {
     if (!i.description.trim() || !['add', 'deduct'].includes(i.direction) || !/^(?:0|[1-9]\d{0,15})\.\d{2}$/.test(i.amount) || i.amount === '0.00' || !i.reg_article.trim()) throw new ZakatValidationError('Invalid adjustment', 'ZAKAT_INVALID_ADJUSTMENT');
     if (!i.evidence_document_id && !(i.evidence_note ?? '').trim()) throw new ZakatValidationError('An adjustment needs an evidence document or an evidence note', 'ZAKAT_EVIDENCE_REQUIRED');
   }
-  async addAdjustment(company: string, year: string, actor: string, input: { description: string; direction: string; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number }) {
+  async addAdjustment(company: string, year: string, actor: string, input: { description: string; direction: string; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; professional_review_required: boolean; version: number }) {
     this.adjustmentChecks(input);
     await this.tx(async (c) => {
       const ws = await this.lockOpen(company, year, c);
       this.requireDraft(ws, input.version);
       const row = (await c.query(
-        `INSERT INTO zakat_worksheet_adjustments(company_id, worksheet_id, description, direction, amount, reg_article, evidence_document_id, evidence_note, created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *, amount::text`,
-        [company, ws.id, input.description.trim(), input.direction, input.amount, input.reg_article.trim(), input.evidence_document_id, input.evidence_note, actor])).rows[0];
+        `INSERT INTO zakat_worksheet_adjustments(company_id, worksheet_id, description, direction, amount, reg_article, evidence_document_id, evidence_note, professional_review_required, created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *, amount::text`,
+        [company, ws.id, input.description.trim(), input.direction, input.amount, input.reg_article.trim(), input.evidence_document_id, input.evidence_note, input.professional_review_required, actor])).rows[0];
       await this.bump(c, company, ws.id);
       await this.log(c, company, actor, 'zakat_worksheet.adjustment.create', 'zakat_worksheet_adjustment', row.id, null, row);
     });
     return this.get(company, year);
   }
-  async changeAdjustment(company: string, year: string, id: string, actor: string, input: { description: string; direction: string; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number; adjustment_version: number }) {
+  async changeAdjustment(company: string, year: string, id: string, actor: string, input: { description: string; direction: string; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; professional_review_required: boolean; version: number; adjustment_version: number }) {
     this.adjustmentChecks(input);
     await this.tx(async (c) => {
       const ws = await this.lockOpen(company, year, c);
@@ -264,9 +264,9 @@ export class ZakatWorksheetService {
       const before = (await c.query('SELECT *, amount::text FROM zakat_worksheet_adjustments WHERE id=$1 AND company_id=$2 AND worksheet_id=$3', [id, company, ws.id])).rows[0];
       if (!before) throw new ZakatNotFoundError();
       const row = (await c.query(
-        `UPDATE zakat_worksheet_adjustments SET description=$4, direction=$5, amount=$6, reg_article=$7, evidence_document_id=$8, evidence_note=$9, version=version+1, updated_at=NOW()
-         WHERE id=$1 AND company_id=$2 AND worksheet_id=$3 AND version=$10 RETURNING *, amount::text`,
-        [id, company, ws.id, input.description.trim(), input.direction, input.amount, input.reg_article.trim(), input.evidence_document_id, input.evidence_note, input.adjustment_version])).rows[0];
+        `UPDATE zakat_worksheet_adjustments SET description=$4, direction=$5, amount=$6, reg_article=$7, evidence_document_id=$8, evidence_note=$9, professional_review_required=$10, version=version+1, updated_at=NOW()
+         WHERE id=$1 AND company_id=$2 AND worksheet_id=$3 AND version=$11 RETURNING *, amount::text`,
+        [id, company, ws.id, input.description.trim(), input.direction, input.amount, input.reg_article.trim(), input.evidence_document_id, input.evidence_note, input.professional_review_required, input.adjustment_version])).rows[0];
       if (!row) throw new ZakatConflictError('Adjustment was modified', 'ZAKAT_VERSION_CONFLICT');
       await this.bump(c, company, ws.id);
       await this.log(c, company, actor, 'zakat_worksheet.adjustment.update', 'zakat_worksheet_adjustment', id, before, row);
@@ -288,9 +288,10 @@ export class ZakatWorksheetService {
   // ---------- workflow ----------
   private async liveReadiness(company: string, year: string, ws: Worksheet, c: PoolClient, liveFp: string) {
     const own = await this.liveOwnership(company, year, c);
-    const classified = new Set((await c.query<{ account_id: string }>('SELECT account_id FROM zakat_account_classifications WHERE company_id=$1 AND worksheet_id=$2', [company, ws.id])).rows.map((r) => r.account_id));
+    const classRows = (await c.query<{ account_id: string; zakat_type: string }>('SELECT account_id, zakat_type FROM zakat_account_classifications WHERE company_id=$1 AND worksheet_id=$2', [company, ws.id])).rows;
+    const classified = new Set(classRows.map((r) => r.account_id));
     const gates = await this.gates(c);
-    return { own, gates, readiness: this.readiness(ws, own, liveFp, classified, gates) };
+    return { own, gates, readiness: this.readiness(ws, own, liveFp, classified, gates, classRows.filter((r) => r.zakat_type === 'deductible_investment').length) };
   }
 
   async transition(company: string, year: string, actor: string, action: 'submit' | 'review' | 'approve', version: number) {
@@ -398,14 +399,15 @@ export class ZakatWorksheetService {
       return row;
     });
   }
-  async endEligibility(company: string, actor: string, id: string, version: number, effectiveTo: string) {
+  async endEligibility(company: string, actor: string, id: string, version: number, effectiveTo: string, reason: string) {
+    if (!reason.trim()) throw new ZakatValidationError('A reason is required to end a confirmed eligibility period', 'ZAKAT_REASON_REQUIRED');
     return this.tx(async (c) => {
       const before = (await c.query('SELECT *, effective_from::text ef FROM zakat_ownership_eligibility WHERE id=$1 AND company_id=$2 FOR UPDATE', [id, company])).rows[0];
       if (!before) throw new ZakatNotFoundError();
       if (before.version !== version) throw new ZakatConflictError('Eligibility row was modified', 'ZAKAT_VERSION_CONFLICT');
       if (before.effective_to !== null || effectiveTo < before.ef) throw new ZakatValidationError('The end date is invalid or already set', 'ZAKAT_INVALID_DATES');
-      const row = (await c.query(`UPDATE zakat_ownership_eligibility SET effective_to=$3, version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *, effective_from::text, effective_to::text`, [id, company, effectiveTo])).rows[0];
-      await this.log(c, company, actor, 'zakat_eligibility.end', 'zakat_ownership_eligibility', id, before, row);
+      const row = (await c.query(`UPDATE zakat_ownership_eligibility SET effective_to=$3, end_reason=$4, ended_by_user_id=$5, ended_at=NOW(), version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *, effective_from::text, effective_to::text`, [id, company, effectiveTo, reason.trim(), actor])).rows[0];
+      await this.log(c, company, actor, 'zakat_eligibility.end', 'zakat_ownership_eligibility', id, before, row, reason.trim());
       return row;
     });
   }

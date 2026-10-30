@@ -15,6 +15,9 @@ CREATE TABLE zakat_ownership_eligibility (
   confirmed_by_user_id UUID REFERENCES users(id),
   confirmed_at TIMESTAMPTZ,
   note TEXT CHECK (note IS NULL OR char_length(note) <= 1000),
+  end_reason TEXT CHECK (end_reason IS NULL OR (btrim(end_reason) <> '' AND char_length(end_reason) <= 2000)),
+  ended_by_user_id UUID REFERENCES users(id),
+  ended_at TIMESTAMPTZ,
   created_by_user_id UUID NOT NULL REFERENCES users(id),
   version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -23,6 +26,7 @@ CREATE TABLE zakat_ownership_eligibility (
   FOREIGN KEY (partner_id, company_id) REFERENCES partners(id, company_id) ON DELETE RESTRICT,
   FOREIGN KEY (evidence_document_id, company_id) REFERENCES documents(id, company_id) ON DELETE RESTRICT,
   CHECK (effective_to IS NULL OR effective_to >= effective_from),
+  CHECK (end_reason IS NULL OR (effective_to IS NOT NULL AND ended_by_user_id IS NOT NULL AND ended_at IS NOT NULL)),
   CHECK (verification_status = 'unconfirmed' OR (confirmed_by_user_id IS NOT NULL AND confirmed_at IS NOT NULL)),
   CHECK (ownership_class NOT IN ('saudi_entity','gcc_entity') OR btrim(COALESCE(entity_ultimate_ownership_note, '')) <> '')
 );
@@ -41,8 +45,13 @@ BEGIN
        OR NEW.evidence_document_id <> OLD.evidence_document_id
        OR NEW.entity_ultimate_ownership_note IS DISTINCT FROM OLD.entity_ultimate_ownership_note
        OR NEW.confirmed_by_user_id IS DISTINCT FROM OLD.confirmed_by_user_id OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at
-       OR (OLD.effective_to IS NOT NULL AND NEW.effective_to IS DISTINCT FROM OLD.effective_to) THEN
+       OR (OLD.effective_to IS NOT NULL AND NEW.effective_to IS DISTINCT FROM OLD.effective_to)
+       OR (OLD.end_reason IS NOT NULL AND (NEW.end_reason IS DISTINCT FROM OLD.end_reason OR NEW.ended_by_user_id IS DISTINCT FROM OLD.ended_by_user_id OR NEW.ended_at IS DISTINCT FROM OLD.ended_at)) THEN
       RAISE EXCEPTION 'Confirmed Zakat eligibility rows are immutable' USING ERRCODE = '23514';
+    END IF;
+    -- Ending a confirmed period needs a recorded reason and actor.
+    IF OLD.effective_to IS NULL AND NEW.effective_to IS NOT NULL AND (NEW.end_reason IS NULL OR NEW.ended_by_user_id IS NULL OR NEW.ended_at IS NULL) THEN
+      RAISE EXCEPTION 'Ending a confirmed Zakat eligibility period requires a reason' USING ERRCODE = '23514';
     END IF;
   END IF;
   IF NEW.verification_status = 'confirmed' AND EXISTS (
@@ -127,6 +136,7 @@ CREATE TABLE zakat_worksheet_adjustments (
   reg_article TEXT NOT NULL CHECK (btrim(reg_article) <> '' AND char_length(reg_article) <= 100),
   evidence_document_id UUID,
   evidence_note TEXT CHECK (evidence_note IS NULL OR char_length(evidence_note) <= 2000),
+  professional_review_required BOOLEAN NOT NULL DEFAULT FALSE,
   created_by_user_id UUID NOT NULL REFERENCES users(id),
   version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -191,4 +201,19 @@ INSERT INTO zakat_regulatory_gates (code, title, article_ref, blocks_approval) V
   ('B4_cap_ordering', 'Order of applying the Art. 23(2) cap with Arts. 25 and 29(2)(b)', 'Arts. 23, 25, 29', TRUE),
   ('B5_max_base_effect', 'Effect of the maximum base when the computed base exceeds it', 'Art. 28', FALSE),
   ('B6_account_mapping_policy', 'Company-level account mapping policy and treatment after closing', 'Art. 17', FALSE),
-  ('B7_book_profit_after_zakat', 'Book profit "after Zakat and tax" when no Zakat provision is recorded yet', 'Art. 23(3)', TRUE);
+  ('B7_book_profit_after_zakat', 'Book profit "after Zakat and tax" when no Zakat provision is recorded yet', 'Art. 23(3)', TRUE),
+  ('B9_reference_cases_approval', 'Accountant approval of the numerical reference cases before any calculation is activated', 'G6-1 accountant package', TRUE);
+
+-- Gates cannot be deleted, renamed, or downgraded to non-blocking by a plain data change; a blocking gate stays blocking.
+CREATE FUNCTION zakat_regulatory_gate_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Zakat regulatory gates cannot be deleted' USING ERRCODE = '23514'; END IF;
+  IF NEW.code <> OLD.code OR (OLD.blocks_approval AND NOT NEW.blocks_approval) THEN
+    RAISE EXCEPTION 'Zakat regulatory gates cannot be renamed or stop blocking approval' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER zakat_regulatory_gate_guard BEFORE UPDATE OR DELETE ON zakat_regulatory_gates FOR EACH ROW EXECUTE FUNCTION zakat_regulatory_gate_guard();
+CREATE FUNCTION zakat_regulatory_gate_no_truncate() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'Zakat regulatory gates cannot be truncated' USING ERRCODE = '23514'; END $$;
+CREATE TRIGGER zakat_regulatory_gate_no_truncate BEFORE TRUNCATE ON zakat_regulatory_gates FOR EACH STATEMENT EXECUTE FUNCTION zakat_regulatory_gate_no_truncate();
