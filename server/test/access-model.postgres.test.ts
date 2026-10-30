@@ -161,12 +161,12 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const equity = (await sa.req('POST', '/accounts', { code: 'SA-3000', name: 'Equity', name_en: 'Equity', account_type: 'equity' })).json;
     const journal = await sa.req('POST', '/journals', { fiscal_year_id: fyId, accounting_date: '2025-02-01', description: 'System Admin journal' });
     expect(journal.status).toBe(201);
-    const lines = await sa.req('PUT', `/journals/${journal.json.id}/lines`, { lines: [{ account_id: cash.id, debit: '100.00', credit: '0', memo: null }, { account_id: equity.id, debit: '0', credit: '90.00', memo: null }] });
+    const lines = await sa.req('PUT', `/journals/${journal.json.id}/lines`, { lines: [{ account_id: cash.id, debit: '100.00', credit: '0', memo: null }, { account_id: equity.id, debit: '0', credit: '90.00', memo: null }] }, { 'if-match': '1' });
     expect(lines.status, JSON.stringify(lines.json)).toBe(200);
     const unbalanced = await sa.req('POST', `/journals/${journal.json.id}/post`, {});
     expect(unbalanced.status).not.toBe(200);
     expect(unbalanced.status).not.toBe(403);
-    await sa.req('PUT', `/journals/${journal.json.id}/lines`, { lines: [{ account_id: cash.id, debit: '100.00', credit: '0', memo: null }, { account_id: equity.id, debit: '0', credit: '100.00', memo: null }] });
+    await sa.req('PUT', `/journals/${journal.json.id}/lines`, { lines: [{ account_id: cash.id, debit: '100.00', credit: '0', memo: null }, { account_id: equity.id, debit: '0', credit: '100.00', memo: null }] }, { 'if-match': '2' });
     const posted = await sa.req('POST', `/journals/${journal.json.id}/post`, {});
     expect(posted.status, JSON.stringify(posted.json)).toBe(200);
     // Closing an unready fiscal year is refused by the readiness rules (not by authorization).

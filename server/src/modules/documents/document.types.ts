@@ -15,6 +15,7 @@ export interface DocumentIntake {
 export interface DocumentRecord extends DocumentIntake {
   relational_counterparty_name?: string | null;
   id: string;
+  version: number;
   company_id: string;
   uploaded_by_user_id: string;
   status: DocumentStatus;

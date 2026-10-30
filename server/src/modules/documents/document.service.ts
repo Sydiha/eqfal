@@ -1,3 +1,4 @@
+import { assertRevision } from '../../shared/revision';
 import crypto from 'crypto';
 import { Pool, PoolClient } from 'pg';
 import logger from '../../shared/logger';
@@ -27,7 +28,7 @@ export interface ReviewDocumentInput extends DocumentTransitionInput {
   note: string | null;
 }
 
-export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; }
+export interface UpdateDocumentIntakeInput extends DocumentTransitionInput { intake: DocumentIntakeUpdate; expectedVersion?: number | null; }
 
 export class DocumentNotFoundError extends Error {}
 export type DocumentConflictCode = 'DOCUMENT_STATE_CONFLICT' | 'DOCUMENT_COUNTERPARTY_INVALID' | 'DOCUMENT_APPROVAL_DATA_INCOMPLETE';
@@ -195,6 +196,7 @@ export class DocumentService {
     return this.withTransaction(async (client) => {
       const current = await this.documents.findByIdForUpdate(input.documentId, input.companyId, client);
       if (!current) throw new DocumentNotFoundError('Document not found');
+      assertRevision(input.expectedVersion, current.version, 'DOCUMENT_VERSION_CONFLICT');
       const accountingDate = input.intake.document_date === undefined ? current.document_date : input.intake.document_date;
       if (accountingDate) await assertAccountingDateWritable(input.companyId, accountingDate, client);
       if (current.document_date && current.document_date !== accountingDate) await assertAccountingDateWritable(input.companyId, current.document_date, client);

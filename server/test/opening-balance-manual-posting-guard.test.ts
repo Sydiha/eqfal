@@ -69,8 +69,8 @@ describe('manual opening_balance journals are rejected over HTTP even for privil
 
   it('update to opening_balance', async () => {
     mocks.query.mockImplementation(async (sql: string) =>
-      /FOR UPDATE/.test(sql) ? { rows: [{ id: J, fiscal_year_id: FY, accounting_date: '2026-01-01', description: 'x', reference: null, source_type: null, source_id: null, entry_type: 'standard', status: 'draft' }], rowCount: 1 } : { rows: [], rowCount: 0 });
-    const r = await request(app).patch(`/api/journals/${J}`).send({ entry_type: 'opening_balance' });
+      /FOR UPDATE/.test(sql) ? { rows: [{ id: J, version: 1, fiscal_year_id: FY, accounting_date: '2026-01-01', description: 'x', reference: null, source_type: null, source_id: null, entry_type: 'standard', status: 'draft' }], rowCount: 1 } : { rows: [], rowCount: 0 });
+    const r = await request(app).patch(`/api/journals/${J}`).set('If-Match', '1').send({ entry_type: 'opening_balance' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('OPENING_BALANCE_MANUAL_JOURNAL_BLOCKED');
     expect(mocks.query.mock.calls.some(([sql]) => /UPDATE journal_entries SET fiscal_year_id/.test(String(sql)))).toBe(false);

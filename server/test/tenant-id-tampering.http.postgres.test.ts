@@ -109,7 +109,7 @@ describeDatabase('Cross-company ID tampering on mutation routes (PostgreSQL)', (
     await B.req('PUT', `/journals/${b['journal']}/lines`, { lines: [
       { account_id: accounts[0], debit: '100.00', credit: '0.00' },
       { account_id: accounts[1], debit: '0.00', credit: '100.00' },
-    ] });
+    ] }, { 'if-match': '1' });
     r = await B.req('POST', '/documents', PNG, { 'content-type': 'image/png', 'x-file-name': 'b-secret.png' });
     b['document'] = r.json?.document?.id;
     r = await B.req('POST', '/bank-accounts', { display_name: 'Bank B', bank_name: 'X', currency_code: 'SAR' });

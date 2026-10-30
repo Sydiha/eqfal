@@ -47,7 +47,7 @@ describeDatabase('opening-balance posting guard (PostgreSQL)', () => {
 
     const std = await o.req('POST', '/journals', { fiscal_year_id: co.fy, accounting_date: '2026-01-01', description: 'draft' });
     expect(std.status).toBe(201);
-    const upd = await o.req('PATCH', `/journals/${std.json.id}`, { entry_type: 'opening_balance' });
+    const upd = await o.req('PATCH', `/journals/${std.json.id}`, { entry_type: 'opening_balance' }, { 'if-match': '1' });
     expect([upd.status, upd.json.code]).toEqual([409, 'OPENING_BALANCE_MANUAL_JOURNAL_BLOCKED']);
     expect((await h.q<{ entry_type: string }>('SELECT entry_type FROM journal_entries WHERE id=$1', [std.json.id]))[0]!.entry_type).toBe('standard');
 

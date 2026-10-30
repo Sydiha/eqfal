@@ -204,9 +204,9 @@ describe('Document API security boundary', () => {
     setContext(['document.edit']); mocks.updateIntake.mockResolvedValue({ ...document, document_type: 'purchase' });
     const res = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', company_id: 'co-other' });
     expect(res.status).toBe(400);
-    const valid = await request(app).patch('/api/documents/doc-1/intake').send({ document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 });
+    const valid = await request(app).patch('/api/documents/doc-1/intake').set('If-Match', '"3"').send({ document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 });
     expect(valid.status).toBe(200);
-    expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 } });
+    expect(mocks.updateIntake).toHaveBeenCalledWith({ documentId: 'doc-1', companyId: 'co-a', actorUserId: 'u1', intake: { document_type: 'purchase', counterparty_id: '11111111-1111-4111-8111-111111111111', total_amount: 12.25 }, expectedVersion: 3 });
   });
 
   it('enforces intake capability, same origin, validation, 404, and conflict', async () => {

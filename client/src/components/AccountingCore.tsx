@@ -193,6 +193,11 @@ const json = (method: string, body: unknown): RequestInit => ({
   headers: { "content-type": "application/json" },
   body: JSON.stringify(body),
 });
+/** Sends the revision the user last loaded so the server can reject an edit made over someone else's newer change. */
+const withRevision = (init: RequestInit, version: number | undefined): RequestInit =>
+  version === undefined
+    ? init
+    : { ...init, headers: { ...(init.headers as Record<string, string>), "if-match": String(version) } };
 const emptyLine = (): Line => ({
   account_id: "",
   debit: "0.00",
@@ -657,7 +662,7 @@ export function Accounting({
     try {
       await api(
         `/api/journals/${selected.id}/lines`,
-        json("PUT", serializeJournalLines(lines)),
+        withRevision(json("PUT", serializeJournalLines(lines)), selected.version),
         onUnauthorized,
       );
       mutationSucceeded();
