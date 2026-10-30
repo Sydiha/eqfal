@@ -169,8 +169,9 @@ export async function getFiscalYearCloseReadiness(
 
   const openingRows = num(d.opening_balances!.summary.unresolved_reviews);
   const blockerSpec: Array<[string, number]> = [
-    ['monthly_period_missing', num(d.monthly_close!.summary.missing_periods)],
-    ['monthly_period_open', num(d.monthly_close!.summary.open_periods)],
+    // Under the optional policy the monthly domain carries no blockers (it reports the open months instead); closed months stay protected by the guard.
+    ['monthly_period_missing', d.monthly_close!.summary.monthly_close_policy === 'optional' ? 0 : num(d.monthly_close!.summary.missing_periods)],
+    ['monthly_period_open', d.monthly_close!.summary.monthly_close_policy === 'optional' ? 0 : num(d.monthly_close!.summary.open_periods)],
     ['draft_journals', num(d.ledger!.summary.draft_journals)],
     ['unposted_operational_sources', num(d.ledger!.summary.unposted_operational_sources)],
     ['trial_balance_unbalanced', d.ledger!.summary.trial_balance_unbalanced ? 1 : 0],
@@ -199,6 +200,10 @@ export async function getFiscalYearCloseReadiness(
   const warn = (code: string, count: number, detail?: string) => warnings.push(detail === undefined ? { code, count } : { code, count, detail });
   const openReceivables = Number(d.receivables_payables!.summary.open_receivable_balance ?? 0);
   const openPayables = Number(d.receivables_payables!.summary.open_payable_balance ?? 0);
+  if (d.monthly_close!.summary.monthly_close_policy === 'optional') {
+    const left = num(d.monthly_close!.summary.open_periods) + num(d.monthly_close!.summary.missing_periods);
+    if (left > 0) warn('monthly_periods_left_open', left);
+  }
   if (openReceivables > 0) warn('open_receivable_balance', 1, String(d.receivables_payables!.summary.open_receivable_balance));
   if (openPayables > 0) warn('open_payable_balance', 1, String(d.receivables_payables!.summary.open_payable_balance));
   if (!['ready', 'not_applicable'].includes(d.zakat!.status)) warn('zakat_tax_workpaper_not_ready', 1, d.zakat!.status);

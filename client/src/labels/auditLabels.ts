@@ -63,7 +63,7 @@ const ACTIONS: Record<string, Pair> = {
   'company_accounting_profile.correction_create': ['Create corrective accounting profile', 'إنشاء نسخة تصحيحية للملف المحاسبي'],
   'company_accounting_profile.update_professional_review': ['Update accounting profile professional review', 'تعديل المراجعة المهنية للملف المحاسبي'],
   'counterparty.update': ['Update counterparty', 'تعديل طرف مقابل'], 'document.mark_incomplete': ['Mark document incomplete', 'وسم مستند بأنه غير مكتمل'], 'document.reject': ['Reject document', 'رفض مستند'],
-  'fiscal_year.create': ['Create fiscal year', 'إنشاء سنة مالية'], 'fiscal_year.status_change': ['Change fiscal year status', 'تغيير حالة سنة مالية'], 'fiscal_year.update': ['Update fiscal year', 'تعديل سنة مالية'],
+  'fiscal_year.create': ['Create fiscal year', 'إنشاء سنة مالية'], 'fiscal_year.monthly_close_policy_change': ['Change monthly closing policy', 'تغيير سياسة الإقفال الشهري'], 'fiscal_year.status_change': ['Change fiscal year status', 'تغيير حالة سنة مالية'], 'fiscal_year.update': ['Update fiscal year', 'تعديل سنة مالية'],
   'journal.approve': ['Approve journal entry', 'اعتماد قيد يومية'], 'obligation.update': ['Update obligation', 'تعديل التزام'],
   'opening_balance.return_to_draft': ['Return opening balances to draft', 'إرجاع الأرصدة الافتتاحية إلى مسودة'], 'opening_balance.submit_review': ['Submit opening balances for review', 'إرسال الأرصدة الافتتاحية للمراجعة'],
   'partner.update': ['Update partner', 'تعديل شريك'], 'partner_ownership.confirm': ['Confirm partner ownership', 'تأكيد ملكية شريك'], 'partner_ownership.update': ['Update partner ownership', 'تعديل ملكية شريك'],

@@ -73,6 +73,7 @@ const OVERRIDES: Record<string, Pair> = {
   'bank.reconciliation.settings': ['Activate bank reconciliation checks', 'تفعيل فحوصات المطابقة البنكية'],
   'obligation.settle': ['Settle obligations', 'تسوية الالتزامات'], 'invoice.create': ['Create invoices', 'إنشاء الفواتير'],
   'invoice.mapping.view': ['View invoice account mappings', 'عرض ربط حسابات الفواتير'], 'invoice.mapping.manage': ['Manage invoice account mappings (also needs view)', 'إدارة ربط حسابات الفواتير (يتطلب صلاحية العرض أيضًا)'],
+  'fiscal_year.monthly_close_policy.manage': ['Change the monthly closing policy of a fiscal year', 'تغيير سياسة الإقفال الشهري للسنة المالية'],
   'payment.settle': ['Settle payments', 'تسوية الدفعات'],
   'partner.transaction.view': ['View partner transactions and ledgers', 'عرض معاملات الشركاء وكشوفهم'],
   'partner.transaction.create': ['Prepare partner transactions', 'إعداد معاملات الشركاء'],
