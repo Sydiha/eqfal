@@ -62,6 +62,15 @@ export const PASSWORD_ERROR_CODES = [
   'PASSWORD_CHANGE_REQUIRED',
 ] as const;
 
+/** Stable codes for stale-write protection on draft edits (G7; each needs AR + EN). */
+export const REVISION_ERROR_CODES = [
+  'DOCUMENT_VERSION_CONFLICT',
+  'JOURNAL_VERSION_CONFLICT',
+  'FIXED_ASSET_VERSION_CONFLICT',
+  'REVISION_REQUIRED',
+  'REVISION_INVALID',
+] as const;
+
 export const FISCAL_YEAR_BLOCKER_CODES = [
   'monthly_period_missing', 'monthly_period_open', 'draft_journals', 'unposted_operational_sources',
   'trial_balance_unbalanced', 'unresolved_documents', 'unconfirmed_obligations',

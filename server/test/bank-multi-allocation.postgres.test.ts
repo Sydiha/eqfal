@@ -63,7 +63,7 @@ describeDatabase('one bank transaction, several document allocations (PostgreSQL
   async function settlementJournal(co: Co, settlementId: string, date: string, lines: Array<[string, string, string]>) {
     const created = await co.owner.client.req('POST', '/journals', { fiscal_year_id: co.fy, accounting_date: date, description: 'Settlement', source_type: 'document_settlement', source_id: settlementId });
     expect(created.status).toBe(201);
-    const put = await co.owner.client.req('PUT', `/journals/${created.json.id}/lines`, { lines: lines.map(([account_id, debit, credit]) => ({ account_id, debit, credit, memo: null })) });
+    const put = await co.owner.client.req('PUT', `/journals/${created.json.id}/lines`, { lines: lines.map(([account_id, debit, credit]) => ({ account_id, debit, credit, memo: null })) }, { 'if-match': '1' });
     expect(put.status, JSON.stringify(put.json)).toBe(200);
     return created.json.id as string;
   }
@@ -192,9 +192,9 @@ describeDatabase('one bank transaction, several document allocations (PostgreSQL
     const [s] = await settlementsOf(receipt);
     const wrongAccount = await settlementJournal(co, s!.id, '2026-01-20', [[co.otherCash, '250.00', '0'], [co.ar, '0', '250.00']]);
     expect((await post(co, wrongAccount)).json.error).toMatch(/linked bank ledger account/i);
-    await co.owner.client.req('PUT', `/journals/${wrongAccount}/lines`, { lines: [{ account_id: co.ar, debit: '250.00', credit: '0', memo: null }, { account_id: co.bankGl, debit: '0', credit: '250.00', memo: null }] });
+    await co.owner.client.req('PUT', `/journals/${wrongAccount}/lines`, { lines: [{ account_id: co.ar, debit: '250.00', credit: '0', memo: null }, { account_id: co.bankGl, debit: '0', credit: '250.00', memo: null }] }, { 'if-match': '2' });
     expect((await post(co, wrongAccount)).json.error).toMatch(/linked bank ledger account/i);  // wrong direction for a receipt
-    await co.owner.client.req('PUT', `/journals/${wrongAccount}/lines`, { lines: [{ account_id: co.bankGl, debit: '250.00', credit: '0', memo: null }, { account_id: co.ar, debit: '0', credit: '250.00', memo: null }] });
+    await co.owner.client.req('PUT', `/journals/${wrongAccount}/lines`, { lines: [{ account_id: co.bankGl, debit: '250.00', credit: '0', memo: null }, { account_id: co.ar, debit: '0', credit: '250.00', memo: null }] }, { 'if-match': '3' });
     expect((await post(co, wrongAccount)).status).toBe(200);
 
     const purchase = await doc(co, '80.00', { type: 'purchase' });

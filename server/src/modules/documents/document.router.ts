@@ -17,6 +17,7 @@ import { DocumentDeleteBlockedError, DocumentNotFoundError, DocumentReviewConfli
 import { DocumentIntakeUpdate, DocumentReviewDecision, DocumentType, isValidDocumentDate, isValidDocumentTotalAmount } from './document.types';
 import { AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import crypto from 'crypto';
+import { readExpectedRevision, StaleRevisionError } from '../../shared/revision';
 import { extractInvoiceSuggestions } from './document-extraction';
 
 export const documentRouter = Router();
@@ -262,13 +263,16 @@ documentRouter.patch(
     if (!context) return;
     const intake = parseIntake(req.body);
     if (!intake) { res.status(400).json({ error: 'Invalid document intake' }); return; }
+    const expectedVersion = readExpectedRevision(req, res);
+    if (expectedVersion === false) return;
     const service = serviceOr503(res);
     if (!service) return;
     try {
-      const document = await service.updateIntake({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, intake });
+      const document = await service.updateIntake({ documentId: req.params.id, companyId: context.activeCompanyId, actorUserId: context.user.id, intake, expectedVersion });
       res.status(200).json({ document });
     } catch (err) {
       if (err instanceof DocumentNotFoundError) { res.status(404).json({ error: 'Document not found' }); return; }
+      if (err instanceof StaleRevisionError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
       if (err instanceof DocumentReviewConflictError) { res.status(409).json({ error: 'Document intake conflict', code: err.code }); return; }
       if (err instanceof AccountingPeriodClosedError) { res.status(409).json({ error: err.message, code: err.code }); return; }
       throw err;

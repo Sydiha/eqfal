@@ -58,7 +58,7 @@ describeDatabase('custody accounting controls (PostgreSQL)', () => {
   async function journal(co: Co, type: string, sourceId: string, date: string, lines: Array<[string, string, string]>) {
     const created = await co.owner.client.req('POST', '/journals', { fiscal_year_id: co.fy, accounting_date: date, description: 'Custody', source_type: type, source_id: sourceId });
     expect(created.status, JSON.stringify(created.json)).toBe(201);
-    const put = await co.owner.client.req('PUT', `/journals/${created.json.id}/lines`, { lines: lines.map(([account_id, debit, credit]) => ({ account_id, debit, credit, memo: null })) });
+    const put = await co.owner.client.req('PUT', `/journals/${created.json.id}/lines`, { lines: lines.map(([account_id, debit, credit]) => ({ account_id, debit, credit, memo: null })) }, { 'if-match': '1' });
     expect(put.status, JSON.stringify(put.json)).toBe(200);
     return created.json.id as string;
   }

@@ -74,7 +74,7 @@ describeDatabase('Tenant isolation over HTTP (two companies, two users, PostgreS
     await client.req('PUT', `/journals/${out['journal']}/lines`, { lines: [
       { account_id: accountIds[0], debit: '100.00', credit: '0.00' },
       { account_id: accountIds[2], debit: '0.00', credit: '100.00' },
-    ] });
+    ] }, { 'if-match': '1' });
     r = await client.req('POST', '/counterparties', { name: `CP ${tag}`, type: 'supplier' });
     out['counterparty'] = r.json?.id;
     r = await client.req('POST', '/documents', PNG, { 'content-type': 'image/png', 'x-file-name': `secret-${tag}.png` });
@@ -226,7 +226,7 @@ describeDatabase('Tenant isolation over HTTP (two companies, two users, PostgreS
     const lines = await A.req('PUT', `/journals/${seedA['journal']}/lines`, { lines: [
       { account_id: seedB['accountDebit'], debit: '10.00', credit: '0.00' },
       { account_id: seedB['accountCredit'], debit: '0.00', credit: '10.00' },
-    ] });
+    ] }, { 'if-match': '1' });
     expect(lines.status).toBeGreaterThanOrEqual(400);
     expect(lines.status).toBeLessThan(500);
 

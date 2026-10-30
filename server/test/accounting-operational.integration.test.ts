@@ -47,6 +47,7 @@ class AccountingPool{
   if(sql.includes('COUNT(*)::text count')&&sql.includes('FROM journal_lines'))return{rows:[{count:String(this.lines.length),debit:'50.00',credit:'50.00',active:String(this.lines.length)}],rowCount:1};
   if(sql.includes('SELECT $1::numeric(18,2)=$2::numeric(18,2) matches'))return{rows:[{matches:values[0]===values[1]}],rowCount:1};
   if(sql.includes("UPDATE journal_entries SET status='posted'")){if(this.journal?.status!=='draft')return{rows:[],rowCount:0};this.journal={...this.journal,status:'posted',posted_at:new Date('2026-08-02T00:00:00Z')};return{rows:[this.journal],rowCount:1}}
+  if(sql.includes('UPDATE journal_entries SET updated_at=NOW()'))return{rows:[{version:2}],rowCount:1};
   if(sql.includes('INSERT INTO audit_log'))return{rows:[{id:'audit'}],rowCount:1};
   if(sql.includes('LEFT JOIN (journal_lines')&&sql.includes("j.status='posted'"))return{rows:this.journal?.status==='posted'?[{account_id:debitAccount,code:'1000',name:'Cash',account_type:'asset',debit_movement:'50.00',credit_movement:'0.00',debit_balance:'50.00',credit_balance:'0.00'}]:[],rowCount:this.journal?.status==='posted'?1:0};
   if(sql.includes('FROM invoice_adjustments'))return{rows:[],rowCount:0};
