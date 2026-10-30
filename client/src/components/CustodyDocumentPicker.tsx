@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Loader, Text, TextInput } from '@mantine/core';
 import { formatMoney } from '../money-format';
 import { formatDisplayDateLtr } from '../date-format';
@@ -7,8 +7,8 @@ export type EligibleDocument = { id: string; original_filename: string; referenc
 type Props = { custodyId: string; currency?: string; language: string; refreshKey: number; selected: EligibleDocument | null; onSelect: (doc: EligibleDocument | null) => void; onUnauthorized: () => void };
 
 const strings = {
-  en: { label: 'Approved document', search: 'Search by reference, supplier, file name or amount', loading: 'Searching documents…', empty: 'No eligible documents found. Only approved expense documents that are not yet linked to a custody, settlement or obligation, and that fit within the remaining custody balance, are listed.', error: 'Unable to search documents', change: 'Change', noRef: 'No reference', noSupplier: 'No supplier', noDate: 'No date' },
-  ar: { label: 'المستند المعتمد', search: 'ابحث بالمرجع أو المورد أو اسم الملف أو المبلغ', loading: 'جارٍ البحث عن المستندات…', empty: 'لا توجد مستندات مؤهلة. تُعرض فقط مستندات المصروفات المعتمدة غير المرتبطة بعهدة أو تسوية أو التزام، والتي لا يتجاوز مبلغها المتبقي من العهدة.', error: 'تعذر البحث عن المستندات', change: 'تغيير', noRef: 'بلا مرجع', noSupplier: 'بلا مورد', noDate: 'بلا تاريخ' },
+  en: { label: 'Approved document', search: 'Search by reference, supplier, file name or amount', loading: 'Searching documents…', empty: 'No eligible documents found. Only approved expense documents that are not yet linked to a custody, settlement or obligation, and that fit within the remaining custody balance, are listed.', error: 'Unable to search documents', found: (n: number) => `${n} eligible document(s) found`, change: 'Change', noRef: 'No reference', noSupplier: 'No supplier', noDate: 'No date' },
+  ar: { label: 'المستند المعتمد', search: 'ابحث بالمرجع أو المورد أو اسم الملف أو المبلغ', loading: 'جارٍ البحث عن المستندات…', empty: 'لا توجد مستندات مؤهلة. تُعرض فقط مستندات المصروفات المعتمدة غير المرتبطة بعهدة أو تسوية أو التزام، والتي لا يتجاوز مبلغها المتبقي من العهدة.', error: 'تعذر البحث عن المستندات', found: (n: number) => `تم العثور على ${n} من المستندات المؤهلة`, change: 'تغيير', noRef: 'بلا مرجع', noSupplier: 'بلا مورد', noDate: 'بلا تاريخ' },
 };
 
 export function CustodyDocumentPicker({ custodyId, currency, language, refreshKey, selected, onSelect, onUnauthorized }: Props) {
@@ -17,6 +17,16 @@ export function CustodyDocumentPicker({ custodyId, currency, language, refreshKe
   const [docs, setDocs] = useState<EligibleDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const wasSelected = useRef(selected !== null);
+
+  // Selecting swaps the list for the summary, which would drop keyboard focus; hand it to the Change button, and back to search on Change.
+  useEffect(() => {
+    if (selected && !wasSelected.current) changeRef.current?.focus();
+    if (!selected && wasSelected.current) searchRef.current?.focus();
+    wasSelected.current = selected !== null;
+  }, [selected]);
 
   useEffect(() => {
     if (selected) return;
@@ -53,18 +63,19 @@ export function CustodyDocumentPicker({ custodyId, currency, language, refreshKe
         <Text size="sm" fw={500} mb={4}>{s.label}</Text>
         <div className="custody-doc-picker__selected">
           <div className="custody-doc-picker__item">{describe(selected)}</div>
-          <Button size="xs" variant="default" onClick={() => onSelect(null)}>{s.change}</Button>
+          <Button ref={changeRef} size="xs" variant="default" onClick={() => onSelect(null)}>{s.change}</Button>
         </div>
       </div>
     );
   }
   return (
     <div className="custody-doc-picker">
-      <TextInput label={s.label} placeholder={s.search} value={query} onChange={e => setQuery(e.currentTarget.value)} maxLength={100} rightSection={loading ? <Loader size="xs" /> : undefined} autoComplete="off" />
+      <TextInput ref={searchRef} label={s.label} placeholder={s.search} value={query} onChange={e => setQuery(e.currentTarget.value)} maxLength={100} rightSection={loading ? <Loader size="xs" /> : undefined} autoComplete="off" />
       <div className="custody-doc-picker__list" role="group" aria-label={s.label} aria-busy={loading}>
         {error && <Alert color="red" role="alert">{error}</Alert>}
         {loading && <Text size="sm" c="dimmed" role="status">{s.loading}</Text>}
         {!loading && !error && docs.length === 0 && <Text size="sm" c="dimmed" role="status">{s.empty}</Text>}
+        {!loading && !error && docs.length > 0 && <span className="sr-only" role="status">{s.found(docs.length)}</span>}
         {!error && docs.map(d => (
           <button type="button" key={d.id} className="custody-doc-picker__item custody-doc-picker__option" onClick={() => onSelect(d)}>{describe(d)}</button>
         ))}

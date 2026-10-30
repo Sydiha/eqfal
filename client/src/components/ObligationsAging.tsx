@@ -7,6 +7,7 @@ import { agingExport, generatedStamp } from '../export/reportExport';
 import './ObligationsAging.css';
 import { formatMoney } from '../money-format';
 import { formatDisplayDateLtr } from '../date-format';
+import { DateInput } from './DateInput';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
 type AgingItem = { obligation_id: string; counterparty_name: string; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
@@ -71,7 +72,7 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
     </div>
     <div className="ob-aging__toolbar">
       <form className="ob-aging__form" onSubmit={submit}>
-        <label><span>{L.asOf}</span><input type="date" required value={asOf} onChange={(e) => setAsOf(e.target.value)} /></label>
+        <label><span>{L.asOf}</span><DateInput required value={asOf} onChange={setAsOf} /></label>
         <button className="primary" disabled={state === 'loading' || !asOf}>{L.run}</button>
       </form>
       <ExportButtons language={i18n.language} document={exportDoc} landscape />
