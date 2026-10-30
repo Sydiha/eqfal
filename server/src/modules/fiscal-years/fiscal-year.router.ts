@@ -100,7 +100,7 @@ function mapDomainError(err: unknown, res: Response, next: NextFunction): void {
     return;
   }
   if (err instanceof AccountingPeriodClosedError) {
-    res.status(409).json({ error: err.message, code: 'ACCOUNTING_PERIOD_CLOSED' });
+    res.status(409).json({ error: err.message, code: err.code });
     return;
   }
   if (err instanceof FiscalYearCloseBlockedError) {

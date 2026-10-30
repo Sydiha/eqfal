@@ -39,7 +39,7 @@ function deletion(code: string, needsVersion: boolean, run: (svc: RecordDeletion
         if (error instanceof RecordNotFoundError) { res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' }); return; }
         if (error instanceof RecordVersionConflictError) { res.status(409).json({ error: 'The record changed. Reload and try again.', code: 'VERSION_CONFLICT' }); return; }
         if (error instanceof DeleteBlockedError) { sendDeleteBlocked(res, code, error); return; }
-        if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: 'ACCOUNTING_PERIOD_CLOSED' }); return; }
+        if (error instanceof AccountingPeriodClosedError) { res.status(409).json({ error: error.message, code: error.code }); return; }
         throw error;
       }
     })().catch(next);

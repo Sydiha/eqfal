@@ -4,7 +4,7 @@ import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
-import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
+import { assertAccountingDateWritable, assertFiscalYearsOpen } from '../monthly-close/accounting-period.guard';
 import { CompanyAccountingProfileRepository } from '../company-accounting-profile/company-accounting-profile.repository';
 import { lockCompanyProfileShared } from '../company-accounting-profile/profile-locks';
 import { DOCUMENT_CARRIED_BY_APPROVED_INVOICE } from './vat-invoice';
@@ -64,7 +64,7 @@ export class VatService{
   if(!doc)throw new VatNotFoundError();if(doc.status!=='approved'||!['purchase','expense','sale'].includes(doc.document_type??''))throw new VatConflictError('Document is not eligible for VAT review');
   const recoverability=resolveRecoverability(doc.document_type!,input);
   const existing=(await client.query<VatReview>('SELECT *,tax_date::text,taxable_amount::text,vat_amount::text,recoverable_vat_amount::text FROM document_vat_reviews WHERE document_id=$1 AND company_id=$2 FOR UPDATE',[documentId,companyId])).rows[0];
-  const dates=[...new Set([input.taxDate,...(existing?[existing.tax_date]:[])])].sort();await lockVatDates(companyId,dates,client);
+  const dates=[...new Set([input.taxDate,...(existing?[existing.tax_date]:[])])].sort();for(const date of dates)await assertFiscalYearsOpen(companyId,date,date,client);await lockVatDates(companyId,dates,client);
   if((await client.query('SELECT 1 FROM vat_periods WHERE company_id=$1 AND status=\'closed\' AND ($2::date BETWEEN period_start AND period_end OR $3::date BETWEEN period_start AND period_end) LIMIT 1',[companyId,dates[0],dates[1]??dates[0]])).rowCount)throw new VatConflictError('VAT period is closed');
   for(const date of dates)await assertAccountingDateWritable(companyId,date,client);if(existing&&input.version!==existing.version)throw new VatConflictError('VAT review was modified');
   const reviewer=recoverability.reviewed?actor:null,reviewedAt=recoverability.reviewed?new Date():null;let review:VatReview;
