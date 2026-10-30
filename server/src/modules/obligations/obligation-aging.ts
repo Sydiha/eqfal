@@ -28,7 +28,7 @@ const dayNumber = (value: string) => Date.UTC(Number(value.slice(0, 4)), Number(
 export const agingBucket = (daysOverdue: number): AgingBucket =>
   daysOverdue <= 0 ? 'current' : daysOverdue <= 30 ? 'days_1_30' : daysOverdue <= 60 ? 'days_31_60' : daysOverdue <= 90 ? 'days_61_90' : 'days_over_90';
 
-type Row = { id: string; direction: AgingDirection; counterparty_id: string; counterparty_name: string; source_type: string; document_id: string | null; recognized_on: string; due_on: string | null; original_amount: string; adjustment_amount?: string; settled_amount: string };
+type Row = { id: string; direction: AgingDirection; counterparty_id: string; counterparty_name: string; labor_relationship: string | null; source_type: string; document_id: string | null; recognized_on: string; due_on: string | null; original_amount: string; adjustment_amount?: string; settled_amount: string };
 
 export class ObligationAgingService {
   constructor(private db: Pool) {}
@@ -36,7 +36,7 @@ export class ObligationAgingService {
   async report(companyId: string, asOf: string) {
     if (!validDate(asOf)) throw new AgingValidationError('Invalid as_of_date');
     const rows = (await this.db.query<Row>(
-      `SELECT o.id,o.direction,o.counterparty_id,c.name counterparty_name,o.source_type,o.document_id,
+      `SELECT o.id,o.direction,o.counterparty_id,c.name counterparty_name,c.labor_relationship,o.source_type,o.document_id,
               o.recognized_on::text,o.due_on::text,o.original_amount::text,obligation_adjustment_net(o.id,o.company_id,$2::date)::text adjustment_amount,
               CASE WHEN o.source_type='document'
                 THEN COALESCE((SELECT SUM(s.amount) FROM document_settlements s JOIN bank_transactions t ON t.id=s.bank_transaction_id AND t.company_id=s.company_id
@@ -59,7 +59,7 @@ export class ObligationAgingService {
         const bucket = agingBucket(daysOverdue);
         totals[bucket] += outstanding;
         return [{
-          obligation_id: row.id, counterparty_id: row.counterparty_id, counterparty_name: row.counterparty_name,
+          obligation_id: row.id, counterparty_id: row.counterparty_id, counterparty_name: row.counterparty_name, counterparty_labor_relationship: row.labor_relationship,
           source_type: row.source_type, document_id: row.document_id, recognized_on: row.recognized_on, due_on: row.due_on,
           original_amount: row.original_amount, adjustment_amount: row.adjustment_amount ?? '0.00', settled_amount: money(cents(row.settled_amount)), outstanding_amount: money(outstanding),
           days_overdue: daysOverdue, bucket,
@@ -69,6 +69,8 @@ export class ObligationAgingService {
       return {
         buckets: AGING_BUCKETS.map((bucket) => ({ bucket, amount: money(totals[bucket]), count: items.filter((item) => item.bucket === bucket).length })),
         total_outstanding: money(total),
+        labor_related_outstanding: money(items.filter((item) => item.counterparty_labor_relationship !== null).reduce((sum, item) => sum + cents(item.outstanding_amount), 0n)),
+        labor_related_count: items.filter((item) => item.counterparty_labor_relationship !== null).length,
         item_count: items.length,
         items,
       };
