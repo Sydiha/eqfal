@@ -99,3 +99,9 @@ body>.modal-backdrop{z-index:1000}
 .date-input[aria-invalid="true"]{border-color:var(--mantine-color-red-6,#c92a2a);outline-color:var(--mantine-color-red-6,#c92a2a)}
 .date-input__error{display:block;color:var(--mantine-color-red-7,#c92a2a);font-size:.8125rem;line-height:1.4;overflow-wrap:anywhere}
 .date-input__sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.date-input__picker{position:relative;display:inline-flex;vertical-align:middle;margin-inline-start:4px}
+.date-input__cal{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;padding:0;border:1px solid var(--border,#ced4da);border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+.date-input__cal:focus-visible{outline:2px solid var(--primary,#1c7ed6);outline-offset:2px}
+.date-input__native{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;border:0;padding:0}
+.date-input__row{display:flex;align-items:center;gap:6px;max-width:100%}.date-input__row .date-input{flex:1 1 auto;min-width:0}.date-input__row .date-input__picker{margin-inline-start:0;flex:none}

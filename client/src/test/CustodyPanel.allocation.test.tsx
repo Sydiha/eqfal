@@ -40,9 +40,9 @@ describe('CustodyPanel document allocation', () => {
     await pickDocument();
     fireEvent.change(screen.getAllByLabelText('Note')[0]!, { target: { value: 'taxi to client' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Document already has a funding source');
+    expect(await screen.findByRole('alert')).toHaveTextContent('already linked to another funding source');
     expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Amount/)).toHaveValue('250');
+    expect(screen.getByLabelText(/Amount/)).toHaveValue('250.00 SAR');
     expect(screen.getAllByLabelText('Note')[0]!).toHaveValue('taxi to client');
     ok = true;
     fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
@@ -79,9 +79,26 @@ describe('CustodyPanel document allocation', () => {
     expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
   });
 
-  it('labels the allocation amount with the funding currency', async () => {
-    setup(() => json({}, 201));
+  it('shows the allocation amount as the read-only document total and submits it unchanged', async () => {
+    const calls = setup(() => json({}, 201));
     await pickDocument();
-    expect(screen.getAllByText('SAR').length).toBeGreaterThan(0);
+    const amount = screen.getByLabelText(/Amount/);
+    expect(amount).toHaveAttribute('readonly');
+    expect(amount).toHaveValue('250.00 SAR');
+    expect(screen.getByText(/Partial allocation is not supported/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+    await waitFor(() => expect(posts(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posts(calls)[0]!.init!.body)).amount).toBe('250');
+  });
+
+  it('explains known server rejections and does not invent a meaning for unknown ones', async () => {
+    let body: unknown = { error: 'Allocation exceeds custody remaining amount' };
+    setup(() => json(body, 409));
+    await pickDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('more than the remaining custody balance');
+    body = { error: 'Something unexpected' };
+    fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/^Something unexpected$/));
   });
 });

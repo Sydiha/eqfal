@@ -10,8 +10,8 @@ import { useTranslation } from 'react-i18next';
  * hands back ISO strings only (or '' while the text is incomplete/invalid).
  */
 const strings = {
-  en: { placeholder: 'YYYY-MM-DD', format: 'Enter the date as YYYY-MM-DD, for example 2026-03-31.', min: (d: string) => `The date must be on or after ${d}.`, max: (d: string) => `The date must be on or before ${d}.` },
-  ar: { placeholder: 'YYYY-MM-DD', format: 'أدخل التاريخ بصيغة سنة-شهر-يوم YYYY-MM-DD، مثل 2026-03-31.', min: (d: string) => `يجب ألا يسبق التاريخ ${d}.`, max: (d: string) => `يجب ألا يتجاوز التاريخ ${d}.` },
+  en: { placeholder: 'YYYY-MM-DD', pick: 'Pick a date from the calendar', format: 'Enter the date as YYYY-MM-DD, for example 2026-03-31.', min: (d: string) => `The date must be on or after ${d}.`, max: (d: string) => `The date must be on or before ${d}.` },
+  ar: { placeholder: 'YYYY-MM-DD', pick: 'اختيار التاريخ من التقويم', format: 'أدخل التاريخ بصيغة سنة-شهر-يوم YYYY-MM-DD، مثل 2026-03-31.', min: (d: string) => `يجب ألا يسبق التاريخ ${d}.`, max: (d: string) => `يجب ألا يتجاوز التاريخ ${d}.` },
 };
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -92,7 +92,28 @@ export function useDateField({ value, defaultValue, onChange, min, max }: Option
       if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && valid) { e.preventDefault(); apply(shiftDay(text, e.key === 'ArrowUp' ? 1 : -1)); }
     },
   };
-  return { inputProps, error };
+  return { inputProps, error, picker: { value: valid ? text : '', min, max, label: s.pick, onPick: apply } };
+}
+
+type PickerProps = { value: string; min?: string; max?: string; label: string; onPick: (iso: string) => void };
+
+/** Calendar button that reuses the browser's own date picker (hidden native date input); the typed YYYY-MM-DD field stays the source of truth. */
+export function CalendarPicker({ value, min, max, label, onPick }: PickerProps) {
+  const native = useRef<HTMLInputElement>(null);
+  const open = () => {
+    const el = native.current;
+    if (!el) return;
+    try { if (typeof el.showPicker === 'function') { el.showPicker(); return; } } catch { /* fall through */ }
+    el.focus(); el.click();
+  };
+  return (
+    <span className="date-input__picker">
+      <button type="button" className="date-input__cal" aria-label={label} title={label} onClick={open}>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      </button>
+      <input ref={native} type="date" className="date-input__native" tabIndex={-1} aria-hidden="true" value={value} min={min} max={max} onChange={e => { if (e.currentTarget.value) onPick(e.currentTarget.value); }} />
+    </span>
+  );
 }
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'defaultValue' | 'onChange' | 'min' | 'max'> & {
@@ -100,11 +121,14 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'def
 };
 
 export function DateInput({ value, defaultValue, onChange, min, max, required, ...rest }: Props) {
-  const { inputProps, error } = useDateField({ value, defaultValue, onChange, min, max });
+  const { inputProps, error, picker } = useDateField({ value, defaultValue, onChange, min, max });
   const errorId = useId();
   return (
     <>
-      <input {...rest} {...inputProps} min={min} max={max} required={required} className={['date-input', rest.className].filter(Boolean).join(' ')} aria-describedby={error ? errorId : rest['aria-describedby']} />
+      <span className="date-input__row">
+        <input {...rest} {...inputProps} min={min} max={max} required={required} className={['date-input', rest.className].filter(Boolean).join(' ')} aria-describedby={error ? errorId : rest['aria-describedby']} />
+        {!rest.disabled && <CalendarPicker {...picker} />}
+      </span>
       {error && <small className="date-input__error" aria-hidden="true">{error}</small>}
       {error && createPortal(<span id={errorId} role="alert" className="date-input__sr">{error}</span>, document.body)}
     </>
@@ -117,6 +141,6 @@ type FieldProps = Omit<TextInputProps, 'type' | 'value' | 'defaultValue' | 'onCh
 
 /** Same behaviour as DateInput, rendered with Mantine's TextInput (label and error slots). */
 export function DateTextInput({ value, defaultValue, onChange, min, max, error, ...rest }: FieldProps) {
-  const { inputProps, error: ownError } = useDateField({ value, defaultValue, onChange, min, max });
-  return <TextInput {...rest} {...inputProps} error={error || ownError || undefined} />;
+  const { inputProps, error: ownError, picker } = useDateField({ value, defaultValue, onChange, min, max });
+  return <TextInput {...rest} {...inputProps} error={error || ownError || undefined} rightSection={rest.disabled ? undefined : <CalendarPicker {...picker} />} rightSectionWidth={40} />;
 }

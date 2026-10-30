@@ -16,6 +16,24 @@ describe('maskDateText', () => {
   });
 });
 
+describe('calendar picker', () => {
+  it('fills the typed field from the browser date picker and keeps the ISO text', () => {
+    const seen = vi.fn();
+    render(<Harness onValue={seen} />);
+    const native = document.querySelector('input[type="date"]') as HTMLInputElement;
+    fireEvent.change(native, { target: { value: '2026-03-15' } });
+    expect(screen.getByLabelText(/^Date/)).toHaveValue('2026-03-15');
+    expect(seen).toHaveBeenLastCalledWith('2026-03-15');
+  });
+  it('opens the native picker from a labelled button', () => {
+    render(<Harness onValue={vi.fn()} />);
+    const native = document.querySelector('input[type="date"]') as HTMLInputElement;
+    native.showPicker = vi.fn();
+    fireEvent.click(screen.getByRole('button', { name: /calendar|التقويم/i }));
+    expect(native.showPicker).toHaveBeenCalled();
+  });
+});
+
 describe('isValidIsoDate', () => {
   it('rejects impossible calendar dates', () => {
     expect(isValidIsoDate('2026-02-29')).toBe(false);
