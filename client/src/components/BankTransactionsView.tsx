@@ -83,7 +83,7 @@ const ico = (children: ReactNode) => <svg viewBox="0 0 24 24" width="12" height=
 const local = {
   ar: {
     title: 'الحركات البنكية',
-    addManual: 'إضافة حركة بنكية', manualBadge: 'يدوي', manualSource: 'المصدر', manualSourceValue: 'إدخال يدوي (ليست من كشف البنك)', manualCategory: 'التصنيف', manualUnresolved: 'غير محسومة في الإقفال: لا يوجد مسار محاسبي معتمد لهذا التصنيف بعد (لا يُسوّي فواتير أو التزامات).', manualUnresolvedOpen: 'غير محسومة في الإقفال حتى تُربط بمستند أو التزام.',
+    addManual: 'إضافة حركة بنكية', actions: 'إجراءات الحركات البنكية', manualBadge: 'يدوي', manualSource: 'المصدر', manualSourceValue: 'إدخال يدوي (ليست من كشف البنك)', manualCategory: 'التصنيف', manualUnresolved: 'غير محسومة في الإقفال: لا يوجد مسار محاسبي معتمد لهذا التصنيف بعد (لا يُسوّي فواتير أو التزامات).', manualUnresolvedOpen: 'غير محسومة في الإقفال حتى تُربط بمستند أو التزام.',
     description: 'راجع الحركة، حالتها، ومبلغها أولًا. التفاصيل البنكية والإجراءات الثانوية متاحة عند الحاجة.',
     date: 'التاريخ', descriptionLabel: 'البيان', amount: 'المبلغ', status: 'الحالة', action: 'الإجراء',
     reference: 'المرجع البنكي', balance: 'الرصيد الجاري', details: 'التفاصيل', hideDetails: 'إخفاء التفاصيل',
@@ -97,7 +97,7 @@ const local = {
   },
   en: {
     title: 'Bank transactions',
-    addManual: 'Add bank transaction', manualBadge: 'Manual', manualSource: 'Source', manualSourceValue: 'Manual entry (not from a bank statement)', manualCategory: 'Category', manualUnresolved: 'Unresolved for closing: no supported accounting workflow exists for this category yet (it cannot settle invoices or obligations).', manualUnresolvedOpen: 'Unresolved for closing until linked to a document or obligation.',
+    addManual: 'Add bank transaction', actions: 'Bank transaction actions', manualBadge: 'Manual', manualSource: 'Source', manualSourceValue: 'Manual entry (not from a bank statement)', manualCategory: 'Category', manualUnresolved: 'Unresolved for closing: no supported accounting workflow exists for this category yet (it cannot settle invoices or obligations).', manualUnresolvedOpen: 'Unresolved for closing until linked to a document or obligation.',
     description: 'Review the transaction, status, and amount first. Bank metadata and secondary actions remain available on demand.',
     date: 'Date', descriptionLabel: 'Description', amount: 'Amount', status: 'Status', action: 'Action',
     reference: 'Bank reference', balance: 'Running balance', details: 'Details', hideDetails: 'Hide details',
@@ -259,10 +259,11 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
         <span className="bank-recon__metric is-pending"><i aria-hidden="true"/>{s.pendingMetric}: <b dir="ltr">{counts.matched}</b></span>
         <span className="bank-recon__metric is-matched"><i aria-hidden="true"/>{s.matchedMetric}: <b dir="ltr">{counts.reconciled}</b></span>
       </div>
-      {canCreateManual && <Button size="compact-sm" onClick={() => setManualOpen(true)}>{s.addManual}</Button>}
       <Button variant="default" size="compact-sm" className="bank-recon__refresh" onClick={() => void refresh()} loading={loading}>{s.refresh}</Button>
     </div>
     <ExportButtons language={i18n.language} document={exportDoc} landscape />
+
+    {canCreateManual && <div className="bank-recon__actions" role="group" aria-label={s.actions}><Button size="sm" onClick={() => setManualOpen(true)}>{s.addManual}</Button></div>}
 
     {!loading && <WorkspaceToolbar className="bank-recon__toolbar" ariaLabel={s.toolbar} search={<label><span className="bank-recon__sr">{s.searchTransactions}</span><input type="search" value={filters.search} placeholder={s.searchPlaceholder} onChange={event => updateFilter('search', event.target.value)}/></label>} filters={<><label>{s.reconciliation}<select value={filters.reconciliation} onChange={event => updateFilter('reconciliation', event.target.value)}><option value="">{s.allStatuses}</option>{reconciliationStatuses.map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label><label>{s.from}<DateInput value={filters.from} onChange={value => updateFilter('from', value)}/></label><label>{s.to}<DateInput value={filters.to} onChange={value => updateFilter('to', value)}/></label><label>{s.amountMin}<input type="number" step="any" value={filters.amountMin} onChange={event => updateFilter('amountMin', event.target.value)}/></label><label>{s.amountMax}<input type="number" step="any" value={filters.amountMax} onChange={event => updateFilter('amountMax', event.target.value)}/></label></>} resultCount={s.resultCount(filteredTransactions.length)} clearAction={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}/>}
 

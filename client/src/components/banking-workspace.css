@@ -112,3 +112,17 @@
 .bank-source-badge--manual { background: #fff4d6; color: #7a5300; border: 1px solid #f0d58a; }
 .manual-bank-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 640px) { .manual-bank-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Manual bank transaction: actions row above the table (not inside the status banner) and the dialog form layout. */
+.bank-recon__actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+.manual-bank-dialog .manual-bank-grid { align-items: start; gap: 14px 16px; }
+.manual-bank-dialog .manual-bank-direction { min-width: 0; }
+.manual-bank-dialog .manual-bank-direction .mantine-SegmentedControl-root { width: 100%; }
+.manual-bank-dialog .manual-bank-ltr input { text-align: start; }
+[dir='rtl'] .manual-bank-dialog .manual-bank-ltr input { text-align: right; }
+.manual-bank-dialog .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) {
+  .bank-recon__actions .mantine-Button-root { width: 100%; }
+  .manual-bank-dialog .modal-actions { flex-direction: column-reverse; }
+  .manual-bank-dialog .modal-actions .mantine-Button-root { width: 100%; }
+}

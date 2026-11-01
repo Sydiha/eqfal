@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, SegmentedControl, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Input, SegmentedControl, Select, Stack, Text, TextInput } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { DateTextInput, isValidIsoDate } from './DateInput';
@@ -17,6 +17,8 @@ export const MANUAL_CATEGORIES: ReadonlyArray<{ value: string; only?: Direction;
   { value: 'cash_deposit', deferred: true }, { value: 'cash_withdrawal', deferred: true }, { value: 'incoming_transfer', deferred: true }, { value: 'outgoing_transfer', deferred: true },
   { value: 'inter_account_transfer', deferred: true }, { value: 'bank_fees', deferred: true }, { value: 'refund', deferred: true },
 ];
+/** The shared Dialog backdrop sits at z-index 1000, above Mantine's default popover layer (300), which hid every dropdown behind it. */
+export const DIALOG_DROPDOWN_PROPS = { withinPortal: true, zIndex: 1100 } as const;
 export const NON_SETTLEABLE: string[] = [];
 
 const strings = {
@@ -24,7 +26,7 @@ const strings = {
     title: 'إضافة حركة بنكية', account: 'الحساب البنكي', date: 'تاريخ الحركة', direction: 'الاتجاه', incoming: 'وارد', outgoing: 'صادر',
     category: 'التصنيف', amount: 'المبلغ (قيمة موجبة)', description: 'البيان', reference: 'المرجع (اختياري)', counterparty: 'الطرف المقابل (اختياري)',
     document: 'المستند الداعم (اختياري)', manualNote: 'حركة يدوية: سجل داخلي أدخله مستخدم وليست من كشف البنك، ولا تُنشئ قيدًا محاسبيًا.',
-    save: 'حفظ الحركة', cancel: 'إلغاء', confirmDuplicate: 'إضافة رغم التشابه', deferredNote: 'غير متاح بعد',
+    save: 'حفظ الحركة', cancel: 'إلغاء', confirmDuplicate: 'إضافة رغم التشابه', deferredNote: 'غير متاح بعد', noOptions: 'لا توجد خيارات',
     duplicateTitle: 'توجد حركة مشابهة (نفس الحساب والتاريخ والمبلغ). راجعها قبل المتابعة.',
     cats: { cash_deposit: 'إيداع نقدي', cash_withdrawal: 'سحب نقدي', incoming_transfer: 'تحويل وارد', outgoing_transfer: 'تحويل صادر', inter_account_transfer: 'تحويل بين حسابات الشركة', customer_receipt: 'تحصيل من عميل', supplier_payment: 'سداد لمورد', government_payment: 'دفعة حكومية', bank_fees: 'رسوم بنكية', refund: 'استرداد', other: 'أخرى' } as Record<string, string>,
     errors: { DIRECTION_CATEGORY_MISMATCH: 'الاتجاه لا يناسب التصنيف المختار.', PAIRED_TRANSFER_DEFERRED: 'التحويل بين حسابات الشركة غير مدعوم بعد.', MANUAL_CATEGORY_UNSUPPORTED: 'هذا التصنيف غير متاح بعد لعدم وجود مسار محاسبي معتمد لحسمه.', MANUAL_BANK_DUPLICATE: 'توجد حركة يدوية بنفس المرجع.', ACCOUNTING_PERIOD_CLOSED: 'الفترة المحاسبية مقفلة.', FISCAL_YEAR_CLOSED: 'السنة المالية مقفلة.', BANK_ACCOUNT_INACTIVE: 'الحساب البنكي غير نشط.', MANUAL_BANK_INVALID: 'تحقق من الحقول المدخلة.' } as Record<string, string>,
@@ -34,7 +36,7 @@ const strings = {
     title: 'Add bank transaction', account: 'Bank account', date: 'Transaction date', direction: 'Direction', incoming: 'Incoming', outgoing: 'Outgoing',
     category: 'Category', amount: 'Amount (positive value)', description: 'Description', reference: 'Reference (optional)', counterparty: 'Counterparty (optional)',
     document: 'Supporting document (optional)', manualNote: 'Manual entry: an internal record entered by a user. It is not from a bank statement and creates no journal entry.',
-    save: 'Save transaction', cancel: 'Cancel', confirmDuplicate: 'Add anyway', deferredNote: 'not available yet',
+    save: 'Save transaction', cancel: 'Cancel', confirmDuplicate: 'Add anyway', deferredNote: 'not available yet', noOptions: 'No options',
     duplicateTitle: 'A similar transaction exists (same account, date and amount). Review it before continuing.',
     cats: { cash_deposit: 'Cash deposit', cash_withdrawal: 'Cash withdrawal', incoming_transfer: 'Incoming transfer', outgoing_transfer: 'Outgoing transfer', inter_account_transfer: 'Inter-account transfer', customer_receipt: 'Customer receipt', supplier_payment: 'Supplier payment', government_payment: 'Government payment', bank_fees: 'Bank fees', refund: 'Refund', other: 'Other' } as Record<string, string>,
     errors: { DIRECTION_CATEGORY_MISMATCH: 'The direction does not fit the selected category.', PAIRED_TRANSFER_DEFERRED: 'Transfers between company accounts are not supported yet.', MANUAL_CATEGORY_UNSUPPORTED: 'This category is not available yet: no supported accounting workflow can resolve it.', MANUAL_BANK_DUPLICATE: 'A manual transaction with the same reference already exists.', ACCOUNTING_PERIOD_CLOSED: 'The accounting period is closed.', FISCAL_YEAR_CLOSED: 'The fiscal year is closed.', BANK_ACCOUNT_INACTIVE: 'The bank account is inactive.', MANUAL_BANK_INVALID: 'Check the entered fields.' } as Record<string, string>,
@@ -115,19 +117,19 @@ export function ManualBankTransactionDialog({ onClose, onCreated, onUnauthorized
         {error && <Alert color="red" role="alert">{error}</Alert>}
         {duplicates && <Alert color="orange" role="alert" title={s.duplicateTitle}>{duplicates.map(c => <Text size="sm" key={c.id} dir="ltr">{c.id.slice(0, 8)} · {c.source_kind}</Text>)}</Alert>}
         <div className="manual-bank-grid">
-          <Select label={s.account} data={accounts.map(a => ({ value: a.id, label: a.display_name }))} value={accountId} onChange={setAccountId} required error={showErr(!accountId, s.required)}/>
+          <Select label={s.account} data={accounts.map(a => ({ value: a.id, label: a.display_name }))} value={accountId} onChange={setAccountId} comboboxProps={DIALOG_DROPDOWN_PROPS} nothingFoundMessage={s.noOptions} required error={showErr(!accountId, s.required)}/>
           <DateTextInput label={s.date} value={date} onChange={setDate} required error={showErr(!dateOk, s.badDate)}/>
-          <div><Text size="sm" fw={500} mb={4}>{s.direction}</Text>
-            <SegmentedControl fullWidth aria-label={s.direction} value={direction} onChange={pickDirection} data={[{ value: 'incoming', label: s.incoming }, { value: 'outgoing', label: s.outgoing }]}/></div>
-          <Select label={s.category} value={category} onChange={pickCategory} required error={showErr(!category, s.required)}
+          <Input.Wrapper label={s.direction} className="manual-bank-direction">
+            <SegmentedControl fullWidth aria-label={s.direction} value={direction} onChange={pickDirection} data={[{ value: 'incoming', label: s.incoming }, { value: 'outgoing', label: s.outgoing }]}/></Input.Wrapper>
+          <Select label={s.category} value={category} onChange={pickCategory} comboboxProps={DIALOG_DROPDOWN_PROPS} required error={showErr(!category, s.required)}
             data={MANUAL_CATEGORIES.map(c => ({ value: c.value, disabled: Boolean(c.deferred), label: c.deferred ? `${s.cats[c.value]} (${s.deferredNote})` : (s.cats[c.value] ?? c.value) }))}/>
-          <TextInput label={s.amount} value={amount} onChange={e => setAmount(e.currentTarget.value)} inputMode="decimal" dir="ltr" required error={showErr(!amountOk, s.badAmount)}/>
-          <TextInput label={s.reference} value={reference} onChange={e => setReference(e.currentTarget.value)} maxLength={100} dir="ltr"/>
+          <TextInput label={s.amount} value={amount} onChange={e => setAmount(e.currentTarget.value)} inputMode="decimal" dir="ltr" className="manual-bank-ltr" required error={showErr(!amountOk, s.badAmount)}/>
+          <TextInput label={s.reference} value={reference} onChange={e => setReference(e.currentTarget.value)} maxLength={100} dir="ltr" className="manual-bank-ltr"/>
         </div>
         <TextInput label={s.description} value={description} onChange={e => setDescription(e.currentTarget.value)} maxLength={500} required error={showErr(!description.trim(), s.required)}/>
         <div className="manual-bank-grid">
           <TextInput label={s.counterparty} value={counterparty} onChange={e => setCounterparty(e.currentTarget.value)} maxLength={200}/>
-          <Select label={s.document} data={docOptions} value={documentId} onChange={setDocumentId} searchable clearable/>
+          <Select label={s.document} data={docOptions} value={documentId} onChange={setDocumentId} comboboxProps={DIALOG_DROPDOWN_PROPS} nothingFoundMessage={s.noOptions} searchable clearable/>
         </div>
         {otherNote && <Alert color="yellow" role="note">{i18n.language === 'ar' ? 'تبقى غير محسومة في الإقفال حتى تُربط بمسار قائم (التزام، عهدة، حركة شريك، دفعة شخصية). لا يوجد قيد تلقائي.' : 'Stays unresolved for closing until linked through an existing workflow (obligation, custody, partner transaction, personal payment). No automatic journal.'}</Alert>}
         <div className="modal-actions">
