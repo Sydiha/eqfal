@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { BankTransactionsView } from '../components/BankTransactionsView';
 
-const manualTx = { id: 'm1', transaction_date: '2026-03-10', description: 'Cash deposit at branch', bank_reference: null, amount: '500.00', running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched', source_kind: 'manual', manual_category: 'cash_deposit', manual_counterparty: null };
+const manualTx = { id: 'm1', transaction_date: '2026-03-10', description: 'Cash deposit at branch', bank_reference: null, amount: '500.00', running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched', source_kind: 'manual', manual_category: 'other', manual_counterparty: null };
 const importedTx = { ...manualTx, id: 'i1', description: 'Imported row', source_kind: 'import', manual_category: null };
 
 function setup(canCreateManual = true, posts: Array<{ url: string; body: any }> = [], postResponse?: () => Response) {
@@ -21,7 +21,7 @@ function setup(canCreateManual = true, posts: Array<{ url: string; body: any }> 
 
 describe.each(['en', 'ar'] as const)('manual bank transactions (%s)', (lang) => {
   beforeEach(async () => { Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() }); await i18n.changeLanguage(lang); vi.restoreAllMocks(); window.history.replaceState(null, '', '/?page=banks&section=transactions'); });
-  const L = lang === 'en' ? { add: 'Add bank transaction', manual: 'Manual', save: 'Save transaction', unresolved: /no supported accounting workflow/ } : { add: 'إضافة حركة بنكية', manual: 'يدوي', save: 'حفظ الحركة', unresolved: /لا يوجد مسار محاسبي/ };
+  const L = lang === 'en' ? { add: 'Add bank transaction', manual: 'Manual', save: 'Save transaction', unresolved: /Unresolved for closing until linked/ } : { add: 'إضافة حركة بنكية', manual: 'يدوي', save: 'حفظ الحركة', unresolved: /غير محسومة في الإقفال حتى تُربط/ };
 
   it('hides the action without permission and marks only manual rows', async () => {
     setup(false);
@@ -31,7 +31,7 @@ describe.each(['en', 'ar'] as const)('manual bank transactions (%s)', (lang) => 
     expect(screen.getByText(L.manual)).toBeInTheDocument();
   });
 
-  it('explains why a manual cash deposit stays unresolved', async () => {
+  it('explains why an other-category manual transaction stays unresolved until linked', async () => {
     setup();
     fireEvent.click((await screen.findByText('Cash deposit at branch')).closest('article')!);
     expect(await screen.findByText(L.unresolved)).toBeInTheDocument();
@@ -46,8 +46,11 @@ describe.each(['en', 'ar'] as const)('manual bank transactions (%s)', (lang) => 
     fireEvent.click(within(dialog).getByRole('button', { name: L.save }));
     expect(posts).toHaveLength(0);
     fireEvent.click(within(dialog).getByRole('textbox', { name: /Category|التصنيف/ }));
-    const option = await screen.findByRole('option', { name: lang === 'en' ? /Inter-account transfer \(not available yet\)/ : /تحويل بين حسابات الشركة/, hidden: true });
-    expect(option).toHaveAttribute('data-combobox-disabled', 'true');
+    const names = lang === 'en'
+      ? { off: ['Cash deposit', 'Cash withdrawal', 'Incoming transfer', 'Outgoing transfer', 'Inter-account transfer', 'Bank fees', 'Refund'], on: ['Customer receipt', 'Supplier payment', 'Government payment', 'Other'] }
+      : { off: ['إيداع نقدي', 'سحب نقدي', 'تحويل وارد', 'تحويل صادر', 'تحويل بين حسابات الشركة', 'رسوم بنكية', 'استرداد'], on: ['تحصيل من عميل', 'سداد لمورد', 'دفعة حكومية', 'أخرى'] };
+    for (const name of names.off) expect(await screen.findByRole('option', { name: new RegExp(name), hidden: true }), name).toHaveAttribute('data-combobox-disabled', 'true');
+    for (const name of names.on) expect(await screen.findByRole('option', { name: new RegExp(`^${name}$`), hidden: true }), name).not.toHaveAttribute('data-combobox-disabled');
   });
 
   it('surfaces a possible duplicate and only re-submits with explicit confirmation', async () => {

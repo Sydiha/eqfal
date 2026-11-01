@@ -49,7 +49,7 @@ describeDatabase('manual bank transactions (PostgreSQL)', () => {
   it('validates direction against category, amount, account, document and the deferred transfer type', async () => {
     const co = await setup('val');
     expect((await create(co, { direction: 'outgoing' })).json.code).toBe('DIRECTION_CATEGORY_MISMATCH');
-    expect((await create(co, { category: 'bank_fees' })).json.code).toBe('DIRECTION_CATEGORY_MISMATCH');
+    expect((await create(co, { direction: 'incoming', category: 'supplier_payment' })).json.code).toBe('DIRECTION_CATEGORY_MISMATCH');
     const deferred = await create(co, { category: 'inter_account_transfer' });
     expect(deferred.status).toBe(422);
     expect(deferred.json.code).toBe('PAIRED_TRANSFER_DEFERRED');
@@ -60,7 +60,8 @@ describeDatabase('manual bank transactions (PostgreSQL)', () => {
     expect((await create(co, { bank_account_id: randomUUID() })).status).toBe(404);
     expect((await create(co, { supporting_document_id: randomUUID() })).status).toBe(404);
     expect(await h.count("SELECT COUNT(*)::text n FROM bank_transactions WHERE company_id=$1", [co.id])).toBe(0);
-    expect((await create(co, { direction: 'outgoing', category: 'refund' })).status).toBe(201);
+    expect((await create(co, { direction: 'outgoing', category: 'other', description: 'misc' })).status).toBe(201);
+    expect((await create(co, { direction: 'incoming', category: 'other', description: 'misc in', amount: '9.00' })).status).toBe(201);
   });
 
   it('enforces permission, tenant isolation and the DB shape rules', async () => {
@@ -79,6 +80,7 @@ describeDatabase('manual bank transactions (PostgreSQL)', () => {
     expect(await dbError("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-03-01',-5,'SAR','x','weak','manual','customer_receipt',$3)", [co.id, co.bank, co.owner.id])).toMatch(/manual_category_check/);
     expect(await dbError("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-03-01',5,'SAR','y','weak','manual','inter_account_transfer',$3)", [co.id, co.bank, co.owner.id])).toMatch(/manual_category_check/);
     expect(await dbError("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,fingerprint,fingerprint_strength) VALUES($1,$2,'2026-03-01',5,'SAR','z','weak')", [co.id, co.bank])).toMatch(/source_shape_check/);
+    expect(await dbError("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-03-01',5,'SAR','w','weak','manual','cash_deposit',$3)", [co.id, co.bank, co.owner.id])).toMatch(/manual_category_check/);
     const id = (await create(co, { description: 'immutable', amount: '3.33' })).json.transaction.id;
     expect(await dbError('UPDATE bank_transactions SET amount=1 WHERE id=$1', [id])).toMatch(/immutable/);
     expect(await dbError("UPDATE bank_transactions SET source_kind='import' WHERE id=$1", [id])).toMatch(/source cannot change/);
@@ -129,25 +131,47 @@ describeDatabase('manual bank transactions (PostgreSQL)', () => {
     expect(await h.count('SELECT COUNT(*)::text n FROM bank_transactions WHERE company_id=$1', [co.id])).toBe(0);
   });
 
-  it('lets eligible manual rows use existing matching, but never turns transfers, cash or fees into revenue/expense', async () => {
-    const co = await setup('mat');
-    const sale = await doc(co, 'sale', '250.50');
-    const ok = (await create(co)).json.transaction.id;
-    const m = await co.owner.client.req('POST', `/bank-transactions/${ok}/match`, { document_id: sale });
-    expect(m.status, JSON.stringify(m.json)).toBe(201);
-    const again = await co.owner.client.req('POST', `/bank-transactions/${ok}/match`, { document_id: sale });
-    expect(again.status).toBe(409);
-    let n = 0;
-    for (const [cat, dir] of [['cash_deposit', 'incoming'], ['incoming_transfer', 'incoming'], ['cash_withdrawal', 'outgoing'], ['bank_fees', 'outgoing'], ['outgoing_transfer', 'outgoing']] as const) {
-      n += 1; const amt = `${12 + n}.00`;
-      const tx = (await create(co, { category: cat, direction: dir, amount: amt, description: cat, transaction_date: '2026-03-11' })).json.transaction.id;
-      const d = await doc(co, dir === 'incoming' ? 'sale' : 'purchase', amt);
-      const r = await co.owner.client.req('POST', `/bank-transactions/${tx}/match`, { document_id: d });
-      expect(r.status, cat).toBe(409); expect(r.json.code).toBe('MANUAL_CATEGORY_NOT_SETTLEABLE');
-      const a = await co.owner.client.req('POST', `/bank-transactions/${tx}/allocations`, { allocations: [{ document_id: d, amount: amt }] });
-      expect(a.status, cat).toBe(409);
-      expect(await dbError("INSERT INTO bank_transaction_matches(company_id,bank_transaction_id,document_id,match_type,matched_by_user_id) VALUES($1,$2,$3,'document',$4)", [co.id, tx, d, co.owner.id])).toMatch(/cannot settle/);
-      expect(await unresolved(co, tx)).toBe(true);
+  it('rejects every category that has no supported resolution workflow, in the API and in the database', async () => {
+    const co = await setup('uns');
+    const unsupported: Array<[string, string]> = [['cash_deposit', 'incoming'], ['cash_withdrawal', 'outgoing'], ['incoming_transfer', 'incoming'], ['outgoing_transfer', 'outgoing'], ['bank_fees', 'outgoing'], ['refund', 'incoming'], ['refund', 'outgoing']];
+    for (const [category, direction] of unsupported) {
+      const r = await create(co, { category, direction });
+      expect(r.status, `${category}/${direction}`).toBe(422);
+      expect(r.json.code).toBe('MANUAL_CATEGORY_UNSUPPORTED');
+      const amount = direction === 'incoming' ? 5 : -5;
+      expect(await dbError("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-03-01',$3,'SAR',$4,'weak','manual',$5,$6)", [co.id, co.bank, amount, `u-${randomUUID()}`, category, co.owner.id])).toMatch(/manual_category_check/);
     }
+    expect((await create(co, { category: 'inter_account_transfer' })).json.code).toBe('PAIRED_TRANSFER_DEFERRED');
+    expect(await h.count('SELECT COUNT(*)::text n FROM bank_transactions WHERE company_id=$1', [co.id])).toBe(0);
+  });
+
+  it('lets a supported manual receipt reach reconciled through existing settlement, without touching statement verification', async () => {
+    const co = await setup('rec');
+    const sale = await doc(co, 'sale', '250.50');
+    const tx = (await create(co)).json.transaction.id;
+    expect(await unresolved(co, tx)).toBe(true);
+    const m = await co.owner.client.req('POST', `/bank-transactions/${tx}/match`, { document_id: sale });
+    expect(m.status, JSON.stringify(m.json)).toBe(201);
+    expect((await co.owner.client.req('POST', `/bank-transactions/${tx}/match`, { document_id: sale })).status).toBe(409);
+    // matched alone does not resolve it for closing; a ledger-bearing settlement is required
+    expect(await unresolved(co, tx)).toBe(true);
+    const settle = await co.owner.client.req('POST', `/bank-transactions/${tx}/allocations`, { allocations: [{ document_id: sale, amount: '250.50' }] });
+    expect(settle.status, JSON.stringify(settle.json)).toBe(201);
+    expect(await unresolved(co, tx)).toBe(false);
+    const rec = await co.owner.client.req('POST', `/bank-transactions/${tx}/reconciliation`, { status: 'reconciled' });
+    expect(rec.status, JSON.stringify(rec.json)).toBe(200);
+    const row = (await h.q<any>('SELECT source_kind,reconciliation_status FROM bank_transactions WHERE id=$1', [tx]))[0];
+    expect(row).toMatchObject({ source_kind: 'manual', reconciliation_status: 'reconciled' });
+    expect(await h.count('SELECT COUNT(*)::text n FROM bank_statement_balances WHERE company_id=$1', [co.id])).toBe(0);
+    expect(await h.count('SELECT COUNT(*)::text n FROM bank_reconciliation_snapshots WHERE company_id=$1', [co.id])).toBe(0);
+  });
+
+  it('keeps a manual payment from settling a sale of the wrong direction', async () => {
+    const co = await setup('dir');
+    const sale = await doc(co, 'sale', '40.00');
+    const tx = (await create(co, { direction: 'outgoing', category: 'supplier_payment', amount: '40.00', description: 'Pay' })).json.transaction.id;
+    const r = await co.owner.client.req('POST', `/bank-transactions/${tx}/match`, { document_id: sale });
+    expect(r.status).toBe(409);
+    expect(await unresolved(co, tx)).toBe(true);
   });
 });

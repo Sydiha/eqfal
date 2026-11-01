@@ -31,13 +31,15 @@ ALTER TABLE bank_transactions
     (source_kind = 'manual' AND import_batch_id IS NULL AND source_row_number IS NULL
        AND manual_category IS NOT NULL AND created_by_user_id IS NOT NULL AND running_balance IS NULL)
   ),
-  -- Direction (sign of amount) must fit the business category. inter_account_transfer is deferred and therefore not listed.
+  -- Only categories that an existing settlement workflow can resolve are allowed, with a matching direction:
+  -- customer_receipt (in), supplier_payment / government_payment (out), other (either; resolved by partner/custody/personal-payment/obligation paths).
+  -- Cash movements, transfers, bank fees, refunds and inter_account_transfer are deliberately NOT allowed until a supported workflow exists.
   ADD CONSTRAINT bank_transactions_manual_category_check CHECK (
     source_kind = 'import' OR (
       amount <> 0 AND (
-        (manual_category IN ('cash_deposit', 'customer_receipt', 'incoming_transfer') AND amount > 0)
-        OR (manual_category IN ('cash_withdrawal', 'supplier_payment', 'government_payment', 'outgoing_transfer', 'bank_fees') AND amount < 0)
-        OR manual_category IN ('refund', 'other')
+        (manual_category = 'customer_receipt' AND amount > 0)
+        OR (manual_category IN ('supplier_payment', 'government_payment') AND amount < 0)
+        OR manual_category = 'other'
       )
     )
   );

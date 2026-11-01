@@ -11,14 +11,17 @@ import { AccountingPeriodClosedError, assertAccountingDateWritable } from '../mo
  * Manual bank transactions. A manual row is an internal record (source_kind='manual'), never a bank-verified statement row.
  * It posts no journal. It resolves for closing only through the existing ledger-bearing relationships, like an imported row.
  */
-export const MANUAL_CATEGORIES = ['cash_deposit', 'cash_withdrawal', 'incoming_transfer', 'outgoing_transfer', 'customer_receipt', 'supplier_payment', 'government_payment', 'bank_fees', 'refund', 'other'] as const;
+/** Categories an existing workflow can actually resolve (settlement of documents/obligations, or partner/custody/personal-payment links for `other`). */
+export const MANUAL_CATEGORIES = ['customer_receipt', 'supplier_payment', 'government_payment', 'other'] as const;
 export type ManualCategory = (typeof MANUAL_CATEGORIES)[number];
 /** Deferred: needs a designed paired-account workflow so both legs are never counted twice. */
 export const DEFERRED_CATEGORIES = ['inter_account_transfer'] as const;
-const INCOMING_ONLY: readonly string[] = ['cash_deposit', 'customer_receipt', 'incoming_transfer'];
-const OUTGOING_ONLY: readonly string[] = ['cash_withdrawal', 'supplier_payment', 'government_payment', 'outgoing_transfer', 'bank_fees'];
-/** Must never settle documents or obligations (kept in step with trigger bank_manual_internal_guard, migration 106). */
-export const NON_SETTLEABLE_MANUAL_CATEGORIES: readonly string[] = ['cash_deposit', 'cash_withdrawal', 'incoming_transfer', 'outgoing_transfer', 'bank_fees'];
+/** Known but disabled until a supported accounting-resolution workflow exists. They would otherwise stay unresolved and block closing. */
+export const UNSUPPORTED_CATEGORIES = ['cash_deposit', 'cash_withdrawal', 'incoming_transfer', 'outgoing_transfer', 'bank_fees', 'refund'] as const;
+const INCOMING_ONLY: readonly string[] = ['customer_receipt'];
+const OUTGOING_ONLY: readonly string[] = ['supplier_payment', 'government_payment'];
+/** Kept as a second line of defence for rows that might exist (trigger bank_manual_internal_guard, migration 106). */
+export const NON_SETTLEABLE_MANUAL_CATEGORIES: readonly string[] = [...UNSUPPORTED_CATEGORIES.filter((c) => c !== 'refund')];
 
 export function assertManualCategorySettleable(tx: { source_kind?: string; manual_category?: string | null }, ErrorClass: new (m: string) => Error): void {
   if (tx.source_kind === 'manual' && tx.manual_category && NON_SETTLEABLE_MANUAL_CATEGORIES.includes(tx.manual_category)) {
@@ -74,6 +77,7 @@ export class ManualBankTransactionService {
 
   async create(companyId: string, actor: string, input: Input) {
     if ((DEFERRED_CATEGORIES as readonly string[]).includes(input.category)) throw new ManualBankError(422, 'PAIRED_TRANSFER_DEFERRED', 'Transfers between company accounts are not supported yet');
+    if ((UNSUPPORTED_CATEGORIES as readonly string[]).includes(input.category)) throw new ManualBankError(422, 'MANUAL_CATEGORY_UNSUPPORTED', 'This category has no supported accounting-resolution workflow yet');
     if (!(MANUAL_CATEGORIES as readonly string[]).includes(input.category)) throw new ManualBankError(400, 'MANUAL_BANK_INVALID', 'Invalid category');
     if ((input.direction === 'outgoing' && INCOMING_ONLY.includes(input.category)) || (input.direction === 'incoming' && OUTGOING_ONLY.includes(input.category))) {
       throw new ManualBankError(400, 'DIRECTION_CATEGORY_MISMATCH', 'Direction is not compatible with the category');

@@ -12,14 +12,12 @@ type Candidate = { id: string; source_kind: string };
 
 /** Mirrors the server rules (manual-bank-transaction.ts + migration 106). The server stays authoritative. */
 export const MANUAL_CATEGORIES: ReadonlyArray<{ value: string; only?: Direction; deferred?: boolean }> = [
-  { value: 'cash_deposit', only: 'incoming' }, { value: 'cash_withdrawal', only: 'outgoing' },
-  { value: 'incoming_transfer', only: 'incoming' }, { value: 'outgoing_transfer', only: 'outgoing' },
-  { value: 'inter_account_transfer', deferred: true },
-  { value: 'customer_receipt', only: 'incoming' }, { value: 'supplier_payment', only: 'outgoing' }, { value: 'government_payment', only: 'outgoing' },
-  { value: 'bank_fees', only: 'outgoing' }, { value: 'refund' }, { value: 'other' },
+  { value: 'customer_receipt', only: 'incoming' }, { value: 'supplier_payment', only: 'outgoing' }, { value: 'government_payment', only: 'outgoing' }, { value: 'other' },
+  // Disabled until a supported accounting-resolution workflow exists (they would stay unresolved and block closing).
+  { value: 'cash_deposit', deferred: true }, { value: 'cash_withdrawal', deferred: true }, { value: 'incoming_transfer', deferred: true }, { value: 'outgoing_transfer', deferred: true },
+  { value: 'inter_account_transfer', deferred: true }, { value: 'bank_fees', deferred: true }, { value: 'refund', deferred: true },
 ];
-/** Categories that can never settle invoices or obligations. They stay unresolved in closing until a supported workflow exists. */
-export const NON_SETTLEABLE = ['cash_deposit', 'cash_withdrawal', 'incoming_transfer', 'outgoing_transfer', 'bank_fees'];
+export const NON_SETTLEABLE: string[] = [];
 
 const strings = {
   ar: {
@@ -29,7 +27,7 @@ const strings = {
     save: 'حفظ الحركة', cancel: 'إلغاء', confirmDuplicate: 'إضافة رغم التشابه', deferredNote: 'غير متاح بعد',
     duplicateTitle: 'توجد حركة مشابهة (نفس الحساب والتاريخ والمبلغ). راجعها قبل المتابعة.',
     cats: { cash_deposit: 'إيداع نقدي', cash_withdrawal: 'سحب نقدي', incoming_transfer: 'تحويل وارد', outgoing_transfer: 'تحويل صادر', inter_account_transfer: 'تحويل بين حسابات الشركة', customer_receipt: 'تحصيل من عميل', supplier_payment: 'سداد لمورد', government_payment: 'دفعة حكومية', bank_fees: 'رسوم بنكية', refund: 'استرداد', other: 'أخرى' } as Record<string, string>,
-    errors: { DIRECTION_CATEGORY_MISMATCH: 'الاتجاه لا يناسب التصنيف المختار.', PAIRED_TRANSFER_DEFERRED: 'التحويل بين حسابات الشركة غير مدعوم بعد.', MANUAL_BANK_DUPLICATE: 'توجد حركة يدوية بنفس المرجع.', ACCOUNTING_PERIOD_CLOSED: 'الفترة المحاسبية مقفلة.', FISCAL_YEAR_CLOSED: 'السنة المالية مقفلة.', BANK_ACCOUNT_INACTIVE: 'الحساب البنكي غير نشط.', MANUAL_BANK_INVALID: 'تحقق من الحقول المدخلة.' } as Record<string, string>,
+    errors: { DIRECTION_CATEGORY_MISMATCH: 'الاتجاه لا يناسب التصنيف المختار.', PAIRED_TRANSFER_DEFERRED: 'التحويل بين حسابات الشركة غير مدعوم بعد.', MANUAL_CATEGORY_UNSUPPORTED: 'هذا التصنيف غير متاح بعد لعدم وجود مسار محاسبي معتمد لحسمه.', MANUAL_BANK_DUPLICATE: 'توجد حركة يدوية بنفس المرجع.', ACCOUNTING_PERIOD_CLOSED: 'الفترة المحاسبية مقفلة.', FISCAL_YEAR_CLOSED: 'السنة المالية مقفلة.', BANK_ACCOUNT_INACTIVE: 'الحساب البنكي غير نشط.', MANUAL_BANK_INVALID: 'تحقق من الحقول المدخلة.' } as Record<string, string>,
     required: 'هذا الحقل مطلوب', badAmount: 'أدخل مبلغًا موجبًا بخانتين عشريتين كحد أقصى', badDate: 'أدخل تاريخًا صحيحًا',
   },
   en: {
@@ -39,7 +37,7 @@ const strings = {
     save: 'Save transaction', cancel: 'Cancel', confirmDuplicate: 'Add anyway', deferredNote: 'not available yet',
     duplicateTitle: 'A similar transaction exists (same account, date and amount). Review it before continuing.',
     cats: { cash_deposit: 'Cash deposit', cash_withdrawal: 'Cash withdrawal', incoming_transfer: 'Incoming transfer', outgoing_transfer: 'Outgoing transfer', inter_account_transfer: 'Inter-account transfer', customer_receipt: 'Customer receipt', supplier_payment: 'Supplier payment', government_payment: 'Government payment', bank_fees: 'Bank fees', refund: 'Refund', other: 'Other' } as Record<string, string>,
-    errors: { DIRECTION_CATEGORY_MISMATCH: 'The direction does not fit the selected category.', PAIRED_TRANSFER_DEFERRED: 'Transfers between company accounts are not supported yet.', MANUAL_BANK_DUPLICATE: 'A manual transaction with the same reference already exists.', ACCOUNTING_PERIOD_CLOSED: 'The accounting period is closed.', FISCAL_YEAR_CLOSED: 'The fiscal year is closed.', BANK_ACCOUNT_INACTIVE: 'The bank account is inactive.', MANUAL_BANK_INVALID: 'Check the entered fields.' } as Record<string, string>,
+    errors: { DIRECTION_CATEGORY_MISMATCH: 'The direction does not fit the selected category.', PAIRED_TRANSFER_DEFERRED: 'Transfers between company accounts are not supported yet.', MANUAL_CATEGORY_UNSUPPORTED: 'This category is not available yet: no supported accounting workflow can resolve it.', MANUAL_BANK_DUPLICATE: 'A manual transaction with the same reference already exists.', ACCOUNTING_PERIOD_CLOSED: 'The accounting period is closed.', FISCAL_YEAR_CLOSED: 'The fiscal year is closed.', BANK_ACCOUNT_INACTIVE: 'The bank account is inactive.', MANUAL_BANK_INVALID: 'Check the entered fields.' } as Record<string, string>,
     required: 'This field is required', badAmount: 'Enter a positive amount with at most two decimals', badDate: 'Enter a valid date',
   },
 };
@@ -74,7 +72,7 @@ export function ManualBankTransactionDialog({ onClose, onCreated, onUnauthorized
   const amountOk = /^\d{1,13}(\.\d{1,2})?$/.test(amount.trim()) && Number(amount) > 0;
   const dateOk = isValidIsoDate(date);
   const valid = Boolean(accountId && dateOk && category && !selected?.deferred && amountOk && description.trim());
-  const nonSettleable = category !== null && NON_SETTLEABLE.includes(category);
+  const otherNote = category === 'other';
   const docOptions = useMemo(() => docs.slice(0, 200).map(d => ({ value: d.id, label: d.reference_number ? `${d.reference_number} · ${d.original_filename}` : d.original_filename })), [docs]);
 
   const pickDirection = (value: string) => {
@@ -131,7 +129,7 @@ export function ManualBankTransactionDialog({ onClose, onCreated, onUnauthorized
           <TextInput label={s.counterparty} value={counterparty} onChange={e => setCounterparty(e.currentTarget.value)} maxLength={200}/>
           <Select label={s.document} data={docOptions} value={documentId} onChange={setDocumentId} searchable clearable/>
         </div>
-        {nonSettleable && <Alert color="yellow" role="note">{i18n.language === 'ar' ? 'هذا التصنيف لا يُسوّي فواتير أو التزامات، وسيبقى «غير محسوم» في الإقفال حتى يتوفر مسار محاسبي معتمد له.' : 'This category cannot settle invoices or obligations. It stays unresolved for closing until a supported accounting workflow exists for it.'}</Alert>}
+        {otherNote && <Alert color="yellow" role="note">{i18n.language === 'ar' ? 'تبقى غير محسومة في الإقفال حتى تُربط بمسار قائم (التزام، عهدة، حركة شريك، دفعة شخصية). لا يوجد قيد تلقائي.' : 'Stays unresolved for closing until linked through an existing workflow (obligation, custody, partner transaction, personal payment). No automatic journal.'}</Alert>}
         <div className="modal-actions">
           <Button variant="default" onClick={onClose} disabled={busy}>{s.cancel}</Button>
           <Button type="submit" loading={busy}>{duplicates ? s.confirmDuplicate : s.save}</Button>
