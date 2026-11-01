@@ -2,7 +2,7 @@ import { PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { assertCustodyJournalControls } from './custody-posting';
-import { obligationSettlementJournalMatchesPlan } from './obligation-settlement-posting';
+import { SettlementJournalBlockedError, verifyObligationSettlementJournal } from './obligation-settlement-posting';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
@@ -273,9 +273,8 @@ export async function postJournalInTransaction(
       // Same bank-line contract as a document settlement (linked bank ledger account, direction, exact amount) for every obligation settlement; an invoice
       // settlement that can be prefilled must additionally be exactly its two-line plan (payable/receivable control account against the bank ledger account).
       await assertDocumentSettlementBankLine(client, companyId, id, operationalSource);
-      if ((await obligationSettlementJournalMatchesPlan(client, companyId, id, journal.source_id!)) === false) {
-        throw new JournalPostingValidationError('Obligation settlement journal must debit the payable (or the bank for a receipt) and credit the bank (or the receivable) of the settled invoice obligation');
-      }
+      try { await verifyObligationSettlementJournal(client, companyId, id, journal.source_id!); }
+      catch (error) { if (error instanceof SettlementJournalBlockedError) throw new JournalPostingValidationError(`${error.message} [${error.code}]`); throw error; }
     }
 
     await assertCustodyJournalControls(client, companyId, id, operationalSource);

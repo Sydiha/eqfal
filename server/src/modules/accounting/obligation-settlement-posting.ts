@@ -18,6 +18,7 @@ export const SETTLEMENT_JOURNAL_ERROR_CODES = [
   'SETTLEMENT_JOURNAL_RECOGNITION_AMBIGUOUS',
   'SETTLEMENT_JOURNAL_BANK_MISMATCH',
   'SETTLEMENT_JOURNAL_BANK_UNLINKED',
+  'SETTLEMENT_JOURNAL_LINES_MISMATCH',
 ] as const;
 export type SettlementJournalErrorCode = (typeof SETTLEMENT_JOURNAL_ERROR_CODES)[number];
 
@@ -103,19 +104,30 @@ export async function planObligationSettlementJournal(client: Pick<PoolClient, '
   };
 }
 
+/** The only blocks that leave a controlled MANUAL exception at posting: no approved treatment exists for them, so a reviewed manual journal (bank-line rule still enforced) is the only way. */
+const MANUAL_EXCEPTION_CODES: ReadonlySet<SettlementJournalErrorCode> = new Set(['SETTLEMENT_JOURNAL_SOURCE_UNSUPPORTED', 'SETTLEMENT_JOURNAL_ADJUSTMENTS_EXIST']);
+
 /**
- * Posting-time contract. An eligible settlement journal must be exactly the two-line entry of its plan. When the settlement is not eligible for
- * prefilling (manual obligation, credit/debit notes, mapping or recognition ambiguity) the caller still enforces the bank-line rule; the journal stays a reviewed manual entry.
- * Returns null when the plan does not apply, otherwise whether the journal matches it.
+ * Posting-time contract. An invoice-backed settlement journal must be exactly the two-line entry of its plan. It can never bypass that because a
+ * mapping changed, the recognition became ambiguous, the bank link disappeared or the bank row no longer matches: those reject the posting with the
+ * plan's own code. The manual exception is explicit and narrow: a non-invoice obligation (manual/opening/document sourced) or an invoice with credit/debit
+ * notes, where no treatment is approved; the caller still enforces the bank-line rule for them.
+ * Returns 'exact' or 'manual_exception'; throws SettlementJournalBlockedError otherwise.
  */
-export async function obligationSettlementJournalMatchesPlan(client: PoolClient, companyId: string, journalId: string, settlementId: string): Promise<boolean | null> {
+export async function verifyObligationSettlementJournal(client: PoolClient, companyId: string, journalId: string, settlementId: string): Promise<'exact' | 'manual_exception'> {
   let plan: SettlementJournalPlan;
   try { plan = await planObligationSettlementJournal(client, companyId, settlementId, true); }
-  catch (error) { if (error instanceof SettlementJournalBlockedError) return null; throw error; }
+  catch (error) {
+    if (error instanceof SettlementJournalBlockedError && MANUAL_EXCEPTION_CODES.has(error.code)) return 'manual_exception';
+    throw error;
+  }
   const row = (await client.query<{ valid: boolean }>(
     `SELECT COUNT(*)=2 AND BOOL_AND((l.account_id=$2 AND l.debit=$4::numeric AND l.credit=0) OR (l.account_id=$3 AND l.credit=$4::numeric AND l.debit=0))
             AND COUNT(DISTINCT l.account_id)=2 valid
        FROM journal_lines l WHERE l.journal_entry_id=$1 AND l.company_id=$5`,
     [journalId, plan.debitAccountId, plan.creditAccountId, plan.amount, companyId])).rows[0];
-  return row?.valid === true;
+  if (row?.valid !== true) {
+    throw new SettlementJournalBlockedError('SETTLEMENT_JOURNAL_LINES_MISMATCH', 'Obligation settlement journal must debit the payable (or the bank for a receipt) and credit the bank (or the receivable) of the settled invoice obligation');
+  }
+  return 'exact';
 }

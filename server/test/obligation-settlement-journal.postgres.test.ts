@@ -245,4 +245,82 @@ describeDatabase('obligation settlement journal prefill and posting contract (Po
     expect(late.json.code).toBe('FISCAL_YEAR_CLOSED');
     expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_id=$2", [co.id, s2])).toBe(0);
   });
+  describe('posting cannot bypass exact control-account validation after the plan changes', () => {
+    async function drafted(label: string) {
+      const co = await setup(label);
+      const inv = await invoice(co, 'purchase');
+      const s = await settle(co, inv.obligationId, await bankTx(co, '2026-03-20', '-23.00'), '23.00');
+      const d = await prefill(co, s);
+      expect(d.status).toBe(201);
+      return { co, inv, s, journal: d.json.id as string };
+    }
+    const refused = async (co: Co, journal: string, code: string) => {
+      const r = await post(co, journal);
+      expect(r.status, JSON.stringify(r.json)).toBe(400);
+      expect(r.json.error).toContain(code);
+      expect((await h.q<{ status: string }>('SELECT status FROM journal_entries WHERE id=$1', [journal]))[0]!.status).toBe('draft');
+    };
+
+    it('mapping changed to another account: the prepared draft is refused (recognition ambiguous)', async () => {
+      const { co, journal } = await drafted('mc');
+      await h.q("UPDATE invoice_account_mappings SET account_id=$2 WHERE company_id=$1 AND mapping_key='payable'", [co.id, co.acc['other']]);
+      await refused(co, journal, 'SETTLEMENT_JOURNAL_MAPPING_MISSING');
+    });
+    it('mapping removed: refused', async () => {
+      const { co, journal } = await drafted('mr');
+      await h.q("DELETE FROM invoice_account_mappings WHERE company_id=$1 AND mapping_key='payable'", [co.id]);
+      await refused(co, journal, 'SETTLEMENT_JOURNAL_MAPPING_MISSING');
+    });
+    it('mapping moved to another valid liability after recognition: refused as ambiguous, even for a hand-built journal on the new account', async () => {
+      const { co, journal } = await drafted('amb');
+      const other = await h.account(co.id, 'AP2', 'liability', 'current_liability');
+      await h.q("UPDATE invoice_account_mappings SET account_id=$2 WHERE company_id=$1 AND mapping_key='payable'", [co.id, other]);
+      await refused(co, journal, 'SETTLEMENT_JOURNAL_RECOGNITION_AMBIGUOUS');
+      await h.q('UPDATE journal_lines SET account_id=$2 WHERE journal_entry_id=$1 AND debit>0', [journal, other]);
+      await refused(co, journal, 'SETTLEMENT_JOURNAL_RECOGNITION_AMBIGUOUS');
+    });
+    it('bank ledger link removed: refused', async () => {
+      const { co, journal } = await drafted('bl');
+      await h.q("UPDATE bank_account_ledger_links SET valid_to='2026-01-15', ended_by=$2, ended_at=NOW() WHERE company_id=$1", [co.id, co.owner.id]);
+      const r = await post(co, journal);
+      expect(r.status).toBe(400);
+      expect(r.json.error).toMatch(/not linked/i);
+    });
+    it('a prepared draft whose lines were edited to other accounts is refused', async () => {
+      const { co, journal } = await drafted('ed');
+      await h.q('UPDATE journal_lines SET account_id=$2 WHERE journal_entry_id=$1 AND debit>0', [journal, co.acc['other']]);
+      await refused(co, journal, 'SETTLEMENT_JOURNAL_LINES_MISMATCH');
+    });
+    it('credit/debit note introduced after the draft: the explicit manual exception applies (bank-line rule still enforced)', async () => {
+      const { co, inv, journal } = await drafted('cn');
+      await h.q(`INSERT INTO invoice_adjustments(company_id,original_invoice_id,direction,adjustment_type,adjustment_date,external_number,counterparty_id,status,subtotal_amount,vat_amount,total_amount,reason,created_by_user_id)
+                 VALUES($1,$2,'purchase','credit','2026-03-15','CN-9',$3,'draft',1,0,1,'price correction',$4)`, [co.id, inv.invoiceId, co.supplier, co.owner.id]);
+      // a journal that does not move the linked bank account is still refused...
+      await h.q('UPDATE journal_lines SET account_id=$2 WHERE journal_entry_id=$1 AND credit>0', [journal, co.acc['other']]);
+      expect((await post(co, journal)).status).toBe(400);
+      // ...a reviewed journal that does is the controlled manual path
+      await h.q('UPDATE journal_lines SET account_id=$2 WHERE journal_entry_id=$1 AND credit>0', [journal, co.acc['bankGl']]);
+      expect((await post(co, journal)).status).toBe(200);
+    });
+  });
+
+  it('government payments: supported only for invoice-backed obligations; manual government obligations stay on the explicit manual path', async () => {
+    const co = await setup('gov');
+    // invoice-backed government payable (counterparty type government) -> prefilled with the payable mapping
+    const inv = await invoice(co, 'purchase', co.government);
+    const s = await settle(co, inv.obligationId, await bankTx(co, '2026-03-20', '-23.00'), '23.00');
+    expect((await prefill(co, s)).status).toBe(201);
+    // manual government obligation with payment reference and period (G5 fields): no approved treatment -> prefill refused, manual exception only
+    const ob = (await h.q<{ id: string }>("INSERT INTO obligations(company_id,direction,counterparty_id,original_amount,recognized_on,verification_status,source_type,created_by_user_id) VALUES($1,'payable',$2,500,'2026-03-01','confirmed','manual',$3) RETURNING id", [co.id, co.government, co.owner.id]))[0]!.id;
+    const r = await co.owner.client.req('POST', `/obligations/${ob}/settlements`, { bank_transaction_id: await bankTx(co, '2026-03-22', '-500.00'), amount: '500.00', payment_reference: 'SADAD-1', period_from: '2026-02-01', period_to: '2026-02-28' });
+    expect(r.status).toBe(201);
+    const blocked = await prefill(co, r.json.id);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.code).toBe('SETTLEMENT_JOURNAL_SOURCE_UNSUPPORTED');
+    const blank = await co.owner.client.req('POST', '/journals', { fiscal_year_id: co.fy, accounting_date: '2026-03-22', description: 'manual', source_type: 'obligation_settlement', source_id: r.json.id });
+    expect(blank.status).toBe(201);
+    const wrong = await co.owner.client.req('PUT', `/journals/${blank.json.id}/lines`, { lines: [{ account_id: co.acc['payable'], debit: '500', credit: '0', memo: null }, { account_id: co.acc['other'], debit: '0', credit: '500', memo: null }] }, { 'if-match': '1' });
+    expect(wrong.status).toBe(200);
+    expect((await post(co, blank.json.id)).status).toBe(400); // bank-line rule applies to the exception too
+  });
 });
