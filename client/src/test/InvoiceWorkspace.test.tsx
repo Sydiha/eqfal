@@ -55,7 +55,7 @@ describe('Purchase direction',()=>{
   expect(within(screen.getByRole('search')).getByRole('option',{name:'All suppliers'})).toBeInTheDocument();
  });
 
- it('creates a purchase draft with direction purchase, an explicit recoverability and no sales rate lookup',async()=>{
+ it('creates a purchase draft with direction purchase and an explicit recoverability',async()=>{
   const fetchMock=mockApi(base,(key)=>key==='POST /api/invoices'?json({invoice:base},201):undefined);
   render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Add purchase invoice +'}));
@@ -74,7 +74,8 @@ describe('Purchase direction',()=>{
   const body=JSON.parse((calls(fetchMock,'POST /api/invoices')[0]![1] as RequestInit).body as string);
   expect(body.direction).toBe('purchase');
   expect(body.lines[0]).toEqual({description:'Stationery',quantity:'1',unit_price:'100.00',vat_rate:'15.00',vat_treatment:'standard',vat_recoverability:'fully_recoverable'});
-  expect(calls(fetchMock,'/api/invoices/standard-rate')).toEqual([]);
+  // The rate is only suggested from the tax point date; the typed value is what is sent.
+  expect(calls(fetchMock,'/api/invoices/standard-rate').length).toBeGreaterThan(0);
  });
 
  it('offers only non-rejected purchase or expense documents as evidence, and only with document.view',async()=>{
@@ -664,5 +665,94 @@ describe('Delete & void Phase 1: deleting draft invoices',()=>{
   const group=await screen.findByRole('group',{name:'حذف مسودة الفاتورة نهائيًا؟'});
   expect(group).toHaveTextContent('لا يمكن استرجاعها');
   expect(within(group).getByRole('button',{name:'حذف نهائي'})).toBeInTheDocument();
+ });
+});
+
+describe('Purchase VAT rate suggestion',()=>{
+ const rateApi=(missing=false)=>mockApi(base,(key)=>{
+  if(key.startsWith('GET /api/invoices/standard-rate')){
+   const date=new URL(key.split(' ')[1]!,'http://x').searchParams.get('date')!;
+   if(missing)return json({code:'VAT_RATE_NOT_CONFIGURED'},404);
+   return date>='2020-07-01'?json({rate:'15.00'}):json({rate:'5.00'});
+  }
+  return key==='POST /api/invoices'?json({invoice:base},201):undefined;
+ });
+ const openForm=async()=>{
+  render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Add purchase invoice +'}));
+  return await screen.findByRole('dialog');
+ };
+ const rateInput=(d:HTMLElement)=>within(d).getByLabelText('VAT rate %') as HTMLInputElement;
+
+ it('fills an empty rate from the tax point date, with the historical rate before and after 2020-07-01',async()=>{
+  const fetchMock=rateApi();
+  const d=await openForm();
+  fireEvent.change(within(d).getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  expect(rateInput(d).value).toBe('');
+  expect(calls(fetchMock,'/api/invoices/standard-rate')).toEqual([]); // no tax point date, no suggestion
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2020-06-30'}});
+  await waitFor(()=>expect(rateInput(d).value).toBe('5.00'));
+  // Only an empty field is filled: a later date change keeps the value and offers the new suggestion instead.
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2020-07-01'}});
+  const note=await within(d).findByRole('status');
+  expect(rateInput(d).value).toBe('5.00');
+  fireEvent.click(within(note).getByRole('button',{name:'Use 15.00%'}));
+  expect(rateInput(d).value).toBe('15.00');
+ });
+
+ it('keeps a manually entered rate, warns without blocking, and lets the user apply the suggestion',async()=>{
+  const fetchMock=rateApi();
+  const d=await openForm();
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  await waitFor(()=>expect(rateInput(d).value).toBe('15.00'));
+  fireEvent.change(rateInput(d),{target:{value:'5'}});
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2026-10-02'}});
+  await waitFor(()=>expect(calls(fetchMock,'date=2026-10-02').length).toBe(1));
+  expect(rateInput(d).value).toBe('5');
+  const note=await within(d).findByRole('status');
+  expect(note).toHaveTextContent('supplier invoice states 5%');
+  expect(within(d).queryByRole('alert')).toBeNull();
+  fireEvent.click(within(note).getByRole('button',{name:'Use 15.00%'}));
+  expect(rateInput(d).value).toBe('15.00');
+ });
+
+ it('keeps a previously saved rate and warns when it differs',async()=>{
+  const saved={...base,lines:[{...base.lines[0],vat_rate:'5.00'}]};
+  const fetchMock=mockApi(saved,(key)=>key.startsWith('GET /api/invoices/standard-rate')?json({rate:'15.00'}):undefined);
+  render(<InvoiceWorkspace {...caps} direction="purchase" onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('REF-9'));
+  fireEvent.click(await screen.findByRole('button',{name:'Edit'}));
+  const d=await screen.findByRole('dialog');
+  await waitFor(()=>expect(calls(fetchMock,'/api/invoices/standard-rate').length).toBeGreaterThan(0));
+  expect(rateInput(d).value).toBe('5.00');
+  expect(await within(d).findByRole('status')).toHaveTextContent('5.00%');
+ });
+
+ it('keeps the four treatments distinct: non-standard lines carry no rate input, and switching back to standard re-suggests instead of keeping 0',async()=>{
+  rateApi();
+  const d=await openForm();
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  await waitFor(()=>expect(rateInput(d).value).toBe('15.00'));
+  for(const treatment of ['zero_rated','exempt','out_of_scope']){
+   fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:treatment}});
+   expect(within(d).getByLabelText('VAT rate %')).toHaveTextContent('0%');
+   expect(within(d).queryByLabelText(/^Input VAT recovery/)).toBeNull();
+  }
+  fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  await waitFor(()=>expect(rateInput(d).value).toBe('15.00'));
+ });
+
+ it('shows a non-blocking note and leaves the field editable when no rate is configured',async()=>{
+  rateApi(true);
+  const d=await openForm();
+  fireEvent.change(within(d).getByLabelText('Tax point date'),{target:{value:'2010-01-01'}});
+  fireEvent.change(within(d).getByLabelText('VAT treatment'),{target:{value:'standard'}});
+  expect(await within(d).findByRole('status')).toHaveTextContent('No standard VAT rate is configured');
+  fireEvent.change(rateInput(d),{target:{value:'7'}});
+  expect(rateInput(d).value).toBe('7');
+  expect(within(d).queryByRole('alert')).toBeNull();
  });
 });
