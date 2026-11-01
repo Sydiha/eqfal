@@ -53,6 +53,41 @@ describe.each(['en', 'ar'] as const)('manual bank transactions (%s)', (lang) => 
     for (const name of names.on) expect(await screen.findByRole('option', { name: new RegExp(`^${name}$`), hidden: true }), name).not.toHaveAttribute('data-combobox-disabled');
   });
 
+  it('places the add action in its own toolbar row, outside the status banner', async () => {
+    setup();
+    const button = await screen.findByRole('button', { name: L.add });
+    expect(button.closest('.bank-recon__status')).toBeNull();
+    expect(button.closest('.bank-recon__actions')).not.toBeNull();
+  });
+
+  it('renders the category dropdown above the dialog backdrop and selects a supported category', async () => {
+    setup();
+    fireEvent.click(await screen.findByRole('button', { name: L.add }));
+    const dialog = await screen.findByRole('dialog');
+    const category = within(dialog).getByRole('textbox', { name: /Category|التصنيف/ });
+    fireEvent.click(category);
+    const option = await screen.findByRole('option', { name: lang === 'en' ? 'Supplier payment' : 'سداد لمورد', hidden: true });
+    const dropdown = option.closest('.mantine-Select-dropdown') as HTMLElement;
+    expect(Number(dropdown.style.zIndex)).toBeGreaterThan(1000);
+    fireEvent.click(option);
+    await waitFor(() => expect(category).toHaveValue(lang === 'en' ? 'Supplier payment' : 'سداد لمورد'));
+  });
+
+  it('does not select a deferred category and clears a category that conflicts with a new direction', async () => {
+    setup();
+    fireEvent.click(await screen.findByRole('button', { name: L.add }));
+    const dialog = await screen.findByRole('dialog');
+    const category = within(dialog).getByRole('textbox', { name: /Category|التصنيف/ });
+    fireEvent.click(category);
+    fireEvent.click(await screen.findByRole('option', { name: new RegExp(lang === 'en' ? 'Cash deposit' : 'إيداع نقدي'), hidden: true }));
+    expect(category).toHaveValue('');
+    fireEvent.click(category);
+    fireEvent.click(await screen.findByRole('option', { name: lang === 'en' ? 'Customer receipt' : 'تحصيل من عميل', hidden: true }));
+    await waitFor(() => expect(category).toHaveValue(lang === 'en' ? 'Customer receipt' : 'تحصيل من عميل'));
+    fireEvent.click(within(dialog).getByLabelText(lang === 'en' ? 'Outgoing' : 'صادر'));
+    await waitFor(() => expect(category).toHaveValue(''));
+  });
+
   it('surfaces a possible duplicate and only re-submits with explicit confirmation', async () => {
     const posts: Array<{ url: string; body: any }> = [];
     let first = true;
