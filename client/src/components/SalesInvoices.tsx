@@ -99,7 +99,8 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const isPurchase=direction==='purchase';
  const rangeInvalid=!!filters.from&&!!filters.to&&filters.to<filters.from;
  const filtersActive=Object.values(filters).some(Boolean);
- const rateDate=form&&!isPurchase?(form.values.tax_point_date||form.values.issue_date):'';
+ // Sales may show a provisional rate from the issue date; purchases suggest a rate only once the tax point date is known.
+ const rateDate=form?(isPurchase?form.values.tax_point_date:(form.values.tax_point_date||form.values.issue_date)):'';
  const formOpen=!!form;
  const money=(value:string|null|undefined)=>formatMoney(value,'0.00');
  // Most specific first: the stated reason of a code, this direction's text, the shared invoice text, then the app-wide code (e.g. FORBIDDEN).
@@ -150,15 +151,16 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
    if(response.status===401){unauthorized();return;}
    if(response.ok){const payload=await response.json() as {rate:string};if(cancelled)return;setRate({date:rateDate,status:'ok',value:payload.rate});
     // Only lines whose rate was resolved automatically (or is still empty) follow the resolved rate; a saved rate is never overwritten.
-    setForm(current=>current&&{...current,values:{...current.values,lines:current.values.lines.map(l=>l.vat_treatment==='standard'&&(l.rate_source==='auto'||l.vat_rate==='')?{...l,vat_rate:payload.rate,rate_source:'auto'}:l)}});}
+    setForm(current=>current&&{...current,values:{...current.values,lines:current.values.lines.map(l=>l.vat_treatment==='standard'&&(isPurchase?l.vat_rate==='':(l.rate_source==='auto'||l.vat_rate===''))?{...l,vat_rate:payload.rate,rate_source:'auto'}:l)}});}
    else setRate({date:rateDate,status:response.status===404?'missing':'error'});
   }).catch(()=>{if(!cancelled)setRate({date:rateDate,status:'error'})});
   return()=>{cancelled=true};
- },[formOpen,rateDate,unauthorized]);
+ },[formOpen,rateDate,unauthorized,isPurchase]);
  const sameRate=(a:string,b:string)=>a!==''&&b!==''&&Number(a).toFixed(2)===Number(b).toFixed(2);
  // The effective-rate check is a sales rule; purchase lines carry the supplier's stated rate and the server validates it.
  const lineRateState=(line:FormLine):'na'|'ok'|'pending'|'mismatch'|'missing'|'error'|'loading'=>{
-  if(isPurchase||line.vat_treatment!=='standard')return 'na';
+  if(line.vat_treatment!=='standard')return 'na';
+  if(isPurchase&&!rateDate)return 'na';
   if(!rate||rate.status==='loading')return 'loading';
   if(rate.status==='missing')return 'missing';
   if(rate.status==='error')return 'error';
@@ -226,7 +228,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const goToPage=(page:number)=>{setOffset((page-1)*PAGE_SIZE);writeQueryParameters({[`${prefix}Page`]:page>1?String(page):null})};
 
  if(!canView&&!canCreate)return null;
- const saveBlocked=!!form&&form.values.lines.some(l=>{const st=lineRateState(l);return st==='pending'||st==='loading'||(!!form.values.tax_point_date&&(st==='mismatch'||st==='missing'||st==='error'))});
+ const saveBlocked=!isPurchase&&!!form&&form.values.lines.some(l=>{const st=lineRateState(l);return st==='pending'||st==='loading'||(!!form.values.tax_point_date&&(st==='mismatch'||st==='missing'||st==='error'))});
  const statusLabel=(status:string)=>t(`salesInvoice.statuses.${status}`);
  const stageLabel=(invoice:Invoice)=>invoice.actionable_status?t(`invoiceWorkspace.stages.${invoice.actionable_status}`):statusLabel(invoice.status);
  const numberOf=(i:Invoice)=>i.internal_number??i.external_reference??t('salesInvoice.draftNumber');
@@ -370,9 +372,12 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
      <label>{t('salesInvoice.quantity')}<input required inputMode="decimal" value={line.quantity} onChange={e=>setLine(index,{quantity:e.target.value})}/></label>
      <label>{t('salesInvoice.unitPrice')}<input required inputMode="decimal" value={line.unit_price} onChange={e=>setLine(index,{unit_price:e.target.value})}/></label>
      <label>{t('salesInvoice.discount')}<input inputMode="decimal" value={line.discount_amount} onChange={e=>setLine(index,{discount_amount:e.target.value})}/></label>
-     <label>{t('salesInvoice.vatTreatment')}<select value={line.vat_treatment} onChange={e=>setLine(index,{vat_treatment:e.target.value,...(e.target.value!=='standard'?{vat_recoverability:'',vat_recoverable_percent:''}:{}),...(e.target.value==='standard'?(isPurchase?{vat_rate:line.vat_rate,rate_source:'saved' as const}:{vat_rate:rate?.status==='ok'?rate.value??'':'',rate_source:'auto' as const}):e.target.value?{vat_rate:'0'}:{})})}><option value="">{t('salesInvoice.chooseTreatment')}</option>{TREATMENTS.map(x=><option key={x} value={x}>{t(`salesInvoice.treatments.${x}`)}</option>)}</select></label>
+     <label>{t('salesInvoice.vatTreatment')}<select value={line.vat_treatment} onChange={e=>setLine(index,{vat_treatment:e.target.value,...(e.target.value!=='standard'?{vat_recoverability:'',vat_recoverable_percent:''}:{}),...(e.target.value==='standard'?(isPurchase?{vat_rate:line.vat_treatment==='standard'?line.vat_rate:rate?.status==='ok'?rate.value??'':'',rate_source:line.vat_treatment==='standard'?line.rate_source:'auto' as const}:{vat_rate:rate?.status==='ok'?rate.value??'':'',rate_source:'auto' as const}):e.target.value?{vat_rate:'0'}:{})})}><option value="">{t('salesInvoice.chooseTreatment')}</option>{TREATMENTS.map(x=><option key={x} value={x}>{t(`salesInvoice.treatments.${x}`)}</option>)}</select></label>
      {isPurchase&&line.vat_treatment==='standard'?<>
-      <label>{t('salesInvoice.vatRate')}<input required inputMode="decimal" dir="ltr" value={line.vat_rate} onChange={e=>setLine(index,{vat_rate:e.target.value,rate_source:'saved'})}/></label>
+      <label>{t('salesInvoice.vatRate')}<input required inputMode="decimal" dir="ltr" value={line.vat_rate} onChange={e=>setLine(index,{vat_rate:e.target.value,rate_source:'saved'})}/></label>{(()=>{const state=lineRateState(line);return <>
+       {state==='mismatch'&&<span role="status" className="sales-invoices__hint sales-invoices__rate-note">{t('purchaseInvoice.rateDiffers',{entered:line.vat_rate,rate:rate?.value})} <button type="button" onClick={()=>setLine(index,{vat_rate:rate?.value??'',rate_source:'auto'})}>{t('salesInvoice.applyRate',{rate:rate?.value})}</button></span>}
+       {state==='missing'&&<span role="status" className="sales-invoices__hint sales-invoices__rate-note">{t('purchaseInvoice.rateNotConfigured')}</span>}
+       {state==='error'&&<span role="status" className="sales-invoices__hint sales-invoices__rate-note">{t('purchaseInvoice.rateLoadError')}</span>}</>})()}
       <label>{t('purchaseInvoice.recoverability')}<select required value={line.vat_recoverability} onChange={e=>setLine(index,{vat_recoverability:e.target.value,...(e.target.value!=='partially_recoverable'?{vat_recoverable_percent:''}:{})})}><option value="">{t('purchaseInvoice.chooseRecoverability')}</option>{['fully_recoverable','partially_recoverable','non_recoverable'].map(x=><option key={x} value={x}>{t(`purchaseInvoice.recoverabilities.${x}`)}</option>)}</select><span className="sales-invoices__hint">{t('purchaseInvoice.recoverabilityHint')}</span></label>
       {line.vat_recoverability==='partially_recoverable'&&<label>{t('purchaseInvoice.recoverablePercent')}<input required inputMode="decimal" dir="ltr" value={line.vat_recoverable_percent} onChange={e=>setLine(index,{vat_recoverable_percent:e.target.value})}/></label>}</>
      :(()=>{const state=lineRateState(line);const shown=line.vat_treatment==='standard'?(line.vat_rate?`${line.vat_rate}%`:'—'):line.vat_treatment?'0%':'—';
