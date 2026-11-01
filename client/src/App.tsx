@@ -217,6 +217,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       canManage={c.includes('bank.account.manage')}
       canMatch={c.includes('bank.match')}
       canReconcile={c.includes('bank.reconcile')}
+      canCreateManual={c.includes('bank.transaction.manual')}
       canSettle={c.includes('payment.settle')}
       canViewCustody={c.includes('custody.view')}
       canManageCustody={c.includes('custody.manage')}

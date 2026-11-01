@@ -763,6 +763,10 @@ class BankRepository {
     if (!fps.length) return new Set();
     const { rows } = await client.query<{fingerprint:string}>('SELECT DISTINCT fingerprint FROM bank_transactions WHERE company_id=$1 AND bank_account_id=$2 AND fingerprint = ANY($3::text[])',[companyId,accountId,fps]); return new Set(rows.map((r)=>r.fingerprint));
   }
+  /** Manual entries of this account as `date|amount` keys; an import row that matches one is flagged possible_duplicate for review (never suppressed). */
+  async manualKeys(companyId:string, accountId:string, client?:PoolClient): Promise<Set<string>> {
+    const result = await (client??this.db).query<{k:string}>("SELECT transaction_date::text||'|'||amount::text k FROM bank_transactions WHERE company_id=$1 AND bank_account_id=$2 AND source_kind='manual'",[companyId,accountId]); return new Set((result?.rows??[]).map(r=>r.k));
+  }
   async insertTransaction(input: NormalizedTransaction & { companyId:string; accountId:string; batchId:string; currency:string }, client:PoolClient): Promise<boolean> {
     const result = await client.query(`INSERT INTO bank_transactions(company_id,bank_account_id,import_batch_id,transaction_date,value_date,amount,currency_code,description,bank_reference,running_balance,source_row_number,fingerprint,fingerprint_strength) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT DO NOTHING`, [input.companyId,input.accountId,input.batchId,input.transaction_date,input.value_date,input.amount,input.currency,input.description,input.bank_reference,input.running_balance,input.source_row_number,input.fingerprint,input.fingerprint_strength]); return (result.rowCount ?? 0) === 1;
   }
@@ -883,7 +887,7 @@ export class BankService {
     }
   }
 
-  private normalize(table:ParsedTable,mapping:BankColumnMapping,account:BankAccount,existing:Set<string>): PreviewResult {
+  private normalize(table:ParsedTable,mapping:BankColumnMapping,account:BankAccount,existing:Set<string>,manualKeys:Set<string>=new Set()): PreviewResult {
     const results:NormalizedTransaction[]=[]; let valid=0,duplicate=0,possible=0,invalid=0;
     const mappedIndices=[mapping.transaction_date,mapping.amount,mapping.debit,mapping.credit,mapping.value_date,mapping.description,mapping.bank_reference,mapping.running_balance].filter(Boolean).map((r)=>r!.index);
     for(let i=0;i<table.rows.length;i++){
@@ -909,7 +913,7 @@ export class BankService {
       if(formula) error='Formula cells are not allowed';
       const strong=Boolean(reference); const fingerprint=strong ? hashParts([account.id,date,amount,reference]) : hashParts([account.id,date,amount,description,balance]);
       let status:NormalizedTransaction['status']='valid';
-      if(error){status='invalid';invalid++;} else if(existing.has(fingerprint)&&strong){status='duplicate';duplicate++;} else if(existing.has(fingerprint)){status='possible_duplicate';possible++;valid++;} else valid++;
+      if(error){status='invalid';invalid++;} else if(existing.has(fingerprint)&&strong){status='duplicate';duplicate++;} else if(existing.has(fingerprint)||(amount!==null&&date!==null&&manualKeys.has(`${date}|${amount}`))){status='possible_duplicate';possible++;valid++;} else valid++;
       results.push({source_row_number:source,transaction_date:date??'',value_date:valueDate,amount:amount??'',description,bank_reference:reference,running_balance:balance,fingerprint,fingerprint_strength:strong?'strong':'weak',status,error});
     }
     return {totalRows:results.length,validRows:valid,duplicateRows:duplicate,possibleDuplicateRows:possible,invalidRows:invalid,rows:results};
@@ -927,7 +931,7 @@ export class BankService {
       const ref=mapping.bank_reference?normalizeText(row[mapping.bank_reference.index]??null):null; const desc=mapping.description?normalizeText(row[mapping.description.index]??null):null; const bal=mapping.running_balance?normalizeMoney(row[mapping.running_balance.index]??null,true):null;
       return ref?hashParts([account.id,date,amount,ref]):hashParts([account.id,date,amount,desc,bal]);
     }))];
-    const existing=await this.repo.fingerprints(companyId,account.id,refs); return this.normalize(table,mapping,account,existing);
+    const existing=await this.repo.fingerprints(companyId,account.id,refs); const manualKeys=await this.repo.manualKeys(companyId,account.id); return this.normalize(table,mapping,account,existing,manualKeys);
   }
 
   async saveMapping(batchId:string,companyId:string,actor:string,mapping:BankColumnMapping){
@@ -940,7 +944,7 @@ export class BankService {
     return this.tx(async(client)=>{
       const batch=await this.repo.batch(batchId,companyId,client,true); if(!batch) throw new BankNotFoundError('Bank import not found'); if(batch.status==='confirmed') return {batch,importedRows:batch.valid_rows,duplicateRows:batch.duplicate_rows,idempotent:true}; if(!batch.column_mapping||batch.status!=='preview_ready') throw new BankConflictError('Preview required before confirm');
       const accountResult=await client.query<BankAccount>('SELECT * FROM bank_accounts WHERE id=$1 AND company_id=$2',[batch.bank_account_id,companyId]); const account=accountResult.rows[0]; if(!account) throw new BankNotFoundError('Bank account not found'); if(!account.is_active) throw new BankConflictError('Bank account is inactive');
-      const table=parseBankFile(batch.source_format,await readVerified(this.files,batch.storage_key,batch.file_sha256)); const provisional=this.normalize(table,batch.column_mapping,account,new Set()); const existing=await this.repo.fingerprintsTx(companyId,account.id,provisional.rows.map((r)=>r.fingerprint),client); const preview=this.normalize(table,batch.column_mapping,account,existing); if(preview.invalidRows>0) throw new BankConflictError('Bank import contains invalid rows');
+      const table=parseBankFile(batch.source_format,await readVerified(this.files,batch.storage_key,batch.file_sha256)); const provisional=this.normalize(table,batch.column_mapping,account,new Set()); const existing=await this.repo.fingerprintsTx(companyId,account.id,provisional.rows.map((r)=>r.fingerprint),client); const preview=this.normalize(table,batch.column_mapping,account,existing,await this.repo.manualKeys(companyId,account.id,client)); if(preview.invalidRows>0) throw new BankConflictError('Bank import contains invalid rows');
       let imported=0; let duplicates=0;
       for(const row of preview.rows){ if(row.status==='duplicate'){duplicates++;continue;} await assertAccountingDateWritable(companyId,row.transaction_date,client); const inserted=await this.repo.insertTransaction({...row,companyId,accountId:account.id,batchId:batch.id,currency:account.currency_code},client); if(inserted) imported++; else duplicates++; }
       const confirmed=await this.repo.confirmBatch(batch.id,companyId,actor,{valid:imported,duplicates},client); await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'bank_import.confirm',entity_type:'bank_import_batch',entity_id:batch.id,before_data:{status:batch.status},after_data:{status:'confirmed',bank_account_id:account.id,file_sha256:batch.file_sha256,total_rows:preview.totalRows,imported_rows:imported,duplicate_rows:duplicates}},client); return {batch:confirmed,importedRows:imported,duplicateRows:duplicates,idempotent:false};

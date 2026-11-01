@@ -17,6 +17,7 @@ type Props = {
   canManage: boolean;
   canMatch: boolean;
   canReconcile: boolean;
+  canCreateManual?: boolean;
   canSettle: boolean;
   canViewCustody: boolean;
   canManageCustody: boolean;
@@ -124,7 +125,7 @@ export function BankingWorkspace(props: Props) {
       <div><p>{s.descriptions[section]}</p><time>{today}</time></div>
     </header>
 
-    {section === 'transactions' && <BankTransactionsView canView={props.canView} canMatch={props.canMatch} canReconcile={props.canReconcile} onUnauthorized={props.onUnauthorized}/>} 
+    {section === 'transactions' && <BankTransactionsView canView={props.canView} canMatch={props.canMatch} canReconcile={props.canReconcile} canCreateManual={props.canCreateManual} onUnauthorized={props.onUnauthorized}/>} 
 
     {coreSection && <div className={`banking-core banking-core--${coreSection}`}>
       <Banking
