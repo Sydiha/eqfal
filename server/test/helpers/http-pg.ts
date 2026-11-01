@@ -69,5 +69,5 @@ export async function startHarness() {
     return id;
   }
   const count = async (sql: string, p: unknown[] = []) => Number((await q<{ n: string }>(sql, p))[0]!.n);
-  return { db, q, count, run, user, company, member, account, fiscalYear, postedJournal, close: () => server.close() };
+  return { base, db, q, count, run, user, company, member, account, fiscalYear, postedJournal, close: () => server.close() };
 }

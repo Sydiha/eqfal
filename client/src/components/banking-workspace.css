@@ -106,3 +106,9 @@
 .custody-doc-picker__meta { flex: 1 1 100%; order: 3; font-size: 0.85em; opacity: 0.75; overflow-wrap: anywhere; }
 .custody-doc-picker__selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--mantine-color-gray-4, #ced4da); border-radius: 8px; }
 .custody-doc-picker__selected .custody-doc-picker__item { flex: 1; }
+
+/* Manual bank transactions: source badge and the add-transaction form grid (logical properties keep RTL/LTR correct). */
+.bank-source-badge { display: inline-block; margin-inline-start: 6px; padding: 0 8px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 18px; vertical-align: middle; }
+.bank-source-badge--manual { background: #fff4d6; color: #7a5300; border: 1px solid #f0d58a; }
+.manual-bank-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .manual-bank-grid { grid-template-columns: minmax(0, 1fr); } }

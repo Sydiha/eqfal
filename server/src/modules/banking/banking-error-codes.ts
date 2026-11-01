@@ -22,6 +22,7 @@ const BANKING_CONFLICT_CODES: Readonly<Record<string, string>> = {
   'Delete the payment settlement before unmatching': 'BANK_SETTLEMENT_DELETE_REQUIRED',
   'Delete the payment settlement before reopening reconciliation': 'BANK_SETTLEMENT_DELETE_REQUIRED',
   'Custody bank relationships must be changed from the custody workflow': 'BANK_TRANSACTION_CUSTODY_MANAGED',
+  'Manual cash, transfer and bank-fee transactions cannot settle documents or obligations': 'MANUAL_CATEGORY_NOT_SETTLEABLE',
   'Invalid reconciliation transition': 'BANK_RECONCILIATION_INVALID_TRANSITION',
   'Bank transaction already has a settlement': 'BANK_TRANSACTION_ALREADY_SETTLED',
   'Bank transaction already has an obligation settlement': 'BANK_TRANSACTION_ALREADY_LINKED',

@@ -10,6 +10,7 @@ import { bankReconciliationExport, generatedStamp } from '../export/reportExport
 import { DataWorkspace, DetailPane, WorkspaceState, WorkspaceToolbar } from './SharedUI';
 import { formatMoney as formatDecimal } from '../money-format';
 import { DateInput } from './DateInput';
+import { ManualBankTransactionDialog, NON_SETTLEABLE } from './ManualBankTransactionDialog';
 
 type ReconciliationStatus = 'unmatched' | 'matched' | 'reconciled';
 type Transaction = {
@@ -21,6 +22,9 @@ type Transaction = {
   running_balance: string | null;
   currency_code: string;
   reconciliation_status: ReconciliationStatus;
+  source_kind?: 'import' | 'manual';
+  manual_category?: string | null;
+  manual_counterparty?: string | null;
 };
 type Match = { id: string; document_id: string; note: string | null };
 type LinkedObligation = {
@@ -45,7 +49,7 @@ type CandidateDocument = {
 };
 type CandidateResponse = { transaction: { id: string; reconciliation_status: ReconciliationStatus }; match: Match | null; matches?: Match[]; allocated_amount?: string; unallocated_amount?: string; documents: CandidateDocument[] };
 
-type Props = { canView: boolean; canMatch: boolean; canReconcile: boolean; onUnauthorized: () => void };
+type Props = { canView: boolean; canMatch: boolean; canReconcile: boolean; canCreateManual?: boolean; onUnauthorized: () => void };
 
 async function api<T>(url: string, init?: RequestInit, onUnauthorized?: () => void): Promise<T> {
   const response = await fetch(url, init).catch((e) => { throw toApiError(e); });
@@ -70,11 +74,16 @@ function formatAmount(amount: string, currency?: string | null) {
 }
 
 const PAGE_SIZE = 10;
+const manualCategoryNames: Record<'ar' | 'en', Record<string, string>> = {
+  ar: { cash_deposit: 'إيداع نقدي', cash_withdrawal: 'سحب نقدي', incoming_transfer: 'تحويل وارد', outgoing_transfer: 'تحويل صادر', customer_receipt: 'تحصيل من عميل', supplier_payment: 'سداد لمورد', government_payment: 'دفعة حكومية', bank_fees: 'رسوم بنكية', refund: 'استرداد', other: 'أخرى' },
+  en: { cash_deposit: 'Cash deposit', cash_withdrawal: 'Cash withdrawal', incoming_transfer: 'Incoming transfer', outgoing_transfer: 'Outgoing transfer', customer_receipt: 'Customer receipt', supplier_payment: 'Supplier payment', government_payment: 'Government payment', bank_fees: 'Bank fees', refund: 'Refund', other: 'Other' },
+};
 const ico = (children: ReactNode) => <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
 
 const local = {
   ar: {
     title: 'الحركات البنكية',
+    addManual: 'إضافة حركة بنكية', manualBadge: 'يدوي', manualSource: 'المصدر', manualSourceValue: 'إدخال يدوي (ليست من كشف البنك)', manualCategory: 'التصنيف', manualUnresolved: 'غير محسومة في الإقفال: لا يوجد مسار محاسبي معتمد لهذا التصنيف بعد (لا يُسوّي فواتير أو التزامات).', manualUnresolvedOpen: 'غير محسومة في الإقفال حتى تُربط بمستند أو التزام.',
     description: 'راجع الحركة، حالتها، ومبلغها أولًا. التفاصيل البنكية والإجراءات الثانوية متاحة عند الحاجة.',
     date: 'التاريخ', descriptionLabel: 'البيان', amount: 'المبلغ', status: 'الحالة', action: 'الإجراء',
     reference: 'المرجع البنكي', balance: 'الرصيد الجاري', details: 'التفاصيل', hideDetails: 'إخفاء التفاصيل',
@@ -88,6 +97,7 @@ const local = {
   },
   en: {
     title: 'Bank transactions',
+    addManual: 'Add bank transaction', manualBadge: 'Manual', manualSource: 'Source', manualSourceValue: 'Manual entry (not from a bank statement)', manualCategory: 'Category', manualUnresolved: 'Unresolved for closing: no supported accounting workflow exists for this category yet (it cannot settle invoices or obligations).', manualUnresolvedOpen: 'Unresolved for closing until linked to a document or obligation.',
     description: 'Review the transaction, status, and amount first. Bank metadata and secondary actions remain available on demand.',
     date: 'Date', descriptionLabel: 'Description', amount: 'Amount', status: 'Status', action: 'Action',
     reference: 'Bank reference', balance: 'Running balance', details: 'Details', hideDetails: 'Hide details',
@@ -116,13 +126,14 @@ const readFilters = (): Filters => ({
   amountMax: validAmount(readQueryParameter('amountMax')),
 });
 
-export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauthorized }: Props) {
+export function BankTransactionsView({ canView, canMatch, canReconcile, canCreateManual = false, onUnauthorized }: Props) {
   const { t, i18n } = useTranslation();
   const s = i18n.language === 'ar' ? local.ar : local.en;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [matchTransaction, setMatchTransaction] = useState<Transaction | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateResponse | null>(null);
   const [candidateSearch, setCandidateSearch] = useState('');
@@ -229,6 +240,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
   if (!canView) return <Text role="status">{t('banks.noAccess')}</Text>;
 
   const statusLabel = (status: ReconciliationStatus) => s.statuses[status];
+  const manualCategoryLabel = (category?: string | null) => (category && manualCategoryNames[i18n.language === 'ar' ? 'ar' : 'en'][category]) || category || '—';
   const pageCount = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pagedTransactions = filteredTransactions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -247,6 +259,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
         <span className="bank-recon__metric is-pending"><i aria-hidden="true"/>{s.pendingMetric}: <b dir="ltr">{counts.matched}</b></span>
         <span className="bank-recon__metric is-matched"><i aria-hidden="true"/>{s.matchedMetric}: <b dir="ltr">{counts.reconciled}</b></span>
       </div>
+      {canCreateManual && <Button size="compact-sm" onClick={() => setManualOpen(true)}>{s.addManual}</Button>}
       <Button variant="default" size="compact-sm" className="bank-recon__refresh" onClick={() => void refresh()} loading={loading}>{s.refresh}</Button>
     </div>
     <ExportButtons language={i18n.language} document={exportDoc} landscape />
@@ -269,7 +282,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
             <div className="bank-transaction-main">
               <time className="bank-transaction-date" dir="ltr">{displayDate(tx.transaction_date)}</time>
               <div className="bank-transaction-description">
-                <p dir="auto">{tx.description || '—'}</p>
+                <p dir="auto">{tx.description || '—'}{tx.source_kind === 'manual' && <span className="bank-source-badge bank-source-badge--manual" data-source="manual"> {s.manualBadge}</span>}</p>
                 {tx.bank_reference && <small className="bank-transaction-mobile-meta"><span dir="ltr">{tx.bank_reference}</span></small>}
               </div>
               <span className={`bank-transaction-amount ${Number(tx.amount) < 0 ? 'is-outbound' : 'is-inbound'}`} dir="ltr">{formatAmount(tx.amount, tx.currency_code)}</span>
@@ -302,6 +315,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
             <dt>{s.reference}</dt><dd dir="ltr">{selectedTransaction.bank_reference || '—'}</dd>
             <dt>{s.balance}</dt><dd dir="ltr">{selectedTransaction.running_balance ?? '—'}{selectedTransaction.currency_code ? ` ${selectedTransaction.currency_code}` : ''}</dd>
             <dt>{s.status}</dt><dd><span className={`bank-status bank-status--${selectedTransaction.reconciliation_status}`}>{statusLabel(selectedTransaction.reconciliation_status)}</span></dd>
+            {selectedTransaction.source_kind === 'manual' && <><dt>{s.manualSource}</dt><dd>{s.manualSourceValue}</dd><dt>{s.manualCategory}</dt><dd>{manualCategoryLabel(selectedTransaction.manual_category)}</dd>{selectedTransaction.manual_counterparty && <><dt>{s.counterparty}</dt><dd dir="auto">{selectedTransaction.manual_counterparty}</dd></>}</>}
           </dl>
         </div>
         <div className="bank-recon__panel">
@@ -315,7 +329,10 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, onUnauth
           </div>
         </div>
       </div>
+      {selectedTransaction.source_kind === 'manual' && selectedTransaction.reconciliation_status === 'unmatched' && <Alert color="yellow" role="note">{selectedTransaction.manual_category && NON_SETTLEABLE.includes(selectedTransaction.manual_category) ? s.manualUnresolved : s.manualUnresolvedOpen}</Alert>}
     </DetailPane>}</DataWorkspace>}
+
+    {manualOpen && <ManualBankTransactionDialog onClose={() => setManualOpen(false)} onCreated={() => void refresh()} onUnauthorized={onUnauthorized}/>}
 
     {matchTransaction && <Dialog title={t('banks.matchDialog')} busy={matchBusy} onClose={closeMatch} size="wide" className="bank-match-dialog"><Stack gap="md">
       <div className="bank-match-summary">

@@ -67,6 +67,7 @@ const OVERRIDES: Record<string, Pair> = {
   'annual_close.package.snapshot.create': ['Create annual closing package snapshots', 'إنشاء لقطة لحزمة الإقفال السنوي'],
   'audit.view': ['View audit log', 'عرض سجل التدقيق'],
   'bank.import': ['Import bank statements', 'استيراد كشوف البنك'], 'bank.match': ['Match bank transactions', 'مطابقة المعاملات البنكية'],
+  'bank.transaction.manual': ['Enter manual bank transactions', 'إدخال حركات بنكية يدوية'],
   'bank.reconcile': ['Reconcile bank transactions', 'تسوية المعاملات البنكية'],
   'bank.statement.manage': ['Prepare bank statement balances', 'إعداد أرصدة كشوف البنك'],
   'bank.statement.confirm': ['Confirm or replace bank statement balances', 'اعتماد أرصدة كشوف البنك أو استبدالها'],
