@@ -599,7 +599,7 @@ export function Accounting({
       setSaving(false);
     }
   };
-  const createSourceJournal = async (source: OperationalSource) => {
+  const createSourceJournal = async (source: OperationalSource, blank = false) => {
     const year = years.find(
       (y) =>
         source.accounting_date >= y.start_date &&
@@ -612,7 +612,10 @@ export function Accounting({
     mutationStarted();
     setSaving(true);
     try {
-      const response = await api(
+      // Invoice settlements are prefilled by the server (two balanced lines); a blocked prefill shows its actionable error.
+      const response = source.source_type === "obligation_settlement" && !blank
+        ? await api(`/api/accounting/obligation-settlements/${source.source_id}/journal`, json("POST", {}), onUnauthorized)
+        : await api(
         "/api/journals",
         json("POST", {
           fiscal_year_id: year.id,
@@ -625,8 +628,9 @@ export function Accounting({
         }),
         onUnauthorized,
       );
-      setSelected((await response.json()) as Journal);
-      setLines([emptyLine(), emptyLine()]);
+      const created = (await response.json()) as Journal & { lines?: JournalLineResponse[] };
+      setSelected(created);
+      setLines(created.lines?.length ? created.lines.map(journalLineToEditor) : [emptyLine(), emptyLine()]);
       setTab("journals");
       mutationSucceeded();
       await load(true);
@@ -1185,6 +1189,14 @@ export function Accounting({
                               onClick={() => void createSourceJournal(source)}
                             >
                               {t("accounting.createDraft")}
+                            </button>
+                          )}
+                          {canCreateJournal && source.source_type === "obligation_settlement" && (
+                            <button
+                              disabled={saving}
+                              onClick={() => void createSourceJournal(source, true)}
+                            >
+                              {t("accounting.createBlankDraft")}
                             </button>
                           )}
                         </td>

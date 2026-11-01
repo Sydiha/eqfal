@@ -2,6 +2,7 @@ import { PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { assertCustodyJournalControls } from './custody-posting';
+import { obligationSettlementJournalMatchesPlan } from './obligation-settlement-posting';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
 import { invoiceVatRecognitionIsExact } from '../vat/vat-invoice';
@@ -95,11 +96,11 @@ async function assertDocumentSettlementBankLine(client: PoolClient, companyId: s
   const bankAccountId = source.context?.['bank_account_id'];
   const bankAmount = source.context?.['bank_amount'];
   if (typeof bankAccountId !== 'string' || typeof bankAmount !== 'string') {
-    throw new JournalPostingValidationError('Document settlement bank account cannot be determined');
+    throw new JournalPostingValidationError('Settlement bank account cannot be determined');
   }
   const ledgerAccountId = await resolveBankLedgerAccount(client, companyId, bankAccountId, source.accounting_date, true);
   if (!ledgerAccountId) {
-    throw new JournalPostingValidationError('Document settlement bank account is not linked to an active bank ledger account on the transaction date');
+    throw new JournalPostingValidationError('Settlement bank account is not linked to an active bank ledger account on the transaction date');
   }
   const row = (await client.query<{ ok: boolean }>(
     `SELECT COALESCE(SUM(debit-credit),0)::numeric(18,2) = (CASE WHEN $4::numeric < 0 THEN -1 ELSE 1 END * $5::numeric)::numeric(18,2) ok
@@ -107,7 +108,7 @@ async function assertDocumentSettlementBankLine(client: PoolClient, companyId: s
     [journalId, companyId, ledgerAccountId, bankAmount, source.amount],
   )).rows[0];
   if (row?.ok !== true) {
-    throw new JournalPostingValidationError('Document settlement journal must debit (receipt) or credit (payment) the linked bank ledger account by the settlement amount');
+    throw new JournalPostingValidationError('Settlement journal must debit (receipt) or credit (payment) the linked bank ledger account by the settlement amount');
   }
 }
 
@@ -266,6 +267,15 @@ export async function postJournalInTransaction(
 
     if (journal.source_type === 'document_settlement') {
       await assertDocumentSettlementBankLine(client, companyId, id, operationalSource);
+    }
+
+    if (journal.source_type === 'obligation_settlement') {
+      // Same bank-line contract as a document settlement (linked bank ledger account, direction, exact amount) for every obligation settlement; an invoice
+      // settlement that can be prefilled must additionally be exactly its two-line plan (payable/receivable control account against the bank ledger account).
+      await assertDocumentSettlementBankLine(client, companyId, id, operationalSource);
+      if ((await obligationSettlementJournalMatchesPlan(client, companyId, id, journal.source_id!)) === false) {
+        throw new JournalPostingValidationError('Obligation settlement journal must debit the payable (or the bank for a receipt) and credit the bank (or the receivable) of the settled invoice obligation');
+      }
     }
 
     await assertCustodyJournalControls(client, companyId, id, operationalSource);
