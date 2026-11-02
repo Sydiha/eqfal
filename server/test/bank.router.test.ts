@@ -1,6 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import { createHash } from 'crypto';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -77,6 +78,9 @@ describe('Bank API security boundary',()=>{
     expect(sql).toContain('journal_entries');
     expect(sql).toContain('s.company_id=t.company_id');
     expect(sql).toContain('t.company_id=$1');
+    expect(sql).toContain('LIMIT 1');
+    const obligationSchema=readFileSync(new URL('../migrations/017_counterparties_obligations.sql',import.meta.url),'utf8');
+    expect(obligationSchema).toMatch(/UNIQUE\s*\(bank_transaction_id\)/);
   });
   it('does not accept a forged company_id in bank-account creation',async()=>{setContext(['bank.account.manage']);const res=await request(app).post('/api/bank-accounts').send({display_name:'Main',currency_code:'SAR',company_id:'co-b'});expect(res.status).toBe(400);expect(mocks.connect).not.toHaveBeenCalled();});
   it('returns safe 404 when an import account belongs to another company',async()=>{setContext(['bank.import']);mocks.query.mockResolvedValueOnce({rows:[]});const res=await upload();expect(res.status).toBe(404);expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('id=$1 AND company_id=$2'),['a1','co-a']);expect(mocks.storagePut).not.toHaveBeenCalled();});

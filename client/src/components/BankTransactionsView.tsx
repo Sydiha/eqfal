@@ -342,7 +342,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
           <Text size="sm">{selectedTransaction.reconciliation_status === 'reconciled' ? s.reconciliationDone : s.reconciliationOutstanding}</Text>
         </Stack>
       </Alert>}
-      {selectedTransaction.source_kind === 'manual' && selectedTransaction.reconciliation_status === 'unmatched' && <Alert color="yellow" role="note">{selectedTransaction.manual_category && NON_SETTLEABLE.includes(selectedTransaction.manual_category) ? s.manualUnresolved : s.manualUnresolvedOpen}</Alert>}
+      {selectedTransaction.source_kind === 'manual' && selectedTransaction.reconciliation_status === 'unmatched' && !selectedTransaction.obligation_settlement && <Alert color="yellow" role="note">{selectedTransaction.manual_category && NON_SETTLEABLE.includes(selectedTransaction.manual_category) ? s.manualUnresolved : s.manualUnresolvedOpen}</Alert>}
     </DetailPane>}</DataWorkspace>}
 
     {manualOpen && <ManualBankTransactionDialog onClose={() => setManualOpen(false)} onCreated={() => void refresh()} onUnauthorized={onUnauthorized}/>}

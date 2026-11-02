@@ -114,6 +114,21 @@ describe('BankTransactionsView', () => {
     expect(within(detail).getByText('23.00 SAR')).toHaveAttribute('dir', 'ltr');
   });
 
+  it('suppresses the unresolved manual warning when an obligation settlement is linked', async () => {
+    const transaction = {
+      id: '11111111-1111-4111-8111-111111111111', transaction_date: '2026-08-16',
+      description: 'Manual supplier payment', bank_reference: null, amount: '-23.00',
+      running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched',
+      source_kind: 'manual', manual_category: 'supplier_payment',
+      obligation_settlement: { id: 'settlement-1', direction: 'payable', counterparty: 'R9 UAT TEST SUPPLIER', amount: '23.00', journal_status: 'posted' },
+    };
+    renderTransactions([transaction]);
+    fireEvent.click((await screen.findByText('Manual supplier payment')).closest('article')!);
+    const detail = screen.getByRole('complementary', { name: 'Details' });
+    expect(within(detail).getByText('Payment recorded against obligation')).toBeInTheDocument();
+    expect(within(detail).queryByText('Unresolved for closing until linked to a document or obligation.')).not.toBeInTheDocument();
+  });
+
   it('searches description, reference, amount, and running balance with trimmed multilingual text', async () => {
     renderTransactions();
     const search = await screen.findByRole('searchbox', { name: 'Search transactions' });

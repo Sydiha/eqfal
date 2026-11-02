@@ -775,6 +775,7 @@ class BankRepository {
   }
   async transactions(companyId:string): Promise<unknown[]> {
     const { rows } = await this.db.query(`SELECT t.*,
+      -- Migration 017 enforces UNIQUE(bank_transaction_id), so this relation has at most one settlement.
       (SELECT json_build_object('id',s.id,'direction',o.direction,'counterparty',c.name,
         'amount',s.amount::text,'journal_status',j.status)
        FROM obligation_settlements s
