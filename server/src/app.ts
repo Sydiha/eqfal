@@ -57,6 +57,8 @@ app.set('trust proxy', config.trustProxy);
 app.disable('x-powered-by');
 app.use(securityHeaders(config.env === 'production'));
 
+// Chart imports are bounded per batch and need more room than ordinary API writes; leave every other route at the existing 64 KB limit.
+app.use('/api/accounts/import', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '64kb' }));
 
 // Structured request logging. Never log bodies/cookies/auth tokens.

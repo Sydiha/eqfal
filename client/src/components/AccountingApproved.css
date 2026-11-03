@@ -22,6 +22,9 @@
 
 /* Chart of accounts: table + details panel (RTL: table on the right) */
 .ac-approved__accounts{display:flex;align-items:flex-start;gap:16px;min-width:0}
+.ac-import-backdrop{position:fixed;inset:0;z-index:1000;background:#0008;display:grid;place-items:center;padding:16px}
+.ac-import{background:var(--surface,#fff);color:var(--text,#182230);width:min(900px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:12px;box-shadow:0 12px 48px #0004;display:grid;gap:12px}
+.ac-import header,.ac-import footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.ac-import h3{margin:0}.ac-import__file{display:inline-flex;gap:8px;align-items:center}.ac-import__file input{max-width:240px}.ac-import__preview{overflow:auto;max-height:300px}.ac-import table{border-collapse:collapse;width:100%}.ac-import th,.ac-import td{padding:6px 10px;border:1px solid #d5dbe3;text-align:start;white-space:nowrap}
 .ac-approved__chart{flex:1}
 .ac-approved__details{flex:none;width:280px}
 
