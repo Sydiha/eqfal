@@ -5,6 +5,7 @@ import { ReverseJournalAction } from "./ReverseJournalAction";
 import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExportButtons } from "./ExportButtons";
+import { AccountImportDialog } from "./AccountImportDialog";
 import { useActiveCompanyName } from "../context/CompanyContext";
 import { generalLedgerExport, generatedStamp, preCutoverLines, statementExport, trialBalanceExport, type PreCutover, type StatementKind } from "../export/reportExport";
 import "./AccountingApproved.css";
@@ -247,6 +248,7 @@ export function Accounting({
   >(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAccountImport,setShowAccountImport]=useState(false);
   const [accountSearch, setAccountSearch] = useState("");
   const [accountTypeFilter, setAccountTypeFilter] = useState<AccountTypeFilter>("");
   const [accountStatusFilter, setAccountStatusFilter] = useState<AccountStatusFilter>("");
@@ -847,9 +849,9 @@ export function Accounting({
                 </select>
               </label>
               {canCreateChart && (
-                <button type="button" className="ac-approved__create" onClick={() => { setPanelMode("add"); setDraft(null); }}>
+                <><button type="button" className="ac-approved__create" onClick={() => { setPanelMode("add"); setDraft(null); }}>
                   <span aria-hidden="true">+</span> {t("accounting.chart.newAccount")}
-                </button>
+                </button><button type="button" onClick={()=>setShowAccountImport(true)}>{t("accountImport.open")}</button></>
               )}
             </div>
             <div className="ac-approved__table">
@@ -1051,6 +1053,7 @@ export function Accounting({
         </div>
       )}
       {tab === "accounts" && accountsFooter}
+      {showAccountImport&&<AccountImportDialog onClose={()=>setShowAccountImport(false)} onUnauthorized={onUnauthorized} onComplete={()=>{mutationSucceeded();void load(true);}}/>}
       {!loading && tab === "sources" && (
         <div className="ac-tabview">
           <div className="ac-tab__card ac-tab__filters">
