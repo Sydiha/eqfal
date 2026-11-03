@@ -1,8 +1,9 @@
 import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
 
-// This suite writes fixture records; it runs only when the caller explicitly confirms DATABASE_URL is isolated/disposable.
-const describeIsolated=process.env['DATABASE_URL']&&process.env['EQFAL_ISOLATED_TEST_DATABASE']==='1'?describe:describe.skip;
+// This suite writes fixture records. Locally, require an explicit disposable-db flag; CI qualifies only for its exact loopback eqfal_ci service.
+const disposableCiDatabase=process.env['CI']==='true'&&process.env['REQUIRE_POSTGRES_TESTS']==='true'&&process.env['DATABASE_URL']==='postgresql://eqfal:eqfal_ci@127.0.0.1:5432/eqfal_ci';
+const describeIsolated=(process.env['DATABASE_URL']&&process.env['EQFAL_ISOLATED_TEST_DATABASE']==='1')||disposableCiDatabase?describe:describe.skip;
 type Harness=Awaited<ReturnType<typeof startHarness>>;type Owner=Awaited<ReturnType<Harness['user']>>;
 describeIsolated('Chart of Accounts import downstream integration (isolated PostgreSQL)',()=>{
  let h:Awaited<ReturnType<typeof startHarness>>;let company:string;let fy:string;let client:Owner['client'];let actor:string;
