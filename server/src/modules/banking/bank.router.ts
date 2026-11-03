@@ -774,7 +774,17 @@ class BankRepository {
     const { rows } = await client.query<BankBatch>(`UPDATE bank_import_batches SET status='confirmed',valid_rows=$3,duplicate_rows=$4,confirmed_by=$5,confirmed_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *`, [batchId,companyId,counts.valid,counts.duplicates,actor]); return rows[0]!;
   }
   async transactions(companyId:string): Promise<unknown[]> {
-    const { rows } = await this.db.query('SELECT * FROM bank_transactions WHERE company_id=$1 ORDER BY transaction_date DESC, created_at DESC, id',[companyId]); return rows;
+    const { rows } = await this.db.query(`SELECT t.*,
+      -- Migration 017 enforces UNIQUE(bank_transaction_id), so this relation has at most one settlement.
+      (SELECT json_build_object('id',s.id,'direction',o.direction,'counterparty',c.name,
+        'amount',s.amount::text,'journal_status',j.status)
+       FROM obligation_settlements s
+       JOIN obligations o ON o.id=s.obligation_id AND o.company_id=s.company_id
+       JOIN counterparties c ON c.id=o.counterparty_id AND c.company_id=o.company_id
+       LEFT JOIN journal_entries j ON j.company_id=s.company_id AND j.source_type='obligation_settlement' AND j.source_id=s.id
+       WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id
+       LIMIT 1) AS obligation_settlement
+      FROM bank_transactions t WHERE t.company_id=$1 ORDER BY t.transaction_date DESC, t.created_at DESC, t.id`,[companyId]); return rows;
   }
 }
 

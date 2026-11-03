@@ -79,6 +79,56 @@ describe('BankTransactionsView', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/bank-transactions', undefined));
   });
 
+  it('shows an existing obligation settlement without changing unmatched reconciliation status', async () => {
+    const transaction = {
+      id: '11111111-1111-4111-8111-111111111111', transaction_date: '2026-08-16',
+      description: 'Supplier payment', bank_reference: 'UAT-PAY-23-001', amount: '-23.00',
+      running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched',
+      obligation_settlement: { id: 'settlement-1', direction: 'payable', counterparty: 'R9 UAT TEST SUPPLIER', amount: '23.00', journal_status: 'posted' },
+    };
+    renderTransactions([transaction]);
+    const rowDescription = await screen.findByText('Supplier payment');
+    fireEvent.click(rowDescription.closest('article')!);
+    const detail = screen.getByRole('complementary', { name: 'Details' });
+    expect(within(detail).getByText('Unmatched')).toBeInTheDocument();
+    expect(within(detail).getByText('Payment recorded against obligation')).toBeInTheDocument();
+    expect(within(detail).getByText('R9 UAT TEST SUPPLIER')).toBeInTheDocument();
+    expect(within(detail).getByText('23.00 SAR')).toBeInTheDocument();
+    expect(within(detail).getByText(/Settlement journal status: Posted/)).toBeInTheDocument();
+    expect(within(detail).getByText('Bank statement reconciliation is still outstanding.')).toBeInTheDocument();
+  });
+
+  it('localizes settlement messaging in Arabic and keeps the amount left-to-right', async () => {
+    await i18n.changeLanguage('ar');
+    const transaction = {
+      id: '11111111-1111-4111-8111-111111111111', transaction_date: '2026-08-16',
+      description: 'دفعة مورد', bank_reference: 'UAT-PAY-23-001', amount: '-23.00',
+      running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched',
+      obligation_settlement: { id: 'settlement-1', direction: 'payable', counterparty: 'R9 UAT TEST SUPPLIER', amount: '23.00', journal_status: 'posted' },
+    };
+    renderTransactions([transaction]);
+    fireEvent.click((await screen.findByText('دفعة مورد')).closest('article')!);
+    const detail = screen.getByRole('complementary', { name: 'التفاصيل' });
+    expect(within(detail).getByText('تم تسجيل دفعة على الالتزام')).toBeInTheDocument();
+    expect(within(detail).getByText('مطابقة الحركة مع كشف البنك ما زالت معلّقة.')).toBeInTheDocument();
+    expect(within(detail).getByText('23.00 SAR')).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('suppresses the unresolved manual warning when an obligation settlement is linked', async () => {
+    const transaction = {
+      id: '11111111-1111-4111-8111-111111111111', transaction_date: '2026-08-16',
+      description: 'Manual supplier payment', bank_reference: null, amount: '-23.00',
+      running_balance: null, currency_code: 'SAR', reconciliation_status: 'unmatched',
+      source_kind: 'manual', manual_category: 'supplier_payment',
+      obligation_settlement: { id: 'settlement-1', direction: 'payable', counterparty: 'R9 UAT TEST SUPPLIER', amount: '23.00', journal_status: 'posted' },
+    };
+    renderTransactions([transaction]);
+    fireEvent.click((await screen.findByText('Manual supplier payment')).closest('article')!);
+    const detail = screen.getByRole('complementary', { name: 'Details' });
+    expect(within(detail).getByText('Payment recorded against obligation')).toBeInTheDocument();
+    expect(within(detail).queryByText('Unresolved for closing until linked to a document or obligation.')).not.toBeInTheDocument();
+  });
+
   it('searches description, reference, amount, and running balance with trimmed multilingual text', async () => {
     renderTransactions();
     const search = await screen.findByRole('searchbox', { name: 'Search transactions' });

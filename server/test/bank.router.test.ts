@@ -1,6 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import { createHash } from 'crypto';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -65,6 +66,22 @@ describe('Bank API security boundary',()=>{
   });
   it('scopes account lists to the server-trusted active company',async()=>{setContext(['bank.view']);mocks.query.mockResolvedValueOnce({rows:[account]});const res=await request(app).get('/api/bank-accounts?company_id=co-b');expect(res.status).toBe(200);expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('company_id=$1'),['co-a']);});
   it('scopes transaction lists to the server-trusted active company',async()=>{setContext(['bank.view']);mocks.query.mockResolvedValueOnce({rows:[]});const res=await request(app).get('/api/bank-transactions?company_id=co-b');expect(res.status).toBe(200);expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('company_id=$1'),['co-a']);});
+  it('returns linked obligation settlement and journal data in the company-scoped transaction query',async()=>{
+    setContext(['bank.view']);
+    mocks.query.mockResolvedValueOnce({rows:[{id:'tx-1',reconciliation_status:'unmatched',obligation_settlement:{id:'settlement-1',counterparty:'R9 UAT TEST SUPPLIER',amount:'23.00',journal_status:'posted'}}]});
+    const res=await request(app).get('/api/bank-transactions');
+    expect(res.status).toBe(200);
+    expect(res.body.transactions[0]).toMatchObject({reconciliation_status:'unmatched',obligation_settlement:{counterparty:'R9 UAT TEST SUPPLIER',amount:'23.00',journal_status:'posted'}});
+    expect(mocks.query).toHaveBeenCalledTimes(1);
+    const sql=String(mocks.query.mock.calls[0]?.[0]);
+    expect(sql).toContain('obligation_settlements');
+    expect(sql).toContain('journal_entries');
+    expect(sql).toContain('s.company_id=t.company_id');
+    expect(sql).toContain('t.company_id=$1');
+    expect(sql).toContain('LIMIT 1');
+    const obligationSchema=readFileSync(new URL('../migrations/017_counterparties_obligations.sql',import.meta.url),'utf8');
+    expect(obligationSchema).toMatch(/UNIQUE\s*\(bank_transaction_id\)/);
+  });
   it('does not accept a forged company_id in bank-account creation',async()=>{setContext(['bank.account.manage']);const res=await request(app).post('/api/bank-accounts').send({display_name:'Main',currency_code:'SAR',company_id:'co-b'});expect(res.status).toBe(400);expect(mocks.connect).not.toHaveBeenCalled();});
   it('returns safe 404 when an import account belongs to another company',async()=>{setContext(['bank.import']);mocks.query.mockResolvedValueOnce({rows:[]});const res=await upload();expect(res.status).toBe(404);expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('id=$1 AND company_id=$2'),['a1','co-a']);expect(mocks.storagePut).not.toHaveBeenCalled();});
   it('returns safe 404 for cross-company preview batch ids',async()=>{setContext(['bank.import']);mocks.query.mockResolvedValueOnce({rows:[]});const res=await request(app).get('/api/bank-import-batches/other/preview');expect(res.status).toBe(404);expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('id=$1 AND company_id=$2'),['other','co-a']);});

@@ -25,6 +25,7 @@ type Transaction = {
   source_kind?: 'import' | 'manual';
   manual_category?: string | null;
   manual_counterparty?: string | null;
+  obligation_settlement?: { id: string; direction: 'receivable' | 'payable'; counterparty: string; amount: string; journal_status: string | null } | null;
 };
 type Match = { id: string; document_id: string; note: string | null };
 type LinkedObligation = {
@@ -92,6 +93,7 @@ const local = {
     statementTitle: 'حركات كشف الحساب البنكي', transactionsCount: (count: number) => `${count} حركة`, showing: (shown: number, total: number) => `إظهار ${shown} من ${total} حركة`, amountSar: 'المبلغ (ر.س)', matchStatus: 'حالة المطابقة', reset: 'إعادة تعيين', pagination: 'التنقل بين الصفحات', prevPage: 'الصفحة السابقة', nextPage: 'الصفحة التالية',
     selectedDetails: 'تفاصيل الحركة المحددة', bankData: 'بيانات البنك', actionsPanel: 'الإجراءات', pendingMetric: 'قيد المراجعة', matchedMetric: 'مطابق', unmatchedMetric: 'غير مطابق',
     statuses: { unmatched: 'غير مطابق', matched: 'قيد المراجعة', reconciled: 'مطابق' } as Record<ReconciliationStatus, string>,
+    obligationSettlement: 'تسوية الالتزام', settlementRecorded: 'تم تسجيل دفعة على الالتزام', settlementCounterparty: 'المورد أو العميل', settlementAmount: 'مبلغ السداد', settlementJournal: 'حالة قيد التسوية', journalPending: 'لم يُنشأ القيد بعد', journalPosted: 'مُرحّل', journalDraft: 'مسودة', journalOther: 'حالة القيد: {{status}}', reconciliationOutstanding: 'مطابقة الحركة مع كشف البنك ما زالت معلّقة.', reconciliationDone: 'تمت مطابقة الحركة مع كشف البنك.',
     allocationSummary: (documents: number, allocated: string, unallocated: string) => `موزعة على ${documents} مستند · الموزع ${formatDecimal(allocated)} · غير الموزع ${formatDecimal(unallocated)}`,
     toolbar: 'البحث وتصفية الحركات البنكية', searchTransactions: 'البحث في الحركات', searchPlaceholder: 'البيان أو المرجع أو المبلغ', reconciliation: 'حالة التسوية', allStatuses: 'كل الحالات', from: 'من تاريخ', to: 'إلى تاريخ', amountMin: 'الحد الأدنى للمبلغ', amountMax: 'الحد الأعلى للمبلغ', resultCount: (count: number) => `عدد النتائج: ${count}`, clearFilters: 'مسح عوامل التصفية', noResults: 'لا توجد حركات تطابق عوامل التصفية.',
   },
@@ -106,6 +108,7 @@ const local = {
     statementTitle: 'Bank statement transactions', transactionsCount: (count: number) => `${count} transactions`, showing: (shown: number, total: number) => `Showing ${shown} of ${total} transactions`, amountSar: 'Amount (SAR)', matchStatus: 'Match status', reset: 'Reset', pagination: 'Pagination', prevPage: 'Previous page', nextPage: 'Next page',
     selectedDetails: 'Selected transaction details', bankData: 'Bank data', actionsPanel: 'Actions', pendingMetric: 'Matched', matchedMetric: 'Reconciled', unmatchedMetric: 'Unmatched',
     statuses: { unmatched: 'Unmatched', matched: 'Matched', reconciled: 'Reconciled' } as Record<ReconciliationStatus, string>,
+    obligationSettlement: 'Obligation settlement', settlementRecorded: 'Payment recorded against obligation', settlementCounterparty: 'Supplier or customer', settlementAmount: 'Settlement amount', settlementJournal: 'Settlement journal status', journalPending: 'Journal not created yet', journalPosted: 'Posted', journalDraft: 'Draft', journalOther: 'Journal status: {{status}}', reconciliationOutstanding: 'Bank statement reconciliation is still outstanding.', reconciliationDone: 'Bank statement reconciliation is complete.',
     allocationSummary: (documents: number, allocated: string, unallocated: string) => `Allocated to ${documents} documents · allocated ${formatDecimal(allocated)} · unallocated ${formatDecimal(unallocated)}`,
     toolbar: 'Search and filter bank transactions', searchTransactions: 'Search transactions', searchPlaceholder: 'Description, reference, or amount', reconciliation: 'Reconciliation status', allStatuses: 'All statuses', from: 'From date', to: 'To date', amountMin: 'Minimum amount', amountMax: 'Maximum amount', resultCount: (count: number) => `${count} results`, clearFilters: 'Clear filters', noResults: 'No transactions match the filters.',
   },
@@ -330,7 +333,16 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
           </div>
         </div>
       </div>
-      {selectedTransaction.source_kind === 'manual' && selectedTransaction.reconciliation_status === 'unmatched' && <Alert color="yellow" role="note">{selectedTransaction.manual_category && NON_SETTLEABLE.includes(selectedTransaction.manual_category) ? s.manualUnresolved : s.manualUnresolvedOpen}</Alert>}
+      {selectedTransaction.obligation_settlement && <Alert color="blue" title={s.obligationSettlement} role="status">
+        <Stack gap="xs">
+          <Text size="sm">{s.settlementRecorded}</Text>
+          <Text size="sm">{s.settlementCounterparty}: <bdi dir="auto">{selectedTransaction.obligation_settlement.counterparty}</bdi></Text>
+          <Text size="sm">{s.settlementAmount}: <bdi dir="ltr" className="fin-amount">{formatMoney(selectedTransaction.obligation_settlement.amount, selectedTransaction.currency_code)}</bdi></Text>
+          <Text size="sm">{s.settlementJournal}: {selectedTransaction.obligation_settlement.journal_status === 'posted' ? s.journalPosted : selectedTransaction.obligation_settlement.journal_status === 'draft' ? s.journalDraft : selectedTransaction.obligation_settlement.journal_status ? t(s.journalOther, { status: selectedTransaction.obligation_settlement.journal_status }) : s.journalPending}</Text>
+          <Text size="sm">{selectedTransaction.reconciliation_status === 'reconciled' ? s.reconciliationDone : s.reconciliationOutstanding}</Text>
+        </Stack>
+      </Alert>}
+      {selectedTransaction.source_kind === 'manual' && selectedTransaction.reconciliation_status === 'unmatched' && !selectedTransaction.obligation_settlement && <Alert color="yellow" role="note">{selectedTransaction.manual_category && NON_SETTLEABLE.includes(selectedTransaction.manual_category) ? s.manualUnresolved : s.manualUnresolvedOpen}</Alert>}
     </DetailPane>}</DataWorkspace>}
 
     {manualOpen && <ManualBankTransactionDialog onClose={() => setManualOpen(false)} onCreated={() => void refresh()} onUnauthorized={onUnauthorized}/>}
