@@ -19,7 +19,7 @@ import { fromCents, lockBankAccountReconciliation, toCents } from '../banking/ba
 // Totals are never a confirmed mismatch: the schema cannot prove the opening obligation population complete.
 
 export type ReconciliationStatus = 'verified' | 'incomplete_evidence' | 'mismatch' | 'blocked';
-export type ReconciliationSection = 'bank' | 'receivable' | 'payable';
+export type ReconciliationSection = 'bank' | 'cash_on_hand' | 'receivable' | 'payable';
 
 export const OB_RECONCILIATION_BLOCKED_CODE = 'OPENING_BALANCE_RECONCILIATION_BLOCKED';
 export const OB_CODES = {
@@ -28,6 +28,8 @@ export const OB_CODES = {
   bankGlMismatch: 'OB_BANK_ACCOUNT_GL_MISMATCH',
   bankDuplicate: 'OB_BANK_DUPLICATE',
   bankAggregateOnly: 'OB_BANK_AGGREGATE_ONLY',
+  cashAccountInvalid: 'OB_CASH_ACCOUNT_INVALID',
+  physicalCashEvidenceMissing: 'OB_PHYSICAL_CASH_EVIDENCE_MISSING',
   referenceMissing: 'OB_REFERENCE_MISSING',
   bankEvidenceMissing: 'OB_BANK_EVIDENCE_MISSING',
   bankAmountMismatch: 'OB_BANK_AMOUNT_MISMATCH',
@@ -58,6 +60,8 @@ export type ReconciliationIssue = {
 export type ReconciliationItem = {
   id: string; category: string; account_id: string; amount: string; balance_side: 'debit' | 'credit';
   counterparty_id: string | null; bank_account_id: string | null; obligation_id: string | null;
+  source_type?: string; source_document_id?: string | null; source_reference?: string | null; confidence?: string;
+  cash_account_valid?: boolean;
   /** `import` only for an untouched row written by the trial-balance import; everything else is `manual`. */
   provenance: 'import' | 'manual';
 };
@@ -142,6 +146,16 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
     compareBank(i, i.bank_account_id, false);
   }
 
+  // Physical cash is reconciled to an active cash-classified GL asset and a referenced, high-confidence count record.
+  // No bank account, statement, currency comparison or bank-to-GL link is involved.
+  const cashItems = input.items.filter((i) => i.category === 'cash_on_hand');
+  for (const i of cashItems) {
+    if (i.cash_account_valid === false) add('cash_on_hand', 'blocked', OB_CODES.cashAccountInvalid, i);
+    if (i.source_type !== 'original_document' || i.confidence !== 'high' || !(i.source_document_id || i.source_reference?.trim())) {
+      add('cash_on_hand', 'incomplete_evidence', OB_CODES.physicalCashEvidenceMissing, i, { required: 'high-confidence physical cash count record reference' });
+    }
+  }
+
   // ---- receivable / payable ----
   const obligationUse = new Map<string, number>();
   for (const i of input.items) if ((i.category === 'receivable' || i.category === 'payable') && i.obligation_id) obligationUse.set(i.obligation_id, (obligationUse.get(i.obligation_id) ?? 0) + 1);
@@ -200,14 +214,14 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
   }
 
   const sections = {} as Record<ReconciliationSection, ReconciliationSectionReport>;
-  for (const s of ['bank', 'receivable', 'payable'] as const) {
+  for (const s of ['bank', 'cash_on_hand', 'receivable', 'payable'] as const) {
     const own = issues.filter((x) => x.section === s);
     const status = own.reduce<ReconciliationStatus>((a, x) => worst(a, x.class), 'verified');
     const items = input.items.filter((x) => x.category === s);
-    const gl = s === 'bank' ? items.reduce((a, x) => a + signed(x), 0n) : glTotals[s];
-    sections[s] = { status, item_count: items.length, gl_total: fromCents(gl), subledger_total: s === 'bank' ? null : fromCents(subledgerTotals[s]) };
+    const gl = s === 'bank' || s === 'cash_on_hand' ? items.reduce((a, x) => a + signed(x), 0n) : glTotals[s];
+    sections[s] = { status, item_count: items.length, gl_total: fromCents(gl), subledger_total: s === 'bank' || s === 'cash_on_hand' ? null : fromCents(subledgerTotals[s]) };
   }
-  const status = (['bank', 'receivable', 'payable'] as const).reduce<ReconciliationStatus>((a, s) => worst(a, sections[s].status), 'verified');
+  const status = (['bank', 'cash_on_hand', 'receivable', 'payable'] as const).reduce<ReconciliationStatus>((a, s) => worst(a, sections[s].status), 'verified');
   return { status, blocking: status === 'blocked' || status === 'mismatch', as_of_date: input.startDate, sections, issues };
 }
 
@@ -222,11 +236,14 @@ export async function loadOpeningReconciliationInput(client: PoolClient, company
   // transaction, so they share the transaction timestamp; a hand-entered item has its own, and any later edit raises its version.
   const items = (await client.query<ReconciliationItem>(
     `SELECT i.id,i.category,i.account_id,i.amount::text,i.balance_side,i.counterparty_id,i.bank_account_id,i.obligation_id,
+            i.source_type,i.source_document_id,i.source_reference,i.confidence,
+            CASE WHEN i.category='cash_on_hand' THEN (a.account_type='asset' AND a.is_active AND a.cash_role='cash') ELSE TRUE END AS cash_account_valid,
             CASE WHEN i.version=1 AND EXISTS (
                    SELECT 1 FROM audit_log a WHERE a.company_id=i.company_id AND a.action='opening_balance.import'
                       AND a.entity_type='opening_balance_review' AND a.entity_id=i.review_id AND a.created_at=i.created_at)
                  THEN 'import' ELSE 'manual' END AS provenance
-       FROM opening_balance_items i WHERE i.company_id=$1 AND i.review_id=$2 ORDER BY i.created_at,i.id`,
+       FROM opening_balance_items i JOIN accounts a ON a.id=i.account_id AND a.company_id=i.company_id
+       WHERE i.company_id=$1 AND i.review_id=$2 ORDER BY i.created_at,i.id${lock ? ' FOR SHARE OF a' : ''}`,
     [companyId, reviewId])).rows;
   const linkRows = (await client.query<{ bank_account_id: string; account_id: string }>(
     `SELECT bank_account_id,account_id FROM bank_account_ledger_links WHERE company_id=$1 AND valid_from<=$2::date AND (valid_to IS NULL OR valid_to>=$2::date)`,

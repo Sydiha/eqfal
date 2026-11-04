@@ -43,6 +43,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     for (const l of ['ownerA', 'ownerB', 'preparer', 'viewer', 'accountant']) u[l] = await h.user(l);
     A = await setup('cfA', u.ownerA!.id, { close: false });
     B = await setup('cfB', u.ownerB!.id);
+    await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [A.bank]);
     await h.member(A.id, u.preparer!.id, ['accounting.view', 'opening_balance.view', 'fiscal_year.carryforward.prepare']);
     await h.member(A.id, u.viewer!.id, ['accounting.view', 'opening_balance.view']);
     await h.member(A.id, u.accountant!.id, ['accounting.view', 'opening_balance.view', 'opening_balance.item.create', 'opening_balance.submit', 'fiscal_year.view']);
@@ -101,9 +102,10 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(res.json.carryforward).toMatchObject({ net_result: '3000.00', total_debit: '13700.00', total_credit: '13700.00', item_count: 4 });
     expect(await journalCount(A)).toBe(journalsBefore); // nothing posted or drafted
     expect(JSON.stringify(await h.q('SELECT id,status,accounting_date::text FROM journal_entries WHERE fiscal_year_id=$1 ORDER BY id', [A.fy25]))).toBe(fy25Before);
-    const items = await h.q<{ balance_side: string; amount: string; source_type: string }>('SELECT balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
+    const items = await h.q<{ account_id: string; category: string; balance_side: string; amount: string; source_type: string }>('SELECT account_id,category,balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
     expect(items).toHaveLength(4);
     expect(items.every((i) => i.source_type === 'internal_ledger')).toBe(true);
+    expect(items.filter((i) => i.account_id === A.bank)).toMatchObject([{ category: 'cash_on_hand', amount: '13700.00', balance_side: 'debit' }]);
     const sum = (side: string) => items.filter((i) => i.balance_side === side).reduce((s, i) => s + Number(i.amount), 0);
     expect(sum('debit')).toBe(sum('credit'));
     expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='fiscal_year.carryforward.prepare' AND actor_user_id=$2", [A.id, u.preparer!.id])).toBe(1);

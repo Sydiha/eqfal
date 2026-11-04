@@ -20,8 +20,8 @@ export class CarryforwardValidationError extends Error {}
 export class CarryforwardNotFoundError extends Error {}
 
 type Year = { id: string; name: string; start_date: string; end_date: string; status: 'open' | 'closed' };
-type NetRow = { account_id: string; code: string; name: string; account_type: string; is_active: boolean; net: string };
-export type CarryLine = { account_id: string; code: string; name: string; account_type: string; category: 'other_asset' | 'other_liability' | 'equity'; side: 'debit' | 'credit'; amount: string; is_active: boolean };
+type NetRow = { account_id: string; code: string; name: string; account_type: string; cash_role: string; bank_linked: boolean; is_active: boolean; net: string };
+export type CarryLine = { account_id: string; code: string; name: string; account_type: string; category: 'bank' | 'cash_on_hand' | 'other_asset' | 'other_liability' | 'equity'; side: 'debit' | 'credit'; amount: string; is_active: boolean };
 
 const cents = (value: string): bigint => {
   const negative = value.startsWith('-');
@@ -47,12 +47,16 @@ async function nextYear(client: Pick<PoolClient, 'query'>, companyId: string, fr
 /** Final trial balance of the closed year: net (debit - credit) per account over all its posted journals, opening journal included. */
 async function finalBalances(client: Pick<PoolClient, 'query'>, companyId: string, yearId: string): Promise<NetRow[]> {
   return (await client.query<NetRow>(
-    `SELECT a.id account_id,a.code,a.name,a.account_type,a.is_active,SUM(l.debit-l.credit)::text net
+    `SELECT a.id account_id,a.code,a.name,a.account_type,a.cash_role,a.is_active,
+            EXISTS(SELECT 1 FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id
+              AND bl.valid_from<=(SELECT end_date+1 FROM fiscal_years WHERE id=$2 AND company_id=$1)
+              AND (bl.valid_to IS NULL OR bl.valid_to>=(SELECT end_date+1 FROM fiscal_years WHERE id=$2 AND company_id=$1))) bank_linked,
+            SUM(l.debit-l.credit)::text net
      FROM journal_lines l
      JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
      JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
      WHERE l.company_id=$1 AND j.fiscal_year_id=$2 AND j.status='posted'
-     GROUP BY a.id,a.code,a.name,a.account_type,a.is_active
+     GROUP BY a.id,a.code,a.name,a.account_type,a.cash_role,a.is_active
      HAVING SUM(l.debit-l.credit)<>0
      ORDER BY a.code,a.id`, [companyId, yearId])).rows;
 }
@@ -75,7 +79,7 @@ function carryNets(rows: NetRow[], retainedAccount: RetainedRef | null) {
   if (retainedAccount && netResult !== 0n) {
     const existing = carried.get(retainedAccount.id);
     carried.set(retainedAccount.id, {
-      row: existing?.row ?? { account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', is_active: retainedAccount.is_active, net: '0' },
+      row: existing?.row ?? { account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', cash_role: 'non_cash', bank_linked: false, is_active: retainedAccount.is_active, net: '0' },
       net: (existing?.net ?? 0n) - netResult,
     });
   }
@@ -167,7 +171,7 @@ async function compute(client: Pick<PoolClient, 'query'>, companyId: string, fro
   const { carried, netResult } = carryNets(rows, retainedAccount);
   const lines: CarryLine[] = [...carried.values()].filter(({ net }) => net !== 0n).sort((x, y) => x.row.code.localeCompare(y.row.code)).map(({ row, net }) => ({
     account_id: row.account_id, code: row.code, name: row.name, account_type: row.account_type,
-    category: CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',
+    category: row.account_type === 'asset' && row.cash_role === 'cash' ? (row.bank_linked ? 'bank' : 'cash_on_hand') : CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',
     amount: money(net < 0n ? -net : net), is_active: row.is_active,
   }));
   if (!lines.length && (netResult === 0n || retainedAccount)) blockers.push({ code: 'NOTHING_TO_CARRY' });
