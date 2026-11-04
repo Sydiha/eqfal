@@ -140,7 +140,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(p25Before).toBe('3000.00');
     expect((await u.ownerA!.client.req('POST', `/opening-balances/${A.fy26}/submit-review`, {})).status).toBe(200);
     const approved = await u.ownerA!.client.req('POST', `/opening-balances/${A.fy26}/approve`, {});
-    expect(approved.status).toBe(200);
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
     expect(approved.json.journal.status).toBe('posted');
     const tb = (await u.ownerA!.client.req('GET', `/trial-balance?fiscal_year_id=${A.fy26}`)).json.accounts as any[];
     const bal = (id: string) => tb.find((a) => a.account_id === id);
