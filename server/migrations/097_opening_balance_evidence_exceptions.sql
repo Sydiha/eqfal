@@ -3,7 +3,7 @@
 -- no backfill, no automatic acceptance. Approved reviews and their journals are never touched.
 --
 -- An exception records that a named user, with a written reason, accepted ONE reconciliation issue of class incomplete_evidence
--- (the nine codes in the CHECK below) while the review was in_review. It never changes the reconciliation classification, an item,
+-- (the incomplete-evidence codes in the CHECK below) while the review was in_review. It never changes the reconciliation classification, an item,
 -- a journal or any amount; blocked and mismatch issues cannot be recorded (the CHECK rejects their codes, also on a direct INSERT).
 -- issue_key and evidence_fingerprint are computed by the server only (sha256 hex); the database stores and protects them.
 --
@@ -27,9 +27,9 @@ CREATE TABLE opening_balance_evidence_exceptions (
   company_id           UUID        NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   review_id            UUID        NOT NULL,
   item_id              UUID,
-  section              TEXT        NOT NULL CHECK (section IN ('bank', 'receivable', 'payable')),
+  section              TEXT        NOT NULL CHECK (section IN ('bank', 'cash_on_hand', 'receivable', 'payable')),
   issue_code           TEXT        NOT NULL CHECK (issue_code IN (
-                         'OB_BANK_AGGREGATE_ONLY', 'OB_REFERENCE_MISSING', 'OB_BANK_EVIDENCE_MISSING', 'OB_BANK_CURRENCY_NOT_COMPARABLE',
+                         'OB_BANK_AGGREGATE_ONLY', 'OB_PHYSICAL_CASH_EVIDENCE_MISSING', 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED', 'OB_REFERENCE_MISSING', 'OB_BANK_EVIDENCE_MISSING', 'OB_BANK_CURRENCY_NOT_COMPARABLE',
                          'OB_FUNCTIONAL_CURRENCY_UNKNOWN', 'OB_CONTROL_ACCOUNT_UNMAPPED', 'OB_SUBLEDGER_AGGREGATE_ONLY',
                          'OB_SUBLEDGER_UNLINKED_OBLIGATION', 'OB_SUBLEDGER_TOTAL_DIFFERENCE')),
   issue_key            TEXT        NOT NULL CHECK (issue_key ~ '^[0-9a-f]{64}$'),

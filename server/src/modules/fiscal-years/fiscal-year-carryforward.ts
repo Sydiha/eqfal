@@ -48,9 +48,10 @@ async function nextYear(client: Pick<PoolClient, 'query'>, companyId: string, fr
 async function finalBalances(client: Pick<PoolClient, 'query'>, companyId: string, yearId: string): Promise<NetRow[]> {
   return (await client.query<NetRow>(
     `SELECT a.id account_id,a.code,a.name,a.account_type,a.cash_role,a.is_active,
-            EXISTS(SELECT 1 FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id
-              AND bl.valid_from<=(SELECT end_date+1 FROM fiscal_years WHERE id=$2 AND company_id=$1)
-              AND (bl.valid_to IS NULL OR bl.valid_to>=(SELECT end_date+1 FROM fiscal_years WHERE id=$2 AND company_id=$1))) bank_linked,
+            -- A historical bank link is enough to keep this GL account classified as bank on carry-forward.
+            -- If the link expires or moves at the new-year boundary, absence of an active link does not prove
+            -- that the balance is physical cash. Only cash accounts with no bank-link history qualify as cash-on-hand.
+            EXISTS(SELECT 1 FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id) bank_linked,
             SUM(l.debit-l.credit)::text net
      FROM journal_lines l
      JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id

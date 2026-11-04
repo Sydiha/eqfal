@@ -119,23 +119,27 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(await journals(co)).toBe(1);
   });
 
-  it('cash on hand validates without bank linkage and flows through approval, trial balance, financial position, and cash flow', async () => {
+  it('cash on hand records user-declared evidence as unverified, then flows through approval, trial balance, financial position, and cash flow', async () => {
     const co = await setup('cash');
     const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '5000.00', balance_side: 'debit', source_type: 'original_document', source_reference: 'PHYSICAL-COUNT-2025-12-31', confidence: 'high' });
     await balance(co, '5000.00');
     const rep = await report(co);
     expect(rep.status).toBe(200);
-    expect(rep.json).toMatchObject({ status: 'verified', blocking: false });
-    expect(rep.json.sections.cash_on_hand).toMatchObject({ status: 'verified', item_count: 1, gl_total: '5000.00' });
+    expect(rep.json).toMatchObject({ status: 'incomplete_evidence', blocking: false });
+    expect(rep.json.sections.cash_on_hand).toMatchObject({ status: 'incomplete_evidence', item_count: 1, gl_total: '5000.00' });
+    expect(rep.json.issues).toMatchObject([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED', detail: expect.objectContaining({ evidence: 'user_declared', independently_verified: 'false' }) })]);
     expect(rep.json.sections.bank.item_count).toBe(0);
     expect((await submit(co)).status).toBe(200);
+    const accepted = await acceptAllIncomplete(co.manager.client, co.fy);
+    expect([200, 201]).toContain(accepted.status);
     expect((await approve(co)).status).toBe(200);
     const posted = await h.q<{ debit: string; credit: string; entry_type: string }>(
       `SELECT l.debit::text,l.credit::text,j.entry_type FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id WHERE j.company_id=$1 AND l.account_id=$2`, [co.id, co.cashGl]);
     expect(posted).toEqual([{ debit: '5000.00', credit: '0.00', entry_type: 'opening_balance' }]);
     const tb = await co.accountant.client.req('GET', `/trial-balance?fiscal_year_id=${co.fy}`);
     expect(tb.status).toBe(200);
-    expect(tb.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl)).toMatchObject({ debit_balance: '5000.00', credit_balance: '0.00' });
+    expect(tb.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl)).toMatchObject({ debit_balance: '5000.00' });
+    expect(Number(tb.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl).credit_balance)).toBe(0);
     const position = await co.accountant.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}`);
     expect(position.status).toBe(200);
     expect(position.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl)).toMatchObject({ statement_category: 'current_asset', amount: '5000.00' });

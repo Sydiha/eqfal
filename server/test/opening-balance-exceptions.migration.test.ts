@@ -13,11 +13,11 @@ const sql = raw.replace(/--.*$/gm, '');
 const CAP = 'opening_balance.exception.accept';
 
 describe('migration 097 (opening balance evidence exceptions)', () => {
-  it('allows exactly the nine incomplete-evidence codes and no blocked or mismatch code', () => {
+  it('allows exactly the incomplete-evidence codes and no blocked or mismatch code', () => {
     const check = sql.match(/issue_code\s+TEXT\s+NOT NULL CHECK \(issue_code IN \(([\s\S]*?)\)\)/)![1]!;
     const codes = [...check.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
     expect([...codes].sort()).toEqual([...OB_EXCEPTION_ELIGIBLE_CODES].sort());
-    expect(codes).toHaveLength(9);
+    expect(codes).toHaveLength(11);
     for (const c of Object.values(OB_CODES).filter((x) => !OB_EXCEPTION_ELIGIBLE_CODES.includes(x))) expect(codes, c).not.toContain(c);
   });
 

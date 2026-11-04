@@ -30,6 +30,7 @@ export const OB_CODES = {
   bankAggregateOnly: 'OB_BANK_AGGREGATE_ONLY',
   cashAccountInvalid: 'OB_CASH_ACCOUNT_INVALID',
   physicalCashEvidenceMissing: 'OB_PHYSICAL_CASH_EVIDENCE_MISSING',
+  physicalCashEvidenceUserDeclared: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED',
   referenceMissing: 'OB_REFERENCE_MISSING',
   bankEvidenceMissing: 'OB_BANK_EVIDENCE_MISSING',
   bankAmountMismatch: 'OB_BANK_AMOUNT_MISMATCH',
@@ -146,13 +147,18 @@ export function evaluateOpeningReconciliation(input: ReconciliationInput): Recon
     compareBank(i, i.bank_account_id, false);
   }
 
-  // Physical cash is reconciled to an active cash-classified GL asset and a referenced, high-confidence count record.
+  // Physical cash is reconciled to an active cash-classified GL asset with user-declared count evidence.
   // No bank account, statement, currency comparison or bank-to-GL link is involved.
   const cashItems = input.items.filter((i) => i.category === 'cash_on_hand');
   for (const i of cashItems) {
     if (i.cash_account_valid === false) add('cash_on_hand', 'blocked', OB_CODES.cashAccountInvalid, i);
     if (i.source_type !== 'original_document' || i.confidence !== 'high' || !(i.source_document_id || i.source_reference?.trim())) {
       add('cash_on_hand', 'incomplete_evidence', OB_CODES.physicalCashEvidenceMissing, i, { required: 'high-confidence physical cash count record reference' });
+    } else {
+      add('cash_on_hand', 'incomplete_evidence', OB_CODES.physicalCashEvidenceUserDeclared, i, {
+        evidence: 'user_declared', independently_verified: 'false',
+        disclosure: 'Reference and confidence are user-provided; document authenticity and the physical count have not been independently verified',
+      });
     }
   }
 

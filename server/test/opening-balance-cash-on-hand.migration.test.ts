@@ -19,6 +19,7 @@ describe('cash-on-hand opening balance contract', () => {
     expect(router).toContain("input.category==='cash_on_hand'");
     expect(router).toContain("a.account_type!=='asset'||a.cash_role!=='cash'");
     expect(reconciliation).toContain('physicalCashEvidenceMissing');
+    expect(reconciliation).toContain('physicalCashEvidenceUserDeclared');
     expect(reconciliation).toContain("i.category === 'bank'");
     expect(reconciliation).toContain("i.category === 'cash_on_hand'");
     expect(exceptions).toContain("'OB_PHYSICAL_CASH_EVIDENCE_MISSING'");
@@ -26,7 +27,7 @@ describe('cash-on-hand opening balance contract', () => {
 
   it('carries cash-classified ledger balances once under the cash-on-hand category', () => {
     expect(carryforward).toContain("row.account_type === 'asset' && row.cash_role === 'cash' ? (row.bank_linked ? 'bank' : 'cash_on_hand')");
-    expect(carryforward).toContain('bl.valid_from<=');
+    expect(carryforward).toContain('EXISTS(SELECT 1 FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id) bank_linked');
     expect(carryforward).toContain('OPENING_BALANCE_ALREADY_EXISTS');
   });
 });

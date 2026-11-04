@@ -105,7 +105,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     const items = await h.q<{ account_id: string; category: string; balance_side: string; amount: string; source_type: string }>('SELECT account_id,category,balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
     expect(items).toHaveLength(4);
     expect(items.every((i) => i.source_type === 'internal_ledger')).toBe(true);
-    expect(items.filter((i) => i.account_id === A.bank)).toMatchObject([{ category: 'cash_on_hand', amount: '13700.00', balance_side: 'debit' }]);
+    expect(items.filter((i) => i.account_id === A.bank)).toMatchObject([{ category: 'bank', amount: '13700.00', balance_side: 'debit' }]);
     const sum = (side: string) => items.filter((i) => i.balance_side === side).reduce((s, i) => s + Number(i.amount), 0);
     expect(sum('debit')).toBe(sum('credit'));
     expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='fiscal_year.carryforward.prepare' AND actor_user_id=$2", [A.id, u.preparer!.id])).toBe(1);
@@ -140,6 +140,23 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect((await p26()).json.profit_or_loss).toBe('0.00');
     expect((await u.ownerA!.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${A.fy25}`)).json.profit_or_loss).toBe(p25Before);
     expect((await fp(A.fy25)).json.accounting_equation.balanced).toBe(true);
+  });
+
+  it('keeps an expired bank GL link classified as bank at the next-year boundary', async () => {
+    const co = await setup('cfExpiredLink', u.ownerA!.id);
+    await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [co.bank]);
+    const bankAccount = (await h.q<{ id: string }>(
+      "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Boundary bank','SAR',$2) RETURNING id", [co.id, u[co.owner]!.id],
+    ))[0]!.id;
+    await h.q(
+      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,valid_to,created_by) VALUES($1,$2,$3,$4,$5,$6)',
+      [co.id, bankAccount, co.bank, '2025-01-01', '2025-12-31', u[co.owner]!.id],
+    );
+
+    const preview = await u.viewer!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
+    expect(preview.status).toBe(200);
+    expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).toBe('bank');
+    expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).not.toBe('cash_on_hand');
   });
 
   let regression = 0;
