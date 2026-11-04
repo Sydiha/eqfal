@@ -114,10 +114,11 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(res.json.carryforward).toMatchObject({ net_result: '3000.00', total_debit: '13700.00', total_credit: '13700.00', item_count: 4 });
     expect(await journalCount(A)).toBe(journalsBefore); // nothing posted or drafted
     expect(JSON.stringify(await h.q('SELECT id,status,accounting_date::text FROM journal_entries WHERE fiscal_year_id=$1 ORDER BY id', [A.fy25]))).toBe(fy25Before);
-    const items = await h.q<{ account_id: string; category: string; balance_side: string; amount: string; source_type: string }>('SELECT account_id,category,balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
+    const items = await h.q<{ account_id: string; category: string; bank_account_id: string | null; balance_side: string; amount: string; source_type: string }>('SELECT account_id,category,bank_account_id,balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
     expect(items).toHaveLength(4);
     expect(items.every((i) => i.source_type === 'internal_ledger')).toBe(true);
     expect(items.filter((i) => i.account_id === A.bank)).toMatchObject([{ category: 'bank', amount: '13700.00', balance_side: 'debit' }]);
+    expect(items.find((i) => i.account_id === A.bank)?.bank_account_id).toBeTruthy();
     const sum = (side: string) => items.filter((i) => i.balance_side === side).reduce((s, i) => s + Number(i.amount), 0);
     expect(sum('debit')).toBe(sum('credit'));
     expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='fiscal_year.carryforward.prepare' AND actor_user_id=$2", [A.id, u.preparer!.id])).toBe(1);
