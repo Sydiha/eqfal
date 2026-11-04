@@ -83,6 +83,16 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     co.accountant.client.req('PATCH', `/opening-balances/${co.fy}/items/${it.id}`, { version: it.version, ...body });
   const submit = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {});
   const accept = async (co: Co) => { const r = await acceptAllIncomplete(co.manager.client, co.fy); expect([200, 201]).toContain(r.status); };
+  const acceptAsManager = async (co: Co) => {
+    const listed = await co.manager.client.req('GET', `/opening-balances/${co.fy}/exceptions`);
+    expect(listed.status).toBe(200);
+    const issues = (listed.json.issues as Array<{ acceptable: boolean; issue_key: string; evidence_fingerprint: string; code: string; detail?: Record<string, string> }>).filter((i) => i.acceptable);
+    const accepted = await co.manager.client.req('POST', `/opening-balances/${co.fy}/exceptions`, issues.map((i) => ({
+      issue_key: i.issue_key, evidence_fingerprint: i.evidence_fingerprint, reason: 'User-declared cash count accepted for UAT',
+      ...(i.code === 'OB_SUBLEDGER_TOTAL_DIFFERENCE' ? { acknowledged_difference: i.detail?.difference } : {}),
+    })));
+    expect(accepted.status).toBe(201);
+  };
   const approve = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {});
   const report = (co: Co) => co.viewer.client.req('GET', `/opening-balances/${co.fy}/reconciliation`);
   const reviewStatus = async (co: Co) => (await h.q<{ status: string }>('SELECT status FROM opening_balance_reviews WHERE company_id=$1', [co.id]))[0]?.status;
@@ -130,8 +140,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(rep.json.issues).toMatchObject([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED', detail: expect.objectContaining({ evidence: 'user_declared', independently_verified: 'false' }) })]);
     expect(rep.json.sections.bank.item_count).toBe(0);
     expect((await submit(co)).status).toBe(200);
-    const accepted = await acceptAllIncomplete(co.manager.client, co.fy);
-    expect([200, 201]).toContain(accepted.status);
+    await acceptAsManager(co);
     expect((await approve(co)).status).toBe(200);
     const posted = await h.q<{ debit: string; credit: string; entry_type: string }>(
       `SELECT l.debit::text,l.credit::text,j.entry_type FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id WHERE j.company_id=$1 AND l.account_id=$2`, [co.id, co.cashGl]);
@@ -158,7 +167,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const imported = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/import`, {
       confirm: true, file_name: 'cash.csv', items: [
         { row: 1, account_id: co.other, debit: '5.00', credit: '0.00', category: 'cash_on_hand' },
-        { row: 2, account_id: co.equity, debit: '0.00', credit: '5.00', category: 'equity' },
+        { row: 2, account_id: co.equity, debit: '0.00', credit: '5.00', category: 'equity', partner_id: null },
       ],
     });
     expect(imported.status).toBe(400);

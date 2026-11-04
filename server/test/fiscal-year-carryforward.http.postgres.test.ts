@@ -149,9 +149,11 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
       "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Boundary bank','SAR',$2) RETURNING id", [co.id, u[co.owner]!.id],
     ))[0]!.id;
     await h.q(
-      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,valid_to,created_by) VALUES($1,$2,$3,$4,$5,$6)',
-      [co.id, bankAccount, co.bank, '2025-01-01', '2025-12-31', u[co.owner]!.id],
+      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5)',
+      [co.id, bankAccount, co.bank, '2025-01-01', u[co.owner]!.id],
     );
+    const linkId = (await h.q<{ id: string }>('SELECT id FROM bank_account_ledger_links WHERE company_id=$1 AND account_id=$2', [co.id, co.bank]))[0]!.id;
+    await h.q('UPDATE bank_account_ledger_links SET valid_to=$2,ended_by=$3,ended_at=NOW() WHERE id=$1', [linkId, '2025-12-31', u[co.owner]!.id]);
 
     const preview = await u.viewer!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
     expect(preview.status).toBe(200);
