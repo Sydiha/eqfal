@@ -44,6 +44,18 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     A = await setup('cfA', u.ownerA!.id, { close: false });
     B = await setup('cfB', u.ownerB!.id);
     await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [A.bank]);
+    const bankAccount = (await h.q<{ id: string }>(
+      "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Operating bank','SAR',$2) RETURNING id", [A.id, u.ownerA!.id],
+    ))[0]!.id;
+    await h.q(
+      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5)',
+      [A.id, bankAccount, A.bank, '2025-01-01', u.ownerA!.id],
+    );
+    await h.q(
+      `INSERT INTO bank_statement_balances(company_id,bank_account_id,currency_code,statement_ref,period_start,period_end,closing_balance,status,confirmed_by,confirmed_at,created_by)
+       VALUES($1,$2,'SAR','FY25-CLOSING','2025-12-01','2025-12-31','13700.00','confirmed',$3,NOW(),$3)`,
+      [A.id, bankAccount, u.ownerA!.id],
+    );
     await h.member(A.id, u.preparer!.id, ['accounting.view', 'opening_balance.view', 'fiscal_year.carryforward.prepare']);
     await h.member(A.id, u.viewer!.id, ['accounting.view', 'opening_balance.view']);
     await h.member(A.id, u.accountant!.id, ['accounting.view', 'opening_balance.view', 'opening_balance.item.create', 'opening_balance.submit', 'fiscal_year.view']);
