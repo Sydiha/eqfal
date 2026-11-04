@@ -43,6 +43,10 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     for (const l of ['ownerA', 'ownerB', 'preparer', 'viewer', 'accountant']) u[l] = await h.user(l);
     A = await setup('cfA', u.ownerA!.id, { close: false });
     B = await setup('cfB', u.ownerB!.id);
+    await h.q(
+      `INSERT INTO company_accounting_profiles(company_id,version_no,workflow_status,accounting_framework,functional_currency,reporting_currency,first_live_accounting_date,vat_status,tax_treatment,ownership_context,wht_profile,has_non_resident_dealings,effective_from,prepared_by_user_id,approved_by_user_id,approved_at)
+       VALUES($1,1,'approved','IFRS','SAR','SAR','2025-01-01','not_registered','zakat_applicable','saudi_gcc_only','not_currently_applicable','no','2025-01-01',$2,$2,NOW())`, [A.id, u.ownerA!.id],
+    );
     await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [A.bank]);
     const bankAccount = (await h.q<{ id: string }>(
       "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Operating bank','SAR',$2) RETURNING id", [A.id, u.ownerA!.id],
