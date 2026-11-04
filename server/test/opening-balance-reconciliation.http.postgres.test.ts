@@ -166,7 +166,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(manual.status).toBe(400);
     const imported = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/import`, {
       confirm: true, file_name: 'cash.csv', items: [
-        { row: 1, account_id: co.other, debit: '5.00', credit: '0.00', category: 'cash_on_hand' },
+        { row: 1, account_id: co.other, debit: '5.00', credit: '0.00', category: 'cash_on_hand', partner_id: null },
         { row: 2, account_id: co.equity, debit: '0.00', credit: '5.00', category: 'equity', partner_id: null },
       ],
     });

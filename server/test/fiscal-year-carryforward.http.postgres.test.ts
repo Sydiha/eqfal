@@ -155,7 +155,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     const linkId = (await h.q<{ id: string }>('SELECT id FROM bank_account_ledger_links WHERE company_id=$1 AND account_id=$2', [co.id, co.bank]))[0]!.id;
     await h.q('UPDATE bank_account_ledger_links SET valid_to=$2,ended_by=$3,ended_at=NOW() WHERE id=$1', [linkId, '2025-12-31', u[co.owner]!.id]);
 
-    const preview = await u.viewer!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
+    const preview = await u[co.owner]!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
     expect(preview.status).toBe(200);
     expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).toBe('bank');
     expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).not.toBe('cash_on_hand');
