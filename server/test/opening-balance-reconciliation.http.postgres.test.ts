@@ -31,7 +31,9 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
        VALUES($1,1,'approved','IFRS','SAR','SAR','2025-01-01','not_registered','zakat_applicable','saudi_gcc_only','not_currently_applicable','no','2025-01-01',$2,$2,NOW())`, [id, owner.id]);
     const bankGl = await h.account(id, 'OB-BANK', 'asset', 'current_asset');
     const bankGl2 = await h.account(id, 'OB-BANK2', 'asset', 'current_asset');
+    const cashGl = await h.account(id, 'OB-CASH', 'asset', 'current_asset');
     await h.q("UPDATE accounts SET cash_role='cash' WHERE id=ANY($1::uuid[])", [[bankGl, bankGl2]]);
+    await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [cashGl]);
     const ar = await h.account(id, 'OB-AR', 'asset', 'current_asset');
     const arChild = await h.account(id, 'OB-AR-1', 'asset', 'current_asset');
     await h.q('UPDATE accounts SET parent_account_id=$2 WHERE id=$1', [arChild, ar]);
@@ -46,7 +48,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const bank = await mkBank('Main');
     const cp = (await h.q<{ id: string }>("INSERT INTO counterparties(company_id,name,type,created_by_user_id) VALUES($1,'Customer A','customer',$2) RETURNING id", [id, owner.id]))[0]!.id;
     const cp2 = (await h.q<{ id: string }>("INSERT INTO counterparties(company_id,name,type,created_by_user_id) VALUES($1,'Supplier B','supplier',$2) RETURNING id", [id, owner.id]))[0]!.id;
-    return { id, fy, owner, accountant, manager, viewer, noCap, bankGl, bankGl2, ar, arChild, ap, equity, other, bank, cp, cp2, mkBank };
+    return { id, fy, owner, accountant, manager, viewer, noCap, bankGl, bankGl2, cashGl, ar, arChild, ap, equity, other, bank, cp, cp2, mkBank };
   }
   type Co = Awaited<ReturnType<typeof setup>>;
 
@@ -81,6 +83,16 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     co.accountant.client.req('PATCH', `/opening-balances/${co.fy}/items/${it.id}`, { version: it.version, ...body });
   const submit = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/submit-review`, {});
   const accept = async (co: Co) => { const r = await acceptAllIncomplete(co.manager.client, co.fy); expect([200, 201]).toContain(r.status); };
+  const acceptAsManager = async (co: Co) => {
+    const listed = await co.manager.client.req('GET', `/opening-balances/${co.fy}/exceptions`);
+    expect(listed.status).toBe(200);
+    const issues = (listed.json.issues as Array<{ acceptable: boolean; issue_key: string; evidence_fingerprint: string; code: string; detail?: Record<string, string> }>).filter((i) => i.acceptable);
+    const accepted = await co.manager.client.req('POST', `/opening-balances/${co.fy}/exceptions`, issues.map((i) => ({
+      issue_key: i.issue_key, evidence_fingerprint: i.evidence_fingerprint, reason: 'User-declared cash count accepted for UAT',
+      ...(i.code === 'OB_SUBLEDGER_TOTAL_DIFFERENCE' ? { acknowledged_difference: i.detail?.difference } : {}),
+    })));
+    expect(accepted.status).toBe(201);
+  };
   const approve = (co: Co) => co.manager.client.req('POST', `/opening-balances/${co.fy}/approve`, {});
   const report = (co: Co) => co.viewer.client.req('GET', `/opening-balances/${co.fy}/reconciliation`);
   const reviewStatus = async (co: Co) => (await h.q<{ status: string }>('SELECT status FROM opening_balance_reviews WHERE company_id=$1', [co.id]))[0]?.status;
@@ -115,6 +127,51 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect((await approve(co)).status).toBe(200);
     expect(await reviewStatus(co)).toBe('approved');
     expect(await journals(co)).toBe(1);
+  });
+
+  it('cash on hand records user-declared evidence as unverified, then flows through approval, trial balance, financial position, and cash flow', async () => {
+    const co = await setup('cash');
+    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '5000.00', balance_side: 'debit', source_type: 'original_document', source_reference: 'PHYSICAL-COUNT-2025-12-31', confidence: 'high' });
+    await balance(co, '5000.00');
+    const rep = await report(co);
+    expect(rep.status).toBe(200);
+    expect(rep.json).toMatchObject({ status: 'incomplete_evidence', blocking: false });
+    expect(rep.json.sections.cash_on_hand).toMatchObject({ status: 'incomplete_evidence', item_count: 1, gl_total: '5000.00' });
+    expect(rep.json.issues).toMatchObject([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED', detail: expect.objectContaining({ evidence: 'user_declared', independently_verified: 'false' }) })]);
+    expect(rep.json.sections.bank.item_count).toBe(0);
+    expect((await submit(co)).status).toBe(200);
+    await acceptAsManager(co);
+    expect((await approve(co)).status).toBe(200);
+    const posted = await h.q<{ debit: string; credit: string; entry_type: string }>(
+      `SELECT l.debit::text,l.credit::text,j.entry_type FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id WHERE j.company_id=$1 AND l.account_id=$2`, [co.id, co.cashGl]);
+    expect(posted).toEqual([{ debit: '5000.00', credit: '0.00', entry_type: 'opening_balance' }]);
+    const tb = await co.accountant.client.req('GET', `/trial-balance?fiscal_year_id=${co.fy}`);
+    expect(tb.status).toBe(200);
+    expect(tb.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl)).toMatchObject({ debit_balance: '5000.00' });
+    expect(Number(tb.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl).credit_balance)).toBe(0);
+    const position = await co.accountant.client.req('GET', `/financial-statements/financial-position?fiscal_year_id=${co.fy}`);
+    expect(position.status).toBe(200);
+    expect(position.json.accounts.find((a: { account_id: string }) => a.account_id === co.cashGl)).toMatchObject({ statement_category: 'current_asset', amount: '5000.00' });
+    const flow = await co.accountant.client.req('GET', `/financial-statements/cash-flow?fiscal_year_id=${co.fy}`);
+    expect(flow.status).toBe(200);
+    expect(flow.json).toMatchObject({ opening_cash_and_cash_equivalents: '5000.00', closing_cash_and_cash_equivalents: '5000.00', net_change_in_cash_and_cash_equivalents: '0.00' });
+    expect(cash.id).toBeTruthy();
+  });
+
+  it('rejects cash-on-hand rows for non-cash GL assets, including the trial-balance import path', async () => {
+    const co = await setup('cash-invalid');
+    const manual = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/items`, {
+      category: 'cash_on_hand', account_id: co.other, amount: '5.00', balance_side: 'debit', source_type: 'original_document', source_reference: 'COUNT-1', confidence: 'high',
+    });
+    expect(manual.status).toBe(400);
+    const imported = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/import`, {
+      confirm: true, file_name: 'cash.csv', items: [
+        { row: 1, account_id: co.other, debit: '5.00', credit: '0.00', category: 'cash_on_hand', partner_id: null },
+        { row: 2, account_id: co.equity, debit: '0.00', credit: '5.00', category: 'equity', partner_id: null },
+      ],
+    });
+    expect(imported.status).toBe(400);
+    expect(imported.json.code).toBe('IMPORT_CASH_ACCOUNT_INVALID');
   });
 
   it('aggregate-only trial balance items stay supported: reported as incomplete evidence, never blocking', async () => {

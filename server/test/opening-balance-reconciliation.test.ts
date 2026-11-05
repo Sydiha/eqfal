@@ -71,6 +71,28 @@ describe('opening balance reconciliation: bank', () => {
   });
 });
 
+describe('opening balance reconciliation: cash on hand', () => {
+  it('treats a high-confidence physical cash count reference as user-declared, not independently verified', () => {
+    const r = evaluateOpeningReconciliation(input({ items: [item({ category: 'cash_on_hand', account_id: 'petty-cash', amount: '5000.00', cash_account_valid: true, source_type: 'original_document', source_reference: 'CASH-COUNT-2025-12-31', confidence: 'high' })] }));
+    expect(r.status).toBe('incomplete_evidence');
+    expect(r.sections.cash_on_hand).toMatchObject({ status: 'incomplete_evidence', item_count: 1, gl_total: '5000.00', subledger_total: null });
+    expect(r.issues).toMatchObject([{ code: OB_CODES.physicalCashEvidenceUserDeclared, class: 'incomplete_evidence', detail: { evidence: 'user_declared', independently_verified: 'false' } }]);
+  });
+
+  it('blocks an account that is not an active asset classified as cash', () => {
+    const r = evaluateOpeningReconciliation(input({ items: [item({ category: 'cash_on_hand', cash_account_valid: false, source_type: 'original_document', source_reference: 'COUNT-1', confidence: 'high' })] }));
+    expect(r.blocking).toBe(true);
+    expect(codes(r)).toEqual([OB_CODES.cashAccountInvalid, OB_CODES.physicalCashEvidenceUserDeclared]);
+  });
+
+  it('reports missing physical count evidence as incomplete and requires an explicit exception before approval', () => {
+    const r = evaluateOpeningReconciliation(input({ items: [item({ category: 'cash_on_hand', cash_account_valid: true, source_type: 'internal_ledger', source_reference: 'fiscal-year:prior', confidence: 'high' })] }));
+    expect(r.blocking).toBe(false);
+    expect(r.status).toBe('incomplete_evidence');
+    expect(codes(r)).toEqual([OB_CODES.physicalCashEvidenceMissing]);
+  });
+});
+
 describe('opening balance reconciliation: a removed reference never hides a discrepancy', () => {
   const stmt = new Map([['b1', { closing_balance: '100.00', currency_code: 'SAR' }]]);
   it('bank: a hand-entered item without its bank account is a missing reference, not an aggregate', () => {

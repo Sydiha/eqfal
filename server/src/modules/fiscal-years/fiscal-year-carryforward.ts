@@ -20,8 +20,8 @@ export class CarryforwardValidationError extends Error {}
 export class CarryforwardNotFoundError extends Error {}
 
 type Year = { id: string; name: string; start_date: string; end_date: string; status: 'open' | 'closed' };
-type NetRow = { account_id: string; code: string; name: string; account_type: string; is_active: boolean; net: string };
-export type CarryLine = { account_id: string; code: string; name: string; account_type: string; category: 'other_asset' | 'other_liability' | 'equity'; side: 'debit' | 'credit'; amount: string; is_active: boolean };
+type NetRow = { account_id: string; code: string; name: string; account_type: string; cash_role: string; bank_linked: boolean; bank_account_id: string | null; is_active: boolean; net: string };
+export type CarryLine = { account_id: string; code: string; name: string; account_type: string; category: 'bank' | 'cash_on_hand' | 'other_asset' | 'other_liability' | 'equity'; bank_account_id?: string; side: 'debit' | 'credit'; amount: string; is_active: boolean };
 
 const cents = (value: string): bigint => {
   const negative = value.startsWith('-');
@@ -45,16 +45,24 @@ async function nextYear(client: Pick<PoolClient, 'query'>, companyId: string, fr
 }
 
 /** Final trial balance of the closed year: net (debit - credit) per account over all its posted journals, opening journal included. */
-async function finalBalances(client: Pick<PoolClient, 'query'>, companyId: string, yearId: string): Promise<NetRow[]> {
+async function finalBalances(client: Pick<PoolClient, 'query'>, companyId: string, yearId: string, nextYearStart?: string): Promise<NetRow[]> {
   return (await client.query<NetRow>(
-    `SELECT a.id account_id,a.code,a.name,a.account_type,a.is_active,SUM(l.debit-l.credit)::text net
+    `SELECT a.id account_id,a.code,a.name,a.account_type,a.cash_role,a.is_active,
+            -- A historical bank link is enough to keep this GL account classified as bank on carry-forward.
+            -- If the link expires or moves at the new-year boundary, absence of an active link does not prove
+            -- that the balance is physical cash. Only cash accounts with no bank-link history qualify as cash-on-hand.
+            EXISTS(SELECT 1 FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id) bank_linked,
+            (SELECT bl.bank_account_id FROM bank_account_ledger_links bl WHERE bl.company_id=a.company_id AND bl.account_id=a.id
+               AND $3::date IS NOT NULL AND bl.valid_from<=$3::date AND (bl.valid_to IS NULL OR bl.valid_to>=$3::date)
+             ORDER BY bl.valid_from DESC,bl.id LIMIT 1) bank_account_id,
+            SUM(l.debit-l.credit)::text net
      FROM journal_lines l
      JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
      JOIN accounts a ON a.id=l.account_id AND a.company_id=l.company_id
      WHERE l.company_id=$1 AND j.fiscal_year_id=$2 AND j.status='posted'
-     GROUP BY a.id,a.code,a.name,a.account_type,a.is_active
+     GROUP BY a.id,a.code,a.name,a.account_type,a.cash_role,a.is_active
      HAVING SUM(l.debit-l.credit)<>0
-     ORDER BY a.code,a.id`, [companyId, yearId])).rows;
+     ORDER BY a.code,a.id`, [companyId, yearId, nextYearStart ?? null])).rows;
 }
 
 type RetainedRef = { id: string; code: string; name: string; is_active: boolean };
@@ -75,7 +83,7 @@ function carryNets(rows: NetRow[], retainedAccount: RetainedRef | null) {
   if (retainedAccount && netResult !== 0n) {
     const existing = carried.get(retainedAccount.id);
     carried.set(retainedAccount.id, {
-      row: existing?.row ?? { account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', is_active: retainedAccount.is_active, net: '0' },
+      row: existing?.row ?? { account_id: retainedAccount.id, code: retainedAccount.code, name: retainedAccount.name, account_type: 'equity', cash_role: 'non_cash', bank_linked: false, bank_account_id: null, is_active: retainedAccount.is_active, net: '0' },
       net: (existing?.net ?? 0n) - netResult,
     });
   }
@@ -150,7 +158,7 @@ export async function verifyCarryforwardReview(client: Pick<PoolClient, 'query'>
 }
 
 async function compute(client: Pick<PoolClient, 'query'>, companyId: string, from: Year, to: Year | null, retainedAccount: { id: string; code: string; name: string; account_type: string; is_active: boolean } | null) {
-  const rows = await finalBalances(client, companyId, from.id);
+  const rows = await finalBalances(client, companyId, from.id, to?.start_date);
   const blockers: Array<{ code: string; detail?: string }> = [];
   const totalNet = rows.reduce((sum, r) => sum + cents(r.net), 0n);
   if (totalNet !== 0n) blockers.push({ code: 'TRIAL_BALANCE_UNBALANCED', detail: money(totalNet) });
@@ -167,7 +175,8 @@ async function compute(client: Pick<PoolClient, 'query'>, companyId: string, fro
   const { carried, netResult } = carryNets(rows, retainedAccount);
   const lines: CarryLine[] = [...carried.values()].filter(({ net }) => net !== 0n).sort((x, y) => x.row.code.localeCompare(y.row.code)).map(({ row, net }) => ({
     account_id: row.account_id, code: row.code, name: row.name, account_type: row.account_type,
-    category: CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',
+    category: row.account_type === 'asset' && row.cash_role === 'cash' ? (row.bank_linked ? 'bank' : 'cash_on_hand') : CATEGORY[row.account_type as keyof typeof CATEGORY], side: net > 0n ? 'debit' : 'credit' as 'debit' | 'credit',
+    ...(row.bank_linked && row.bank_account_id ? { bank_account_id: row.bank_account_id } : {}),
     amount: money(net < 0n ? -net : net), is_active: row.is_active,
   }));
   if (!lines.length && (netResult === 0n || retainedAccount)) blockers.push({ code: 'NOTHING_TO_CARRY' });
@@ -235,9 +244,9 @@ export class FiscalYearCarryforwardService {
       for (const l of all) {
         const isResult = l.account_id === retained.id && c.netResult !== 0n;
         await client.query(
-          `INSERT INTO opening_balance_items(company_id,review_id,category,account_id,amount,balance_side,source_type,source_reference,confidence,note,created_by)
-           VALUES($1,$2,$3,$4,$5,$6,'internal_ledger',$7,'high',$8,$9)`,
-          [companyId, review.id, l.category, l.account_id, l.amount, l.side, `fiscal_year:${from.id}`,
+          `INSERT INTO opening_balance_items(company_id,review_id,category,account_id,bank_account_id,amount,balance_side,source_type,source_reference,confidence,note,created_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,'internal_ledger',$8,'high',$9,$10)`,
+          [companyId, review.id, l.category, l.account_id, l.bank_account_id ?? null, l.amount, l.side, `fiscal_year:${from.id}`,
             isResult ? `Closing balance of ${from.name} consolidated with its net result (${money(c.netResult)})` : `Closing balance of ${from.name}`, actor]);
       }
       const record = (await client.query(

@@ -43,6 +43,23 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     for (const l of ['ownerA', 'ownerB', 'preparer', 'viewer', 'accountant']) u[l] = await h.user(l);
     A = await setup('cfA', u.ownerA!.id, { close: false });
     B = await setup('cfB', u.ownerB!.id);
+    await h.q(
+      `INSERT INTO company_accounting_profiles(company_id,version_no,workflow_status,accounting_framework,functional_currency,reporting_currency,first_live_accounting_date,vat_status,tax_treatment,ownership_context,wht_profile,has_non_resident_dealings,effective_from,prepared_by_user_id,approved_by_user_id,approved_at)
+       VALUES($1,1,'approved','IFRS','SAR','SAR','2025-01-01','not_registered','zakat_applicable','saudi_gcc_only','not_currently_applicable','no','2025-01-01',$2,$2,NOW())`, [A.id, u.ownerA!.id],
+    );
+    await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [A.bank]);
+    const bankAccount = (await h.q<{ id: string }>(
+      "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Operating bank','SAR',$2) RETURNING id", [A.id, u.ownerA!.id],
+    ))[0]!.id;
+    await h.q(
+      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5)',
+      [A.id, bankAccount, A.bank, '2025-01-01', u.ownerA!.id],
+    );
+    await h.q(
+      `INSERT INTO bank_statement_balances(company_id,bank_account_id,currency_code,statement_ref,period_start,period_end,closing_balance,status,confirmed_by,confirmed_at,created_by)
+       VALUES($1,$2,'SAR','FY25-CLOSING','2025-12-01','2025-12-31','13700.00','confirmed',$3,NOW(),$3)`,
+      [A.id, bankAccount, u.ownerA!.id],
+    );
     await h.member(A.id, u.preparer!.id, ['accounting.view', 'opening_balance.view', 'fiscal_year.carryforward.prepare']);
     await h.member(A.id, u.viewer!.id, ['accounting.view', 'opening_balance.view']);
     await h.member(A.id, u.accountant!.id, ['accounting.view', 'opening_balance.view', 'opening_balance.item.create', 'opening_balance.submit', 'fiscal_year.view']);
@@ -101,9 +118,11 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(res.json.carryforward).toMatchObject({ net_result: '3000.00', total_debit: '13700.00', total_credit: '13700.00', item_count: 4 });
     expect(await journalCount(A)).toBe(journalsBefore); // nothing posted or drafted
     expect(JSON.stringify(await h.q('SELECT id,status,accounting_date::text FROM journal_entries WHERE fiscal_year_id=$1 ORDER BY id', [A.fy25]))).toBe(fy25Before);
-    const items = await h.q<{ balance_side: string; amount: string; source_type: string }>('SELECT balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
+    const items = await h.q<{ account_id: string; category: string; bank_account_id: string | null; balance_side: string; amount: string; source_type: string }>('SELECT account_id,category,bank_account_id,balance_side,amount::text,source_type FROM opening_balance_items WHERE review_id=$1', [res.json.review.id]);
     expect(items).toHaveLength(4);
     expect(items.every((i) => i.source_type === 'internal_ledger')).toBe(true);
+    expect(items.filter((i) => i.account_id === A.bank)).toMatchObject([{ category: 'bank', amount: '13700.00', balance_side: 'debit' }]);
+    expect(items.find((i) => i.account_id === A.bank)?.bank_account_id).toBeTruthy();
     const sum = (side: string) => items.filter((i) => i.balance_side === side).reduce((s, i) => s + Number(i.amount), 0);
     expect(sum('debit')).toBe(sum('credit'));
     expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action='fiscal_year.carryforward.prepare' AND actor_user_id=$2", [A.id, u.preparer!.id])).toBe(1);
@@ -125,7 +144,7 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect(p25Before).toBe('3000.00');
     expect((await u.ownerA!.client.req('POST', `/opening-balances/${A.fy26}/submit-review`, {})).status).toBe(200);
     const approved = await u.ownerA!.client.req('POST', `/opening-balances/${A.fy26}/approve`, {});
-    expect(approved.status).toBe(200);
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
     expect(approved.json.journal.status).toBe('posted');
     const tb = (await u.ownerA!.client.req('GET', `/trial-balance?fiscal_year_id=${A.fy26}`)).json.accounts as any[];
     const bal = (id: string) => tb.find((a) => a.account_id === id);
@@ -138,6 +157,25 @@ describeDatabase('fiscal-year carry-forward (PostgreSQL)', () => {
     expect((await p26()).json.profit_or_loss).toBe('0.00');
     expect((await u.ownerA!.client.req('GET', `/financial-statements/profit-or-loss?fiscal_year_id=${A.fy25}`)).json.profit_or_loss).toBe(p25Before);
     expect((await fp(A.fy25)).json.accounting_equation.balanced).toBe(true);
+  });
+
+  it('keeps an expired bank GL link classified as bank at the next-year boundary', async () => {
+    const co = await setup('cfExpiredLink', u.ownerA!.id);
+    await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1", [co.bank]);
+    const bankAccount = (await h.q<{ id: string }>(
+      "INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Boundary bank','SAR',$2) RETURNING id", [co.id, u[co.owner]!.id],
+    ))[0]!.id;
+    await h.q(
+      'INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5)',
+      [co.id, bankAccount, co.bank, '2025-01-01', u[co.owner]!.id],
+    );
+    const linkId = (await h.q<{ id: string }>('SELECT id FROM bank_account_ledger_links WHERE company_id=$1 AND account_id=$2', [co.id, co.bank]))[0]!.id;
+    await h.q('UPDATE bank_account_ledger_links SET valid_to=$2,ended_by=$3,ended_at=NOW() WHERE id=$1', [linkId, '2025-12-31', u[co.owner]!.id]);
+
+    const preview = await u[co.owner]!.client.req('GET', `/fiscal-years/${co.fy25}/carryforward?retained_earnings_account_id=${co.re}`);
+    expect(preview.status).toBe(200);
+    expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).toBe('bank');
+    expect(preview.json.lines.find((line: any) => line.account_id === co.bank).category).not.toBe('cash_on_hand');
   });
 
   let regression = 0;
