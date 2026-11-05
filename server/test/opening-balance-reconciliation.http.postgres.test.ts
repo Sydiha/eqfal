@@ -1,4 +1,7 @@
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
 import { acceptAllIncomplete } from './helpers/ob-exceptions';
@@ -10,8 +13,9 @@ const BLOCKED = 'OPENING_BALANCE_RECONCILIATION_BLOCKED';
 
 describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
   let h: Awaited<ReturnType<typeof startHarness>>;
-  beforeAll(async () => { h = await startHarness(); });
-  afterAll(() => h.close());
+  let documentStorage = '';
+  beforeAll(async () => { documentStorage = fs.mkdtempSync(path.join(os.tmpdir(), 'eqfal-cash-evidence-')); process.env['DOCUMENT_STORAGE_DIR'] = documentStorage; h = await startHarness(); });
+  afterAll(() => { h.close(); fs.rmSync(documentStorage, { recursive: true, force: true }); });
 
   async function setup(label: string) {
     const owner = await h.user(`${label}-own`);
@@ -51,6 +55,15 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     return { id, fy, owner, accountant, manager, viewer, noCap, bankGl, bankGl2, cashGl, ar, arChild, ap, equity, other, bank, cp, cp2, mkBank };
   }
   type Co = Awaited<ReturnType<typeof setup>>;
+  const uploadCount = async (co: Co, label: string) => {
+    const response = await fetch(`${h.base}/api/documents`, { method: 'POST', headers: { origin: h.base, cookie: co.accountant.client.cookie, 'content-type': 'application/pdf', 'x-file-name': `${label}.pdf` }, body: new Uint8Array(Buffer.from(`%PDF-1.4\nphysical count ${label}\n`)) });
+    expect(response.status).toBe(201);
+    return (await response.json() as { document: { id: string } }).document.id;
+  };
+  const replaceCount = async (co: Co, documentId: string) => {
+    const response = await fetch(`${h.base}/api/documents/${documentId}/file`, { method: 'PUT', headers: { origin: h.base, cookie: co.accountant.client.cookie, 'content-type': 'application/pdf', 'x-file-name': 'recount.pdf', 'if-match': '1' }, body: new Uint8Array(Buffer.from('%PDF-1.4\nrevised physical count\n')) });
+    return response.status;
+  };
 
   const link = (co: Co, bank = co.bank, account = co.bankGl, from = '2025-01-01') =>
     h.q('INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5)', [co.id, bank, account, from, co.owner.id]);
@@ -140,6 +153,8 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(rep.json.issues).toMatchObject([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED', detail: expect.objectContaining({ evidence: 'user_declared', independently_verified: 'false' }) })]);
     expect(rep.json.sections.bank.item_count).toBe(0);
     expect((await submit(co)).status).toBe(200);
+    const cashIssue = (await co.manager.client.req('GET', `/opening-balances/${co.fy}/cash-verifications`)).json.items[0].issue;
+    expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/cash-verifications/${cash.id}`, { issue_key: cashIssue.issue_key, evidence_fingerprint: cashIssue.evidence_fingerprint, evidence_reference: 'PHYSICAL-COUNT-2025-12-31', decision: 'verified', rationale: 'Reviewed the typed reference only; no document is attached.' })).status).toBe(409);
     await acceptAsManager(co);
     expect((await approve(co)).status).toBe(200);
     const posted = await h.q<{ debit: string; credit: string; entry_type: string }>(
@@ -160,21 +175,34 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
 
   it('requires an authorized, separate reviewer and clears only reviewed cash evidence', async () => {
     const co = await setup('cash-verify');
-    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '5000.00', balance_side: 'debit', source_reference: 'COUNT-2025-12-31' });
+    const foreign = await setup('cash-foreign-document');
+    const foreignDocument = await uploadCount(foreign, 'foreign-count');
+    expect((await co.accountant.client.req('POST', `/opening-balances/${co.fy}/items`, { category: 'cash_on_hand', account_id: co.cashGl, amount: '1.00', balance_side: 'debit', source_type: 'original_document', source_reference: 'FOREIGN', source_document_id: foreignDocument, confidence: 'high' })).status).toBe(400);
+    const documentId = await uploadCount(co, 'count-verify');
+    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '5000.00', balance_side: 'debit', source_reference: 'COUNT-2025-12-31', source_document_id: documentId });
     await balance(co, '5000.00');
     expect((await submit(co)).status).toBe(200);
     const path = `/opening-balances/${co.fy}/cash-verifications/${cash.id}`;
     const listed = await co.manager.client.req('GET', `/opening-balances/${co.fy}/cash-verifications`);
+    expect(listed.json.items[0]).toMatchObject({ document_id: documentId, document_accessible: true });
+    expect((await co.manager.client.req('GET', `/documents/${documentId}/file`)).status).toBe(200);
+    expect((await co.viewer.client.req('GET', `/documents/${documentId}/file`)).status).toBe(403);
     const issue = listed.json.items[0].issue;
     const body = { issue_key: issue.issue_key, evidence_fingerprint: issue.evidence_fingerprint, evidence_reference: 'COUNT-2025-12-31', decision: 'verified', rationale: 'Count sheet and physical cash were checked independently.' };
     expect((await co.accountant.client.req('POST', path, body)).status).toBe(403);
+    const limited = await h.user('cash-limited-reviewer');
+    await h.member(co.id, limited.id, ['opening_balance.view', 'opening_balance.evidence.verify']);
+    await limited.client.login();
+    expect((await limited.client.req('POST', path, body)).status).toBe(403);
+    expect((await limited.client.req('GET', `/documents/${documentId}/file`)).status).toBe(403);
     expect((await co.manager.client.req('POST', path, body)).status).toBe(201);
     expect((await report(co)).json.sections.cash_on_hand.status).toBe('verified');
     expect((await co.manager.client.req('GET', `/opening-balances/${co.fy}/exceptions`)).json.required_count).toBe(0);
     expect((await approve(co)).status).toBe(200);
 
     const other = await setup('cash-preparer');
-    const own = await addItem(other, { category: 'cash_on_hand', account_id: other.cashGl, amount: '100.00', balance_side: 'debit', source_reference: 'COUNT-OTHER' });
+    const ownDocument = await uploadCount(other, 'count-preparer');
+    const own = await addItem(other, { category: 'cash_on_hand', account_id: other.cashGl, amount: '100.00', balance_side: 'debit', source_reference: 'COUNT-OTHER', source_document_id: ownDocument });
     await balance(other, '100.00');
     await h.q('UPDATE opening_balance_reviews SET prepared_by=$2 WHERE company_id=$1', [other.id, other.manager.id]);
     expect((await submit(other)).status).toBe(200);
@@ -184,7 +212,8 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
 
   it('blocks approval after a rejected decision or a changed count record', async () => {
     const co = await setup('cash-stale');
-    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '50.00', balance_side: 'debit', source_reference: 'COUNT-A' });
+    const documentId = await uploadCount(co, 'count-stale');
+    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '50.00', balance_side: 'debit', source_reference: 'COUNT-A', source_document_id: documentId });
     await balance(co, '50.00');
     expect((await submit(co)).status).toBe(200);
     const path = `/opening-balances/${co.fy}/cash-verifications/${cash.id}`;
@@ -196,9 +225,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect((await decide('rejected', 'Physical count record conflicts with cash present.')).status).toBe(201);
     expect((await approve(co)).status).toBe(409);
     expect((await decide('verified', 'Count sheet and cash were checked independently.')).status).toBe(201);
-    expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/return-to-draft`, { reason: 'Correct the count reference' })).status).toBe(200);
-    expect((await patch(co, cash, { source_reference: 'COUNT-B' })).status).toBe(200);
-    expect((await submit(co)).status).toBe(200);
+    expect(await replaceCount(co, documentId)).toBe(200);
     expect((await current()).status).toBe('stale');
     expect((await approve(co)).status).toBe(409);
     expect((await decide('verified', 'Updated count sheet and cash were checked.')).status).toBe(201);
