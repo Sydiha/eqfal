@@ -158,6 +158,53 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect(cash.id).toBeTruthy();
   });
 
+  it('requires an authorized, separate reviewer and clears only reviewed cash evidence', async () => {
+    const co = await setup('cash-verify');
+    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '5000.00', balance_side: 'debit', source_reference: 'COUNT-2025-12-31' });
+    await balance(co, '5000.00');
+    expect((await submit(co)).status).toBe(200);
+    const path = `/opening-balances/${co.fy}/cash-verifications/${cash.id}`;
+    const listed = await co.manager.client.req('GET', `/opening-balances/${co.fy}/cash-verifications`);
+    const issue = listed.json.items[0].issue;
+    const body = { issue_key: issue.issue_key, evidence_fingerprint: issue.evidence_fingerprint, evidence_reference: 'COUNT-2025-12-31', decision: 'verified', rationale: 'Count sheet and physical cash were checked independently.' };
+    expect((await co.accountant.client.req('POST', path, body)).status).toBe(403);
+    expect((await co.manager.client.req('POST', path, body)).status).toBe(201);
+    expect((await report(co)).json.sections.cash_on_hand.status).toBe('verified');
+    expect((await co.manager.client.req('GET', `/opening-balances/${co.fy}/exceptions`)).json.required_count).toBe(0);
+    expect((await approve(co)).status).toBe(200);
+
+    const other = await setup('cash-preparer');
+    const own = await addItem(other, { category: 'cash_on_hand', account_id: other.cashGl, amount: '100.00', balance_side: 'debit', source_reference: 'COUNT-OTHER' });
+    await balance(other, '100.00');
+    await h.q('UPDATE opening_balance_reviews SET prepared_by=$2 WHERE company_id=$1', [other.id, other.manager.id]);
+    expect((await submit(other)).status).toBe(200);
+    const ownIssue = (await other.manager.client.req('GET', `/opening-balances/${other.fy}/cash-verifications`)).json.items[0].issue;
+    expect((await other.manager.client.req('POST', `/opening-balances/${other.fy}/cash-verifications/${own.id}`, { ...body, issue_key: ownIssue.issue_key, evidence_fingerprint: ownIssue.evidence_fingerprint, evidence_reference: 'COUNT-OTHER' })).status).toBe(403);
+  });
+
+  it('blocks approval after a rejected decision or a changed count record', async () => {
+    const co = await setup('cash-stale');
+    const cash = await addItem(co, { category: 'cash_on_hand', account_id: co.cashGl, amount: '50.00', balance_side: 'debit', source_reference: 'COUNT-A' });
+    await balance(co, '50.00');
+    expect((await submit(co)).status).toBe(200);
+    const path = `/opening-balances/${co.fy}/cash-verifications/${cash.id}`;
+    const current = async () => (await co.manager.client.req('GET', `/opening-balances/${co.fy}/cash-verifications`)).json.items[0];
+    const decide = async (decision: string, rationale: string) => {
+      const item = await current();
+      return co.manager.client.req('POST', path, { issue_key: item.issue.issue_key, evidence_fingerprint: item.issue.evidence_fingerprint, evidence_reference: item.evidence_reference, decision, rationale });
+    };
+    expect((await decide('rejected', 'Physical count record conflicts with cash present.')).status).toBe(201);
+    expect((await approve(co)).status).toBe(409);
+    expect((await decide('verified', 'Count sheet and cash were checked independently.')).status).toBe(201);
+    expect((await co.manager.client.req('POST', `/opening-balances/${co.fy}/return-to-draft`, { reason: 'Correct the count reference' })).status).toBe(200);
+    expect((await patch(co, cash, { source_reference: 'COUNT-B' })).status).toBe(200);
+    expect((await submit(co)).status).toBe(200);
+    expect((await current()).status).toBe('stale');
+    expect((await approve(co)).status).toBe(409);
+    expect((await decide('verified', 'Updated count sheet and cash were checked.')).status).toBe(201);
+    expect((await approve(co)).status).toBe(200);
+  });
+
   it('rejects cash-on-hand rows for non-cash GL assets, including the trial-balance import path', async () => {
     const co = await setup('cash-invalid');
     const manual = await co.accountant.client.req('POST', `/opening-balances/${co.fy}/items`, {
