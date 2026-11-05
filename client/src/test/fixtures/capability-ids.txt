@@ -86,6 +86,7 @@ obligation.settlement.create
 obligation.settlement.remove
 obligation.view
 opening_balance.approve
+opening_balance.evidence.verify
 opening_balance.item.create
 opening_balance.item.delete
 opening_balance.item.edit

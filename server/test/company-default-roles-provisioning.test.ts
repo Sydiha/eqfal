@@ -180,7 +180,7 @@ describe('company default roles provisioning', () => {
   it('provisions Finance Manager role with the canonical 96 capabilities plus the post-059 grant (opening_balance.exception.accept)', async () => {
     const byRole = await provisionCapabilitiesByRole();
     expect(FINANCE_MANAGER_CAPABILITIES).toHaveLength(96);
-    expect(FINANCE_MANAGER_DEFAULT_CAPABILITIES).toHaveLength(97);
+    expect(FINANCE_MANAGER_DEFAULT_CAPABILITIES).toHaveLength(98);
     expect(byRole['Finance Manager']).toHaveLength(FINANCE_MANAGER_DEFAULT_CAPABILITIES.length);
     expect(new Set(byRole['Finance Manager'])).toEqual(new Set(FINANCE_MANAGER_DEFAULT_CAPABILITIES));
     expect(byRole['Accountant']).not.toContain('opening_balance.exception.accept');

@@ -131,7 +131,7 @@ export const FINANCE_MANAGER_CAPABILITIES: readonly string[] = [
  * Finance Manager grants added after migration 059 (whose matrix above stays frozen and contract-tested). Migration 097 grants these
  * to existing Finance Manager roles; company provisioning adds them to new ones. Accountant and Viewer never receive them.
  */
-export const FINANCE_MANAGER_POST_059_CAPABILITIES: readonly string[] = ['opening_balance.exception.accept'];
+export const FINANCE_MANAGER_POST_059_CAPABILITIES: readonly string[] = ['opening_balance.exception.accept', 'opening_balance.evidence.verify'];
 
 /** What a newly provisioned Finance Manager role holds. */
 export const FINANCE_MANAGER_DEFAULT_CAPABILITIES: readonly string[] = [

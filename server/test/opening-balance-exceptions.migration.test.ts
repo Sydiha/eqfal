@@ -75,12 +75,15 @@ describe('migration 108 (physical cash evidence exceptions)', () => {
 
 describe('capability opening_balance.exception.accept', () => {
   it('is held by the default Finance Manager only, never by Accountant or Viewer, and the frozen 059 matrix is unchanged', () => {
-    expect(FINANCE_MANAGER_POST_059_CAPABILITIES).toEqual([CAP]);
+    expect(FINANCE_MANAGER_POST_059_CAPABILITIES).toEqual([CAP, 'opening_balance.evidence.verify']);
     expect(FINANCE_MANAGER_DEFAULT_CAPABILITIES).toContain(CAP);
     expect(FINANCE_MANAGER_CAPABILITIES).not.toContain(CAP);
     expect(FINANCE_MANAGER_CAPABILITIES).toHaveLength(96);
     expect(ACCOUNTANT_CAPABILITIES).not.toContain(CAP);
     expect(VIEWER_CAPABILITIES).not.toContain(CAP);
+    expect(FINANCE_MANAGER_CAPABILITIES).not.toContain('opening_balance.evidence.verify');
+    expect(ACCOUNTANT_CAPABILITIES).not.toContain('opening_balance.evidence.verify');
+    expect(VIEWER_CAPABILITIES).not.toContain('opening_balance.evidence.verify');
     expect(capabilitySensitivity(CAP)).toBe('sensitive');
   });
 });
