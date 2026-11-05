@@ -7,18 +7,32 @@ import {
 } from '../src/modules/memberships/default-role-capabilities';
 import { capabilitySensitivity } from '../src/modules/memberships/capability-sensitivity';
 
-// C4-P2b-1: static contract of migration 097 and of the capability grant (no database needed).
+// C4-P2b-1: static contract of the original migration 097 and its forward extension in 108.
 const raw = readFileSync(new URL('../migrations/097_opening_balance_evidence_exceptions.sql', import.meta.url), 'utf8');
 const sql = raw.replace(/--.*$/gm, '');
+const raw108 = readFileSync(new URL('../migrations/108_opening_balance_cash_evidence_exceptions.sql', import.meta.url), 'utf8');
+const sql108 = raw108.replace(/--.*$/gm, '');
 const CAP = 'opening_balance.exception.accept';
+const sectionValues = (source: string) => [...source.match(/section\s+TEXT\s+NOT NULL CHECK \(section IN \(([^)]*)\)\)/)![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+const issueCodeValues = (source: string) => {
+  const check = source.match(/issue_code\s+TEXT\s+NOT NULL CHECK \(issue_code IN \(([\s\S]*?)\)\)/)![1]!;
+  return [...check.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
+};
+const extendedSectionValues = (source: string) => [...source.match(/opening_balance_evidence_exceptions_section_check[\s\S]*?CHECK \(section IN \(([^)]*)\)\)/)![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+const extendedIssueCodeValues = (source: string) => {
+  const check = source.match(/opening_balance_evidence_exceptions_issue_code_check[\s\S]*?CHECK \(issue_code IN \(([\s\S]*?)\)\)/)![1]!;
+  return [...check.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
+};
 
 describe('migration 097 (opening balance evidence exceptions)', () => {
-  it('allows exactly the incomplete-evidence codes and no blocked or mismatch code', () => {
-    const check = sql.match(/issue_code\s+TEXT\s+NOT NULL CHECK \(issue_code IN \(([\s\S]*?)\)\)/)![1]!;
-    const codes = [...check.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
-    expect([...codes].sort()).toEqual([...OB_EXCEPTION_ELIGIBLE_CODES].sort());
-    expect(codes).toHaveLength(11);
-    for (const c of Object.values(OB_CODES).filter((x) => !OB_EXCEPTION_ELIGIBLE_CODES.includes(x))) expect(codes, c).not.toContain(c);
+  it('preserves the original section and issue-code checks from main', () => {
+    expect(sectionValues(sql)).toEqual(['bank', 'receivable', 'payable']);
+    expect(issueCodeValues(sql)).toEqual([
+      'OB_BANK_AGGREGATE_ONLY', 'OB_REFERENCE_MISSING', 'OB_BANK_EVIDENCE_MISSING', 'OB_BANK_CURRENCY_NOT_COMPARABLE',
+      'OB_FUNCTIONAL_CURRENCY_UNKNOWN', 'OB_CONTROL_ACCOUNT_UNMAPPED', 'OB_SUBLEDGER_AGGREGATE_ONLY',
+      'OB_SUBLEDGER_UNLINKED_OBLIGATION', 'OB_SUBLEDGER_TOTAL_DIFFERENCE',
+    ]);
+    expect(sql).not.toMatch(/ALTER TABLE|DROP CONSTRAINT/);
   });
 
   it('is additive: one new table, no change to an existing table, row or constraint', () => {
@@ -36,6 +50,26 @@ describe('migration 097 (opening balance evidence exceptions)', () => {
     expect(grant).toMatch(/capability_id = 'opening_balance\.approve'/);
     expect(grant).not.toMatch(/accountant|viewer|Accountant|Viewer/);
     expect(sql.match(/INSERT INTO role_capabilities/g)).toHaveLength(1);
+  });
+});
+
+describe('migration 108 (physical cash evidence exceptions)', () => {
+  it('extends both checks without dropping any value accepted by migration 097', () => {
+    expect(sql108).toContain('DROP CONSTRAINT opening_balance_evidence_exceptions_section_check');
+    expect(sql108).toContain('DROP CONSTRAINT opening_balance_evidence_exceptions_issue_code_check');
+    expect(extendedSectionValues(sql108)).toEqual(['bank', 'cash_on_hand', 'receivable', 'payable']);
+    expect(extendedIssueCodeValues(sql108)).toEqual([
+      'OB_BANK_AGGREGATE_ONLY', 'OB_PHYSICAL_CASH_EVIDENCE_MISSING', 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED',
+      'OB_REFERENCE_MISSING', 'OB_BANK_EVIDENCE_MISSING', 'OB_BANK_CURRENCY_NOT_COMPARABLE',
+      'OB_FUNCTIONAL_CURRENCY_UNKNOWN', 'OB_CONTROL_ACCOUNT_UNMAPPED', 'OB_SUBLEDGER_AGGREGATE_ONLY',
+      'OB_SUBLEDGER_UNLINKED_OBLIGATION', 'OB_SUBLEDGER_TOTAL_DIFFERENCE',
+    ]);
+    expect(extendedSectionValues(sql108)).toEqual(expect.arrayContaining(sectionValues(sql)));
+    expect(extendedIssueCodeValues(sql108)).toEqual(expect.arrayContaining(issueCodeValues(sql)));
+    expect([...extendedIssueCodeValues(sql108)].sort()).toEqual([...OB_EXCEPTION_ELIGIBLE_CODES].sort());
+    for (const c of Object.values(OB_CODES).filter((x) => !OB_EXCEPTION_ELIGIBLE_CODES.includes(x))) {
+      expect(extendedIssueCodeValues(sql108), c).not.toContain(c);
+    }
   });
 });
 
