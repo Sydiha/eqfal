@@ -96,6 +96,8 @@ export type ReconciliationReport = {
   as_of_date: string;
   sections: Record<ReconciliationSection, ReconciliationSectionReport>;
   issues: ReconciliationIssue[];
+  /** Current administrative self-reviews are disclosed separately from independent verification. */
+  administrative_self_reviews?: Array<{ item_id: string; actor: string; preparer: string; reason: string; decision: 'verified' | 'rejected' | 'conflicting'; reviewed_at: string; evidence_fingerprint: string; document_id: string | null; document_sha256: string | null; document_version: number | null }>;
 };
 
 const RANK: Record<ReconciliationStatus, number> = { verified: 0, incomplete_evidence: 1, mismatch: 2, blocked: 3 };

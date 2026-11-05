@@ -208,6 +208,31 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect((await submit(other)).status).toBe(200);
     const ownIssue = (await other.manager.client.req('GET', `/opening-balances/${other.fy}/cash-verifications`)).json.items[0].issue;
     expect((await other.manager.client.req('POST', `/opening-balances/${other.fy}/cash-verifications/${own.id}`, { ...body, issue_key: ownIssue.issue_key, evidence_fingerprint: ownIssue.evidence_fingerprint, evidence_reference: 'COUNT-OTHER' })).status).toBe(403);
+    const sysAdmin = await h.user('cash-admin-preparer');
+    await h.q('UPDATE users SET is_system_admin=true WHERE id=$1', [sysAdmin.id]);
+    await sysAdmin.client.login();
+    const adminCo = await setup('cash-admin-prep');
+    // The review is prepared by the active global administrator in a different company.
+    const adminDocument = await uploadCount(adminCo, 'count-admin-self');
+    const adminCash = await addItem(adminCo, { category: 'cash_on_hand', account_id: adminCo.cashGl, amount: '75.00', balance_side: 'debit', source_reference: 'COUNT-ADMIN', source_document_id: adminDocument });
+    await balance(adminCo, '75.00');
+    await h.member(adminCo.id, sysAdmin.id, [...FINANCE_MANAGER_DEFAULT_CAPABILITIES]);
+    await h.q('UPDATE opening_balance_reviews SET prepared_by=$2 WHERE company_id=$1', [adminCo.id, sysAdmin.id]);
+    const adminCompany = (await sysAdmin.client.req('POST', '/auth/switch-company', { companyId: adminCo.id }));
+    expect(adminCompany.status).toBe(200);
+    expect((await sysAdmin.client.req('POST', `/opening-balances/${adminCo.fy}/submit-review`)).status).toBe(200);
+    const adminItem = (await sysAdmin.client.req('GET', `/opening-balances/${adminCo.fy}/cash-verifications`)).json.items[0];
+    const adminPath = `/opening-balances/${adminCo.fy}/cash-verifications/${adminCash.id}`;
+    const adminBody = { issue_key: adminItem.issue.issue_key, evidence_fingerprint: adminItem.issue.evidence_fingerprint, evidence_reference: 'COUNT-ADMIN', decision: 'verified', rationale: 'Checked the original count document and cash.' };
+    expect((await sysAdmin.client.req('POST', adminPath, adminBody)).status).toBe(400);
+    const overridden = await sysAdmin.client.req('POST', adminPath, { ...adminBody, override_reason: 'Owner approved UAT administrative self-review.' });
+    expect(overridden.status).toBe(201);
+    expect(overridden.json.decision).toMatchObject({ verification_type: 'administrative_self_review', override_actor: sysAdmin.id, override_preparer: sysAdmin.id, override_reason: 'Owner approved UAT administrative self-review.' });
+    expect((await sysAdmin.client.req('GET', `/opening-balances/${adminCo.fy}/cash-verifications`)).json.items[0]).toMatchObject({ status: 'administrative_self_review', latest: { verification_type: 'administrative_self_review' } });
+    const adminReport = await report(adminCo);
+    expect(adminReport.json.issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED' })]));
+    expect(adminReport.json.administrative_self_reviews).toEqual([expect.objectContaining({ item_id: adminCash.id, actor: sysAdmin.id, preparer: sysAdmin.id, reason: 'Owner approved UAT administrative self-review.', evidence_fingerprint: adminItem.issue.evidence_fingerprint, document_id: adminDocument })]);
+    await expect(h.q('UPDATE opening_balance_cash_verifications SET rationale=$2 WHERE id=$1', [overridden.json.decision.id, 'attempt alteration'])).rejects.toThrow();
   });
 
   it('blocks approval after a rejected decision or a changed count record', async () => {
