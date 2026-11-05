@@ -16,13 +16,12 @@ export type CashDecision = {
   reviewed_by: string; reviewed_at: string;
 };
 export type CashDocument = { id: string; sha256: string; version: number; status: string; original_filename: string; mime_type: string; storage_key: string };
-const storage = getStorage('documents', config.documentStorageDir);
 export async function inspectableCashDocument(client: PoolClient, companyId: string, documentId: string, lock = false): Promise<CashDocument | null> {
   const document = (await client.query<CashDocument>(
     `SELECT id,sha256,version,status,original_filename,mime_type,storage_key FROM documents WHERE id=$1 AND company_id=$2${lock ? ' FOR SHARE' : ''}`,
     [documentId, companyId])).rows[0];
   if (!document || document.status === 'rejected') return null;
-  try { await readVerified(storage, document.storage_key, document.sha256); return document; } catch { return null; }
+  try { await readVerified(getStorage('documents', config.documentStorageDir), document.storage_key, document.sha256); return document; } catch { return null; }
 }
 const cashCode = OB_CODES.physicalCashEvidenceUserDeclared;
 const rank: Record<ReconciliationStatus, number> = { verified: 0, incomplete_evidence: 1, mismatch: 2, blocked: 3 };
