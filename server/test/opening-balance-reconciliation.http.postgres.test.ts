@@ -231,8 +231,17 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     expect((await sysAdmin.client.req('GET', `/opening-balances/${adminCo.fy}/cash-verifications`)).json.items[0]).toMatchObject({ status: 'administrative_self_review', latest: { verification_type: 'administrative_self_review' } });
     const adminReport = await report(adminCo);
     expect(adminReport.json.issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'OB_PHYSICAL_CASH_EVIDENCE_USER_DECLARED' })]));
-    expect(adminReport.json.administrative_self_reviews).toEqual([expect.objectContaining({ item_id: adminCash.id, actor: sysAdmin.id, preparer: sysAdmin.id, reason: 'Owner approved UAT administrative self-review.', evidence_fingerprint: adminItem.issue.evidence_fingerprint, document_id: adminDocument })]);
+    const expectedDisclosure = expect.arrayContaining([expect.objectContaining({ item_id: adminCash.id, actor: sysAdmin.id, preparer: sysAdmin.id, reason: 'Owner approved UAT administrative self-review.', evidence_fingerprint: adminItem.issue.evidence_fingerprint, document_id: adminDocument, independently_verified: false })]);
+    expect(adminReport.json.administrative_self_reviews).toEqual(expectedDisclosure);
+    expect(adminReport.json.sections.cash_on_hand).toMatchObject({ status: 'verified', verification_basis: 'includes_administrative_self_review', independently_verified: false });
     await expect(h.q('UPDATE opening_balance_cash_verifications SET rationale=$2 WHERE id=$1', [overridden.json.decision.id, 'attempt alteration'])).rejects.toThrow();
+    const approved = await sysAdmin.client.req('POST', `/opening-balances/${adminCo.fy}/approve`, {});
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    expect(approved.json).toMatchObject({ review: { status: 'approved' }, reconciliation: { status: 'verified', administrative_self_reviews: expectedDisclosure, sections: { cash_on_hand: { verification_basis: 'includes_administrative_self_review', independently_verified: false } } } });
+    const approvalAudit = (await h.q<{ after_data: any }>("SELECT after_data FROM audit_log WHERE company_id=$1 AND action='opening_balance.approve'", [adminCo.id]))[0]!.after_data;
+    expect(approvalAudit).toMatchObject({ status: 'approved', reconciliation: { status: 'verified', administrative_self_reviews: expectedDisclosure, sections: { cash_on_hand: { verification_basis: 'includes_administrative_self_review', independently_verified: false } } } });
+    const finalReconciliation = await report(adminCo);
+    expect(finalReconciliation.json).toMatchObject({ status: 'verified', review_status: 'approved', administrative_self_reviews: expectedDisclosure, sections: { cash_on_hand: { verification_basis: 'includes_administrative_self_review', independently_verified: false } } });
   });
 
   it('blocks approval after a rejected decision or a changed count record', async () => {

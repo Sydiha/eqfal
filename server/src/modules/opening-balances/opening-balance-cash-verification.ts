@@ -69,8 +69,11 @@ export function applyCashDecisions(state: Awaited<ReturnType<typeof cashDecision
     status: reportIssues.filter(i => i.section === 'cash_on_hand').reduce<ReconciliationStatus>((s, i) => rank[i.class] > rank[s] ? i.class : s, 'verified') };
   const status = Object.values(sections).reduce<ReconciliationStatus>((s, section) => rank[section.status] > rank[s] ? section.status : s, 'verified');
   const administrativeSelfReviews = [...(state.latest ?? new Map<string, CashDecision>()).entries()].filter(([itemId, d]) => ['administrative_self_review','rejected','conflicting'].includes(state.status.get(itemId) ?? '') && d.verification_type === 'administrative_self_review').map(([itemId, d]) => ({
-    item_id: itemId, actor: d.override_actor ?? d.reviewed_by, preparer: d.override_preparer ?? '', reason: d.override_reason ?? '', decision: d.decision, reviewed_at: d.reviewed_at,
+    item_id: itemId, actor: d.override_actor ?? d.reviewed_by, preparer: d.override_preparer ?? '', reason: d.override_reason ?? '', decision: d.decision, independently_verified: false as const, reviewed_at: d.reviewed_at,
     evidence_fingerprint: d.evidence_fingerprint, document_id: d.document_id, document_sha256: d.document_sha256, document_version: d.document_version,
   }));
+  if (administrativeSelfReviews.length) {
+    sections.cash_on_hand = { ...sections.cash_on_hand, verification_basis: 'includes_administrative_self_review', independently_verified: false };
+  }
   return { issues, report: { ...state.evaluation.report, issues: reportIssues, sections, status, blocking: status === 'blocked' || status === 'mismatch', ...(administrativeSelfReviews.length ? { administrative_self_reviews: administrativeSelfReviews } : {}) } };
 }
