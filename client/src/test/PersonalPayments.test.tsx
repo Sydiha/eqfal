@@ -171,10 +171,10 @@ describe('PersonalPayments', () => {
   it('isolates mobile payment amounts in left-to-right text runs', async () => {
     stubFetch(); renderIt(['personal_payment.view']);
     await screen.findByText('Client lunch');
-    const amountCells = screen.getAllByRole('cell').filter(cell => /500\\.00/.test(cell.textContent ?? ''));
+    const amountCells = screen.getAllByRole('cell').filter(cell => /500\.00/.test(cell.textContent ?? ''));
     expect(amountCells.length).toBeGreaterThan(0);
     expect(amountCells[0]!.querySelector('bdi[dir="ltr"]')).toBeInTheDocument();
-    const outstanding = screen.getAllByRole('cell').find(cell => /300\\.00/.test(cell.textContent ?? ''));
+    const outstanding = screen.getAllByRole('cell').find(cell => /300\.00/.test(cell.textContent ?? ''));
     expect(outstanding?.querySelector('bdi[dir="ltr"]')).toBeInTheDocument();
   });
 
