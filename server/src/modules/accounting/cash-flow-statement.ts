@@ -14,10 +14,10 @@ export class CashFlowClassificationError extends Error{
 
 type QueryRunner=Pick<Pool|PoolClient,'query'>;
 type CashFlowLine={
-  journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance'|'cutover_balance';source_type:string|null;source_id:string|null;
+  journal_id:string;accounting_date:string;reference:string|null;entry_type:'standard'|'opening_balance'|'cutover_balance';source_type:string|null;source_id:string|null;
   account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;cash_role:CashRole;cash_flow_category:CashFlowCategory;debit:string;credit:string;
 };
-export type CashFlowBlocker={journal_id:string;accounting_date:string;reason:'unmapped'|'ambiguous';account_ids:string[]};
+export type CashFlowBlocker={journal_id:string;accounting_date:string;reference:string|null;reason:'unmapped'|'ambiguous';accounts:Array<{account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null}>};
 export type CashFlowRow={account_id:string;code:string;name:string;name_ar:string|null;name_en:string|null;amount:string};
 export type CashFlowSection={category:Exclude<CashFlowCategory,'unmapped'>;accounts:CashFlowRow[];total:string};
 
@@ -71,7 +71,7 @@ export class CashFlowStatementService{
       if(supplement)return await this.fullYear(client,fiscalYearId,from,to,sections,supplementLines,supplementOpening,closing,disclosure!);
       const operating=Number(sections[0]!.total),investing=Number(sections[1]!.total),financing=Number(sections[2]!.total);
       const net=round(operating+investing+financing),difference=round(opening+net-closing);
-      if(material(difference))throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reason:'ambiguous',account_ids:[]}]);
+      if(material(difference))throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reference:null,reason:'ambiguous',accounts:[]}]);
       // S1: a year with an active cut-over range discloses it (only periods after D reach this point); January-1 companies are unchanged.
       await client.query('COMMIT');
       return{
@@ -99,7 +99,7 @@ export class CashFlowStatementService{
     const fx=pre('fx_effect');
     const operating=cents(sections[0]!.total),investing=cents(sections[1]!.total),financing=cents(sections[2]!.total);
     const net=operating+investing+financing+fx,closing=cents(money(closingNumber)),difference=opening+net-closing;
-    if(difference!==0n)throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reason:'ambiguous',account_ids:[]}]);
+    if(difference!==0n)throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reference:null,reason:'ambiguous',accounts:[]}]);
     await client.query('COMMIT');
     return{
       statement:'cash_flow',fiscal_year_id:fiscalYearId,start_date:from,end_date:to,...preCutover(disclosure,'cash_flow',true),sections,
@@ -112,7 +112,7 @@ export class CashFlowStatementService{
 
   private async lines(db:QueryRunner,companyId:string,fiscalYearId:string,start:string,end:string){
     return(await db.query<CashFlowLine>(
-      `SELECT j.id journal_id,j.accounting_date::text,j.entry_type,j.source_type,j.source_id,
+      `SELECT j.id journal_id,j.accounting_date::text,j.reference,j.entry_type,j.source_type,j.source_id,
               a.id account_id,a.code,a.name,a.name_ar,a.name_en,a.cash_role,a.cash_flow_category,l.debit::text,l.credit::text
        FROM journal_lines l
        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
@@ -129,16 +129,17 @@ export class CashFlowStatementService{
     if(!cash.length)return;
     const cashNet=round(cash.reduce((sum,line)=>sum+amount(line),0));
     if(!counterparts.length)return; // A cash/cash-equivalent-only journal is an internal transfer.
-    const ids=counterparts.map(line=>line.account_id);
+    const accounts=[...new Map(counterparts.map(line=>[line.account_id,{account_id:line.account_id,code:line.code,name:line.name,name_ar:line.name_ar,name_en:line.name_en}])).values()];
+    const blocker=(reason:'unmapped'|'ambiguous'):CashFlowBlocker=>({journal_id:journal[0]!.journal_id,accounting_date:journal[0]!.accounting_date,reference:journal[0]!.reference,reason,accounts});
     if(!material(cashNet)){
-      blockers.push({journal_id:journal[0]!.journal_id,accounting_date:journal[0]!.accounting_date,reason:'ambiguous',account_ids:ids});return;
+      blockers.push(blocker('ambiguous'));return;
     }
     if(counterparts.some(line=>line.cash_flow_category==='unmapped')){
-      blockers.push({journal_id:journal[0]!.journal_id,accounting_date:journal[0]!.accounting_date,reason:'unmapped',account_ids:ids});return;
+      blockers.push(blocker('unmapped'));return;
     }
     const movements=counterparts.map(line=>({line,value:round(-amount(line))})).filter(row=>material(row.value));
     if(!movements.length||movements.some(row=>Math.sign(row.value)!==Math.sign(cashNet))||material(movements.reduce((sum,row)=>sum+row.value,0)-cashNet)){
-      blockers.push({journal_id:journal[0]!.journal_id,accounting_date:journal[0]!.accounting_date,reason:'ambiguous',account_ids:ids});return;
+      blockers.push(blocker('ambiguous'));return;
     }
     for(const {line,value} of movements){
       const category=line.cash_flow_category as Exclude<CashFlowCategory,'unmapped'>,existing=grouped[category].get(line.account_id);

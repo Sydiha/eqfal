@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n';
 import { Accounting } from '../components/Accounting';
-import { localizedAccountName } from '../components/accounting-contracts';
+import { localizedAccountName, normalizeFinancialAmount } from '../components/accounting-contracts';
 
 // Task 30B: bilingual account names with legacy `name` fallback.
 const accounts = [
@@ -37,6 +37,15 @@ describe('bilingual account names', () => {
     expect(localizedAccountName({ name: 'Old', name_ar: null, name_en: 'New' }, 'ar')).toBe('New');
     expect(localizedAccountName({ name: '', name_ar: 'ع' }, 'en')).toBe('ع');
     expect(localizedAccountName({ name: 'L' }, 'ar')).toBe('L');
+  });
+
+  it('normalizes valid grouped amounts and rejects malformed or ambiguous separators', () => {
+    expect(normalizeFinancialAmount('5,000')).toBe('5000');
+    expect(normalizeFinancialAmount('5,000.50')).toBe('5000.50');
+    expect(normalizeFinancialAmount('5000.50')).toBe('5000.50');
+    expect(normalizeFinancialAmount('50,00')).toBeNull();
+    expect(normalizeFinancialAmount('5,000.500')).toBeNull();
+    expect(normalizeFinancialAmount('5.000,50')).toBeNull();
   });
 
   it('shows Arabic names in the Arabic UI and legacy names for legacy accounts, including the parent column', async () => {

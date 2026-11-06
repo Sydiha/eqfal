@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AccountResponse, CashFlowCategory, CashRole, StatementCategory } from './accounting-contracts';
+import { AccountResponse, CashFlowCategory, CashRole, localizedAccountName, StatementCategory } from './accounting-contracts';
 
 interface Props{
   canView:boolean;
@@ -29,7 +29,7 @@ async function request(url:string,options:RequestInit,onUnauthorized:()=>void){
 }
 
 export function AccountClassificationPanel({canView,canManage,onUnauthorized,autoOpen=false}:Props){
-  const {t}=useTranslation();
+  const {t,i18n}=useTranslation();
   const label=(group:string,key:string)=>t(`accountMapping.${group}.${key}`);
   const [opened,setOpened]=useState(autoOpen);
   const [filter,setFilter]=useState<StatementCategory|'all'>(autoOpen?'all':'unmapped');
@@ -203,7 +203,7 @@ export function AccountClassificationPanel({canView,canManage,onUnauthorized,aut
             };
             return <tr key={account.id}>
               <td className="ac-mapping__code">{account.code}</td>
-              <td className="ac-mapping__name">{account.name}</td>
+              <td className="ac-mapping__name"><bdi dir="auto">{localizedAccountName(account,i18n.language)}</bdi></td>
               <td>{label('types',account.account_type)}</td>
               <td>
                 {canManage?

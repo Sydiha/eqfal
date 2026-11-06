@@ -252,7 +252,9 @@ export async function readAccountImport(file: File): Promise<ImportSheetRow[]> {
 
   if (rows.length < 2) throw Error('missing_headers');
   const headerKeys = readCells(rows[1]!).map((value) => value.trim());
-  if (new Set(headerKeys).size !== headerKeys.length || ACCOUNT_IMPORT_KEYS.some((key) => !headerKeys.includes(key))) throw Error('bad_headers');
+  const missingHeaders = ACCOUNT_IMPORT_KEYS.filter((key) => !headerKeys.includes(key));
+  if (missingHeaders.length) throw Error(`missing_columns:${missingHeaders.join(',')}`);
+  if (new Set(headerKeys).size !== headerKeys.length) throw Error('bad_headers');
   const result: ImportSheetRow[] = [];
   for (const row of rows.slice(2)) {
     const values = readCells(row);

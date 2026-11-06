@@ -27,7 +27,7 @@ describe('Chart of Accounts Excel template upload',()=>{
   const bad=new File(['not a zip workbook'],'broken.xlsx');
   Object.defineProperty(bad,'arrayBuffer',{value:async()=>new TextEncoder().encode('not a zip workbook').buffer});
   fireEvent.change(screen.getByLabelText('Choose .xlsx file'),{target:{files:[bad]}});
-  expect(await screen.findByText('Could not read this workbook. Use the provided .xlsx template.')).toBeInTheDocument();
+  expect(await screen.findByText('Invalid or unsupported workbook structure. Use the provided .xlsx template.')).toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalled();
  });
 });

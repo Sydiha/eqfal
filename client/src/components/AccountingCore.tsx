@@ -24,6 +24,7 @@ import {
   JournalResponse,
   journalLineToEditor,
   localizedAccountName,
+  normalizeFinancialAmount,
   serializeJournalLines,
 } from "./accounting-contracts";
 import {
@@ -65,6 +66,7 @@ type StatementSection = {
   pre_cutover_lines?: Array<{ label: string; amount: string }>;
 };
 type StatementReport = { statement: "financial_position" | "profit_or_loss" | "changes_in_equity" | "cash_flow"; pre_cutover?: PreCutover; fx_effect?: string; pre_cutover_equity?: { movements_by_type: Record<string, string> }; profit_or_loss_split?: { imported: string; native: string }; sections?: StatementSection[]; equity_accounts?: StatementSection["accounts"]; profit_or_loss?: string; opening_equity?: string; direct_equity_movements?: string; current_period_earnings?: string; closing_equity?: string; operating_cash_flow?: string; investing_cash_flow?: string; financing_cash_flow?: string; net_change_in_cash_and_cash_equivalents?: string; opening_cash_and_cash_equivalents?: string; closing_cash_and_cash_equivalents?: string; total_assets?: string; total_liabilities?: string; total_equity?: string; accounting_equation?: { assets: string; liabilities_and_equity: string; difference: string; balanced: boolean }; reconciliation?: { expected: string; actual: string; difference: string; balanced: boolean } };
+type CashFlowBlockerView = { journal_id: string; accounting_date: string; reference: string | null; reason: "unmapped" | "ambiguous"; accounts: Array<{ account_id: string; code: string; name: string; name_ar: string | null; name_en: string | null }> };
 type OperationalSource = {
   source_type: string;
   source_id: string;
@@ -229,11 +231,13 @@ export function Accounting({
   const [selected, setSelected] = useState<Journal | null>(null);
   const journalFocusRef = useRef<string | null>(readQueryParameter("journalId", { pattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i }));
   const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
+  const [amountErrors, setAmountErrors] = useState<Record<string, boolean>>({});
   const [trial, setTrial] = useState<TrialRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [reportScope, setReportScope] = useState<Record<string, string>>({});
   const [statement, setStatement] = useState<StatementReport | null>(null);
   const [statementBlocked, setStatementBlocked] = useState(false);
+  const [cashFlowBlockers, setCashFlowBlockers] = useState<CashFlowBlockerView[]>([]);
   const companyName = useActiveCompanyName() ?? "";
   // What each loaded report was run for; export files and print headers read from this, never re-query.
   const [exportMeta, setExportMeta] = useState<{ trial?: { yearName: string }; ledger?: { yearName: string; accountLabel: string; accountCode: string }; statement?: { kind: StatementKind; yearName: string; start?: string; end?: string; asOf?: string } }>({});
@@ -663,12 +667,24 @@ export function Accounting({
   };
   const saveLines = async () => {
     if (!selected) return;
+    const normalized = lines.map((line) => ({
+      ...line,
+      debit: normalizeFinancialAmount(line.debit) ?? '',
+      credit: normalizeFinancialAmount(line.credit) ?? '',
+    }));
+    const invalid: Record<string, boolean> = {};
+    lines.forEach((line, index) => {
+      if (normalizeFinancialAmount(line.debit) === null) invalid[`${index}-debit`] = true;
+      if (normalizeFinancialAmount(line.credit) === null) invalid[`${index}-credit`] = true;
+    });
+    setAmountErrors(invalid);
+    if (Object.keys(invalid).length) return;
     mutationStarted();
     setSaving(true);
     try {
       await api(
         `/api/journals/${selected.id}/lines`,
-        withRevision(json("PUT", serializeJournalLines(lines)), selected.version),
+        withRevision(json("PUT", serializeJournalLines(normalized)), selected.version),
         onUnauthorized,
       );
       mutationSucceeded();
@@ -715,6 +731,7 @@ export function Accounting({
     const yearName = years.find((y) => y.id === year)?.name ?? "";
     const yearLabel = `${t("accounting.fiscalYear")}: ${yearName}`;
     setStatementBlocked(false);
+    setCashFlowBlockers([]);
     try {
       if (kind === "trial") {
         const r = await api(
@@ -748,7 +765,10 @@ export function Accounting({
         setReportScope((p) => ({ ...p, [kind]: kind === "financialPosition" ? `${yearLabel} · ${t("accounting.statements.asOf")} ${String(d.get("as_of_date"))}` : `${yearLabel} · ${String(d.get("start_date"))} — ${String(d.get("end_date"))}` }));
       }
     } catch (reportError) {
-      if (reportError instanceof ApiError && (reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS" || reportError.code === "CASH_FLOW_CLASSIFICATION_BLOCKED")) setStatementBlocked(true);
+      if (reportError instanceof ApiError && (reportError.code === "FINANCIAL_STATEMENT_UNMAPPED_ACCOUNTS" || reportError.code === "CASH_FLOW_CLASSIFICATION_BLOCKED")) {
+        setStatementBlocked(true);
+        if (reportError.code === "CASH_FLOW_CLASSIFICATION_BLOCKED" && Array.isArray(reportError.details)) setCashFlowBlockers(reportError.details as CashFlowBlockerView[]);
+      }
       else setError(true);
     }
   };
@@ -1425,37 +1445,41 @@ export function Accounting({
                       <span aria-hidden="true">{t("accounting.debit")}</span>
                       <input
                         aria-label={t("accounting.debit")}
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
+                        aria-invalid={!!amountErrors[`${i}-debit`]}
                         value={l.debit}
                         disabled={selected.status === "posted" || !canEditJournal}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setAmountErrors((v) => ({ ...v, [`${i}-debit`]: false }));
                           setLines((v) =>
                             v.map((x, n) =>
                               n === i ? { ...x, debit: e.target.value } : x,
                             ),
-                          )
-                        }
+                          );
+                        }}
                       />
+                      {amountErrors[`${i}-debit`] && <span role="alert">{t("accounting.invalidAmount")}</span>}
                     </div>
                     <div className="ac-tab__field">
                       <span aria-hidden="true">{t("accounting.credit")}</span>
                       <input
                         aria-label={t("accounting.credit")}
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
+                        aria-invalid={!!amountErrors[`${i}-credit`]}
                         value={l.credit}
                         disabled={selected.status === "posted" || !canEditJournal}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setAmountErrors((v) => ({ ...v, [`${i}-credit`]: false }));
                           setLines((v) =>
                             v.map((x, n) =>
                               n === i ? { ...x, credit: e.target.value } : x,
                             ),
-                          )
-                        }
+                          );
+                        }}
                       />
+                      {amountErrors[`${i}-credit`] && <span role="alert">{t("accounting.invalidAmount")}</span>}
                     </div>
                   </div>
                 ))}
@@ -1575,7 +1599,7 @@ export function Accounting({
                 </thead>
                 <tbody>
                   {trial.map((r) => (
-                    <tr key={r.account_id ?? r.id}>
+                    <tr key={r.account_id ?? r.id} className={Number(r.debit_balance) === 0 && Number(r.credit_balance) === 0 ? "is-zero-balance" : undefined}>
                       <td className="ac-tab__wide">
                         {r.code} — {accountName(r)}
                       </td>
@@ -1711,6 +1735,14 @@ export function Accounting({
             <button className="primary ac-tab__primary">{t("accounting.run")}</button>
           </form>
           {statementBlocked && <WorkspaceState tone="error">{t(tab === "cashFlow" ? "accounting.statements.cashFlowBlocked" : "accounting.statements.unmapped")}</WorkspaceState>}
+          {tab === "cashFlow" && cashFlowBlockers.length > 0 && <ul className="ac-cash-flow-blockers" role="list">
+            {cashFlowBlockers.map((blocker, index) => <li key={`${blocker.journal_id}-${index}`}>
+              <span><bdi dir="ltr">{blocker.reference ? `${t("accounting.reference")}: ${blocker.reference} · ` : ""}{blocker.accounting_date}</bdi></span>
+              <span>{t(`accounting.statements.cashFlowReasons.${blocker.reason}`)}</span>
+              {blocker.accounts.map(account => <span key={account.account_id}><bdi dir="auto">{account.code} — {accountName(account)}</bdi></span>)}
+              <span>{t(`accounting.statements.cashFlowActions.${blocker.reason}`)}</span>
+            </li>)}
+          </ul>}
           {statement && !statementBlocked && statement.statement === (tab === "financialPosition" ? "financial_position" : tab === "profitOrLoss" ? "profit_or_loss" : tab === "changesInEquity" ? "changes_in_equity" : "cash_flow") && <section className="ac-tab__card" aria-labelledby="accounting-statement-title">
             <div className="ac-tab__head"><h2 id="accounting-statement-title">{t(`accounting.tabs.${tab}`)}</h2>{reportScope[tab] && <p className="ac-tab__context" dir="auto">{reportScope[tab]}</p>}</div>
             {exportButtons(statementExportDoc, false)}
