@@ -14,6 +14,8 @@ export type CashDecision = {
   evidence_reference: string; decision: 'verified' | 'rejected' | 'conflicting'; rationale: string;
   document_id: string | null; document_sha256: string | null; document_version: number | null;
   reviewed_by: string; reviewed_at: string;
+  verification_type: 'independent_human' | 'administrative_self_review';
+  override_actor: string | null; override_preparer: string | null; override_reason: string | null;
 };
 export type CashDocument = { id: string; sha256: string; version: number; status: string; original_filename: string; mime_type: string; storage_key: string };
 export async function inspectableCashDocument(client: PoolClient, companyId: string, documentId: string, lock = false): Promise<CashDocument | null> {
@@ -29,7 +31,7 @@ const rank: Record<ReconciliationStatus, number> = { verified: 0, incomplete_evi
 export async function cashDecisionState(client: PoolClient, companyId: string, reviewId: string, startDate: string, lock = false) {
   const evaluation = await evaluateOpeningEvidence(client, companyId, reviewId, startDate, lock);
   const decisions = (await client.query<CashDecision>(
-    `SELECT id,item_id,issue_key,evidence_fingerprint,item_version,evidence_reference,decision,rationale,reviewed_by,reviewed_at,document_id,document_sha256,document_version
+    `SELECT id,item_id,issue_key,evidence_fingerprint,item_version,evidence_reference,decision,rationale,reviewed_by,reviewed_at,document_id,document_sha256,document_version,verification_type,override_actor,override_preparer,override_reason
        FROM opening_balance_cash_verifications WHERE company_id=$1 AND review_id=$2
        ORDER BY reviewed_at DESC,id DESC${lock ? ' FOR SHARE' : ''}`, [companyId, reviewId])).rows;
   const review = (await client.query<{ submitted_at: string | null }>(
@@ -41,7 +43,7 @@ export async function cashDecisionState(client: PoolClient, companyId: string, r
   const latest = new Map<string, CashDecision>();
   for (const d of decisions) if (!latest.has(d.item_id)) latest.set(d.item_id, d);
   const current = new Map(evaluation.issues.filter(i => i.code === cashCode && i.item_id).map(i => [i.item_id!, i]));
-  const status = new Map<string, 'pending_verification' | 'reviewer_verified' | 'rejected' | 'conflicting' | 'stale'>();
+  const status = new Map<string, 'pending_verification' | 'reviewer_verified' | 'administrative_self_review' | 'rejected' | 'conflicting' | 'stale'>();
   for (const i of evaluation.issues.filter(i => i.code === cashCode && i.item_id)) status.set(i.item_id!, 'pending_verification');
   for (const [itemId, d] of latest) {
     if (!liveCash.has(itemId)) continue;
@@ -50,13 +52,13 @@ export async function cashDecisionState(client: PoolClient, companyId: string, r
       ? await inspectableCashDocument(client, companyId, d.document_id, lock) : null;
     const staleDocument = d.decision === 'verified' && (!document || document.sha256 !== d.document_sha256 || document.version !== d.document_version);
     status.set(itemId, !i || !review?.submitted_at || new Date(d.reviewed_at) < new Date(review.submitted_at) || i.issue_key !== d.issue_key || i.evidence_fingerprint !== d.evidence_fingerprint || i.item_version !== d.item_version || staleDocument
-      ? 'stale' : d.decision === 'verified' ? 'reviewer_verified' : d.decision);
+      ? 'stale' : d.decision === 'verified' ? d.verification_type === 'administrative_self_review' ? 'administrative_self_review' : 'reviewer_verified' : d.decision);
   }
   return { evaluation, decisions, latest, status, current };
 }
 
 export function applyCashDecisions(state: Awaited<ReturnType<typeof cashDecisionState>>): EvidenceEvaluation {
-  const issues = state.evaluation.issues.filter(i => !(i.code === cashCode && i.item_id && state.status.get(i.item_id) === 'reviewer_verified'));
+  const issues = state.evaluation.issues.filter(i => !(i.code === cashCode && i.item_id && ['reviewer_verified','administrative_self_review'].includes(state.status.get(i.item_id) ?? '')));
   const blocking: ReconciliationIssue[] = [];
   for (const [itemId, decision] of state.status) if (decision === 'rejected' || decision === 'conflicting' || decision === 'stale') {
     blocking.push({ code: decision === 'stale' ? 'OB_PHYSICAL_CASH_VERIFICATION_STALE' : decision === 'rejected' ? 'OB_PHYSICAL_CASH_EVIDENCE_REJECTED' : 'OB_PHYSICAL_CASH_EVIDENCE_CONFLICTING', class: 'blocked', section: 'cash_on_hand', item_id: itemId });
@@ -66,5 +68,12 @@ export function applyCashDecisions(state: Awaited<ReturnType<typeof cashDecision
   sections.cash_on_hand = { ...sections.cash_on_hand,
     status: reportIssues.filter(i => i.section === 'cash_on_hand').reduce<ReconciliationStatus>((s, i) => rank[i.class] > rank[s] ? i.class : s, 'verified') };
   const status = Object.values(sections).reduce<ReconciliationStatus>((s, section) => rank[section.status] > rank[s] ? section.status : s, 'verified');
-  return { issues, report: { ...state.evaluation.report, issues: reportIssues, sections, status, blocking: status === 'blocked' || status === 'mismatch' } };
+  const administrativeSelfReviews = [...(state.latest ?? new Map<string, CashDecision>()).entries()].filter(([itemId, d]) => ['administrative_self_review','rejected','conflicting'].includes(state.status.get(itemId) ?? '') && d.verification_type === 'administrative_self_review').map(([itemId, d]) => ({
+    item_id: itemId, actor: d.override_actor ?? d.reviewed_by, preparer: d.override_preparer ?? '', reason: d.override_reason ?? '', decision: d.decision, independently_verified: false as const, reviewed_at: d.reviewed_at,
+    evidence_fingerprint: d.evidence_fingerprint, document_id: d.document_id, document_sha256: d.document_sha256, document_version: d.document_version,
+  }));
+  if (administrativeSelfReviews.length) {
+    sections.cash_on_hand = { ...sections.cash_on_hand, verification_basis: 'includes_administrative_self_review', independently_verified: false };
+  }
+  return { issues, report: { ...state.evaluation.report, issues: reportIssues, sections, status, blocking: status === 'blocked' || status === 'mismatch', ...(administrativeSelfReviews.length ? { administrative_self_reviews: administrativeSelfReviews } : {}) } };
 }
