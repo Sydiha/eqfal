@@ -96,3 +96,5 @@
  .ob-approved__table tfoot td:empty{display:none}
  .ob-approved__table tfoot td[data-label]::before{content:attr(data-label);display:block;color:var(--ob-muted);font-size:10px;font-weight:600}
 }
+
+.counterparty-manager li{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}.counterparty-manager__identity{flex:1 1 12rem;min-width:0;overflow-wrap:anywhere}.counterparty-manager__actions{display:flex;flex:0 1 auto;flex-wrap:wrap;justify-content:flex-end;gap:6px;min-width:0;max-width:100%}.counterparty-manager__actions button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}.counterparty-form .modal-actions .counterparty-form__save{font-weight:800;box-shadow:0 2px 6px rgba(0,184,148,.2)}@media(max-width:36em){.counterparty-manager li{flex-direction:column;align-items:stretch}.counterparty-manager__actions{justify-content:flex-start}.counterparty-manager__actions button{flex:1 1 8rem}}

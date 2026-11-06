@@ -25,7 +25,7 @@ describe('PR-4 bank import history', () => {
     render(<MantineProvider><Banking canView canImport canDeleteImport canManage={false} canMatch={false} canReconcile={false} onUnauthorized={vi.fn()} /></MantineProvider>);
     const name = await screen.findByText(filename);
     expect(name.tagName).toBe('BDI');
-    expect(name).toHaveAttribute('dir', 'ltr');
+    expect(name).toHaveAttribute('dir', 'auto');
     const row = name.closest('tr')!;
     const cells = Array.from(row.querySelectorAll('td'));
     expect(cells.every((td) => td.getAttribute('data-label'))).toBe(true);
