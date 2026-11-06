@@ -86,5 +86,6 @@ describe('Financial statement mapping localization',()=>{
       expect(within(screen.getByRole('row',{name:/1000/})).getByText('Operating')).toBeInTheDocument();
       expect(within(screen.getByRole('row',{name:/1000/})).getByText('No')).toBeInTheDocument();
     });
+
   });
 });

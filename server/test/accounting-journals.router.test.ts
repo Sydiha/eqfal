@@ -23,7 +23,8 @@ vi.mock('../src/modules/auth/auth.middleware', () => ({
   requireCapability: () => (_req: Request, _res: Response, next: NextFunction) => next(),
 }));
 
-import { accountingRouter } from '../src/modules/accounting/accounting.router';
+import { accountingRouter, cashFlowClassificationPayload } from '../src/modules/accounting/accounting.router';
+import { CashFlowClassificationError } from '../src/modules/accounting/cash-flow-statement';
 
 const app = express();
 app.use(express.json());
@@ -78,5 +79,19 @@ describe('GET /api/journals', () => {
       journals: [{ id: 'journal-1', accounting_date: '2026-08-19' }],
     });
     expect(mocks.query).toHaveBeenCalledOnce();
+  });
+});
+
+describe('cash-flow error response compatibility', () => {
+  it('keeps the legacy blockers field while exposing the detailed diagnostics alias', () => {
+    const blocker = {
+      journal_id: 'journal-1', accounting_date: '2026-06-01', reference: 'JV-42', reason: 'unmapped' as const,
+      accounts: [{ account_id: 'expense', code: '6000', name: 'Expense', name_ar: null, name_en: 'Expense' }],
+    };
+    const payload = cashFlowClassificationPayload(new CashFlowClassificationError([blocker]));
+
+    expect(payload.code).toBe('CASH_FLOW_CLASSIFICATION_BLOCKED');
+    expect(payload.blockers).toEqual([blocker]);
+    expect(payload.details).toEqual(payload.blockers);
   });
 });

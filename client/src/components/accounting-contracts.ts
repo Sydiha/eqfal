@@ -56,3 +56,13 @@ export const localizedAccountName=(account:AccountNames,language:string)=>{
  const own=ar?account.name_ar:account.name_en,other=ar?account.name_en:account.name_ar;
  return own||other||account.name||'';
 };
+
+/** Accept plain decimals or correctly grouped thousands; return an ungrouped decimal for APIs. */
+export const normalizeFinancialAmount=(value:string):string|null=>{
+ const input=value.trim();
+ if(!input)return '';
+ const grouped=/^(?:0|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d{1,2})?$/;
+ const plain=/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/;
+ if(!plain.test(input)&&!grouped.test(input))return null;
+ return input.replace(/,/g,'');
+};

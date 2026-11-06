@@ -4,7 +4,7 @@ import { CashFlowClassificationError, CashFlowStatementService, CashFlowValidati
 
 const year={start_date:'2026-01-01',end_date:'2026-12-31'};
 type Overrides=Partial<{journal_id:string;accounting_date:string;entry_type:'standard'|'opening_balance';source_type:string|null;source_id:string|null;account_id:string;code:string;name:string;cash_role:'non_cash'|'cash'|'cash_equivalent';cash_flow_category:'unmapped'|'operating'|'investing'|'financing';debit:string;credit:string}>;
-const line=(overrides:Overrides={})=>({journal_id:'j1',accounting_date:'2026-06-01',entry_type:'standard' as const,source_type:null,source_id:null,account_id:'cash',code:'1000',name:'Cash',cash_role:'cash' as const,cash_flow_category:'unmapped' as const,debit:'0',credit:'0',...overrides});
+const line=(overrides:Overrides={})=>({journal_id:'j1',accounting_date:'2026-06-01',reference:'JV-1',entry_type:'standard' as const,source_type:null,source_id:null,account_id:'cash',code:'1000',name:'Cash',cash_role:'cash' as const,cash_flow_category:'unmapped' as const,debit:'0',credit:'0',...overrides});
 const database=(lines:unknown[])=>{
   const client={query:vi.fn(async(sql:string)=>sql.startsWith('BEGIN')||sql==='COMMIT'||sql==='ROLLBACK'?{rows:[]}:sql.startsWith('SELECT start_date')?{rows:[year]}:{rows:lines}),release:vi.fn()};
   return{db:{connect:vi.fn().mockResolvedValue(client)},client};
@@ -53,7 +53,7 @@ describe('Phase 5D.2 statement of cash flows',()=>{
 
   it('fails closed for unmapped and ambiguous compound cash activity without name/code inference',async()=>{
     const unmapped=database([line({debit:'10',code:'CASH'}),line({account_id:'named',name:'Operating revenue',code:'4000',cash_role:'non_cash',cash_flow_category:'unmapped',credit:'10'})]);
-    await expect(new CashFlowStatementService(unmapped.db as never).statement('company','year')).rejects.toMatchObject({blockers:[{reason:'unmapped'}]});
+    await expect(new CashFlowStatementService(unmapped.db as never).statement('company','year')).rejects.toMatchObject({blockers:[{reason:'unmapped',reference:'JV-1',accounting_date:'2026-06-01',accounts:[{account_id:'named',code:'4000',name:'Operating revenue'}]}]});
     const ambiguous=database([line({debit:'100'}),line({account_id:'cash2',cash_role:'cash_equivalent',credit:'20'}),line({account_id:'op',cash_role:'non_cash',cash_flow_category:'operating',credit:'100'}),line({account_id:'inv',cash_role:'non_cash',cash_flow_category:'investing',debit:'20'})]);
     await expect(new CashFlowStatementService(ambiguous.db as never).statement('company','year')).rejects.toBeInstanceOf(CashFlowClassificationError);
   });

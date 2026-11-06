@@ -49,19 +49,19 @@ describe('Accounting integration contracts',()=>{
   await screen.findByText('Saved successfully.');
   await waitFor(()=>expect(screen.getByRole('button',{name:/Round trip/})).toBeInTheDocument());
   fireEvent.click(screen.getByRole('button',{name:/Round trip/}));
-  let amounts=await screen.findAllByRole('spinbutton');
+  let amounts=await screen.findAllByLabelText(/^(Debit|Credit)$/);
   fireEvent.change(amounts[0]!,{target:{value:'25.00'}});
   fireEvent.change(amounts[3]!,{target:{value:'25.00'}});
   fireEvent.click(screen.getByRole('button',{name:'Save'}));
   await waitFor(()=>expect(writes).toHaveLength(1));
-  amounts=screen.getAllByRole('spinbutton');
-  expect(amounts[0]).toHaveValue(25);
-  expect(amounts[3]).toHaveValue(25);
+  amounts=screen.getAllByLabelText(/^(Debit|Credit)$/);
+  expect(amounts[0]).toHaveValue('25.00');
+  expect(amounts[3]).toHaveValue('25.00');
   fireEvent.change(amounts[0]!,{target:{value:'40.00'}});
   fireEvent.change(amounts[3]!,{target:{value:'40.00'}});
   fireEvent.click(screen.getByRole('button',{name:'Save'}));
   await waitFor(()=>expect(writes).toHaveLength(2));
-  await waitFor(()=>expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(40));
+  await waitFor(()=>expect(screen.getAllByLabelText(/^(Debit|Credit)$/)[0]).toHaveValue('40.00'));
   for(const write of writes)for(const line of write.lines as Record<string,unknown>[]){
    expect(Object.keys(line).sort()).toEqual(['account_id','credit','debit','memo']);
    expect(line).not.toHaveProperty('id');expect(line).not.toHaveProperty('company_id');expect(line).not.toHaveProperty('journal_entry_id');expect(line).not.toHaveProperty('sequence');
