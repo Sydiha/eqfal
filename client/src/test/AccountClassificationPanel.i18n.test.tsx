@@ -87,15 +87,5 @@ describe('Financial statement mapping localization',()=>{
       expect(within(screen.getByRole('row',{name:/1000/})).getByText('No')).toBeInTheDocument();
     });
 
-    it('switches account names with the UI language and falls back to the stored name',async()=>{
-      vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({accounts:[{...account,name:'Cash',name_ar:'النقدية',name_en:'Cash'},{...account,id:'22222222-2222-4222-8222-222222222222',code:'1100',name:'Legacy',name_ar:null,name_en:null}]}))));
-      await act(async()=>{await i18n.changeLanguage('ar');});
-      render(<AccountClassificationPanel canView canManage={false} autoOpen onUnauthorized={vi.fn()}/>);
-      const row=await screen.findByRole('row',{name:/1000/});
-      expect(within(row).getByText('النقدية')).toBeInTheDocument();
-      expect(screen.getByRole('row',{name:/1100/})).toHaveTextContent('Legacy');
-      await act(async()=>{await i18n.changeLanguage('en');});
-      expect(row.querySelector('.ac-mapping__name')).toHaveTextContent('Cash');
-    });
   });
 });

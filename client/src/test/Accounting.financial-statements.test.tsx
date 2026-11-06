@@ -87,6 +87,6 @@ describe('Accounting financial statements',()=>{
   render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('tab',{name:'Cash Flows'}));
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
-  expect(await screen.findByText(/cash activity is unmapped or ambiguous/)).toBeInTheDocument();
+  expect(await screen.findByText(/cash flow statement is blocked/i)).toBeInTheDocument();
  });
 });

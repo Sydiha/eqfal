@@ -47,7 +47,7 @@ describe('Accounting report and journal tabs (Figma 246:*)', () => {
     fireEvent.click(within(register).getByRole('button', { name: /Posted rent/ }));
     const editor = (await screen.findByRole('heading', { name: 'Selected journal' })).closest('section')!;
     expect(within(editor).getByText('Posted rent', { selector: 'h3' })).toBeInTheDocument();
-    for (const amount of within(editor).getAllByRole('spinbutton')) expect(amount).toBeDisabled();
+    for (const amount of within(editor).getAllByLabelText(/^(Debit|Credit)$/)) expect(amount).toBeDisabled();
     expect(within(editor).getByText('Total debit').nextSibling).toHaveTextContent('75.00');
     expect(within(editor).getByText('Total credit').nextSibling).toHaveTextContent('75.00');
     expect(within(editor).getByText('Balanced')).toBeInTheDocument();
