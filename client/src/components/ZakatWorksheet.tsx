@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './ZakatWorksheet.css';
+import { formatMinorUnits } from '../money-format';
 
 // G6-1 preparation workflow inside the existing TaxWorkpaper page. It never shows a Zakat payable amount: the calculation is withheld
 // until the regulatory gates are verified by the company's qualified accountant.
@@ -41,7 +42,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const [reason, setReason] = useState('');
   const [entityClass, setEntityClass] = useState('saudi_natural');
 
-  const money = (cents: string) => (Number(BigInt(cents)) / 100).toLocaleString(ar ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = (cents: string) => formatMinorUnits(cents);
   const pct = (bps4: string) => (Number(bps4) / 10000).toLocaleString(ar ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const blockerLabel = (code: string) => t(`zakatWorksheet.blockers.${code}`, { defaultValue: code });
 

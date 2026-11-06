@@ -42,6 +42,18 @@ export function formatMoney(value: string | number | null | undefined, empty = '
   return `${sign === '-' && !isZero ? '-' : ''}${intPart}.${decimals}`;
 }
 
+/** Format integer minor units without converting through an unsafe JavaScript Number. */
+export function formatMinorUnits(value: string | bigint, empty = '—'): string {
+  const raw = String(value).trim();
+  if (!/^[+-]?\d+$/.test(raw)) return raw || empty;
+  const units = BigInt(raw);
+  const negative = units < 0n;
+  const absolute = negative ? -units : units;
+  const major = absolute / 100n;
+  const minor = (absolute % 100n).toString().padStart(2, '0');
+  return formatMoney(`${negative ? '-' : ''}${major}.${minor}`, empty);
+}
+
 // Exact decimal arithmetic on strings (scaled BigInt) for totals that used to go through floating point.
 const scaled = (value: string) => {
   const m = DECIMAL.exec(value.trim());
