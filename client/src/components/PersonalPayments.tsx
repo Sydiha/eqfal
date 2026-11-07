@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import './PersonalPayments.css';
-import { formatMoney } from '../money-format';
+import { formatMoney, normalizeMoneyInput } from '../money-format';
 import { DateInput } from './DateInput';
 
 // Personal expense payments made on behalf of the company: draft -> submit -> approve/reject -> reimbursement.
@@ -59,7 +59,7 @@ const TEXT = {
     statuses: { draft: 'Draft', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected' } as Record<Status, string>,
     settleLabel: 'Reimbursement',
     settle: { none: 'Not reimbursed', partial: 'Partly reimbursed', full: 'Fully reimbursed' } as Record<string, string>,
-    errors: {
+    badAmount: 'Enter a valid positive amount with at most two decimals.', errors: {
       PERSONAL_PAYMENT_MAPPING_MISSING: 'The payer has no valid account mapping. Fix the mapping before approving.',
       PERSONAL_PAYMENT_PERIOD_CLOSED: 'The accounting period is closed.', PERSONAL_PAYMENT_FISCAL_YEAR_CLOSED: 'The fiscal year is closed.',
       PERSONAL_PAYMENT_DOCUMENT_ALREADY_RECOGNIZED: 'This document is already recognized by another workflow.', PERSONAL_PAYMENT_VAT_UNSUPPORTED: 'Documents with VAT must go through the invoice or obligation path.',
@@ -87,7 +87,7 @@ const TEXT = {
     statuses: { draft: 'مسودة', submitted: 'مرسلة', approved: 'معتمدة', rejected: 'مرفوضة' } as Record<Status, string>,
     settleLabel: 'الاسترداد',
     settle: { none: 'غير مستردة', partial: 'مستردة جزئياً', full: 'مستردة بالكامل' } as Record<string, string>,
-    errors: {
+    badAmount: 'أدخل مبلغاً موجباً صحيحاً بحد أقصى منزلتين عشريتين.', errors: {
       PERSONAL_PAYMENT_MAPPING_MISSING: 'لا يوجد ربط محاسبي صالح للدافع. أصلح الربط قبل الاعتماد.',
       PERSONAL_PAYMENT_PERIOD_CLOSED: 'الفترة المحاسبية مغلقة.', PERSONAL_PAYMENT_FISCAL_YEAR_CLOSED: 'السنة المالية مغلقة.',
       PERSONAL_PAYMENT_DOCUMENT_ALREADY_RECOGNIZED: 'هذا المستند مثبت بالفعل في مسار آخر.', PERSONAL_PAYMENT_VAT_UNSUPPORTED: 'المستندات التي تتضمن ضريبة قيمة مضافة تمر عبر مسار الفواتير أو الذمم.',
@@ -162,7 +162,9 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
   const saveForm = (e: FormEvent) => {
     e.preventDefault();
     if (!form) return;
-    const body: Record<string, unknown> = { payer_id: form.payer_id, treatment: form.treatment, payment_date: form.payment_date, amount: form.amount, purpose: form.purpose };
+    const amount = normalizeMoneyInput(form.amount, { maxWholeDigits: 16, allowZero: false });
+    if (amount === null) { setMessage(L.badAmount); return; }
+    const body: Record<string, unknown> = { payer_id: form.payer_id, treatment: form.treatment, payment_date: form.payment_date, amount, purpose: form.purpose };
     if (form.treatment === 'new_expense') { body['document_id'] = form.document_id; body['expense_account_id'] = form.expense_account_id; } else body['obligation_id'] = form.obligation_id;
     void act(async () => {
       if (form.id) await api(`/api/personal-payments/${form.id}`, send('PATCH', { ...body, version: form.version }), onUnauthorized);

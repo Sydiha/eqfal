@@ -98,6 +98,33 @@ describe('BankStatementReconciliation', () => {
     expect(document.querySelector('input[name="closing"]')?.getAttribute('dir')).toBe('ltr');
   });
 
+  it('accepts grouped balances and sends normalized decimal strings', async () => {
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    renderIt({ canManageStatements: true });
+    await screen.findByText('Draft');
+    for (const [name, value] of Object.entries({ ref: 'ST-1', from: '2026-01-01', to: '2026-01-31', opening: '-1,234.50', closing: '1,234,567.89' })) {
+      fireEvent.change(document.querySelector(`input[name="${name}"]`)!, { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(true));
+    const request = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')![1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({ opening_balance: '-1234.50', closing_balance: '1234567.89' });
+  });
+
+  it('rejects malformed grouping and excess precision before saving', async () => {
+    mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    renderIt({ canManageStatements: true });
+    await screen.findByText('Draft');
+    for (const [name, value] of Object.entries({ ref: 'ST-1', from: '2026-01-01', to: '2026-01-31', opening: '', closing: '12,34,567' })) {
+      fireEvent.change(document.querySelector(`input[name="${name}"]`)!, { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(await screen.findByText('Enter a valid amount with at most two decimals')).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+  });
+
   it('requires an effective date before enforcing and localizes the message', async () => {
     mockApi({ mode: 'off', enforce_from: null, version: 0 }, calc());
     renderIt({ canManageSettings: true });

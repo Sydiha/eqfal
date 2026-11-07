@@ -82,8 +82,10 @@ describe('PR-4 counterparty and settlement styles', () => {
     expect(c).toMatch(/\.counterparty-manager li\{flex-direction:column/);
     expect(c).toMatch(/\.counterparty-form\{display:grid;gap:16px\}/);
   });
-  it('removes the detached spinner controls on settlement amounts', () => {
+  it('uses text inputs for settlement amounts so grouped decimals are accepted', () => {
     const src = css('SettlementPanel.tsx');
-    expect(src.match(/<NumberInput hideControls/g)).toHaveLength(2);
+    expect(src).toMatch(/<TextInput[^>]*inputMode="decimal"/);
+    expect(src).toMatch(/parseMoneyInput/);
+    expect(src).not.toMatch(/<NumberInput/);
   });
 });

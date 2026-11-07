@@ -3,7 +3,7 @@ import { DateTextInput } from './DateInput';
 import { Alert, Badge, Button, Card, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { readQueryParameter } from '../navigation/queryState';
-import { formatMoney } from '../money-format';
+import { formatMoney, parseMoneyInput } from '../money-format';
 import { formatDisplayDateLtr } from '../date-format';
 import './BankStatementReconciliation.css';
 
@@ -109,7 +109,6 @@ async function api<T>(url: string, init?: RequestInit, onUnauthorized?: () => vo
 }
 /** Carries only the server's stable error code; user-facing text is always localized here, never the raw backend message. */
 class ApiFailure extends Error { constructor(readonly code: string) { super(code || 'request_failed'); } }
-const AMOUNT = /^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Pending = { kind: 'confirm'; st: Statement } | { kind: 'delete'; st: Statement } | { kind: 'endLink'; link: Link };
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -189,13 +188,15 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
   const endLink = (link: Link) => void guard(async () => { await api(`/api/bank-ledger-links/${link.id}/end`, json('POST', { valid_to: periodEnd }), onUnauthorized); await load(); await calculate(); });
   const addStatement = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const form = e.currentTarget; const data = new FormData(form); const field = (k: string) => String(data.get(k) ?? '').trim();
-    const body = { bank_account_id: bankId, statement_ref: field('ref'), period_start: field('from'), period_end: field('to'), opening_balance: field('opening') || null, closing_balance: field('closing'), note: field('note') || null };
+    const opening = field('opening') ? parseMoneyInput(field('opening'), { maxWholeDigits: 16, allowNegative: true }) : null;
+    const closing = parseMoneyInput(field('closing'), { maxWholeDigits: 16, allowNegative: true });
+    const body = { bank_account_id: bankId, statement_ref: field('ref'), period_start: field('from'), period_end: field('to'), opening_balance: opening, closing_balance: closing, note: field('note') || null };
     const errors: Record<string, string> = {};
     if (!body.statement_ref) errors['ref'] = s.required;
     if (!body.period_start) errors['from'] = s.required; else if (!DATE.test(body.period_start)) errors['from'] = s.badDate;
     if (!body.period_end) errors['to'] = s.required; else if (!DATE.test(body.period_end)) errors['to'] = s.badDate; else if (body.period_start && body.period_end < body.period_start) errors['to'] = s.endBeforeStart;
-    if (!body.closing_balance) errors['closing'] = s.required; else if (!AMOUNT.test(body.closing_balance)) errors['closing'] = s.badAmount;
-    if (body.opening_balance && !AMOUNT.test(body.opening_balance)) errors['opening'] = s.badAmount;
+    if (!field('closing').trim()) errors['closing'] = s.required; else if (closing === null) errors['closing'] = s.badAmount;
+    if (field('opening').trim() && opening === null) errors['opening'] = s.badAmount;
     if (replacing && !reason.trim()) errors['reason'] = s.required;
     setFieldErrors(errors); if (Object.keys(errors).length) return;
     void guard(async () => {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { DateTextInput, isValidIsoDate } from './DateInput';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
+import { normalizeMoneyInput } from '../money-format';
 
 type Direction = 'incoming' | 'outgoing';
 type Account = { id: string; display_name: string; is_active: boolean };
@@ -71,7 +72,8 @@ export function ManualBankTransactionDialog({ onClose, onCreated, onUnauthorized
   }, []);
 
   const selected = MANUAL_CATEGORIES.find(c => c.value === category);
-  const amountOk = /^\d{1,13}(\.\d{1,2})?$/.test(amount.trim()) && Number(amount) > 0;
+  const normalizedAmount = normalizeMoneyInput(amount, { maxWholeDigits: 13, allowZero: false });
+  const amountOk = normalizedAmount !== null && normalizedAmount.replace(/[-.]/g, '').length <= 15;
   const dateOk = isValidIsoDate(date);
   const valid = Boolean(accountId && dateOk && category && !selected?.deferred && amountOk && description.trim());
   const otherNote = category === 'other';
@@ -92,7 +94,7 @@ export function ManualBankTransactionDialog({ onClose, onCreated, onUnauthorized
     try {
       const response = await fetch('/api/bank-transactions/manual', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank_account_id: accountId, transaction_date: date, direction, category, amount: amount.trim(), description: description.trim(), reference: reference.trim() || undefined, counterparty: counterparty.trim() || undefined, supporting_document_id: documentId || undefined, confirm_duplicate: confirmDuplicate || undefined }),
+        body: JSON.stringify({ bank_account_id: accountId, transaction_date: date, direction, category, amount: normalizedAmount, description: description.trim(), reference: reference.trim() || undefined, counterparty: counterparty.trim() || undefined, supporting_document_id: documentId || undefined, confirm_duplicate: confirmDuplicate || undefined }),
       }).catch(e => { throw toApiError(e); });
       if (response.status === 401) { onUnauthorized(); throw new ApiError({ status: 401 }); }
       if (response.status === 409) {

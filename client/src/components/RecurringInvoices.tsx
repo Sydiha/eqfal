@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
 import {formatDisplayDate} from '../date-format';
 import './RecurringInvoices.css';
-import { formatMoney } from '../money-format';
+import { formatMoney, normalizeMoneyInput, parseMoneyInput } from '../money-format';
 
 /**
  * Recurring invoice schedules inside the invoice workspace. A schedule only ever produces DRAFT invoices: nothing here submits, approves,
@@ -19,13 +19,13 @@ const FREQUENCIES=['monthly','quarterly','annual'] as const;
 const emptyLine=():Line=>({description:'',quantity:'1',unit_price:'',discount_amount:'',vat_rate:'',vat_treatment:'standard',vat_recoverability:'',vat_recoverable_percent:''});
 const emptyForm=():Form=>({id:null,version:null,locked:false,name:'',counterparty_id:'',frequency:'monthly',start_date:'',end_date:'',due_days:'',notes:'',lines:[emptyLine()]});
 const fromTemplate=(x:Template):Form=>({id:x.id,version:x.version,locked:x.last_generated_for!==null,name:x.name,counterparty_id:x.counterparty_id,frequency:x.frequency,start_date:x.start_date,end_date:x.end_date??'',due_days:x.due_days==null?'':String(x.due_days),notes:x.notes??'',
- lines:(x.lines??[]).map(l=>({description:l.description??'',quantity:l.quantity??'1',unit_price:l.unit_price??'',discount_amount:l.discount_amount&&Number(l.discount_amount)!==0?l.discount_amount:'',vat_rate:l.vat_rate??'',vat_treatment:l.vat_treatment??'standard',vat_recoverability:l.vat_recoverability??'',vat_recoverable_percent:l.vat_recoverable_percent??''}))});
+ lines:(x.lines??[]).map(l=>({description:l.description??'',quantity:l.quantity??'1',unit_price:l.unit_price??'',discount_amount:l.discount_amount&&!/^0+(?:\.0+)?$/.test(l.discount_amount)?l.discount_amount:'',vat_rate:l.vat_rate??'',vat_treatment:l.vat_treatment??'standard',vat_recoverability:l.vat_recoverability??'',vat_recoverable_percent:l.vat_recoverable_percent??''}))});
 const toPayload=(f:Form,purchase:boolean)=>({name:f.name.trim(),counterparty_id:f.counterparty_id,frequency:f.frequency,start_date:f.start_date,end_date:f.end_date||null,due_days:f.due_days.trim()===''?null:Number(f.due_days),notes:f.notes.trim()||null,
- lines:f.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,...(l.discount_amount.trim()?{discount_amount:l.discount_amount}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:'0',vat_treatment:l.vat_treatment,
+ lines:f.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:normalizeMoneyInput(l.unit_price)!,...(l.discount_amount.trim()?{discount_amount:normalizeMoneyInput(l.discount_amount)!}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:'0',vat_treatment:l.vat_treatment,
   ...(purchase&&l.vat_treatment==='standard'&&l.vat_recoverability?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
 
 export function RecurringInvoices({direction,canManage,canGenerate,onChanged,onUnauthorized}:{direction:'sales'|'purchase';canManage:boolean;canGenerate:boolean;onChanged:()=>void;onUnauthorized:()=>void}){
- const{t}=useTranslation();
+ const{t,i18n}=useTranslation();
  const purchase=direction==='purchase';
  const[list,setList]=useState<Template[]|null>(null),[loadError,setLoadError]=useState(false),[detail,setDetail]=useState<Template|null>(null),[form,setForm]=useState<Form|null>(null),[parties,setParties]=useState<Party[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[notice,setNotice]=useState<string|null>(null),[confirmEnd,setConfirmEnd]=useState(false),[stdRate,setStdRate]=useState<string|null>(null);
  const errorText=(code?:string)=>{const key=`recurringInvoice.errors.${code}`;const text=t(key);if(code&&text!==key)return text;const shared=t(`salesInvoice.errors.${code}`);return code&&shared!==`salesInvoice.errors.${code}`?shared:t('recurringInvoice.errors.generic')};
@@ -51,6 +51,7 @@ export function RecurringInvoices({direction,canManage,canGenerate,onChanged,onU
  const openDetail=async(id:string)=>{setError(null);setConfirmEnd(false);try{const r=await call(`/api/recurring-invoices/${id}`,'GET');if(r.ok)setDetail(r.payload.template as Template);else setError(errorText(r.payload.code as string|undefined));}catch{setError(errorText(undefined));}};
  const save=async(event:FormEvent)=>{
   event.preventDefault();if(!form)return;
+  if(form.lines.some(line=>parseMoneyInput(line.unit_price,{maxWholeDigits:16})===null||(line.discount_amount.trim()&&parseMoneyInput(line.discount_amount,{maxWholeDigits:16})===null))){setError(i18n.language.startsWith('ar')?'أدخل سعر الوحدة والخصم كمبالغ صحيحة بحد أقصى منزلتين عشريتين.':'Enter valid unit prices and discounts with at most two decimal places.');return;}
   const body=toPayload(form,purchase);
   const payload=form.id?await act(`/api/recurring-invoices/${form.id}`,'PUT',{...body,version:form.version}):await act('/api/recurring-invoices','POST',{direction,...body});
   if(payload){setForm(null);setDetail(null);}

@@ -99,12 +99,12 @@ describe.each(['en', 'ar'] as const)('manual bank transactions (%s)', (lang) => 
     await waitFor(() => expect(field(/Bank account|الحساب البنكي/)).toHaveValue('Main'));
     fireEvent.change(field(/Transaction date|تاريخ الحركة/), { target: { value: '2026-03-10' } });
     fireEvent.click(field(/Category|التصنيف/)); fireEvent.click(await screen.findByRole('option', { name: lang === 'en' ? 'Customer receipt' : 'تحصيل من عميل', hidden: true }));
-    fireEvent.change(field(/Amount|المبلغ/), { target: { value: '120.50' } });
+    fireEvent.change(field(/Amount|المبلغ/), { target: { value: '1,200.50' } });
     fireEvent.change(field(/Description|البيان/), { target: { value: 'Receipt' } });
     fireEvent.click(within(dialog).getByRole('button', { name: L.save }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.url).toBe('/api/bank-transactions/manual');
-    expect(posts[0]!.body).toMatchObject({ bank_account_id: 'acc-1', transaction_date: '2026-03-10', direction: 'incoming', category: 'customer_receipt', amount: '120.50' });
+    expect(posts[0]!.body).toMatchObject({ bank_account_id: 'acc-1', transaction_date: '2026-03-10', direction: 'incoming', category: 'customer_receipt', amount: '1200.50' });
     expect(posts[0]!.body.confirm_duplicate).toBeUndefined();
     const confirm = await within(dialog).findByRole('button', { name: lang === 'en' ? 'Add anyway' : 'إضافة رغم التشابه' });
     fireEvent.click(confirm);

@@ -10,6 +10,43 @@
 // Anything that is not a plain decimal (identifiers, free text, empty) is returned unchanged; only call this for
 // money, never for dates, percentages, counts or ids.
 const DECIMAL = /^([+-])?(\d+)(?:\.(\d*))?$/;
+const GROUPED_MONEY = /^([+-]?)(?:(\d+)|(\d{1,3}(?:,\d{3})+))(?:\.(\d*))?$/;
+
+/** Parse a user-entered monetary value without passing through binary floating point.
+ * Commas are accepted only as complete groups of three. Returns an ungrouped decimal
+ * preserving the entered scale, or null when syntax, precision, or sign is invalid.
+ */
+export function parseMoneyInput(value: string, options: { decimals?: number; maxWholeDigits?: number; allowNegative?: boolean; allowZero?: boolean } = {}): string | null {
+  const { decimals = 2, maxWholeDigits = Infinity, allowNegative = false, allowZero = true } = options;
+  const match = GROUPED_MONEY.exec(value.trim());
+  if (!match || match[1] === '+' || (match[1] === '-' && !allowNegative)) return null;
+  const fraction = match[4] ?? '';
+  if (fraction.length > decimals) return null;
+  const whole = (match[2] ?? match[3]!).replace(/,/g, '').replace(/^0+(?=\d)/, '');
+  if (whole.length > maxWholeDigits) return null;
+  if (!allowZero && /^0+$/.test(whole + fraction)) return null;
+  return `${match[1]}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
+/** Normalize a valid input for fixed-scale monetary API fields without rounding. */
+export function normalizeMoneyInput(value: string, options: { decimals?: number; maxWholeDigits?: number; allowNegative?: boolean; allowZero?: boolean } = {}): string | null {
+  const { decimals = 2 } = options;
+  const parsed = parseMoneyInput(value, options);
+  if (parsed === null) return null;
+  const negative = parsed.startsWith('-');
+  const [whole, fraction = ''] = (negative ? parsed.slice(1) : parsed).split('.');
+  return `${negative ? '-' : ''}${whole}${decimals ? `.${fraction.padEnd(decimals, '0')}` : ''}`;
+}
+
+/** Convert a valid fixed-scale decimal input to integer minor units exactly. */
+export function moneyToMinorUnits(value: string, decimals = 2, allowNegative = true): bigint | null {
+  const parsed = parseMoneyInput(value, { decimals, allowNegative });
+  if (parsed === null) return null;
+  const negative = parsed.startsWith('-');
+  const [whole, fraction = ''] = (negative ? parsed.slice(1) : parsed).split('.');
+  const units = BigInt(whole!) * 10n ** BigInt(decimals) + (decimals === 0 ? 0n : BigInt(fraction.padEnd(decimals, '0')));
+  return negative ? -units : units;
+}
 
 const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 

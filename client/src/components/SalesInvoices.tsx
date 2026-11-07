@@ -8,7 +8,7 @@ import {InvoiceNotes} from './InvoiceNotes';
 import {RecurringInvoices} from './RecurringInvoices';
 import {UUID_PATTERN} from './obligationSettlementLogic';
 import './SalesInvoices.css';
-import { formatMoney } from '../money-format';
+import { formatMoney, normalizeMoneyInput, parseMoneyInput } from '../money-format';
 
 /**
  * One invoice workspace for both directions (sales and purchase). Amounts, numbering, VAT, obligations and journals are
@@ -31,7 +31,7 @@ const emptyForm=():FormValues=>({counterparty_id:'',issue_date:'',due_date:'',su
 const fromInvoice=(i:Invoice):FormValues=>({counterparty_id:i.counterparty_id,issue_date:i.issue_date,due_date:i.due_date??'',supply_date:i.supply_date??'',tax_point_date:i.tax_point_date??'',external_reference:i.external_reference??'',notes:i.notes??'',source_document_id:i.source_document_id??'',lines:(i.lines??[]).map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,discount_amount:l.discount_amount==='0.00'?'':l.discount_amount,vat_rate:l.vat_rate,vat_treatment:l.vat_treatment??'',vat_recoverability:l.vat_recoverability??'',vat_recoverable_percent:l.vat_recoverable_percent??'',rate_source:'saved'}))});
 // Amounts are always computed by the server; the client only sends the raw inputs as strings.
 // The source document link is part of the full draft replacement, so an edit must send the existing link back or the server removes it.
-const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.counterparty_id,issue_date:v.issue_date,due_date:v.due_date||null,supply_date:v.supply_date||null,tax_point_date:v.tax_point_date||null,external_reference:v.external_reference.trim()||null,notes:v.notes.trim()||null,source_document_id:v.source_document_id||null,lines:v.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:l.unit_price,...(l.discount_amount?{discount_amount:l.discount_amount}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:l.vat_treatment?'0':l.vat_rate,vat_treatment:l.vat_treatment||null,...(direction==='purchase'&&l.vat_treatment==='standard'&&l.vat_recoverability?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
+const toPayload=(v:FormValues,direction:InvoiceDirection)=>({counterparty_id:v.counterparty_id,issue_date:v.issue_date,due_date:v.due_date||null,supply_date:v.supply_date||null,tax_point_date:v.tax_point_date||null,external_reference:v.external_reference.trim()||null,notes:v.notes.trim()||null,source_document_id:v.source_document_id||null,lines:v.lines.map(l=>({description:l.description,quantity:l.quantity,unit_price:normalizeMoneyInput(l.unit_price)!,...(l.discount_amount?{discount_amount:normalizeMoneyInput(l.discount_amount)!}:{}),vat_rate:l.vat_treatment==='standard'?l.vat_rate:l.vat_treatment?'0':l.vat_rate,vat_treatment:l.vat_treatment||null,...(direction==='purchase'&&l.vat_treatment==='standard'&&l.vat_recoverability?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
 const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value?value:'';
 
 type MoreItem={key:string;label:string;enabled:boolean;onSelect:()=>void;note?:ReactNode};
@@ -81,7 +81,7 @@ function ConfirmStep({label,children}:{label:string;children:ReactNode}){
 
 export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,...caps}:SalesInvoiceCapabilities&{direction?:InvoiceDirection;onUnauthorized:()=>void;onNavigate?:(page:string,parameters:Record<string,string>)=>void}){
  const{canView,canCreate,canEdit,canSubmit,canCancel=false,canAdjust=false,canAdjustApprove=false,canAdjustVoid=false,canRecurring=false,canViewDocuments=false}=caps;
- const{t}=useTranslation();
+ const{t,i18n}=useTranslation();
  const ns=direction==='purchase'?'purchaseInvoice':'salesInvoice';
  const d=(key:string,options?:Record<string,unknown>)=>t(`${ns}.${key}`,options);
  const prefix=direction==='purchase'?'purchaseInv':'salesInv';
@@ -180,6 +180,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
  const startEdit=(invoice:Invoice)=>{setError(null);setDetail(null);setForm({id:invoice.id,version:invoice.version,values:fromInvoice(invoice)});void loadParties();void loadDocuments()};
  const save=async(event:FormEvent)=>{
   event.preventDefault();if(!form)return;
+  if(form.values.lines.some(line=>parseMoneyInput(line.unit_price,{maxWholeDigits:16})===null||(line.discount_amount.trim()&&parseMoneyInput(line.discount_amount,{maxWholeDigits:16})===null))){setError(i18n.language.startsWith('ar')?'أدخل سعر الوحدة والخصم كمبالغ صحيحة بحد أقصى منزلتين عشريتين.':'Enter valid unit prices and discounts with at most two decimal places.');return;}
   const saved=form.id?await request(`/api/invoices/${form.id}`,'PUT',{...toPayload(form.values,direction),version:form.version}):await request('/api/invoices','POST',{direction,...toPayload(form.values,direction)});
   if(saved){setForm(null);await refresh();await open(saved.id)}
  };
@@ -312,7 +313,7 @@ export function InvoiceWorkspace({direction='sales',onNavigate,onUnauthorized,..
      <td data-label={t('salesInvoice.description')}>{l.description}{isPurchase&&l.vat_recoverability&&<span className="sales-invoices__line-note">{t('purchaseInvoice.recoverability')}: {t(`purchaseInvoice.recoverabilities.${l.vat_recoverability}`)}{l.vat_recoverability==='partially_recoverable'&&l.vat_recoverable_percent?<> (<bdi dir="ltr">{l.vat_recoverable_percent}%</bdi>)</>:null}</span>}</td>
      <td className="sales-invoices__num" data-label={t('salesInvoice.quantity')}>{l.quantity}</td>
      <td className="sales-invoices__num" data-label={t('salesInvoice.unitPrice')}>{money(l.unit_price)}</td>
-     <td className="sales-invoices__num" data-label={t('salesInvoice.discount')}>{l.discount_amount&&Number(l.discount_amount)!==0?money(l.discount_amount):'—'}</td>
+     <td className="sales-invoices__num" data-label={t('salesInvoice.discount')}>{l.discount_amount&&!/^0+(?:\.0+)?$/.test(l.discount_amount)?money(l.discount_amount):'—'}</td>
      <td data-label={t('salesInvoice.vatTreatment')}>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td>
      <td className="sales-invoices__num" data-label={t('salesInvoice.vatRate')}>{l.vat_rate}%</td>
      <td className="sales-invoices__num" data-label={t('salesInvoice.net')}>{money(l.net_amount??'0')}</td>

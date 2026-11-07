@@ -154,6 +154,17 @@ describe('BankTransactionsView', () => {
     expect(screen.getByRole('status', { name: '' })).toHaveTextContent('1 results');
   });
 
+  it('filters transactions using grouped decimal amount bounds exactly', async () => {
+    renderTransactions();
+    await screen.findByText('Customer receipt');
+    fireEvent.change(screen.getByLabelText('Minimum amount'), { target: { value: '1,150.00' } });
+    fireEvent.change(screen.getByLabelText('Maximum amount'), { target: { value: '1,150' } });
+    expect(screen.getByText('Customer receipt')).toBeInTheDocument();
+    expect(screen.queryByText('Vendor payment بيان')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Minimum amount'), { target: { value: '1,15' } });
+    expect(screen.getByText('Customer receipt')).toBeInTheDocument(); // malformed bounds are ignored, rather than changing rows through Number coercion
+  });
+
   it('initializes safely from URL, restores history, clears only discovery state, and reports zero results', async () => {
     window.history.replaceState(null, '', '/?page=banks&section=transactions&search=receipt&reconciliation=bad&from=not-a-date&amountMin=nope&safe=keep');
     renderTransactions();
