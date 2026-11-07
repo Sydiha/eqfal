@@ -10,7 +10,7 @@ import {ExportButtons} from './ExportButtons';
 import {useActiveCompanyName} from '../context/CompanyContext';
 import {accrualsExport,generatedStamp} from '../export/reportExport';
 import './PeriodicAdjustments.css';
-import { formatMoney } from '../money-format';
+import { formatMoney, normalizeMoneyInput, sumMoney } from '../money-format';
 
 type AdjustmentType='accrued_expense'|'prepaid_expense'|'accrued_income'|'deferred_income';
 type Status='draft'|'in_review'|'approved'|'completed';
@@ -54,7 +54,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
   const only=remaining.length===1?remaining[0]!:null;
   setQuick(next);setSelectedId(only?only.id:null);
   window.setTimeout(()=>{const el=(only&&scheduleRef.current)||resultsRef.current;el?.scrollIntoView?.({block:'start',behavior:'smooth'});el?.focus({preventScroll:true})},0)};
- const [formOpen,setFormOpen]=useState(false),[selectedId,setSelectedId]=useState<string|null>(null),[busyUrl,setBusyUrl]=useState<string|null>(null);
+ const [formOpen,setFormOpen]=useState(false),[selectedId,setSelectedId]=useState<string|null>(null),[busyUrl,setBusyUrl]=useState<string|null>(null),[amountError,setAmountError]=useState(false);
  const load=async()=>{setLoading(true);setError(false);try{const main=await api('/api/periodic-adjustments',{},onUnauthorized);setItems(((await main.json()) as {adjustments:Adjustment[]}).adjustments);const optional=await Promise.allSettled([api('/api/accounts',{},onUnauthorized),api('/api/documents',{},onUnauthorized),api('/api/obligations',{},onUnauthorized)]);if(optional[0].status==='fulfilled')setAccounts(((await optional[0].value.json()) as {accounts:Account[]}).accounts);if(optional[1].status==='fulfilled')setDocuments(((await optional[1].value.json()) as {documents:Document[]}).documents);if(optional[2].status==='fulfilled')setObligations(((await optional[2].value.json()) as {obligations:Obligation[]}).obligations);}catch{setError(true)}finally{setLoading(false)}};
  useEffect(()=>{if(canView)void load();// eslint-disable-next-line react-hooks/exhaustive-deps
  },[canView]);
@@ -64,10 +64,10 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  useEffect(()=>{if(editing&&items.find(i=>i.id===editing.id)?.workflow_status!=='draft'){setEditing(null);setForm(initialForm);setFormOpen(false)}},[items,editing]);
  const expected=useMemo(()=>{const balance=form.type==='accrued_expense'||form.type==='deferred_income'?'liability':'asset';const pnl=form.type==='accrued_expense'||form.type==='prepaid_expense'?'expense':'revenue';return{balance,pnl}},[form.type]);
  const balanceAccounts=accounts.filter(a=>a.is_active&&a.account_type===expected.balance),pnlAccounts=accounts.filter(a=>a.is_active&&a.account_type===expected.pnl);
- const reset=()=>{setEditing(null);setForm(initialForm);setFormOpen(false)};
- const edit=(a:Adjustment)=>{setEditing(a);setFormOpen(true);setForm({type:a.adjustment_type,amount:a.total_amount,start:a.recognition_start,end:a.recognition_end,description:a.description,reference:a.reference??'',notes:a.notes??'',balanceAccountId:a.balance_account_id,pnlAccountId:a.pnl_account_id,documentId:a.document_id??'',obligationId:a.obligation_id??''});};
- const payload=()=>({adjustment_type:form.type,total_amount:form.amount,recognition_start:form.start,recognition_end:form.end,description:form.description,reference:form.reference||null,notes:form.notes||null,balance_account_id:form.balanceAccountId,pnl_account_id:form.pnlAccountId,document_id:form.documentId||null,obligation_id:form.obligationId||null});
- const submitForm=async(e:FormEvent)=>{e.preventDefault();setBusy(true);setError(false);try{if(editing)await api(`/api/periodic-adjustments/${editing.id}`,json('PATCH',{...payload(),version:editing.version}),onUnauthorized);else await api('/api/periodic-adjustments',json('POST',payload()),onUnauthorized);reset();await load();}catch{setError(true)}finally{setBusy(false)}};
+ const reset=()=>{setEditing(null);setForm(initialForm);setFormOpen(false);setAmountError(false)};
+ const edit=(a:Adjustment)=>{setAmountError(false);setEditing(a);setFormOpen(true);setForm({type:a.adjustment_type,amount:a.total_amount,start:a.recognition_start,end:a.recognition_end,description:a.description,reference:a.reference??'',notes:a.notes??'',balanceAccountId:a.balance_account_id,pnlAccountId:a.pnl_account_id,documentId:a.document_id??'',obligationId:a.obligation_id??''});};
+ const payload=(totalAmount:string)=>({adjustment_type:form.type,total_amount:totalAmount,recognition_start:form.start,recognition_end:form.end,description:form.description,reference:form.reference||null,notes:form.notes||null,balance_account_id:form.balanceAccountId,pnl_account_id:form.pnlAccountId,document_id:form.documentId||null,obligation_id:form.obligationId||null});
+ const submitForm=async(e:FormEvent)=>{e.preventDefault();const totalAmount=normalizeMoneyInput(form.amount,{maxWholeDigits:16,allowZero:false});if(totalAmount===null){setAmountError(true);return}setAmountError(false);setBusy(true);setError(false);try{if(editing)await api(`/api/periodic-adjustments/${editing.id}`,json('PATCH',{...payload(totalAmount),version:editing.version}),onUnauthorized);else await api('/api/periodic-adjustments',json('POST',payload(totalAmount)),onUnauthorized);reset();await load();}catch{setError(true)}finally{setBusy(false)}};
  const mutate=async(url:string,body?:unknown)=>{setBusy(true);setBusyUrl(url);setError(false);try{await api(url,body===undefined?{method:'POST'}:json('POST',body),onUnauthorized);await load();return true}catch{setError(true);return false}finally{setBusy(false);setBusyUrl(null)}};
  if(!canView)return <section className="panel pa-view"><WorkspaceState>{l.noAccess}</WorkspaceState></section>;
  const closePeriod=readClosePeriod();
@@ -87,7 +87,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  const shortRef=(id:string)=>id.length>20?`${id.slice(0,8)}…${id.slice(-8)}`:id;
  const showForm=(canCreate&&formOpen)||(!!editing&&canEdit);
  const scheduleRows=selected?(quick==='all'?selected.schedule:entriesInScope(selected).filter(e=>e.status===quick)):[];
- const scheduleTotal=selected?scheduleRows.reduce((sum,s)=>sum+Math.round((parseFloat(s.amount)||0)*100),0)/100:0;
+ const scheduleTotal=selected?sumMoney(scheduleRows.map(s=>s.amount)):'0.00';
  const accountLabel=(id:string)=>{const a=accounts.find(x=>x.id===id);return a?`${a.code} — ${localizedAccountName(a,i18n.language)}`:''};
  const exportDoc=!loading&&!error&&visibleItems.length>0?(()=>{const stamp=generatedStamp();const filterRows:Array<[string,string]>=[];if(quick!=='all')filterRows.push([ar?'الجدولة':'Schedule',quick==='pending'?l.pendingCount:l.postedCount]);if(typeFilter)filterRows.push([l.fType,l[typeFilter]]);if(statusFilter)filterRows.push([l.fStatus,l[statusFilter]]);return accrualsExport({ar,company,generatedAt:stamp,asOf:stamp.slice(0,10),scopeRange:scopeRange??null,scopeLabel:scopeRange?`${scopeRange.from} — ${scopeRange.to}`:l.ctxAll,filters:filterRows,pending,postedEntries:posted,rows:visibleItems.map(a=>({typeLabel:l[a.adjustment_type],description:a.description,reference:a.reference??'',document:a.document_name??'',balanceAccount:accountLabel(a.balance_account_id),pnlAccount:accountLabel(a.pnl_account_id),start:a.recognition_start,end:a.recognition_end,amount:a.total_amount,posted:a.schedule.filter(e=>e.status==='posted').length,periods:a.schedule.length,statusLabel:l[a.workflow_status]}))})})():null;
  const icon=(d:string)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d}/></svg>;
@@ -96,7 +96,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
  return <section className="panel pa-view" aria-labelledby="periodic-adjustments-title" data-workspace-size="operational">
   <header className="pa-header">
    <div><h2 id="periodic-adjustments-title">{l.title}</h2><p>{l.description}</p></div>
-   {canCreate&&!showForm&&<button type="button" className="pa-primary" onClick={()=>setFormOpen(true)}><span aria-hidden="true">+</span> {l.newItem}</button>}
+   {canCreate&&!showForm&&<button type="button" className="pa-primary" onClick={()=>{setAmountError(false);setFormOpen(true)}}><span aria-hidden="true">+</span> {l.newItem}</button>}
   </header>
   <p className="pa-context" role="status"><strong>{closePeriod?l.ctxDrill:l.ctxLabel}:</strong> {scopeRange?<span dir="ltr"><bdi dir="rtl">{formatDisplayDate(scopeRange.from,i18n.language)}</bdi> — <bdi dir="rtl">{formatDisplayDate(scopeRange.to,i18n.language)}</bdi></span>:l.ctxAll}<small> {l.ctxHint}</small></p>
   <div className="pa-kpis">
@@ -113,7 +113,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
   <ExportButtons language={i18n.language} document={exportDoc} landscape/>
   {showForm&&<section className="pa-card pa-form-card" aria-label={editing?l.update:l.newItem}><div className="pa-card__head"><h3>{editing?l.update:l.formTitle}</h3></div><p className="pa-muted">{l.accountHint}</p><form className="pa-form" onSubmit={submitForm}>
    <label>{l.type}<select value={form.type} onChange={e=>setForm({...form,type:e.target.value as AdjustmentType,balanceAccountId:'',pnlAccountId:''})}>{types.map(t=><option key={t} value={t}>{l[t]}</option>)}</select></label>
-   <label>{l.amount}<input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required/></label>
+   <label>{l.amount}<input value={form.amount} onChange={e=>{setForm({...form,amount:e.target.value});setAmountError(false)}} inputMode="decimal" aria-invalid={amountError||undefined} aria-describedby={amountError?'pa-amount-error':undefined} required/></label>{amountError&&<span id="pa-amount-error" role="alert">{ar?'أدخل مبلغاً صحيحاً مع فواصل آلاف سليمة وبحد أقصى منزلتين عشريتين.':'Enter a valid amount with correctly grouped thousands separators and at most two decimal places.'}</span>}
    <label>{l.start}<input type="date" value={form.start} onChange={e=>setForm({...form,start:e.target.value})} required/></label>
    <label>{l.end}<input type="date" value={form.end} onChange={e=>setForm({...form,end:e.target.value})} required/></label>
    <label className="pa-form__wide">{l.descriptionLabel}<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} maxLength={500} required/></label>
@@ -150,7 +150,7 @@ export function PeriodicAdjustments({canView,canCreate,canEdit,canSubmit,canRevi
     <td data-label={l.journal}>{s.journal_entry_id?<code className="pa-ref" title={s.journal_entry_id}>{shortRef(s.journal_entry_id)}</code>:'—'}</td>
     <td data-label={l.action}>{canPost&&s.status==='pending'?<button type="button" className="pa-primary" disabled={busy} onClick={()=>void mutate(`/api/periodic-adjustments/${selected.id}/schedule/${s.id}/post`)}>{busyUrl===`/api/periodic-adjustments/${selected.id}/schedule/${s.id}/post`?l.posting:l.post}</button>:s.status==='posted'?<span className="pa-done">✓ {l.posted_done}</span>:null}</td>
    </tr>)}</tbody></table></div>
-   <div className="pa-total"><strong>{l.scheduleTotal} • {l.periodsCount(scheduleRows.length)}</strong>{amountCell(scheduleTotal.toFixed(2))}</div>
+   <div className="pa-total"><strong>{l.scheduleTotal} • {l.periodsCount(scheduleRows.length)}</strong>{amountCell(scheduleTotal)}</div>
    <p className="pa-note">{l.postNote}</p></>}
   </section>}
  </section>;
