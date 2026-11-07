@@ -32,6 +32,23 @@ describe('Phase 5D.2 statement of cash flows',()=>{
     expect(client.query.mock.calls[2]![1]).toEqual(['company-a','year','2026-01-01','2026-12-31']);
   });
 
+  it('retains large balances, negative flows, and cent-level totals exactly',async()=>{
+    const large='9999999999999999.99';
+    const lines=[
+      line({journal_id:'large-in',debit:large}),
+      line({journal_id:'large-in',account_id:'income',cash_role:'non_cash',cash_flow_category:'operating',credit:large}),
+      line({journal_id:'one-cent-in',debit:'0.01'}),
+      line({journal_id:'one-cent-in',account_id:'income-cent',cash_role:'non_cash',cash_flow_category:'operating',credit:'0.01'}),
+      line({journal_id:'negative-out',credit:'0.02'}),
+      line({journal_id:'negative-out',account_id:'expense',cash_role:'non_cash',cash_flow_category:'operating',debit:'0.02'}),
+    ];
+    const{db}=database(lines);
+    const result=await new CashFlowStatementService(db as never).statement('company','year');
+    expect(result.operating_cash_flow).toBe('9999999999999999.98');
+    expect(result.closing_cash_and_cash_equivalents).toBe('9999999999999999.98');
+    expect(result.reconciliation).toEqual({expected:'9999999999999999.98',actual:'9999999999999999.98',difference:'0.00',balanced:true});
+  });
+
   it('includes cash equivalents, treats opening journals as opening cash, and excludes internal transfers',async()=>{
     const lines=[
       line({journal_id:'opening',accounting_date:'2026-01-01',entry_type:'opening_balance',cash_role:'cash_equivalent',debit:'40'}),

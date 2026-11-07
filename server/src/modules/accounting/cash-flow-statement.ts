@@ -23,10 +23,9 @@ export type CashFlowSection={category:Exclude<CashFlowCategory,'unmapped'>;accou
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=(value:string)=>DATE.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`));
-const amount=(line:Pick<CashFlowLine,'debit'|'credit'>)=>Number(line.debit)-Number(line.credit);
-const round=(value:number)=>Number(value.toFixed(2));
-const money=(value:number)=>round(value).toFixed(2);
-const material=(value:number)=>Math.abs(value)>=0.005;
+const amount=(line:Pick<CashFlowLine,'debit'|'credit'>)=>cents(line.debit)-cents(line.credit);
+const money=(value:bigint)=>exactMoney(value);
+const material=(value:bigint)=>value!==0n;
 
 export class CashFlowStatementService{
   constructor(private db:Pool){}
@@ -52,8 +51,8 @@ export class CashFlowStatementService{
       const supplementOpening=supplementLines.filter(line=>line.line_type==='cash_balance').reduce((sum,line)=>sum+cents(line.opening_amount!),0n);
       // Full-year mode: the opening is the supplement's 1 Jan cash; the cut-over journal is NOT a cash movement (its cash lines are the D balances,
       // reached by the supplement flows), so it is excluded from classification but still counted in the closing balance. No double counting.
-      const opening=supplement?Number(exactMoney(supplementOpening)):lines.filter(line=>line.cash_role!=='non_cash'&&(line.entry_type==='opening_balance'||line.accounting_date<from)).reduce((sum,line)=>sum+amount(line),0);
-      const closing=lines.filter(line=>line.cash_role!=='non_cash').reduce((sum,line)=>sum+amount(line),0);
+      const opening=supplement?supplementOpening:lines.filter(line=>line.cash_role!=='non_cash'&&(line.entry_type==='opening_balance'||line.accounting_date<from)).reduce((sum,line)=>sum+amount(line),0n);
+      const closing=lines.filter(line=>line.cash_role!=='non_cash').reduce((sum,line)=>sum+amount(line),0n);
       const journals=new Map<string,CashFlowLine[]>();
       for(const line of lines){
         if(line.entry_type==='opening_balance'||line.accounting_date<from)continue;
@@ -66,11 +65,11 @@ export class CashFlowStatementService{
       if(blockers.length)throw new CashFlowClassificationError(blockers);
       const sections=(Object.keys(grouped) as Array<Exclude<CashFlowCategory,'unmapped'>>).map(category=>{
         const rows=[...grouped[category].values()].sort((a,b)=>a.code.localeCompare(b.code)||a.account_id.localeCompare(b.account_id));
-        return{category,accounts:rows,total:money(rows.reduce((sum,row)=>sum+Number(row.amount),0))};
+        return{category,accounts:rows,total:money(rows.reduce((sum,row)=>sum+cents(row.amount),0n))};
       });
       if(supplement)return await this.fullYear(client,fiscalYearId,from,to,sections,supplementLines,supplementOpening,closing,disclosure!);
-      const operating=Number(sections[0]!.total),investing=Number(sections[1]!.total),financing=Number(sections[2]!.total);
-      const net=round(operating+investing+financing),difference=round(opening+net-closing);
+      const operating=cents(sections[0]!.total),investing=cents(sections[1]!.total),financing=cents(sections[2]!.total);
+      const net=operating+investing+financing,difference=opening+net-closing;
       if(material(difference))throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reference:null,reason:'ambiguous',accounts:[]}]);
       // S1: a year with an active cut-over range discloses it (only periods after D reach this point); January-1 companies are unchanged.
       await client.query('COMMIT');
@@ -88,7 +87,7 @@ export class CashFlowStatementService{
    * halalas. Each section keeps its native accounts; the supplement part is reported beside them. fx_effect is its own line. The closing
    * reconciliation must hold exactly or the statement is refused, as for any other period.
    */
-  private async fullYear(client:PoolClient,fiscalYearId:string,from:string,to:string,nativeSections:CashFlowSection[],supplementLines:SupplementLine[],opening:bigint,closingNumber:number,disclosure:NonNullable<Awaited<ReturnType<typeof loadCutoverDisclosure>>>){
+  private async fullYear(client:PoolClient,fiscalYearId:string,from:string,to:string,nativeSections:CashFlowSection[],supplementLines:SupplementLine[],opening:bigint,closing:bigint,disclosure:NonNullable<Awaited<ReturnType<typeof loadCutoverDisclosure>>>){
     const flows=supplementLines.filter(line=>line.line_type==='cash_flow');
     const pre=(section:string)=>flows.filter(line=>line.section===section).reduce((sum,line)=>sum+cents(line.amount!),0n);
     const sections=nativeSections.map(section=>{
@@ -98,7 +97,7 @@ export class CashFlowStatementService{
     });
     const fx=pre('fx_effect');
     const operating=cents(sections[0]!.total),investing=cents(sections[1]!.total),financing=cents(sections[2]!.total);
-    const net=operating+investing+financing+fx,closing=cents(money(closingNumber)),difference=opening+net-closing;
+    const net=operating+investing+financing+fx,difference=opening+net-closing;
     if(difference!==0n)throw new CashFlowClassificationError([{journal_id:'reconciliation',accounting_date:to,reference:null,reason:'ambiguous',accounts:[]}]);
     await client.query('COMMIT');
     return{
@@ -127,7 +126,7 @@ export class CashFlowStatementService{
   private classify(journal:CashFlowLine[],grouped:Record<Exclude<CashFlowCategory,'unmapped'>,Map<string,CashFlowRow>>,blockers:CashFlowBlocker[]){
     const cash=journal.filter(line=>line.cash_role!=='non_cash'),counterparts=journal.filter(line=>line.cash_role==='non_cash');
     if(!cash.length)return;
-    const cashNet=round(cash.reduce((sum,line)=>sum+amount(line),0));
+    const cashNet=cash.reduce((sum,line)=>sum+amount(line),0n);
     if(!counterparts.length)return; // A cash/cash-equivalent-only journal is an internal transfer.
     const accounts=[...new Map(counterparts.map(line=>[line.account_id,{account_id:line.account_id,code:line.code,name:line.name,name_ar:line.name_ar,name_en:line.name_en}])).values()];
     const blocker=(reason:'unmapped'|'ambiguous'):CashFlowBlocker=>({journal_id:journal[0]!.journal_id,accounting_date:journal[0]!.accounting_date,reference:journal[0]!.reference,reason,accounts});
@@ -137,13 +136,13 @@ export class CashFlowStatementService{
     if(counterparts.some(line=>line.cash_flow_category==='unmapped')){
       blockers.push(blocker('unmapped'));return;
     }
-    const movements=counterparts.map(line=>({line,value:round(-amount(line))})).filter(row=>material(row.value));
-    if(!movements.length||movements.some(row=>Math.sign(row.value)!==Math.sign(cashNet))||material(movements.reduce((sum,row)=>sum+row.value,0)-cashNet)){
+    const movements=counterparts.map(line=>({line,value:-amount(line)})).filter(row=>material(row.value));
+    if(!movements.length||movements.some(row=>(row.value>0n)!==(cashNet>0n))||movements.reduce((sum,row)=>sum+row.value,0n)!==cashNet){
       blockers.push(blocker('ambiguous'));return;
     }
     for(const {line,value} of movements){
       const category=line.cash_flow_category as Exclude<CashFlowCategory,'unmapped'>,existing=grouped[category].get(line.account_id);
-      grouped[category].set(line.account_id,{account_id:line.account_id,code:line.code,name:line.name,name_ar:line.name_ar,name_en:line.name_en,amount:money((existing?Number(existing.amount):0)+value)});
+      grouped[category].set(line.account_id,{account_id:line.account_id,code:line.code,name:line.name,name_ar:line.name_ar,name_en:line.name_en,amount:money((existing?cents(existing.amount):0n)+value)});
     }
   }
 }

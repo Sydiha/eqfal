@@ -25,8 +25,8 @@ const financialPositionCategories:StatementCategory[]=['current_asset','non_curr
 const profitOrLossCategories:StatementCategory[]=['revenue','cost_of_sales','operating_expense','finance_income','finance_expense','other_income','other_expense'];
 
 const accountAmount=(row:Pick<Movement,'debit'|'credit'|'account_type'|'is_contra'>)=>{
-  const debit=Number(row.debit),credit=Number(row.credit);
-  if(row.account_type==='asset')return row.is_contra?debit-credit:debit-credit;
+  const debit=cents(row.debit),credit=cents(row.credit);
+  if(row.account_type==='asset')return debit-credit;
   if(row.account_type==='expense')return debit-credit;
   return credit-debit;
 };
@@ -61,13 +61,13 @@ export class FinancialStatementsService{
        ORDER BY a.code,a.id`,
       [companyId,fiscalYearId,from,to],
     )).rows;
-    const accounts=rows.map(({opening_debit:_od,opening_credit:_oc,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,amount:accountAmount(row).toFixed(2)}));
-    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,debit,credit,amount:accountAmount({...row,debit,credit}).toFixed(2)}));
+    const accounts=rows.map(({opening_debit:_od,opening_credit:_oc,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,amount:exactMoney(accountAmount(row))}));
+    const openingAccounts=rows.map(({opening_debit:debit,opening_credit:credit,cutover_debit:_cd,cutover_credit:_cc,...row})=>({...row,debit,credit,amount:exactMoney(accountAmount({...row,debit,credit}))}));
     // S1: the part of each amount that comes from the cut-over journal (imported, dates up to D); zero when the range starts after D.
     const importedAmounts=rows.map(row=>accountAmount({...row,debit:row.cutover_debit,credit:row.cutover_credit}));
     // Only years with an active cut-over range disclose anything; January-1 companies get no extra query or field.
     const disclosure:CutoverDisclosure|null=cutoverDate?await loadCutoverDisclosure(db,companyId,fiscalYearId):null;
-    const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(Number(rows[index]!.debit)!==0||Number(rows[index]!.credit)!==0));
+    const unmapped=accounts.filter((row,index)=>row.statement_category==='unmapped'&&(cents(rows[index]!.debit)!==0n||cents(rows[index]!.credit)!==0n));
     if(unmapped.length)throw new FinancialStatementUnmappedError(unmapped);
     return{fiscal_year_id:fiscalYearId,start_date:from,end_date:to,cutover_date:cutoverDate,accounts,openingAccounts,importedAmounts,disclosure};
   }
@@ -75,21 +75,21 @@ export class FinancialStatementsService{
   private sections(accounts:StatementAccount[],categories:StatementCategory[]){
     return categories.map(category=>{
       const categoryAccounts=accounts.filter(account=>account.statement_category===category);
-      return{category,accounts:categoryAccounts,total:categoryAccounts.reduce((sum,account)=>sum+Number(account.amount),0).toFixed(2)};
+      return{category,accounts:categoryAccounts,total:exactMoney(categoryAccounts.reduce((sum,account)=>sum+cents(account.amount),0n))};
     });
   }
 
   async financialPosition(companyId:string,fiscalYearId:string,asOf?:string){
     const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
     const sections=this.sections(report.accounts,financialPositionCategories);
-    const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+Number(section.total),0);
+    const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+cents(section.total),0n);
     const currentPeriodEarnings=this.earnings(report.accounts);
     const assets=total(['current_asset','non_current_asset']);
     const liabilities=total(['current_liability','non_current_liability']);
     const equity=total(['equity'])+currentPeriodEarnings;
     const difference=assets-liabilities-equity;
     const{openingAccounts:_,importedAmounts:_i,disclosure,...publicReport}=report;
-    return{...publicReport,...preCutover(disclosure,'financial_position',report.start_date===disclosure?.cutover_from),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:assets.toFixed(2),total_liabilities:liabilities.toFixed(2),current_period_earnings:currentPeriodEarnings.toFixed(2),total_equity:equity.toFixed(2),accounting_equation:{assets:assets.toFixed(2),liabilities_and_equity:(liabilities+equity).toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005}};
+    return{...publicReport,...preCutover(disclosure,'financial_position',report.start_date===disclosure?.cutover_from),as_of_date:report.end_date,statement:'financial_position',sections,total_assets:exactMoney(assets),total_liabilities:exactMoney(liabilities),current_period_earnings:exactMoney(currentPeriodEarnings),total_equity:exactMoney(equity),accounting_equation:{assets:exactMoney(assets),liabilities_and_equity:exactMoney(liabilities+equity),difference:exactMoney(difference),balanced:difference===0n}};
   }
 
   async profitOrLoss(companyId:string,fiscalYearId:string,start?:string,end?:string){
@@ -97,12 +97,12 @@ export class FinancialStatementsService{
     const sections=this.sections(report.accounts,profitOrLossCategories);
     const profit=this.earnings(report.accounts);
     const{openingAccounts:_,importedAmounts,disclosure,...publicReport}=report;
-    const base={...publicReport,statement:'profit_or_loss' as const,sections,profit_or_loss:profit.toFixed(2)};
+    const base={...publicReport,statement:'profit_or_loss' as const,sections,profit_or_loss:exactMoney(profit)};
     if(!disclosure)return base;
     // Imported (cut-over journal, dates up to D) vs native (after D) columns. Both come from the same posted ledger, so imported + native = amount.
-    const imported=report.accounts.map((account,index)=>({...account,amount:(Math.abs(importedAmounts[index]!)<0.005?0:importedAmounts[index]!).toFixed(2)}));
-    const money=(value:number)=>(Math.abs(value)<0.005?0:value).toFixed(2); // never "-0.00" from a float difference
-    const native=report.accounts.map((account,index)=>({...account,amount:money(Number(account.amount)-importedAmounts[index]!)}));
+    const imported=report.accounts.map((account,index)=>({...account,amount:exactMoney(importedAmounts[index]!)}));
+    const money=(value:bigint)=>exactMoney(value);
+    const native=report.accounts.map((account,index)=>({...account,amount:money(cents(account.amount)-importedAmounts[index]!)}));
     const importedById=new Map(imported.map(account=>[account.account_id,account.amount]));
     const nativeById=new Map(native.map(account=>[account.account_id,account.amount]));
     const importedSections=this.sections(imported,profitOrLossCategories),nativeSections=this.sections(native,profitOrLossCategories);
@@ -130,7 +130,7 @@ export class FinancialStatementsService{
         ? {accounts:[] as StatementAccount[]}
         : await this.movements(companyId,fiscalYearId,undefined,previousEnd,client);
       const openingBalanceAccounts=period.start_date===closing.start_date?period.openingAccounts:[];
-      const periodAccounts=period.accounts.map((account,index)=>({...account,amount:(Number(account.amount)-Number(period.openingAccounts[index]!.amount)).toFixed(2)}));
+      const periodAccounts=period.accounts.map((account,index)=>({...account,amount:exactMoney(cents(account.amount)-cents(period.openingAccounts[index]!.amount))}));
       const equityAccounts=periodAccounts.filter(account=>account.statement_category==='equity');
       const fullYearRange=Boolean(period.disclosure)&&period.start_date===period.disclosure!.cutover_from;
       const supplement=fullYearRange&&period.disclosure!.completeness.changes_in_equity.full_year_complete?period.disclosure!.supplements!.equity:null;
@@ -139,7 +139,7 @@ export class FinancialStatementsService{
         return this.fullYearEquity(fiscalYearId,period,periodAccounts,equityAccounts,closing.accounts,supplement.lines);
       }
       const openingEquity=this.equityWithEarnings(opening.accounts)+this.equityWithEarnings(openingBalanceAccounts);
-      const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+Number(account.amount),0);
+      const directEquityMovements=equityAccounts.reduce((sum,account)=>sum+cents(account.amount),0n);
       const currentPeriodEarnings=this.earnings(periodAccounts);
       const closingEquity=openingEquity+directEquityMovements+currentPeriodEarnings;
       const financialPositionEquity=this.equityWithEarnings(closing.accounts);
@@ -148,10 +148,10 @@ export class FinancialStatementsService{
       return{
         fiscal_year_id:fiscalYearId,start_date:period.start_date,end_date:period.end_date,cutover_date:period.cutover_date,
         ...preCutover(period.disclosure,'changes_in_equity',fullYearRange),
-        statement:'changes_in_equity',opening_equity:openingEquity.toFixed(2),
-        direct_equity_movements:directEquityMovements.toFixed(2),equity_accounts:equityAccounts,
-        current_period_earnings:currentPeriodEarnings.toFixed(2),closing_equity:closingEquity.toFixed(2),
-        reconciliation:{expected:closingEquity.toFixed(2),actual:financialPositionEquity.toFixed(2),difference:difference.toFixed(2),balanced:Math.abs(difference)<0.005},
+        statement:'changes_in_equity',opening_equity:exactMoney(openingEquity),
+        direct_equity_movements:exactMoney(directEquityMovements),equity_accounts:equityAccounts,
+        current_period_earnings:exactMoney(currentPeriodEarnings),closing_equity:exactMoney(closingEquity),
+        reconciliation:{expected:exactMoney(closingEquity),actual:exactMoney(financialPositionEquity),difference:exactMoney(difference),balanced:difference===0n},
       };
     }catch(error){
       await client.query('ROLLBACK');
@@ -200,7 +200,7 @@ export class FinancialStatementsService{
   }
 
   private earnings(accounts:StatementAccount[]){
-    return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+(section.category.includes('expense')||section.category==='cost_of_sales'?-Number(section.total):Number(section.total)),0);
+    return this.sections(accounts,profitOrLossCategories).reduce((sum,section)=>sum+cents(section.total)*(section.category.includes('expense')||section.category==='cost_of_sales'?-1n:1n),0n);
   }
 
   /** Exact halalas, summed per account (never through the float section totals). */
@@ -209,6 +209,6 @@ export class FinancialStatementsService{
   }
 
   private equityWithEarnings(accounts:StatementAccount[]){
-    return accounts.filter(account=>account.statement_category==='equity').reduce((sum,account)=>sum+Number(account.amount),0)+this.earnings(accounts);
+    return accounts.filter(account=>account.statement_category==='equity').reduce((sum,account)=>sum+cents(account.amount),0n)+this.earnings(accounts);
   }
 }
