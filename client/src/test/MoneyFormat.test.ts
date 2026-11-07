@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney } from '../money-format';
+import { formatMinorUnits, formatMoney } from '../money-format';
 
 describe('formatMoney (UI-11)', () => {
   it('groups thousands and forces two decimals', () => {
@@ -63,5 +63,13 @@ describe('formatMoney numeric inputs keep representable precision', () => {
     expect(formatMoney(1e21)).toBe('1e+21');
     expect(formatMoney(Number.NaN)).toBe('NaN');
     expect(formatMoney(Infinity)).toBe('Infinity');
+  });
+});
+
+describe('formatMinorUnits', () => {
+  it('formats large and negative integer minor units without floating-point conversion', () => {
+    expect(formatMinorUnits('1234567890123456789')).toBe('12,345,678,901,234,567.89');
+    expect(formatMinorUnits('-1250075')).toBe('-12,500.75');
+    expect(formatMinorUnits('0')).toBe('0.00');
   });
 });

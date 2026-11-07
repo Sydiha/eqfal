@@ -357,17 +357,19 @@ export function Accounting({
   useEffect(() => {
     if (canView) void load(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView]);
-  const totals = useMemo(
-    () =>
-      lines.reduce(
-        (v, l) => ({
-          debit: v.debit + Number(l.debit || 0),
-          credit: v.credit + Number(l.credit || 0),
-        }),
-        { debit: 0, credit: 0 },
-      ),
-    [lines],
-  );
+  const totals = useMemo(() => {
+    const normalized = lines.map((line) => ({
+      debit: normalizeFinancialAmount(line.debit),
+      credit: normalizeFinancialAmount(line.credit),
+    }));
+    const valid = normalized.every((line) => line.debit !== null && line.credit !== null);
+    return {
+      valid,
+      debit: valid ? sumMoney(normalized.map((line) => line.debit!)) : null,
+      credit: valid ? sumMoney(normalized.map((line) => line.credit!)) : null,
+    };
+  }, [lines]);
+  const balanced = totals.valid && totals.debit === totals.credit && totals.debit !== "0.00";
   const visibleJournals = useMemo(() => {
     const search = journalFilters.search.trim().toLocaleLowerCase();
     return journals.filter(
@@ -1448,6 +1450,7 @@ export function Accounting({
                         type="text"
                         inputMode="decimal"
                         aria-invalid={!!amountErrors[`${i}-debit`]}
+                        aria-describedby={amountErrors[`${i}-debit`] ? `journal-amount-error-${i}-debit` : undefined}
                         value={l.debit}
                         disabled={selected.status === "posted" || !canEditJournal}
                         onChange={(e) => {
@@ -1459,7 +1462,7 @@ export function Accounting({
                           );
                         }}
                       />
-                      {amountErrors[`${i}-debit`] && <span role="alert">{t("accounting.invalidAmount")}</span>}
+                      {amountErrors[`${i}-debit`] && <span id={`journal-amount-error-${i}-debit`} role="alert">{t("accounting.invalidAmount")}</span>}
                     </div>
                     <div className="ac-tab__field">
                       <span aria-hidden="true">{t("accounting.credit")}</span>
@@ -1468,6 +1471,7 @@ export function Accounting({
                         type="text"
                         inputMode="decimal"
                         aria-invalid={!!amountErrors[`${i}-credit`]}
+                        aria-describedby={amountErrors[`${i}-credit`] ? `journal-amount-error-${i}-credit` : undefined}
                         value={l.credit}
                         disabled={selected.status === "posted" || !canEditJournal}
                         onChange={(e) => {
@@ -1479,24 +1483,18 @@ export function Accounting({
                           );
                         }}
                       />
-                      {amountErrors[`${i}-credit`] && <span role="alert">{t("accounting.invalidAmount")}</span>}
+                      {amountErrors[`${i}-credit`] && <span id={`journal-amount-error-${i}-credit`} role="alert">{t("accounting.invalidAmount")}</span>}
                     </div>
                   </div>
                 ))}
                 <div
-                  className={`ac-tab__totals ${
-                    totals.debit === totals.credit && totals.debit > 0
-                      ? "balanced"
-                      : "unbalanced"
-                  }`}
+                  className={`ac-tab__totals ${balanced ? "balanced" : "unbalanced"}`}
                 >
-                  <div><span>{t("accounting.totalDebit")}</span><strong>{formatMoney(totals.debit)}</strong></div>
-                  <div><span>{t("accounting.totalCredit")}</span><strong>{formatMoney(totals.credit)}</strong></div>
-                  <span className={`ac-tab__pill ${totals.debit === totals.credit && totals.debit > 0 ? "is-balanced" : "is-unbalanced"}`}>
+                  <div><span>{t("accounting.totalDebit")}</span><strong>{totals.valid ? formatMoney(totals.debit) : "—"}</strong></div>
+                  <div><span>{t("accounting.totalCredit")}</span><strong>{totals.valid ? formatMoney(totals.credit) : "—"}</strong></div>
+                  <span className={`ac-tab__pill ${balanced ? "is-balanced" : "is-unbalanced"}`}>
                     {t(
-                      totals.debit === totals.credit && totals.debit > 0
-                        ? "accounting.balanced"
-                        : "accounting.unbalanced",
+                      balanced ? "accounting.balanced" : "accounting.unbalanced",
                     )}
                   </span>
                 </div>
@@ -1547,8 +1545,9 @@ export function Accounting({
                         className="primary ac-tab__primary"
                         disabled={
                           saving ||
+                          !totals.valid ||
                           totals.debit !== totals.credit ||
-                          totals.debit === 0 ||
+                          totals.debit === "0.00" ||
                           lines.length < 2
                         }
                         onClick={() => void post()}
