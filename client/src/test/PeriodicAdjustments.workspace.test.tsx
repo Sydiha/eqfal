@@ -30,18 +30,27 @@ describe('Accruals & Prepayments workspace',()=>{
   fireEvent.click(cta);
   for(const label of ['Type','Total amount','Recognition start','Recognition end','Description','Reference','Balance-sheet account','P&L account','Notes'])expect(screen.getByLabelText(label)).toBeInTheDocument();
   expect(screen.getByText(/determines debit\/credit direction automatically/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Total amount'),{target:{value:'120.00'}});fireEvent.change(screen.getByLabelText('Recognition start'),{target:{value:'2026-01-01'}});fireEvent.change(screen.getByLabelText('Recognition end'),{target:{value:'2026-03-31'}});fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Test'}});
+  fireEvent.change(screen.getByLabelText('Total amount'),{target:{value:'1,200.50'}});fireEvent.change(screen.getByLabelText('Recognition start'),{target:{value:'2026-01-01'}});fireEvent.change(screen.getByLabelText('Recognition end'),{target:{value:'2026-03-31'}});fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Test'}});
   fireEvent.change(screen.getByLabelText('Balance-sheet account'),{target:{value:'b'}});fireEvent.change(screen.getByLabelText('P&L account'),{target:{value:'p'}});
   fireEvent.click(screen.getByRole('button',{name:'Save'}));
   await waitFor(()=>expect(calls.some(c=>c.method==='POST'&&c.url==='/api/periodic-adjustments')).toBe(true));
   const post=calls.find(c=>c.method==='POST')!;
-  expect(JSON.parse(post.body!)).toEqual({adjustment_type:'accrued_expense',total_amount:'120.00',recognition_start:'2026-01-01',recognition_end:'2026-03-31',description:'Test',reference:null,notes:null,balance_account_id:'b',pnl_account_id:'p',document_id:null,obligation_id:null});
+  expect(JSON.parse(post.body!)).toEqual({adjustment_type:'accrued_expense',total_amount:'1200.50',recognition_start:'2026-01-01',recognition_end:'2026-03-31',description:'Test',reference:null,notes:null,balance_account_id:'b',pnl_account_id:'p',document_id:null,obligation_id:null});
   await waitFor(()=>expect(screen.queryByLabelText('Total amount')).not.toBeInTheDocument());
  });
  it('preserves native form validation (required fields) and sends nothing when empty',async()=>{
   mount();fireEvent.click(await screen.findByRole('button',{name:/Add periodic adjustment/}));
   for(const label of ['Total amount','Recognition start','Recognition end','Description','Balance-sheet account','P&L account'])expect(screen.getByLabelText(label)).toBeRequired();
-  expect(screen.getByLabelText('Total amount')).toHaveAttribute('pattern','[0-9]+([.][0-9]{1,2})?');
+  expect(screen.getByLabelText('Total amount')).toHaveAttribute('inputmode','decimal');
+ });
+ it.each([
+  ['1,00','en','valid amount'],
+  ['12,34,567','en','valid amount'],
+  ['1,000.999','ar','مبلغاً صحيحاً'],
+ ])('rejects invalid periodic adjustment amount %s before saving in %s',async(value,language,message)=>{
+  await i18n.changeLanguage(language);mount();fireEvent.click(await screen.findByRole('button',{name:/إضافة تعديل دوري|Add periodic adjustment/}));
+  fireEvent.change(screen.getByLabelText(language==='ar'?'إجمالي المبلغ':'Total amount'),{target:{value}});fireEvent.change(screen.getByLabelText(language==='ar'?'بداية الاعتراف':'Recognition start'),{target:{value:'2026-01-01'}});fireEvent.change(screen.getByLabelText(language==='ar'?'نهاية الاعتراف':'Recognition end'),{target:{value:'2026-03-31'}});fireEvent.change(screen.getByLabelText(language==='ar'?'الوصف':'Description'),{target:{value:'Test'}});fireEvent.change(screen.getByLabelText(language==='ar'?'حساب الميزانية':'Balance-sheet account'),{target:{value:'b'}});fireEvent.change(screen.getByLabelText(language==='ar'?'حساب الربح والخسارة':'P&L account'),{target:{value:'p'}});
+  fireEvent.click(screen.getByRole('button',{name:language==='ar'?'حفظ':'Save'}));expect(await screen.findByRole('alert')).toHaveTextContent(message);expect(calls.some(c=>c.method==='POST'&&c.url==='/api/periodic-adjustments')).toBe(false);expect(screen.getByLabelText(language==='ar'?'إجمالي المبلغ':'Total amount')).toHaveAttribute('aria-invalid','true');
  });
  it('shows no schedule until View schedule is clicked, then switches per adjustment, read-only',async()=>{
   mount();await screen.findByText('Prepaid rent');
@@ -65,6 +74,11 @@ describe('Accruals & Prepayments workspace',()=>{
   mount();await openSchedule();const buttons=await screen.findAllByRole('button',{name:'Post period'});fireEvent.click(buttons[0]);
   await waitFor(()=>expect(calls.some(c=>c.method==='POST'&&c.url==='/api/periodic-adjustments/a1/schedule/s1/post')).toBe(true));
   expect(calls.filter(c=>c.url.endsWith('/post'))).toHaveLength(1);
+ });
+ it('totals recognition schedule amounts exactly beyond floating-point precision',async()=>{
+  const large={...approved,schedule:[{...sched('large-1','pending','09'),amount:'90071992547409.91'},{...sched('large-2','posted','10'),amount:'0.09'}]};
+  (fetch as ReturnType<typeof vi.fn>).mockImplementation(async(input:string|URL|Request)=>{const url=String(input);if(url==='/api/periodic-adjustments')return new Response(JSON.stringify({adjustments:[draft,large]}));if(url==='/api/accounts')return new Response(JSON.stringify({accounts}));if(url==='/api/documents')return new Response(JSON.stringify({documents:[]}));if(url==='/api/obligations')return new Response(JSON.stringify({obligations:[]}));return new Response('{}')});
+  mount();await screen.findByText('Prepaid rent');await openSchedule();expect(screen.getByText('90,071,992,547,410.00').closest('.pa-total')).toBeInTheDocument();
  });
  it('hides posting without the post capability and never offers it for posted periods',async()=>{
   mount({canPost:false});await openSchedule();await screen.findByText('Recognition schedule');expect(screen.queryByRole('button',{name:'Post period'})).not.toBeInTheDocument();expect(screen.getByText(/Posted$/,{selector:'.pa-done'})).toBeInTheDocument();
