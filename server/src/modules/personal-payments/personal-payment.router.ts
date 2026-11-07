@@ -10,6 +10,8 @@ export const personalPaymentRouter = Router();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONEY = /^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
+const moneyCents = (value: string) => { const [whole, fraction = ''] = value.split('.'); return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')); };
+const normalizeMoney = (value: string) => { const [whole, fraction = ''] = value.split('.'); return `${whole}.${fraction.padEnd(2, '0')}`; };
 const STATUSES = ['draft', 'submitted', 'approved', 'rejected'];
 const asyncRoute = (h: (q: Request, s: Response, n: NextFunction) => Promise<void>): RequestHandler => (q, s, n) => void h(q, s, n).catch(n);
 const plain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -57,9 +59,9 @@ function parsePayment(body: unknown): PaymentInput {
   const payerId = uuid(body['payer_id']);
   const treatment = body['treatment'];
   const amount = typeof body['amount'] === 'number' ? String(body['amount']) : body['amount'];
-  if (!payerId || (treatment !== 'new_expense' && treatment !== 'existing_obligation') || !validDate(body['payment_date']) || typeof amount !== 'string' || !MONEY.test(amount) || Number(amount) <= 0) throw bad();
+  if (!payerId || (treatment !== 'new_expense' && treatment !== 'existing_obligation') || !validDate(body['payment_date']) || typeof amount !== 'string' || !MONEY.test(amount) || moneyCents(amount) <= 0n) throw bad();
   return {
-    payerId, treatment: treatment as Treatment, paymentDate: body['payment_date'], amount: Number(amount).toFixed(2), purpose: text(body['purpose'], 1, 500),
+    payerId, treatment: treatment as Treatment, paymentDate: body['payment_date'], amount: normalizeMoney(amount), purpose: text(body['purpose'], 1, 500),
     counterpartyId: optionalUuid(body['counterparty_id']), documentId: optionalUuid(body['document_id']), obligationId: optionalUuid(body['obligation_id']),
     expenseAccountId: optionalUuid(body['expense_account_id']),
   };

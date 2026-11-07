@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Group, NumberInput, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { transactionOptionLabel } from './bankTransactionLabel';
-import { formatMoney } from '../money-format';
+import { formatMinorUnits, formatMoney, moneyToMinorUnits, normalizeMoneyInput, parseMoneyInput } from '../money-format';
 import { formatDisplayDateLtr } from '../date-format';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 
@@ -30,10 +30,10 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
   const {t,i18n}=useTranslation(); const s=i18n.language==='ar'?strings.ar:strings.en;
   const [transactions,setTransactions]=useState<Transaction[]>([]); const [selectedTx,setSelectedTx]=useState<string|null>(null); const [documentId,setDocumentId]=useState<string|null>(null); const [summary,setSummary]=useState<Summary|null>(null);
   const [refreshFailed,setRefreshFailed]=useState<'load'|'afterSave'|null>(null); const [listStale,setListStale]=useState(false); const seq=useRef(0);
-  const [candidates,setCandidates]=useState<MatchResponse|null>(null); const [allocations,setAllocations]=useState<Record<string,number|string>>({});
-  const [amount,setAmount]=useState<number|string>(''); const [note,setNote]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const [candidates,setCandidates]=useState<MatchResponse|null>(null); const [allocations,setAllocations]=useState<Record<string,string>>({});
+  const [amount,setAmount]=useState(''); const [note,setNote]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
 
-  const toCents=(v:unknown)=>Math.round(Number(v)*100);
+  const toCents=(v:unknown):bigint|null=>typeof v==='string'||typeof v==='number'?moneyToMinorUnits(String(v),2,false):null;
   // Every load gets a ticket; a response whose ticket is no longer current is dropped, and state is committed only after all requests of the load succeeded.
   const load=async(txId:string|null,opts:{list:boolean;afterSave?:boolean})=>{
     const ticket=++seq.current; const live=()=>ticket===seq.current;
@@ -46,10 +46,10 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
       const docId=match.match?.document_id??null;
       const data=docId?await api<Summary>(`/api/documents/${docId}/settlements`,undefined,onUnauthorized):null;
       if(!live())return;
-      const available=match.unallocated_amount!=null&&match.unallocated_amount!==''?toCents(match.unallocated_amount):NaN;
-      const remaining=data&&data.remaining_amount!==null?toCents(data.remaining_amount):NaN;
-      const next=Math.min(available,remaining);
-      setListStale(false);setTransactions(list);setSelectedTx(keep);setCandidates(match);setDocumentId(docId);setSummary(data);setAllocations({});setAmount(Number.isFinite(next)&&next>0?next/100:'');
+      const available=match.unallocated_amount!=null&&match.unallocated_amount!==''?toCents(match.unallocated_amount):null;
+      const remaining=data&&data.remaining_amount!==null?toCents(data.remaining_amount):null;
+      const next=available!==null&&remaining!==null?(available<remaining?available:remaining):null;
+      setListStale(false);setTransactions(list);setSelectedTx(keep);setCandidates(match);setDocumentId(docId);setSummary(data);setAllocations({});setAmount(next!==null&&next>0n?formatMinorUnits(next.toString()):'');
       if(!docId&&!canSettle)setError(s.select);
     }catch(e){
       if(!live())return;
@@ -65,15 +65,19 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
 
   const choose=async(value:string|null)=>{setSelectedTx(value);setDocumentId(null);setSummary(null);setCandidates(null);setAllocations({});setAmount('');setError('');setRefreshFailed(null);if(!value){seq.current++;setBusy(false);return;}await load(value,{list:false});};
   const retry=()=>void load(selectedTx,{list:true,afterSave:refreshFailed==='afterSave'});
-  const allocationTotal=Object.values(allocations).reduce<number>((n,v)=>n+Math.round(Number(v||0)*100),0);
-  const unallocatedCents=Math.round(Number(candidates?.unallocated_amount??0)*100);
-  const allocationRows=(candidates?.documents??[]).filter(d=>d.status==='approved'&&!(d.remaining_amount!=null&&toCents(d.remaining_amount)<=0));
-  const docOver=allocationRows.some(d=>d.remaining_amount!=null&&Math.round(Number(allocations[d.id]||0)*100)>Math.round(Number(d.remaining_amount)*100));
+  const allocationValues=Object.entries(allocations).map(([id,value])=>({id,value,cents:value.trim()?toCents(value):0n}));
+  const allocationTotal=allocationValues.reduce((n,row)=>n+(row.cents??0n),0n);
+  const unallocatedCents=toCents(candidates?.unallocated_amount??'0')??0n;
+  const docRemaining=(d:CandidateDocument)=>d.remaining_amount??d.linked_obligation?.remaining_amount??d.total_amount;
+  const allocationRows=(candidates?.documents??[]).filter(d=>d.status==='approved'&&(toCents(docRemaining(d)??'0')??0n)>0n);
+  const docOver=allocationRows.some(d=>(toCents(allocations[d.id]??'0')??-1n)>(toCents(docRemaining(d)??'0')??0n));
+  const allocationInvalid=allocationValues.some(row=>row.value.trim()&&row.cents===null);
+  const settlementAmount=parseMoneyInput(amount,{allowZero:false});
   // Mutations never retry themselves: after a successful save only the read requests are repeated (see load/retry).
   const mutate=async(request:()=>Promise<unknown>)=>{const txId=selectedTx;setBusy(true);setError('');setRefreshFailed(null);try{await request();}catch(e){setError(screenErrorMessage(e,t,s.actionError));setBusy(false);return;}setNote('');setReason('');await load(txId,{list:true,afterSave:true});};
   const post=(url:string,method:string,body:unknown)=>api(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},onUnauthorized);
-  const allocate=async(event:FormEvent)=>{event.preventDefault();if(!selectedTx)return;const rows=Object.entries(allocations).filter(([,v])=>Number(v)>0).map(([document_id,v])=>({document_id,amount:Number(v).toFixed(2)}));if(!rows.length)return;await mutate(()=>post(`/api/bank-transactions/${selectedTx}/allocations`,'POST',{allocations:rows,note:note||undefined}));};
-  const create=async(event:FormEvent)=>{event.preventDefault();if(!documentId||!selectedTx||!amount)return;await mutate(()=>post(`/api/documents/${documentId}/settlements`,'POST',{bank_transaction_id:selectedTx,amount:String(amount),note:note||undefined}));};
+  const allocate=async(event:FormEvent)=>{event.preventDefault();if(!selectedTx||allocationInvalid)return;const rows=allocationValues.filter(row=>row.cents!==null&&row.cents>0n).map(row=>({document_id:row.id,amount:normalizeMoneyInput(row.value)!}));if(!rows.length)return;await mutate(()=>post(`/api/bank-transactions/${selectedTx}/allocations`,'POST',{allocations:rows,note:note||undefined}));};
+  const create=async(event:FormEvent)=>{event.preventDefault();if(!documentId||!selectedTx||settlementAmount===null)return;await mutate(()=>post(`/api/documents/${documentId}/settlements`,'POST',{bank_transaction_id:selectedTx,amount:normalizeMoneyInput(amount)!,note:note||undefined}));};
   const remove=async(id:string)=>{if(!documentId||!reason.trim())return;await mutate(()=>post(`/api/documents/${documentId}/settlements/${id}`,'DELETE',{reason:reason.trim()}));};
 
   if(!canView)return null;
@@ -86,17 +90,18 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
     </div>
     {candidates&&canSettle&&candidates.transaction.reconciliation_status!=='reconciled'&&<div className="banking-selected-operation"><Stack gap="md">
       <div><Title order={3} size="h4">{s.allocateTitle}</Title><Text size="sm" c="dimmed">{s.allocateHelp}</Text></div>
-      <div className="banking-metrics-grid">
+        <div className="banking-metrics-grid">
         <div><span>{s.bankAmount}</span><strong dir="ltr">{formatMoney(candidates.transaction.amount)}</strong></div>
         <div><span>{s.allocated}</span><strong dir="ltr">{formatMoney(candidates.allocated_amount??'0.00')}</strong></div>
         <div className={unallocatedCents>0?'is-key':undefined}><span>{s.unallocated}</span><strong dir="ltr">{formatMoney(candidates.unallocated_amount)}</strong></div>
         <div><span>{s.matchedDocuments}</span><strong dir="ltr">{candidates.matches?.length??0}</strong></div>
       </div>
       {unallocatedCents>0&&(allocationRows.length===0?<Text c="dimmed">{s.noCandidates}</Text>:<form onSubmit={allocate}><Stack gap="sm">
-        <Table.ScrollContainer minWidth={640} className="settlement-scroll"><Table className="settlement-stack settlement-stack--alloc"><Table.Thead><Table.Tr><Table.Th>{s.document}</Table.Th><Table.Th>{s.counterparty}</Table.Th><Table.Th>{s.remaining}</Table.Th><Table.Th>{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{allocationRows.map(d=><Table.Tr key={d.id}><Table.Td data-label={s.document}><Text size="sm"><bdi dir="auto">{d.original_filename}</bdi></Text></Table.Td><Table.Td data-label={s.counterparty}><Text dir="auto" size="sm">{d.counterparty_name||'—'}</Text></Table.Td><Table.Td dir="ltr" data-label={s.remaining}>{formatMoney(d.remaining_amount??d.linked_obligation?.remaining_amount??d.total_amount)}</Table.Td><Table.Td data-label={s.amount}><NumberInput hideControls aria-label={`${s.amount} ${d.original_filename}`} value={allocations[d.id]??''} onChange={v=>setAllocations(a=>({...a,[d.id]:v}))} min={0} max={d.remaining_amount!=null?Number(d.remaining_amount):undefined} clampBehavior="none" decimalScale={2} disabled={busy}/></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>
+        <Table.ScrollContainer minWidth={640} className="settlement-scroll"><Table className="settlement-stack settlement-stack--alloc"><Table.Thead><Table.Tr><Table.Th>{s.document}</Table.Th><Table.Th>{s.counterparty}</Table.Th><Table.Th>{s.remaining}</Table.Th><Table.Th>{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{allocationRows.map(d=><Table.Tr key={d.id}><Table.Td data-label={s.document}><Text size="sm"><bdi dir="auto">{d.original_filename}</bdi></Text></Table.Td><Table.Td data-label={s.counterparty}><Text dir="auto" size="sm">{d.counterparty_name||'—'}</Text></Table.Td><Table.Td dir="ltr" data-label={s.remaining}>{formatMoney(docRemaining(d))}</Table.Td><Table.Td data-label={s.amount}><TextInput aria-label={`${s.amount} ${d.original_filename}`} inputMode="decimal" dir="ltr" value={allocations[d.id]??''} onChange={e=>setAllocations(a=>({...a,[d.id]:e.currentTarget.value}))} disabled={busy}/></Table.Td></Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>
+        {allocationInvalid&&<Alert color="red" role="alert">{s.actionError}</Alert>}
         {allocationTotal>unallocatedCents&&<Alert color="red">{s.allocationExceeds}</Alert>}
         {docOver&&<Alert color="red">{s.docExceeds}</Alert>}
-        <Group align="end" grow className="settlement-form-row"><div><Text size="sm" c="dimmed">{s.allocationTotal}</Text><Text fw={700} dir="ltr">{formatMoney((allocationTotal/100).toFixed(2))}</Text></div><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy} disabled={docOver||allocationTotal<=0||allocationTotal>unallocatedCents}>{s.allocate}</Button></Group>
+        <Group align="end" grow className="settlement-form-row"><div><Text size="sm" c="dimmed">{s.allocationTotal}</Text><Text fw={700} dir="ltr">{formatMoney(formatMinorUnits(allocationTotal.toString()))}</Text></div><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy} disabled={allocationInvalid||docOver||allocationTotal<=0n||allocationTotal>unallocatedCents}>{s.allocate}</Button></Group>
       </Stack></form>)}
     </Stack></div>}
     {summary&&<div className="banking-selected-operation"><Stack gap="md">
@@ -108,7 +113,7 @@ export function SettlementPanel({canView,canSettle,onUnauthorized}:Props){
         <div><span>{s.settled}</span><strong dir="ltr">{formatMoney(summary.settled_amount)}</strong></div>
         <div className="is-key"><span>{s.remaining}</span><strong dir="ltr">{formatMoney(summary.remaining_amount)}</strong></div>
       </div>
-      {canSettle&&summary.document.status==='approved'&&summary.remaining_amount!==null&&Number(summary.remaining_amount)>0&&<form onSubmit={create} className="banking-inline-form"><Group align="end" grow className="settlement-form-row"><NumberInput hideControls label={s.amount} value={amount} onChange={setAmount} min={0.01} decimalScale={2} required/><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy}>{s.create}</Button></Group></form>}
+      {canSettle&&summary.document.status==='approved'&&summary.remaining_amount!==null&&(toCents(summary.remaining_amount)??0n)>0n&&<form onSubmit={create} className="banking-inline-form"><Group align="end" grow className="settlement-form-row"><TextInput label={s.amount} value={amount} onChange={e=>setAmount(e.currentTarget.value)} inputMode="decimal" dir="ltr" required/><TextInput label={s.note} value={note} onChange={e=>setNote(e.currentTarget.value)} maxLength={500}/><Button type="submit" loading={busy} disabled={settlementAmount===null||(toCents(settlementAmount)??0n)>(toCents(summary.remaining_amount)??0n)||(toCents(settlementAmount)??0n)>unallocatedCents}>{s.create}</Button></Group></form>}
       <div className="banking-subsection"><Title order={3} size="h4">{s.history}</Title>
         {summary.settlements.length===0?<Text c="dimmed">{s.none}</Text>:<Table.ScrollContainer minWidth={700} className="settlement-scroll"><Table className="settlement-stack settlement-stack--history"><Table.Thead><Table.Tr><Table.Th>{s.transaction}</Table.Th><Table.Th>{s.amount}</Table.Th><Table.Th>{s.note}</Table.Th>{canSettle&&<Table.Th>{s.delete}</Table.Th>}</Table.Tr></Table.Thead><Table.Tbody>{summary.settlements.map(x=><Table.Tr key={x.id}><Table.Td data-label={s.transaction}><span><span dir="ltr">{formatDisplayDateLtr(x.transaction_date,i18n.language)}</span> · <bdi dir="auto">{x.transaction_description||x.bank_reference||s.transaction}</bdi></span></Table.Td><Table.Td dir="ltr" data-label={s.amount}>{formatMoney(x.amount)}</Table.Td><Table.Td dir="auto" data-label={s.note}>{x.note||'—'}</Table.Td>{canSettle&&<Table.Td data-label={s.delete}><Group align="end" className="settlement-delete-row"><TextInput aria-label={s.reason} placeholder={s.reason} value={reason} onChange={e=>setReason(e.currentTarget.value)} maxLength={500}/><Button color="red" variant="light" onClick={()=>void remove(x.id)} disabled={!reason.trim()} loading={busy}>{s.deleteAction}</Button></Group></Table.Td>}</Table.Tr>)}</Table.Tbody></Table></Table.ScrollContainer>}
       </div>

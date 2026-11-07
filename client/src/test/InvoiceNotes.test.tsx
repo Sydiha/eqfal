@@ -50,12 +50,12 @@ describe('InvoiceNotes',()=>{
   fireEvent.change(screen.getByLabelText('Note date'),{target:{value:'2026-03-20'}});
   fireEvent.change(screen.getByLabelText('Reason'),{target:{value:'Discount'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Line'}});
-  fireEvent.change(screen.getByLabelText('Net amount'),{target:{value:'100.00'}});
+  fireEvent.change(screen.getByLabelText('Net amount'),{target:{value:'1,000.50'}});
   expect(screen.queryByLabelText(/recover/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
   await waitFor(()=>expect(props.onChanged).toHaveBeenCalled());
   const call=f.mock.calls.find(c=>(c[1] as RequestInit|undefined)?.method==='POST')!;
-  expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({adjustment_type:'credit',external_number:'CN-9',adjustment_date:'2026-03-20',reason:'Discount',lines:[{description:'Line',vat_treatment:'standard',vat_rate:'15',net_amount:'100.00'}]});
+  expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({adjustment_type:'credit',external_number:'CN-9',adjustment_date:'2026-03-20',reason:'Discount',lines:[{description:'Line',vat_treatment:'standard',vat_rate:'15',net_amount:'1000.50'}]});
  });
  it('purchase notes require an explicit recoverability choice per standard line',async()=>{
   mock([]);

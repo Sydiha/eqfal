@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { formatMinorUnits, formatMoney } from '../money-format';
+import { formatMinorUnits, formatMoney, parseMoneyInput } from '../money-format';
+
+describe('parseMoneyInput', () => {
+  it('accepts grouped and ungrouped values and normalizes API input', () => {
+    for (const [input, output] of [['1000', '1000'], ['1000.50', '1000.50'], ['1,000', '1000'], ['1,000.50', '1000.50'], ['1,234,567.89', '1234567.89']]) expect(parseMoneyInput(input!)).toBe(output);
+  });
+  it('rejects malformed groups, excess precision, and disallowed signs', () => {
+    for (const input of ['1,00', '12,34,567', '1,000.999', '-1', '1,00.00']) expect(parseMoneyInput(input!)).toBeNull();
+    expect(parseMoneyInput('-1.25', { allowNegative: true })).toBe('-1.25');
+    expect(parseMoneyInput('0', { allowZero: false })).toBeNull();
+  });
+});
 
 describe('formatMoney (UI-11)', () => {
   it('groups thousands and forces two decimals', () => {

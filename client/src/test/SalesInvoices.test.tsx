@@ -38,7 +38,7 @@ describe('Sales invoices',()=>{
   expect(screen.getByText('15.00%')).toBeInTheDocument();
  });
 
- it('creates a draft with raw string inputs, direction sales, customers from the invoice picker endpoint',async()=>{
+ it('creates a draft with grouped monetary input normalized for the API',async()=>{
   const fetchMock=mockApi(draft,{'POST /api/invoices':()=>json({invoice:draft},201)});
   render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
@@ -49,7 +49,7 @@ describe('Sales invoices',()=>{
   fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
   fireEvent.change(screen.getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
-  fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'100.00'}});
+  fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'1,000.50'}});
   fireEvent.change(screen.getByLabelText('VAT treatment'),{target:{value:'standard'}});
   await waitFor(()=>expect(screen.getByLabelText('VAT rate %')).toHaveTextContent('15.00%'));
   expect(screen.getByLabelText('VAT rate %').tagName).toBe('OUTPUT');
@@ -57,8 +57,22 @@ describe('Sales invoices',()=>{
   await waitFor(()=>expect(bodyOf(fetchMock,'POST /api/invoices')).toBeDefined());
   const body=bodyOf(fetchMock,'POST /api/invoices');
   expect(body.direction).toBe('sales');
-  expect(body.lines[0]).toEqual({description:'Service',quantity:'1',unit_price:'100.00',vat_rate:'15.00',vat_treatment:'standard'});
+  expect(body.lines[0]).toEqual({description:'Service',quantity:'1',unit_price:'1000.50',vat_rate:'15.00',vat_treatment:'standard'});
   expect(body).not.toHaveProperty('total_amount');
+ });
+
+ it('blocks malformed monetary grouping before an invoice save',async()=>{
+  const fetchMock=mockApi(draft,{'POST /api/invoices':()=>json({invoice:draft},201)});
+  render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Add sales invoice +'}));
+  await waitFor(()=>expect(within(screen.getByRole('dialog')).getByRole('option',{name:'Acme'})).toBeInTheDocument());
+  fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Customer'),{target:{value:draft.counterparty_id}});
+  fireEvent.change(screen.getByLabelText('Issue date'),{target:{value:'2026-10-01'}});
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
+  fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'1,00'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('valid unit prices and discounts');
+  expect(fetchMock.mock.calls.some(c=>c[0]==='/api/invoices'&&(c[1] as RequestInit|undefined)?.method==='POST')).toBe(false);
  });
 
  it('edits a draft with the current version and sends rate 0 for non-standard treatment',async()=>{

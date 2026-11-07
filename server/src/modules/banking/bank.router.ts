@@ -663,20 +663,44 @@ function normalizeText(value: Cell): string | null {
   return text || null;
 }
 
-function normalizeMoney(value: Cell, allowBlank = false): string | null {
+export function normalizeBankImportMoney(value: Cell, allowBlank = false): string | null {
   if (value === null || value === undefined || String(value).trim() === '') return allowBlank ? null : null;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return null;
-    return value.toFixed(2);
-  }
   let text = String(value).trim();
   let negative = false;
-  if (/^\(.*\)$/.test(text)) { negative = true; text = text.slice(1, -1); }
-  text = text.replace(/[\s,٬]/g, '').replace(/٫/g, '.');
-  if (!/^[+-]?\d+(?:\.\d{1,2})?$/.test(text)) return null;
-  const amount = Number(text);
-  if (!Number.isFinite(amount) || Math.abs(amount) >= 1e16) return null;
-  return (negative ? -Math.abs(amount) : amount).toFixed(2);
+  if (/^\(.*\)$/.test(text)) { negative = true; text = text.slice(1, -1).trim(); }
+  text = text.replace(/٫/g, '.').replace(/٬/g, ',');
+  const match = /^([+-]?)(?:(\d+)|(\d{1,3}(?:,\d{3})+)|(\d{1,3}(?:\s\d{3})+))(?:\.(\d{1,2}))?$/.exec(text);
+  if (!match) return null;
+  const whole = (match[2] ?? match[3]?.replace(/,/g, '') ?? match[4]!.replace(/\s/g, '')).replace(/^0+(?=\d)/, '');
+  if (whole.length > 16) return null;
+  const fraction = (match[5] ?? '').padEnd(2, '0');
+  const cents = BigInt(whole) * 100n + BigInt(fraction || '0');
+  // XLSX numeric cells have already passed through a JS number. Accept them only while
+  // their cents remain exactly representable; text cells retain the full NUMERIC range.
+  if (typeof value === 'number' && (cents > BigInt(Number.MAX_SAFE_INTEGER) || whole.length > 13)) return null;
+  const isNegative = negative || match[1] === '-';
+  return `${isNegative && cents !== 0n ? '-' : ''}${whole}.${fraction}`;
+}
+
+const importedCents = (value: string) => {
+  const negative = value.startsWith('-');
+  const [whole, fraction = ''] = (negative ? value.slice(1) : value).split('.');
+  const cents = BigInt(whole!) * 100n + BigInt(fraction);
+  return negative ? -cents : cents;
+};
+
+export function normalizeBankImportDebitCredit(debitValue: Cell, creditValue: Cell): { amount: string | null; error: string | null } {
+  const debit = normalizeBankImportMoney(debitValue, true);
+  const credit = normalizeBankImportMoney(creditValue, true);
+  const debitPresent = debitValue !== null && debitValue !== undefined && String(debitValue).trim() !== '';
+  const creditPresent = creditValue !== null && creditValue !== undefined && String(creditValue).trim() !== '';
+  if ((debitPresent && debit === null) || (creditPresent && credit === null)) return { amount: null, error: 'Missing or invalid amount' };
+  if (debit !== null && credit !== null && importedCents(debit) !== 0n && importedCents(credit) !== 0n) {
+    return { amount: null, error: 'Debit and credit both populated' };
+  }
+  if (debit !== null && importedCents(debit) !== 0n) return { amount: `-${debit.replace(/^-/, '')}`, error: null };
+  if (credit !== null && importedCents(credit) !== 0n) return { amount: credit.replace(/^-/, ''), error: null };
+  return { amount: null, error: null };
 }
 
 function excelSerialDate(value: number): string | null {
@@ -908,17 +932,16 @@ export class BankService {
       const valueDate=mapping.value_date ? normalizeDate(row[mapping.value_date.index] ?? null,mapping.date_format) : null;
       if(mapping.value_date && row[mapping.value_date.index] != null && !valueDate) error=error ?? 'Invalid value date';
       let amount:string|null=null;
-      if(mapping.amount_mode==='signed') amount=normalizeMoney(row[mapping.amount!.index] ?? null);
+      if(mapping.amount_mode==='signed') amount=normalizeBankImportMoney(row[mapping.amount!.index] ?? null);
       else {
-        const debit=normalizeMoney(row[mapping.debit!.index] ?? null,true); const credit=normalizeMoney(row[mapping.credit!.index] ?? null,true);
-        if(debit!==null && credit!==null && Number(debit)!==0 && Number(credit)!==0) error=error ?? 'Debit and credit both populated';
-        else if(debit!==null && Number(debit)!==0) amount=(-Math.abs(Number(debit))).toFixed(2);
-        else if(credit!==null && Number(credit)!==0) amount=Math.abs(Number(credit)).toFixed(2);
+        const debitCredit=normalizeBankImportDebitCredit(row[mapping.debit!.index] ?? null,row[mapping.credit!.index] ?? null);
+        amount=debitCredit.amount;
+        if(debitCredit.error) error=error ?? debitCredit.error;
       }
-      if(!amount || Number(amount)===0) error=error ?? 'Missing or invalid amount';
+      if(!amount || importedCents(amount)===0n) error=error ?? 'Missing or invalid amount';
       const description=mapping.description ? normalizeText(row[mapping.description.index] ?? null) : null;
       const reference=mapping.bank_reference ? normalizeText(row[mapping.bank_reference.index] ?? null) : null;
-      const balance=mapping.running_balance ? normalizeMoney(row[mapping.running_balance.index] ?? null,true) : null;
+      const balance=mapping.running_balance ? normalizeBankImportMoney(row[mapping.running_balance.index] ?? null,true) : null;
       if(mapping.running_balance && row[mapping.running_balance.index] != null && String(row[mapping.running_balance.index]).trim()!=='' && balance===null) error=error ?? 'Invalid running balance';
       if(formula) error='Formula cells are not allowed';
       const strong=Boolean(reference); const fingerprint=strong ? hashParts([account.id,date,amount,reference]) : hashParts([account.id,date,amount,description,balance]);
@@ -936,9 +959,9 @@ export class BankService {
     const table=parseBankFile(batch.source_format,await readVerified(this.files,batch.storage_key,batch.file_sha256));
     const refs=[...new Set(table.rows.map((row)=>{
       const date=normalizeDate(row[mapping.transaction_date.index]??null,mapping.date_format); let amount:string|null=null;
-      if(mapping.amount_mode==='signed') amount=normalizeMoney(row[mapping.amount!.index]??null);
-      else { const d=normalizeMoney(row[mapping.debit!.index]??null,true); const c=normalizeMoney(row[mapping.credit!.index]??null,true); if(d&&Number(d)!==0) amount=(-Math.abs(Number(d))).toFixed(2); else if(c&&Number(c)!==0) amount=Math.abs(Number(c)).toFixed(2); }
-      const ref=mapping.bank_reference?normalizeText(row[mapping.bank_reference.index]??null):null; const desc=mapping.description?normalizeText(row[mapping.description.index]??null):null; const bal=mapping.running_balance?normalizeMoney(row[mapping.running_balance.index]??null,true):null;
+      if(mapping.amount_mode==='signed') amount=normalizeBankImportMoney(row[mapping.amount!.index]??null);
+      else amount=normalizeBankImportDebitCredit(row[mapping.debit!.index]??null,row[mapping.credit!.index]??null).amount;
+      const ref=mapping.bank_reference?normalizeText(row[mapping.bank_reference.index]??null):null; const desc=mapping.description?normalizeText(row[mapping.description.index]??null):null; const bal=mapping.running_balance?normalizeBankImportMoney(row[mapping.running_balance.index]??null,true):null;
       return ref?hashParts([account.id,date,amount,ref]):hashParts([account.id,date,amount,desc,bal]);
     }))];
     const existing=await this.repo.fingerprints(companyId,account.id,refs); const manualKeys=await this.repo.manualKeys(companyId,account.id); return this.normalize(table,mapping,account,existing,manualKeys);

@@ -8,7 +8,7 @@ import { ExportButtons } from './ExportButtons';
 import { useActiveCompanyName } from '../context/CompanyContext';
 import { bankReconciliationExport, generatedStamp } from '../export/reportExport';
 import { DataWorkspace, DetailPane, WorkspaceState, WorkspaceToolbar } from './SharedUI';
-import { formatMoney as formatDecimal } from '../money-format';
+import { formatMoney as formatDecimal, moneyToMinorUnits, parseMoneyInput } from '../money-format';
 import { DateInput } from './DateInput';
 import { ManualBankTransactionDialog, NON_SETTLEABLE } from './ManualBankTransactionDialog';
 
@@ -119,7 +119,7 @@ const discoveryParameters = ['search', 'reconciliation', 'from', 'to', 'amountMi
 const datePattern = /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/;
 type Filters = { search: string; reconciliation: string; from: string; to: string; amountMin: string; amountMax: string };
 const validDate = (value: string | null) => value && datePattern.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value ? value : '';
-const validAmount = (value: string | null) => value != null && value.trim() !== '' && Number.isFinite(Number(value)) ? value : '';
+const validAmount = (value: string | null) => value != null && parseMoneyInput(value,{allowNegative:true}) !== null ? value : '';
 const readFilters = (): Filters => ({
   search: readQueryParameter('search') ?? '',
   reconciliation: readQueryParameter('reconciliation', { allowedValues: reconciliationStatuses }) ?? '',
@@ -178,17 +178,17 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
   };
   const filteredTransactions = useMemo(() => {
     const needle = filters.search.trim().toLocaleLowerCase();
-    const minimum = validAmount(filters.amountMin) ? Number(filters.amountMin) : null;
-    const maximum = validAmount(filters.amountMax) ? Number(filters.amountMax) : null;
+    const minimum = validAmount(filters.amountMin) ? moneyToMinorUnits(filters.amountMin) : null;
+    const maximum = validAmount(filters.amountMax) ? moneyToMinorUnits(filters.amountMax) : null;
     return transactions.map((transaction, index) => ({ transaction, index })).filter(({ transaction }) => {
-      const amount = Number(transaction.amount);
+      const amount = moneyToMinorUnits(transaction.amount);
       const date = transaction.transaction_date.slice(0, 10);
       const searchable = [transaction.description, transaction.bank_reference, transaction.amount, formatMoney(transaction.amount, transaction.currency_code), transaction.running_balance];
       return (!needle || searchable.some(value => value?.toLocaleLowerCase().includes(needle)))
         && (!filters.reconciliation || transaction.reconciliation_status === filters.reconciliation)
         && (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to)
-        && (minimum == null || (Number.isFinite(amount) && amount >= minimum))
-        && (maximum == null || (Number.isFinite(amount) && amount <= maximum));
+        && (minimum == null || (amount !== null && amount >= minimum))
+        && (maximum == null || (amount !== null && amount <= maximum));
     }).sort((a, b) => b.transaction.transaction_date.localeCompare(a.transaction.transaction_date) || a.index - b.index).map(({ transaction }) => transaction);
   }, [filters, transactions]);
   const selectedTransaction = filteredTransactions.find(transaction => transaction.id === selectedId) ?? null;
@@ -268,7 +268,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
 
     {canCreateManual && <div className="bank-recon__actions" role="group" aria-label={s.actions}><Button size="sm" onClick={() => setManualOpen(true)}>{s.addManual}</Button></div>}
 
-    {!loading && <WorkspaceToolbar className="bank-recon__toolbar" ariaLabel={s.toolbar} search={<label><span className="bank-recon__sr">{s.searchTransactions}</span><input type="search" value={filters.search} placeholder={s.searchPlaceholder} onChange={event => updateFilter('search', event.target.value)}/></label>} filters={<><label>{s.reconciliation}<select value={filters.reconciliation} onChange={event => updateFilter('reconciliation', event.target.value)}><option value="">{s.allStatuses}</option>{reconciliationStatuses.map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label><label>{s.from}<DateInput value={filters.from} onChange={value => updateFilter('from', value)}/></label><label>{s.to}<DateInput value={filters.to} onChange={value => updateFilter('to', value)}/></label><label>{s.amountMin}<input type="number" step="any" value={filters.amountMin} onChange={event => updateFilter('amountMin', event.target.value)}/></label><label>{s.amountMax}<input type="number" step="any" value={filters.amountMax} onChange={event => updateFilter('amountMax', event.target.value)}/></label></>} resultCount={s.resultCount(filteredTransactions.length)} clearAction={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}/>}
+    {!loading && <WorkspaceToolbar className="bank-recon__toolbar" ariaLabel={s.toolbar} search={<label><span className="bank-recon__sr">{s.searchTransactions}</span><input type="search" value={filters.search} placeholder={s.searchPlaceholder} onChange={event => updateFilter('search', event.target.value)}/></label>} filters={<><label>{s.reconciliation}<select value={filters.reconciliation} onChange={event => updateFilter('reconciliation', event.target.value)}><option value="">{s.allStatuses}</option>{reconciliationStatuses.map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label><label>{s.from}<DateInput value={filters.from} onChange={value => updateFilter('from', value)}/></label><label>{s.to}<DateInput value={filters.to} onChange={value => updateFilter('to', value)}/></label><label>{s.amountMin}<input inputMode="decimal" dir="ltr" value={filters.amountMin} onChange={event => updateFilter('amountMin', event.target.value)}/></label><label>{s.amountMax}<input inputMode="decimal" dir="ltr" value={filters.amountMax} onChange={event => updateFilter('amountMax', event.target.value)}/></label></>} resultCount={s.resultCount(filteredTransactions.length)} clearAction={filtersActive ? <button type="button" onClick={clearFilters}>{s.clearFilters}</button> : undefined}/>}
 
     {loading && transactions.length === 0 && <Group justify="center" py="xl"><Loader size="sm"/></Group>}
     {!loading && transactions.length === 0 && <WorkspaceState kind="empty">{s.empty}</WorkspaceState>}
@@ -289,7 +289,7 @@ export function BankTransactionsView({ canView, canMatch, canReconcile, canCreat
                 <p dir="auto">{tx.description || '—'}{tx.source_kind === 'manual' && <span className="bank-source-badge bank-source-badge--manual" data-source="manual"> {s.manualBadge}</span>}</p>
                 {tx.bank_reference && <small className="bank-transaction-mobile-meta"><span dir="ltr">{tx.bank_reference}</span></small>}
               </div>
-              <span className={`bank-transaction-amount ${Number(tx.amount) < 0 ? 'is-outbound' : 'is-inbound'}`} dir="ltr">{formatAmount(tx.amount, tx.currency_code)}</span>
+              <span className={`bank-transaction-amount ${tx.amount.startsWith('-') ? 'is-outbound' : 'is-inbound'}`} dir="ltr">{formatAmount(tx.amount, tx.currency_code)}</span>
               <span className={`bank-status bank-status--${tx.reconciliation_status} bank-transaction-status`}>{statusLabel(tx.reconciliation_status)}</span>
               <div className="bank-transaction-primary-action">{rowActions(tx)}</div>
             </div>

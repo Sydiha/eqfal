@@ -54,12 +54,12 @@ describe('RecurringInvoices',()=>{
   fireEvent.change(screen.getByLabelText('Start date'),{target:{value:'2031-01-31'}});
   fireEvent.change(screen.getByLabelText('Days until due'),{target:{value:'30'}});
   fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Service'}});
-  fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'1000.00'}});
+  fireEvent.change(screen.getByLabelText('Unit price'),{target:{value:'1,000.50'}});
   fireEvent.change(screen.getByLabelText('VAT rate %'),{target:{value:'15'}});
   fireEvent.click(screen.getByRole('button',{name:'Save schedule'}));
   await waitFor(()=>expect(posts(f)).toHaveLength(1));
   const body=JSON.parse(String((posts(f)[0]![1] as RequestInit).body));
-  expect(body).toEqual({direction:'sales',name:'Rent',counterparty_id:CP,frequency:'monthly',start_date:'2031-01-31',end_date:null,due_days:30,notes:null,lines:[{description:'Service',quantity:'1',unit_price:'1000.00',vat_rate:'15',vat_treatment:'standard'}]});
+  expect(body).toEqual({direction:'sales',name:'Rent',counterparty_id:CP,frequency:'monthly',start_date:'2031-01-31',end_date:null,due_days:30,notes:null,lines:[{description:'Service',quantity:'1',unit_price:'1000.50',vat_rate:'15',vat_treatment:'standard'}]});
  });
  it('purchase schedules require an explicit input-VAT recovery choice per standard line and use suppliers',async()=>{
   mock([]);

@@ -31,6 +31,8 @@ export function assertManualCategorySettleable(tx: { source_kind?: string; manua
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AMOUNT_RE = /^\d{1,13}(?:\.\d{1,2})?$/;
+const amountCents = (value: string) => { const [whole, fraction = ''] = value.split('.'); return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')); };
+const normalizeAmount = (value: string) => { const [whole, fraction = ''] = value.split('.'); return `${whole}.${fraction.padEnd(2, '0')}`; };
 const KEYS = ['bank_account_id', 'transaction_date', 'direction', 'category', 'amount', 'description', 'reference', 'counterparty', 'supporting_document_id', 'confirm_duplicate'];
 
 export class ManualBankError extends Error {
@@ -55,7 +57,7 @@ export function parseManualBody(body: unknown): Input | ManualBankError {
   if (x.direction !== 'incoming' && x.direction !== 'outgoing') return bad('Invalid direction');
   if (typeof x.category !== 'string') return bad('Invalid category');
   const amount = typeof x.amount === 'number' ? String(x.amount) : x.amount;
-  if (typeof amount !== 'string' || !AMOUNT_RE.test(amount) || Number(amount) <= 0) return bad('Amount must be a positive number with at most two decimals');
+  if (typeof amount !== 'string' || !AMOUNT_RE.test(amount) || amountCents(amount) <= 0n) return bad('Amount must be a positive number with at most two decimals');
   const description = optText(x.description, 500);
   if (!description) return bad('Description is required');
   const reference = optText(x.reference, 100); const counterparty = optText(x.counterparty, 200);
@@ -82,7 +84,7 @@ export class ManualBankTransactionService {
     if ((input.direction === 'outgoing' && INCOMING_ONLY.includes(input.category)) || (input.direction === 'incoming' && OUTGOING_ONLY.includes(input.category))) {
       throw new ManualBankError(400, 'DIRECTION_CATEGORY_MISMATCH', 'Direction is not compatible with the category');
     }
-    const signed = (input.direction === 'outgoing' ? '-' : '') + Number(input.amount).toFixed(2);
+    const signed = (input.direction === 'outgoing' ? '-' : '') + normalizeAmount(input.amount);
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');

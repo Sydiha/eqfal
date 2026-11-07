@@ -1,7 +1,7 @@
 import {FormEvent,useCallback,useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatDisplayDate} from '../date-format';
-import { formatMoney } from '../money-format';
+import { formatMoney, normalizeMoneyInput, parseMoneyInput } from '../money-format';
 
 /**
  * External credit / debit notes registered against one approved invoice. EQFAL registers notes issued elsewhere; it never issues them.
@@ -13,10 +13,10 @@ type Form={adjustment_type:'credit'|'debit';external_number:string;adjustment_da
 const TREATMENTS=['standard','zero_rated','exempt','out_of_scope'] as const;
 const emptyLine=():FormLine=>({description:'',vat_treatment:'standard',vat_rate:'15',net_amount:'',vat_recoverability:'',vat_recoverable_percent:''});
 const emptyForm=():Form=>({adjustment_type:'credit',external_number:'',adjustment_date:'',reason:'',lines:[emptyLine()]});
-const toPayload=(f:Form,purchase:boolean)=>({adjustment_type:f.adjustment_type,external_number:f.external_number.trim(),adjustment_date:f.adjustment_date,reason:f.reason.trim(),lines:f.lines.map(l=>({description:l.description.trim(),vat_treatment:l.vat_treatment,vat_rate:l.vat_treatment==='standard'?l.vat_rate:'0',net_amount:l.net_amount,...(purchase&&l.vat_treatment==='standard'?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
+const toPayload=(f:Form,purchase:boolean)=>({adjustment_type:f.adjustment_type,external_number:f.external_number.trim(),adjustment_date:f.adjustment_date,reason:f.reason.trim(),lines:f.lines.map(l=>({description:l.description.trim(),vat_treatment:l.vat_treatment,vat_rate:l.vat_treatment==='standard'?l.vat_rate:'0',net_amount:normalizeMoneyInput(l.net_amount,{allowZero:false})!,...(purchase&&l.vat_treatment==='standard'?{vat_recoverability:l.vat_recoverability,...(l.vat_recoverability==='partially_recoverable'?{vat_recoverable_percent:l.vat_recoverable_percent}:{})}:{})}))});
 
 export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,canVoid=false,onChanged,onUnauthorized}:{invoiceId:string;purchase:boolean;currency:string;canAdjust:boolean;canApprove:boolean;canVoid?:boolean;onChanged:()=>void;onUnauthorized:()=>void}){
- const{t}=useTranslation();
+ const{t,i18n}=useTranslation();
  const[notes,setNotes]=useState<Note[]|null>(null),[loadError,setLoadError]=useState(false),[form,setForm]=useState<Form|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[cancelling,setCancelling]=useState<{id:string;reason:string}|null>(null),[voiding,setVoiding]=useState<{id:string;reason:string}|null>(null);
  const money=(v:string)=>formatMoney(v,'0.00');
  const errorText=(code?:string,status?:number)=>{if(!code&&status===403)code='INVOICE_FORBIDDEN';const key=`invoiceNotes.errors.${code}`;const text=t(key);return code&&text!==key?text:t('invoiceNotes.errors.generic')};
@@ -33,7 +33,7 @@ export function InvoiceNotes({invoiceId,purchase,currency,canAdjust,canApprove,c
    await load();onChanged();return true;
   }catch{setError(errorText(undefined));return false;}finally{setBusy(false);}
  };
- const submit=async(event:FormEvent)=>{event.preventDefault();if(!form)return;if(await send(`/api/invoices/${invoiceId}/adjustments`,'POST',toPayload(form,purchase)))setForm(null);};
+ const submit=async(event:FormEvent)=>{event.preventDefault();if(!form)return;if(form.lines.some(line=>parseMoneyInput(line.net_amount,{maxWholeDigits:16,allowZero:false})===null)){setError(i18n.language.startsWith('ar')?'أدخل صافي مبلغ صحيحاً أكبر من صفر وبحد أقصى منزلتين عشريتين.':'Enter a valid net amount greater than zero with at most two decimal places.');return;}if(await send(`/api/invoices/${invoiceId}/adjustments`,'POST',toPayload(form,purchase)))setForm(null);};
  const setLine=(i:number,patch:Partial<FormLine>)=>setForm(f=>f&&{...f,lines:f.lines.map((l,x)=>x===i?{...l,...patch}:l)});
  return <section className="sales-invoices__finance" aria-label={t('invoiceNotes.title')} data-testid="invoice-notes"><h4>{t('invoiceNotes.title')}</h4>
   <p className="sales-invoices__hint">{t('invoiceNotes.hint')}</p>

@@ -52,6 +52,23 @@ describe('PersonalPayments', () => {
     for (const name of ['New personal payment', 'Submit', 'Approve', 'Reject', 'Reimburse', 'Edit', 'Delete']) expect(screen.queryByRole('button', { name })).toBeNull();
   });
 
+  it('normalizes grouped personal payment amounts before saving', async () => {
+    const calls=stubFetch({'/lookups':()=>new Response(JSON.stringify({payers:[{id:'y1',display_name:'Manager M',is_partner:false}],documents:[{id:'d1',original_filename:'receipt.pdf',total_amount:'1000.50',document_date:'2026-03-10'}],expense_accounts:[{id:'a1',code:'5100',name:'Meals'}]}))});
+    renderIt(ALL);
+    await screen.findByText('Client lunch');
+    fireEvent.click(screen.getByRole('button',{name:'New personal payment'}));
+    fireEvent.change(await screen.findByLabelText('Payer'),{target:{value:'y1'}});
+    fireEvent.change(screen.getByLabelText('Expense document'),{target:{value:'d1'}});
+    fireEvent.change(screen.getByLabelText('Expense account'),{target:{value:'a1'}});
+    fireEvent.change(screen.getByLabelText('Payment date'),{target:{value:'2026-03-12'}});
+    fireEvent.change(screen.getByLabelText('Amount (SAR)'),{target:{value:'1,000.50'}});
+    fireEvent.change(screen.getByLabelText('Purpose'),{target:{value:'Travel'}});
+    fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
+    await waitFor(()=>expect(calls.some(c=>c.url==='/api/personal-payments'&&c.init?.method==='POST')).toBe(true));
+    const call=calls.find(c=>c.url==='/api/personal-payments'&&c.init?.method==='POST')!;
+    expect(JSON.parse(String(call.init?.body))).toMatchObject({amount:'1000.50',purpose:'Travel'});
+  });
+
   it('shows each action only with its own capability', async () => {
     stubFetch();
     const { unmount } = renderIt(['personal_payment.view', 'personal_payment.submit']);

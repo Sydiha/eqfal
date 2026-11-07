@@ -118,13 +118,13 @@ describe('SettlementPanel',()=>{
       const {st}=makeServer();
       renderPanel({canView:true,canSettle:true,onUnauthorized:vi.fn()});
       await select();
-      expect(amountInput().value).toBe('100');
+      expect(amountInput().value).toBe('100.00');
       fireEvent.change(amountInput(),{target:{value:'40'}});
       fireEvent.click(screen.getByRole('button',{name:'Record settlement'}));
       await waitFor(()=>expect(metric('Settled')).toBe('40.00'));
       expect(metric('Remaining')).toBe('60.00');
       expect(metric('Payment status')).toBe('Partially paid');
-      expect(amountInput().value).toBe('60');
+      expect(amountInput().value).toBe('60.00');
       expect(st.log.filter(l=>l==='GET /api/bank-transactions').length).toBe(2);
       expect(st.log.filter(l=>l.endsWith('/match-candidates')).length).toBe(2);
       expect(posts(st.log)).toBe(1);
@@ -144,12 +144,12 @@ describe('SettlementPanel',()=>{
       const {st}=makeServer({settled:4000});
       renderPanel({canView:true,canSettle:true,onUnauthorized:vi.fn()});
       await select();
-      expect(amountInput().value).toBe('60');
+      expect(amountInput().value).toBe('60.00');
       fireEvent.change(screen.getByLabelText('Deletion reason'),{target:{value:'mistake'}});
       fireEvent.click(screen.getByRole('button',{name:'Delete settlement'}));
       await waitFor(()=>expect(metric('Payment status')).toBe('Unpaid'));
       expect(metric('Remaining')).toBe('100.00');
-      expect(amountInput().value).toBe('100');
+      expect(amountInput().value).toBe('100.00');
       expect(st.log.filter(l=>l.startsWith('DELETE ')).length).toBe(1);
     });
 
