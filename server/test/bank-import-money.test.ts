@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeBankImportMoney } from '../src/modules/banking/bank.router';
+import { normalizeBankImportDebitCredit, normalizeBankImportMoney } from '../src/modules/banking/bank.router';
 
 describe('bank statement monetary normalization', () => {
   it.each([
@@ -25,5 +25,14 @@ describe('bank statement monetary normalization', () => {
   it('rejects XLSX numeric cells whose cents exceed safe integer precision', () => {
     expect(normalizeBankImportMoney(1_234_567.89)).toBe('1234567.89');
     expect(normalizeBankImportMoney(90_071_992_547_409.91)).toBeNull();
+  });
+
+  it.each([
+    { side: 'debit grouping', debit: '1,00', credit: '250' },
+    { side: 'credit grouping', debit: '250', credit: '1,00' },
+    { side: 'debit precision', debit: '1,000.999', credit: '250' },
+    { side: 'credit precision', debit: '250', credit: '1,000.999' },
+  ])('rejects malformed nonblank $side amount when the opposite side is valid', ({ debit, credit }) => {
+    expect(normalizeBankImportDebitCredit(debit, credit)).toEqual({ amount: null, error: 'Missing or invalid amount' });
   });
 });
