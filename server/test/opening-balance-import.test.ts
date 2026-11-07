@@ -70,6 +70,30 @@ beforeEach(() => {
 });
 
 describe('T7.2 opening-balance file preview', () => {
+  it('summarizes large numeric balances and a one-cent difference exactly', async () => {
+    setCtx(['opening_balance.view']);
+    client.query
+      .mockImplementationOnce(async (sql: string) => {
+      if (sql.startsWith('SELECT id,start_date')) return { rows: [{ id: FY, start_date: '2026-01-01', end_date: '2026-12-31' }] };
+      throw new Error(`unexpected query ${sql}`);
+    })
+      .mockImplementationOnce(async (sql: string) => {
+      if (sql.includes('FROM opening_balance_reviews')) return { rows: [{ id: 'r1', status: 'draft' }] };
+      throw new Error(`unexpected query ${sql}`);
+    })
+      .mockImplementationOnce(async (sql: string) => {
+      if (sql.includes('FROM opening_balance_items')) return { rows: [
+        { amount: '9999999999999999.99', balance_side: 'debit', confidence: 'high' },
+        { amount: '0.01', balance_side: 'debit', confidence: 'medium' },
+        { amount: '9999999999999999.99', balance_side: 'credit', confidence: 'low' },
+      ] };
+      throw new Error(`unexpected query ${sql}`);
+    });
+    const res = await request(app).get(`/api/opening-balances/${FY}`);
+    expect(res.status).toBe(200);
+    expect(res.body.summary).toEqual({ debit: '10000000000000000.00', credit: '9999999999999999.99', difference: '0.01', confidence: { high: 1, medium: 1, low: 1 } });
+  });
+
   it('requires opening_balance.item.create', async () => {
     setCtx(['opening_balance.view']);
     expect((await csv('Code,Debit,Credit\n1101,5,\n3101,,5\n')).status).toBe(403);

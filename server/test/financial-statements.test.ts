@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FinancialStatementsService, FinancialStatementUnmappedError, FinancialStatementValidationError } from '../src/modules/accounting/financial-statements';
 
 const year={start_date:'2026-01-01',end_date:'2026-12-31'};
-const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,opening_debit:'0',opening_credit:'0',...overrides});
+const row=(statement_category:string,debit:string,credit:string,overrides:Record<string,unknown>={})=>({account_id:'a',code:'1000',name:'Account',account_type:'asset',statement_category,is_contra:false,debit,credit,opening_debit:'0',opening_credit:'0',cutover_debit:'0',cutover_credit:'0',...overrides});
 const database=(rows:unknown[])=>({query:vi.fn().mockResolvedValueOnce({rows:[year]}).mockResolvedValueOnce({rows})});
 const snapshotDatabase=(results:unknown[][])=>{
   const pending=[...results];
@@ -36,6 +36,17 @@ describe('Phase 5B financial statements',()=>{
     expect(result.accounting_equation.balanced).toBe(true);
     expect(db.query.mock.calls[1]![0]).toContain("j.status='posted'");
     expect(db.query.mock.calls[1]![0]).toContain('l.company_id=$1 AND j.company_id=$1');
+  });
+
+  it('keeps supported large totals and cent-level reconciliation exact',async()=>{
+    const db=database([
+      row('current_asset','9999999999999999.99','0'),
+      row('current_asset','0.01','0',{account_id:'asset-cent'}),
+      row('equity','0','9999999999999999.99',{account_id:'equity',account_type:'equity'}),
+    ]);
+    const result=await new FinancialStatementsService(db as never).financialPosition('company','year');
+    expect(result.total_assets).toBe('10000000000000000.00');
+    expect(result.accounting_equation).toEqual({assets:'10000000000000000.00',liabilities_and_equity:'9999999999999999.99',difference:'0.01',balanced:false});
   });
 
   it('keeps profit or loss on explicit inclusive from/to boundaries',async()=>{

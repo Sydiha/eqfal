@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { loadValidMappings } from '../invoices/invoice-account-mapping.service';
 import { resolveBankLedgerAccount } from './personal-payment-posting';
+import { toCents } from '../banking/bank-reconciliation-core';
 
 /**
  * Accounting contract of an invoice-backed obligation settlement (supplier payment, customer receipt, government payment).
@@ -68,8 +69,8 @@ export async function planObligationSettlementJournal(client: Pick<PoolClient, '
     throw new SettlementJournalBlockedError('SETTLEMENT_JOURNAL_ADJUSTMENTS_EXIST', 'The invoice has credit/debit notes; prepare this settlement journal manually');
   }
 
-  const bankCents = BigInt(Math.round(Number(row.bank_amount) * 100));
-  const settleCents = BigInt(Math.round(Number(row.amount) * 100));
+  const bankCents = toCents(row.bank_amount);
+  const settleCents = toCents(row.amount);
   const absBank = bankCents < 0n ? -bankCents : bankCents;
   const directionOk = row.direction === 'payable' ? bankCents < 0n : bankCents > 0n;
   if (!directionOk || absBank !== settleCents) {
