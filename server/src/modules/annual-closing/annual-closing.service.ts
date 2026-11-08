@@ -146,7 +146,22 @@ export class AnnualClosingService {
       COUNT(*) FILTER (WHERE p.period_start >= $2 AND p.period_end <= $3 AND (p.status <> 'closed' OR r.status IS NULL OR r.status <> 'filed'))::text incomplete,
       COUNT(*) FILTER (WHERE p.period_start <= $3 AND p.period_end >= $2 AND NOT (p.period_start >= $2 AND p.period_end <= $3))::text boundary
       FROM vat_periods p LEFT JOIN vat_returns r ON r.vat_period_id=p.id AND r.company_id=p.company_id WHERE p.company_id=$1`, [companyId, start, end])).rows[0]!;
-    const generalSql = `SELECT
+    const generalSql = `WITH effective_obligation_settlements AS (
+      SELECT obligation_id, company_id, SUM(amount) settled
+      FROM (
+        SELECT s.obligation_id, s.company_id, s.amount
+        FROM obligation_settlements s
+        JOIN bank_transactions t ON t.id=s.bank_transaction_id AND t.company_id=s.company_id
+        WHERE s.company_id=$1 AND t.transaction_date<=$3
+        UNION ALL
+        SELECT o.id obligation_id, s.company_id, s.amount
+        FROM document_settlements s
+        JOIN bank_transactions t ON t.id=s.bank_transaction_id AND t.company_id=s.company_id
+        JOIN obligations o ON o.company_id=s.company_id AND o.document_id=s.document_id AND o.source_type='document'
+        WHERE s.company_id=$1 AND t.transaction_date<=$3
+      ) settlements
+      GROUP BY obligation_id, company_id
+    ) SELECT
       (SELECT COUNT(*) FROM bank_transactions t WHERE t.company_id=$1 AND t.transaction_date BETWEEN $2 AND $3 AND ${UNRESOLVED_BANK_TRANSACTION_SQL})::text banking,
       (SELECT COUNT(*) FROM documents d WHERE d.company_id=$1 AND d.document_date BETWEEN $2 AND $3 AND (
         d.status IN ('uploaded','needs_review','incomplete') OR (d.status='approved' AND d.document_type IN ('sale','purchase','expense') AND NOT (
@@ -156,8 +171,8 @@ export class AnnualClosingService {
         ))))::text documents,
       ((SELECT COUNT(*) FROM obligations o WHERE o.company_id=$1 AND ${obligationDate} AND NOT o.is_cancelled AND o.verification_status='unconfirmed')
         + (SELECT COUNT(*) FROM personal_payments pp WHERE pp.company_id=$1 AND pp.status IN ('draft','submitted') AND pp.accounting_date BETWEEN $2 AND $3))::text obligations,
-      (SELECT COALESCE(SUM(GREATEST(o.original_amount+obligation_adjustment_net(o.id,o.company_id,$3)-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN (SELECT obligation_id,company_id,SUM(amount) settled FROM obligation_settlements WHERE company_id=$1 AND created_at::date<=$3 GROUP BY obligation_id,company_id) s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='receivable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_receivables,
-      (SELECT COALESCE(SUM(GREATEST(o.original_amount+obligation_adjustment_net(o.id,o.company_id,$3)-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN (SELECT obligation_id,company_id,SUM(amount) settled FROM obligation_settlements WHERE company_id=$1 AND created_at::date<=$3 GROUP BY obligation_id,company_id) s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='payable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_payables,
+      (SELECT COALESCE(SUM(GREATEST(o.original_amount+obligation_adjustment_net(o.id,o.company_id,$3)-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN effective_obligation_settlements s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='receivable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_receivables,
+      (SELECT COALESCE(SUM(GREATEST(o.original_amount+obligation_adjustment_net(o.id,o.company_id,$3)-COALESCE(s.settled,0),0)),0) FROM obligations o LEFT JOIN effective_obligation_settlements s ON s.obligation_id=o.id AND s.company_id=o.company_id WHERE o.company_id=$1 AND o.direction='payable' AND o.recognized_on<=$3 AND NOT o.is_cancelled)::text open_payables,
       (SELECT COUNT(*) FROM partner_ownership_periods p WHERE p.company_id=$1 AND p.verification_status='unconfirmed' AND (p.effective_from IS NULL OR p.effective_from<=$3) AND (p.effective_to IS NULL OR p.effective_to>=$2))::text partner_unconfirmed,
       (SELECT COUNT(*) FROM partner_ownership_periods a JOIN partner_ownership_periods b ON b.company_id=a.company_id AND b.partner_id=a.partner_id AND b.id>a.id WHERE a.company_id=$1 AND a.verification_status='confirmed' AND b.verification_status='confirmed' AND COALESCE(a.effective_to,'infinity'::date)>=b.effective_from AND COALESCE(b.effective_to,'infinity'::date)>=a.effective_from AND a.effective_from<=$3 AND b.effective_from<=$3${partnerOverlapLowerBound})::text partner_overlaps,
       (SELECT COUNT(*) FROM partners p WHERE p.company_id=$1 AND p.is_active AND NOT EXISTS (SELECT 1 FROM partner_ownership_periods h WHERE h.company_id=p.company_id AND h.partner_id=p.id AND h.verification_status='confirmed' AND h.effective_from<=$3 AND (h.effective_to IS NULL OR h.effective_to>=$2)))::text partner_missing,
