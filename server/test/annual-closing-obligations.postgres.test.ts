@@ -120,5 +120,24 @@ describeDatabase('annual obligations as-of cutoff (PostgreSQL)', () => {
     expect(ledger).toEqual({ receivable: '800.00', payable: '700.00' });
     expect(summary.open_receivable_balance).toBe(ledger.receivable);
     expect(summary.open_payable_balance).toBe(ledger.payable);
+
+    // Operational settlement state updates immediately, but close remains blocked until its source journal is posted.
+    await directSettlement(arDirect, '2025-07-01', '50.00');
+    const pendingReadiness = await new AnnualClosingService(h.db).readiness(company, fy);
+    expect(pendingReadiness.domains.receivables_payables!.summary.open_receivable_balance).toBe('750.00');
+    expect(pendingReadiness.domains.ledger!.summary.unposted_operational_sources).toBe(1);
+    const client = await h.db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM fiscal_years WHERE id=$1 AND company_id=$2 FOR UPDATE', [fy, company]);
+      const { getFiscalYearCloseReadiness, loadFiscalYearBounds, lockFiscalYearCloseScope } = await import('../src/modules/fiscal-years/fiscal-year-close-readiness');
+      const year = await loadFiscalYearBounds(client, company, fy);
+      await lockFiscalYearCloseScope(client, company, year);
+      const close = await getFiscalYearCloseReadiness(client, company, year);
+      expect(close.blockers.map(item => item.code)).toContain('unposted_operational_sources');
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
   });
 });
