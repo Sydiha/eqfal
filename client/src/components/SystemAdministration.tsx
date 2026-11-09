@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { roleDisplayName } from '../labels/displayLabels';
 import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/apiError';
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
@@ -190,7 +191,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized, onAccessCh
               <td>{companyLabel({ name: m.company_name, name_ar: m.company_name_ar })}{!m.company_is_active && <small> · {t('systemAdmin.companyDisabled')}</small>}</td>
               <td><select aria-label={`${t('access.role')} ${companyLabel({ name: m.company_name, name_ar: m.company_name_ar })}`} value={m.role_id ?? ''} disabled={busy || !m.company_is_active} onChange={(event) => event.target.value && changeRole(m, event.target.value)}>
                 <option value="" disabled>{t('access.noRole')}</option>
-                {(rolesByCompany[m.company_id] ?? []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                {(rolesByCompany[m.company_id] ?? []).map((role) => <option key={role.id} value={role.id}>{roleDisplayName(role.name, t)}</option>)}
               </select></td>
               <td><StatusBadge status={m.is_active ? 'open' : 'closed'}>{t(m.is_active ? 'access.active' : 'access.inactive')}</StatusBadge></td>
               <td><button className="acc-ghost" disabled={busy || !m.company_is_active} onClick={() => void mutate(() => request(`/api/admin/memberships/${m.id}/active`, json('PATCH', { is_active: !m.is_active }), onUnauthorized))}>{t(m.is_active ? 'access.disable' : 'access.enable')}</button></td>
@@ -202,7 +203,7 @@ export function SystemAdministration({ currentUserId, onUnauthorized, onAccessCh
             </select></label>
             <label>{t('access.role')}<select value={addRoleId} disabled={busy || !addCompanyId} onChange={(event) => setAddRoleId(event.target.value)}>
               <option value="">{t('access.noRole')}</option>
-              {(rolesByCompany[addCompanyId] ?? []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+              {(rolesByCompany[addCompanyId] ?? []).map((role) => <option key={role.id} value={role.id}>{roleDisplayName(role.name, t)}</option>)}
             </select></label>
             <button type="submit" className="acc-primary" disabled={busy || !addCompanyId}>{t('systemAdmin.addAccess')}</button>
           </form>

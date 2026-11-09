@@ -6,7 +6,8 @@ const ar = {
     switchLanguage: 'Switch to English',
     loading: 'جارٍ التحميل…',
   },
-  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', monthlyClose:'الإقفال الشهري', annualClosing:'الإقفال السنوي', vat:'ضريبة القيمة المضافة', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', obligations:'الذمم', sales:'المبيعات', purchases:'المشتريات', invoiceMappings: 'ربط حسابات الفواتير', accounting:'المحاسبة', assets:'الأصول الثابتة', access:'المستخدمون والصلاحيات',companies:'الشركات', auditLog:'سجل التدقيق', account:'إعدادات الحساب', openMenu: 'فتح قائمة التنقل' },
+  nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', monthlyClose:'الإقفال الشهري', annualClosing:'الإقفال السنوي', vat:'ضريبة القيمة المضافة', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', obligations:'الذمم', sales:'المبيعات', purchases:'المشتريات',salesInvoices:'فواتير المبيعات',purchaseInvoices:'فواتير المشتريات', invoiceMappings: 'ربط حسابات الفواتير', accounting:'المحاسبة', assets:'الأصول الثابتة', access:'المستخدمون والصلاحيات',companies:'الشركات', auditLog:'سجل التدقيق', account:'إعدادات الحساب', openMenu: 'فتح قائمة التنقل', historicalRecords:'السجلات التاريخية', sourceAuthority:'صلاحية مصدر الدفتر', companyProfile:'الملف المحاسبي والضريبي', openingBalances:'الأرصدة الافتتاحية', periodicAdjustments:'الاستحقاقات والمقدمات' },
+  shell: { searchDocuments:'بحث في المستندات', fiscalYear:'السنة المالية', selectYear:'اختر السنة', period:'الفترة', allPeriods:'السنة كاملة', selectPeriod:'اختر الفترة', attentionItems:'بانتظارك: {{count}} عنصر', attention:'المهام بانتظارك', logout:'خروج', groupInvoices:'الفواتير', groupOperations:'التشغيل', groupAccounting:'المحاسبة', groupClosing:'الإقفال', groupAdministration:'الإدارة' },
   home: {
     workspace: 'مساحة عمل الشركة',
     welcome: 'مرحبًا بعودتك',

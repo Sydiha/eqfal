@@ -4,6 +4,7 @@ import { ApiError, apiErrorMessage, parseApiError, toApiError } from '../api/api
 import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import { capabilityLabel, langOf } from '../labels/capabilityLabels';
+import { roleDisplayName } from '../labels/displayLabels';
 
 export type EffectiveSource = 'role' | 'full_access_wildcard' | 'system_admin_global' | 'none';
 export interface UserCompanyAccess {
@@ -70,7 +71,7 @@ export function UserAccessDetails({ membershipId, email, onClose, onUnauthorized
                   <StatusBadge status={c.is_active ? 'open' : 'closed'}>{t(c.is_active ? 'access.active' : 'access.inactive')}</StatusBadge>
                 </div>
                 <dl className="acc-details-grid">
-                  <dt>{t('access.role')}</dt><dd>{c.role ? <>{c.role.name}{c.role.is_full_access && <small> · {t('access.fullAccess')}</small>}</> : t('access.noRole')}</dd>
+                  <dt>{t('access.role')}</dt><dd>{c.role ? <>{roleDisplayName(c.role.name, t)}{c.role.is_full_access && <small> · {t('access.fullAccess')}</small>}</> : t('access.noRole')}</dd>
                   <dt>{t('access.details.roleCapabilities')}</dt><dd>{c.role?.is_full_access ? t('access.details.wildcard') : t('access.capabilityCount', { count: c.role_capabilities.length })}</dd>
                   <dt>{t('access.details.effective')}</dt><dd>{t(`access.details.source.${c.effective_source}`, { count: c.effective_capabilities.length })}</dd>
                 </dl>

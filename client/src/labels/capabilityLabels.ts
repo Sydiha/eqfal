@@ -16,6 +16,9 @@ const VERBS: Record<string, Pair> = {
   import: ['Import', 'استيراد'], match: ['Match', 'مطابقة'], reconcile: ['Reconcile', 'تسوية'], upload: ['Upload', 'رفع'],
   grant: ['Grant', 'منح'], revoke: ['Revoke', 'سحب'], assign: ['Assign', 'تعيين'], finalize: ['Finalize', 'اعتماد نهائي لـ'],
   handoff: ['Hand off', 'تسليم'], file: ['File', 'تقديم'], remove: ['Remove', 'إزالة'], update: ['Update', 'تحديث'],
+  reverse: ['Reverse', 'عكس'],
+  prepare: ['Prepare', 'إعداد'],
+  adjust: ['Adjust', 'تعديل'], void: ['Void', 'إلغاء'],
 };
 const OBJECTS: Record<string, Pair> = {
   access: ['access administration', 'إدارة الصلاحيات'],
@@ -31,17 +34,19 @@ const OBJECTS: Record<string, Pair> = {
   asset: ['fixed assets', 'الأصول الثابتة'], 'asset.estimate_change': ['asset estimate changes', 'تغييرات تقدير الأصول'],
   'asset.policy': ['depreciation policies', 'سياسات الإهلاك'],
   audit: ['audit log', 'سجل التدقيق'],
-  bank: ['bank data', 'بيانات البنك'], 'bank.account': ['bank accounts', 'الحسابات البنكية'],
+  bank: ['bank data', 'بيانات البنك'], 'bank.account': ['bank accounts', 'الحسابات البنكية'], 'bank.import': ['bank imports', 'استيرادات البنك'],
   company: ['companies', 'الشركات'], 'company.status': ['company status', 'حالة الشركة'],
   company_accounting_profile: ['company accounting profile', 'الملف المحاسبي للشركة'],
   counterparty: ['counterparties', 'الأطراف المقابلة'],
+  invoice: ['invoices', 'الفواتير'], 'invoice.adjust': ['invoice adjustments', 'تعديلات الفواتير'],
   custody: ['custody advances', 'العهد'], document: ['documents', 'المستندات'],
-  fiscal_year: ['fiscal years', 'السنوات المالية'], monthly_close: ['monthly closing', 'الإقفال الشهري'],
+  fiscal_year: ['fiscal years', 'السنوات المالية'], 'fiscal_year.carryforward': ['fiscal year carryforwards', 'ترحيلات السنة المالية'], monthly_close: ['monthly closing', 'الإقفال الشهري'],
+  historical: ['historical records', 'السجلات التاريخية'],
   obligation: ['obligations', 'الالتزامات'], 'obligation.settlement': ['obligation settlements', 'تسويات الالتزامات'],
   opening_balance: ['opening balances', 'الأرصدة الافتتاحية'], 'opening_balance.item': ['opening balance items', 'بنود الأرصدة الافتتاحية'],
   partner: ['partners', 'الشركاء'], 'partner.ownership': ['partner ownership', 'ملكية الشركاء'],
   periodic_adjustment: ['periodic adjustments', 'التسويات الدورية'], report: ['reports', 'التقارير'],
-  tax_workpaper: ['tax working papers', 'أوراق العمل الضريبية'], 'tax_workpaper.adjustment': ['tax working paper adjustments', 'تعديلات أوراق العمل الضريبية'],
+  tax_workpaper: ['tax working papers', 'أوراق العمل الضريبية'], 'tax_workpaper.adjustment': ['tax working paper adjustments', 'تعديلات أوراق العمل الضريبية'], 'tax_workpaper.adjust': ['tax working paper adjustments', 'تعديلات أوراق العمل الضريبية'],
   vat: ['VAT', 'ضريبة القيمة المضافة'], wht_review: ['withholding tax reviews', 'مراجعات الضريبة المقتطعة'],
 };
 /** Group headings shown above related capabilities (first ID segment). */
@@ -53,6 +58,8 @@ const GROUPS: Record<string, Pair> = {
   monthly_close: ['Monthly closing', 'الإقفال الشهري'], obligation: ['Obligations', 'الالتزامات'], opening_balance: ['Opening balances', 'الأرصدة الافتتاحية'],
   partner: ['Partners', 'الشركاء'], periodic_adjustment: ['Periodic adjustments', 'التسويات الدورية'], report: ['Reports', 'التقارير'],
   tax_workpaper: ['Tax working papers', 'أوراق العمل الضريبية'], vat: ['VAT', 'ضريبة القيمة المضافة'], wht_review: ['Withholding tax reviews', 'مراجعات الضريبة المقتطعة'],
+  source_authority: ['Ledger source authority', 'صلاحية مصدر الدفتر'], invoice: ['Invoices', 'الفواتير'], payment: ['Payments', 'المدفوعات'], personal_payment: ['Personal payments', 'المدفوعات الشخصية'],
+  historical: ['Historical records', 'السجلات التاريخية'], eqfal: ['EQFAL operations', 'عمليات إقفال'],
 };
 /** Whole-ID overrides where composition would read poorly. */
 const OVERRIDES: Record<string, Pair> = {
@@ -75,6 +82,8 @@ const OVERRIDES: Record<string, Pair> = {
   'bank.reconciliation.settings': ['Activate bank reconciliation checks', 'تفعيل فحوصات المطابقة البنكية'],
   'obligation.settle': ['Settle obligations', 'تسوية الالتزامات'], 'invoice.create': ['Create invoices', 'إنشاء الفواتير'],
   'invoice.mapping.view': ['View invoice account mappings', 'عرض ربط حسابات الفواتير'], 'invoice.mapping.manage': ['Manage invoice account mappings (also needs view)', 'إدارة ربط حسابات الفواتير (يتطلب صلاحية العرض أيضًا)'],
+  'invoice.adjust_approve': ['Approve invoice adjustments', 'اعتماد تعديلات الفواتير'], 'invoice.adjust_void': ['Void invoice adjustments', 'إلغاء تعديلات الفواتير'],
+  'invoice.recurring': ['Manage recurring invoices', 'إدارة الفواتير المتكررة'],
   'fiscal_year.monthly_close_policy.manage': ['Change the monthly closing policy of a fiscal year', 'تغيير سياسة الإقفال الشهري للسنة المالية'],
   'payment.settle': ['Settle payments', 'تسوية الدفعات'],
   'partner.transaction.view': ['View partner transactions and ledgers', 'عرض معاملات الشركاء وكشوفهم'],
@@ -90,12 +99,21 @@ const OVERRIDES: Record<string, Pair> = {
   'personal_payment.audit.view': ['View personal payment history and journals', 'عرض سجل المدفوعات الشخصية وقيودها'],
   'personal_payment.payer.manage': ['Manage personal payers', 'إدارة الدافعين الشخصيين'],
   'document.upload': ['Upload documents', 'رفع المستندات'], 'document.submit': ['Submit documents for review', 'إرسال المستندات للمراجعة'],
+  'source_authority.activate': ['Activate ledger source authority', 'تفعيل صلاحية مصدر الدفتر'],
+  'source_authority.manage': ['Manage ledger source authority', 'إدارة صلاحية مصدر الدفتر'],
+  'source_authority.view': ['View ledger source authority', 'عرض صلاحية مصدر الدفتر'],
+  'source_authority.supplement_approve': ['Approve historical supplements', 'اعتماد الملاحق التاريخية'],
+  'source_authority.supplement_manage': ['Manage historical supplements', 'إدارة الملاحق التاريخية'],
+  'access.full_access.grant': ['Grant full access', 'منح صلاحية الوصول الكامل'],
+  'eqfal.adjustment_void': ['Void EQFAL adjustments', 'إلغاء تسويات إقفال'],
+  'eqfal.asset_estimate_change': ['Manage asset estimate changes', 'إدارة تغييرات تقديرات الأصول'],
+  'eqfal.asset_policy_sync': ['Synchronize asset policies', 'مزامنة سياسات الأصول'],
 };
 
 const humanize = (id: string) => id.replace(/[._]+/g, ' ');
 export function capabilityGroupKey(id: string): string { return id.split('.')[0]; }
 export function capabilityGroupLabel(group: string, lang: Lang): string {
-  const pair = GROUPS[group]; return pair ? pick(pair, lang) : humanize(group);
+  const pair = GROUPS[group]; return pair ? pick(pair, lang) : lang === 'ar' ? `صلاحيات أخرى [${group}]` : humanize(group);
 }
 export function capabilityLabel(id: string, lang: Lang): string {
   const override = OVERRIDES[id]; if (override) return pick(override, lang);
@@ -103,5 +121,15 @@ export function capabilityLabel(id: string, lang: Lang): string {
   const verb = VERBS[parts[parts.length - 1]];
   const object = OBJECTS[parts.slice(0, -1).join('.')] ?? (parts.length === 1 ? OBJECTS[id] : undefined);
   if (verb && object) return `${pick(verb, lang)} ${pick(object, lang)}`;
-  return humanize(id); // unknown or new capability: readable fallback, never blank
+  // A future catalog ID remains legible in Arabic without exposing its raw backend identifier.
+  if (lang === 'ar') {
+    const words: Record<string, string> = {
+      access: 'الصلاحيات', role: 'الدور', capability: 'الصلاحية', membership: 'العضوية', status: 'الحالة', user: 'المستخدم', password: 'كلمة المرور', full: 'كامل',
+      accounting: 'المحاسبة', chart: 'دليل الحسابات', journal: 'قيد اليومية', annual: 'سنوي', close: 'إغلاق', package: 'الحزمة', snapshot: 'اللقطة', asset: 'الأصل', estimate: 'التقدير', policy: 'السياسة', audit: 'التدقيق', bank: 'البنك', account: 'الحساب', statement: 'الكشف', transaction: 'المعاملة', reconciliation: 'المطابقة البنكية', company: 'الشركة', profile: 'الملف', counterparty: 'الطرف المقابل', custody: 'العهدة', document: 'المستند', fiscal: 'المالية', year: 'السنة', historical: 'التاريخية', invoice: 'الفاتورة', mapping: 'الربط', monthly: 'الشهري', obligation: 'الالتزام', settlement: 'التسوية', opening: 'الافتتاحي', balance: 'الرصيد', partner: 'الشريك', ownership: 'الملكية', periodic: 'الدورية', adjustment: 'التسوية', adjust: 'تعديل', personal: 'الشخصية', payment: 'الدفعة', payer: 'الدافع', report: 'التقرير', source: 'المصدر', authority: 'الصلاحية', tax: 'الضريبي', workpaper: 'ورقة العمل', vat: 'القيمة المضافة', wht: 'الاستقطاع', eqfal: 'إقفال', view: 'عرض', create: 'إنشاء', edit: 'تعديل', manage: 'إدارة', approve: 'اعتماد', review: 'مراجعة', submit: 'إرسال', post: 'ترحيل', reverse: 'عكس', delete: 'حذف', cancel: 'إلغاء', disable: 'تعطيل', enable: 'تفعيل', reopen: 'إعادة فتح', reset: 'إعادة تعيين', confirm: 'تأكيد', settle: 'تسوية', import: 'استيراد', match: 'مطابقة', reconcile: 'تسوية', upload: 'رفع', grant: 'منح', revoke: 'سحب', assign: 'تعيين', prepare: 'إعداد', carryforward: 'ترحيل', activate: 'تفعيل', accept: 'قبول', verify: 'تحقق', finalize: 'اعتماد نهائي', handoff: 'تسليم', supplement: 'ملحق', recurring: 'متكرر', manual: 'يدوي', full_access: 'الوصول الكامل', adjustment_void: 'إلغاء التسوية', asset_estimate_change: 'تغيير تقدير الأصل', asset_policy_sync: 'مزامنة سياسة الأصل',
+    };
+    const parts = id.split(/[._]+/);
+    if (parts.some((part) => !words[part])) return `صلاحية أخرى [${id}]`;
+    return parts.map((part) => words[part]).join(' ') || `صلاحية أخرى [${id}]`;
+  }
+  return humanize(id); // readable English fallback; unknown IDs are still never blank
 }

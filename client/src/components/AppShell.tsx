@@ -84,7 +84,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
     writeExpandedGroups(next);
     return next;
   });
-  const pageLabel=(next:Page)=>next==='historicalRecords'?(i18n.language==='ar'?'السجلات التاريخية':'Historical Records'):next==='sourceAuthority'?(i18n.language==='ar'?'سلطة مصدر الدفاتر':'Ledger Source Authority'):next==='companyProfile'?(i18n.language==='ar'?'الملف المحاسبي والضريبي':'Accounting & Tax Profile'):next==='invoiceMappings'?(i18n.language==='ar'?'ربط حسابات الفواتير':'Invoice Account Mappings'):next==='sales'?(i18n.language==='ar'?'فواتير المبيعات':'Sales Invoices'):next==='purchases'?(i18n.language==='ar'?'فواتير المشتريات':'Purchase Invoices'):next==='openingBalances'?(i18n.language==='ar'?'الأرصدة الافتتاحية':'Opening Balances'):next==='periodicAdjustments'?(i18n.language==='ar'?'الاستحقاقات والمقدمات':'Accruals & Prepayments'):t(`nav.${next}`);
+  const pageLabel=(next:Page)=>next==='sales'?t('nav.salesInvoices'):next==='purchases'?t('nav.purchaseInvoices'):t(`nav.${next}`);
 
   const nav = (next: Page) => (
     <NavLink
@@ -123,11 +123,9 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
   };
 
   const isAr = i18n.language === 'ar';
-  const mobileLogoutLabel = i18n.language === 'ar' ? 'خروج' : 'Log out';
+  const mobileLogoutLabel = t('shell.logout');
   const userInitial = (displayName?.trim() || email.trim()).charAt(0).toUpperCase() || 'U';
-  const groupLabels = i18n.language === 'ar'
-    ? { invoices: 'الفواتير', operations: 'التشغيل', accounting: 'المحاسبة', closing: 'الإقفال', administration: 'الإدارة' }
-    : { invoices: 'Invoices', operations: 'Operations', accounting: 'Accounting', closing: 'Closing', administration: 'Administration' };
+  const groupLabels = { invoices: t('shell.groupInvoices'), operations: t('shell.groupOperations'), accounting: t('shell.groupAccounting'), closing: t('shell.groupClosing'), administration: t('shell.groupAdministration') };
 
   return (
     <MantineAppShell
@@ -147,7 +145,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
           </Stack>
           <Group gap={8} wrap="nowrap" className="topbar-context">
             {canShowNavigationPage('documents', capabilities) && (
-              <button type="button" className="topbar-icon-button" aria-label={isAr ? 'بحث في المستندات' : 'Search documents'} onClick={() => setPage('documents')}>
+              <button type="button" className="topbar-icon-button" aria-label={t('shell.searchDocuments')} onClick={() => setPage('documents')}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
               </button>
             )}
@@ -156,14 +154,14 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
             {/* Fiscal Year Selector */}
             {availableFiscalYears && availableFiscalYears.length > 0 && (
               <Select
-                aria-label={isAr ? 'السنة المالية' : 'Fiscal Year'}
+                aria-label={t('shell.fiscalYear')}
                 value={selectedFiscalYearId || ''}
                 onChange={(value) => value && onSelectFiscalYear(value)}
                 data={availableFiscalYears.map(fy => ({
                   value: fy.id,
                   label: fy.name
                 }))}
-                placeholder={isAr ? 'اختر السنة' : 'Select Year'}
+                placeholder={t('shell.selectYear')}
                 searchable
                 clearable={false}
                 size="xs"
@@ -175,7 +173,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
             {/* Period Selector */}
             {availablePeriodsForSelectedYear && availablePeriodsForSelectedYear.length > 0 && (
               <Select
-                aria-label={isAr ? 'الفترة' : 'Period'}
+                aria-label={t('shell.period')}
                 value={periodMode === 'all' ? 'all' : (selectedPeriodId || '')}
                 onChange={(value) => {
                   if (value === 'all') {
@@ -185,13 +183,13 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
                   }
                 }}
                 data={[
-                  { value: 'all', label: isAr ? 'السنة كاملة' : 'All Periods in Year' },
+                  { value: 'all', label: t('shell.allPeriods') },
                   ...availablePeriodsForSelectedYear.map(period => ({
                     value: period.id,
                     label: `${new Date(period.period_start).toLocaleDateString(isAr ? 'ar-u-ca-gregory-nu-latn' : 'en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })}`
                   }))
                 ]}
-                placeholder={isAr ? 'اختر الفترة' : 'Select Month'}
+                placeholder={t('shell.selectPeriod')}
                 searchable
                 clearable={false}
                 size="xs"
@@ -202,7 +200,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
           </Group>
           <Box className="topbar-spacer" />
           <Group gap={10} wrap="nowrap" className="topbar-user-group">
-            <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={bellCount > 0 ? (isAr ? `بانتظارك: ${bellCount} عنصر` : `Needs your attention: ${bellCount} items`) : (isAr ? 'المهام بانتظارك' : 'Tasks waiting for you')} onClick={openAttention}>
+            <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={bellCount > 0 ? t('shell.attentionItems', { count: bellCount }) : t('shell.attention')} onClick={openAttention}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
             {bellCount > 0 && <span className="topbar-bell-badge" data-testid="bell-count" aria-hidden="true">{bellCount > 99 ? '99+' : bellCount}</span>}</button>
             <UnstyledButton className="user-summary-link" aria-label={t('nav.account')} aria-current={page === 'account' ? 'page' : undefined} onClick={() => setPage('account')}>

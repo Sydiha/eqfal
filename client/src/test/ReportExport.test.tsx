@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ObligationsAging, type AgingReport } from '../components/ObligationsAging';
 import { Accounting } from '../components/Accounting';
@@ -124,13 +124,24 @@ describe('aging export + buttons', () => {
     const print = vi.fn(); vi.stubGlobal('print', print);
     render(<ObligationsAging onUnauthorized={vi.fn()} />);
     await screen.findByText('Customer A');
-    const before = document.querySelector('.ob-aging')!.innerHTML;
+    const reportView = document.querySelector('.ob-aging')!;
+    const before = reportView.innerHTML;
+    const rowCount = reportView.querySelectorAll('tbody tr').length;
     fireEvent.click(screen.getByRole('button', { name: 'Export Excel' })); fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
     expect(names).toEqual(['eqfal-ar-aging-2026-10-07.xlsx', 'eqfal-ar-aging-2026-10-07.csv']);
     expect(blobs[0]!.type).toContain('spreadsheetml');
     fireEvent.click(screen.getByRole('button', { name: 'Print / Save PDF' }));
     expect(print).toHaveBeenCalledTimes(1); expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('.ob-aging')!.innerHTML).toBe(before);
+    // Reproduce a suite-level locale change while the print portal is open. Localized labels may
+    // legitimately change, so compare report state/data instead of byte-for-byte rendered HTML.
+    await act(async () => { await i18n.changeLanguage('ar'); });
+    const afterLocaleChange = document.querySelector('.ob-aging')!;
+    expect(afterLocaleChange.innerHTML).not.toBe(before);
+    expect(afterLocaleChange.querySelectorAll('tbody tr')).toHaveLength(rowCount);
+    expect(afterLocaleChange).toHaveTextContent('Customer A');
+    expect(screen.getByRole('tab', { name: 'الذمم المدينة' })).toHaveAttribute('aria-selected', 'true');
+    await act(async () => { await i18n.changeLanguage('en'); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('tab', { name: /Payables/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
     expect(names[2]).toBe('eqfal-ap-aging-2026-10-07.csv');

@@ -59,6 +59,7 @@ import { PeriodicAdjustments } from './components/PeriodicAdjustments';
 import { AnnualClosing } from './components/AnnualClosing';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
+import { roleDisplayName } from './labels/displayLabels';
 
 type DocumentEntryType = 'purchase' | 'expense' | 'sale';
 type DocumentEntryContext = {
@@ -144,7 +145,7 @@ export function headerRoleLabel(session: AuthSession, t: TFunction): string {
   if (session.user.isSystemAdmin) return t('systemAdmin.systemAdmin');
   const name = session.activeRole?.name;
   if (!name) return t('home.noRole');
-  return t(`home.roleNames.${name}`, { defaultValue: name });
+  return roleDisplayName(name, t);
 }
 
 function AuthenticatedShell() {
