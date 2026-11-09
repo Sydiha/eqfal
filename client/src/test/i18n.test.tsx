@@ -157,12 +157,18 @@ describe('i18n — centralized shell labels', () => {
 });
 
 describe('i18n — translation resource coverage', () => {
-  it('has an Arabic translation for every English message key', () => {
+  it('covers both locale key directions and allows only Arabic-specific plural forms', () => {
     const leafKeys = (value: Record<string, unknown>, prefix = ''): string[] => Object.entries(value).flatMap(([key, item]) => {
       const path = prefix ? `${prefix}.${key}` : key;
       return item !== null && typeof item === 'object' ? leafKeys(item as Record<string, unknown>, path) : [path];
     });
+    const englishKeys = new Set(leafKeys(en as unknown as Record<string, unknown>));
     const arabicKeys = new Set(leafKeys(ar as unknown as Record<string, unknown>));
-    expect(leafKeys(en as unknown as Record<string, unknown>).filter((key) => !arabicKeys.has(key))).toEqual([]);
+    const missingArabic = [...englishKeys].filter((key) => !arabicKeys.has(key));
+    const missingEnglish = [...arabicKeys].filter((key) => !englishKeys.has(key));
+    const intentionalArabicPluralForms = missingEnglish.filter((key) => /_(zero|two|few|many)$/.test(key));
+    expect(missingArabic).toEqual([]);
+    expect(intentionalArabicPluralForms.length).toBeGreaterThan(0);
+    expect(missingEnglish).toEqual(intentionalArabicPluralForms);
   });
 });

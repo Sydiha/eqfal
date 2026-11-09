@@ -113,7 +113,7 @@ const OVERRIDES: Record<string, Pair> = {
 const humanize = (id: string) => id.replace(/[._]+/g, ' ');
 export function capabilityGroupKey(id: string): string { return id.split('.')[0]; }
 export function capabilityGroupLabel(group: string, lang: Lang): string {
-  const pair = GROUPS[group]; return pair ? pick(pair, lang) : lang === 'ar' ? 'صلاحيات أخرى' : humanize(group);
+  const pair = GROUPS[group]; return pair ? pick(pair, lang) : lang === 'ar' ? `صلاحيات أخرى [${group}]` : humanize(group);
 }
 export function capabilityLabel(id: string, lang: Lang): string {
   const override = OVERRIDES[id]; if (override) return pick(override, lang);
@@ -128,8 +128,8 @@ export function capabilityLabel(id: string, lang: Lang): string {
       accounting: 'المحاسبة', chart: 'دليل الحسابات', journal: 'قيد اليومية', annual: 'سنوي', close: 'إغلاق', package: 'الحزمة', snapshot: 'اللقطة', asset: 'الأصل', estimate: 'التقدير', policy: 'السياسة', audit: 'التدقيق', bank: 'البنك', account: 'الحساب', statement: 'الكشف', transaction: 'المعاملة', reconciliation: 'المطابقة البنكية', company: 'الشركة', profile: 'الملف', counterparty: 'الطرف المقابل', custody: 'العهدة', document: 'المستند', fiscal: 'المالية', year: 'السنة', historical: 'التاريخية', invoice: 'الفاتورة', mapping: 'الربط', monthly: 'الشهري', obligation: 'الالتزام', settlement: 'التسوية', opening: 'الافتتاحي', balance: 'الرصيد', partner: 'الشريك', ownership: 'الملكية', periodic: 'الدورية', adjustment: 'التسوية', adjust: 'تعديل', personal: 'الشخصية', payment: 'الدفعة', payer: 'الدافع', report: 'التقرير', source: 'المصدر', authority: 'الصلاحية', tax: 'الضريبي', workpaper: 'ورقة العمل', vat: 'القيمة المضافة', wht: 'الاستقطاع', eqfal: 'إقفال', view: 'عرض', create: 'إنشاء', edit: 'تعديل', manage: 'إدارة', approve: 'اعتماد', review: 'مراجعة', submit: 'إرسال', post: 'ترحيل', reverse: 'عكس', delete: 'حذف', cancel: 'إلغاء', disable: 'تعطيل', enable: 'تفعيل', reopen: 'إعادة فتح', reset: 'إعادة تعيين', confirm: 'تأكيد', settle: 'تسوية', import: 'استيراد', match: 'مطابقة', reconcile: 'تسوية', upload: 'رفع', grant: 'منح', revoke: 'سحب', assign: 'تعيين', prepare: 'إعداد', carryforward: 'ترحيل', activate: 'تفعيل', accept: 'قبول', verify: 'تحقق', finalize: 'اعتماد نهائي', handoff: 'تسليم', supplement: 'ملحق', recurring: 'متكرر', manual: 'يدوي', full_access: 'الوصول الكامل', adjustment_void: 'إلغاء التسوية', asset_estimate_change: 'تغيير تقدير الأصل', asset_policy_sync: 'مزامنة سياسة الأصل',
     };
     const parts = id.split(/[._]+/);
-    if (parts.some((part) => !words[part])) return 'صلاحية أخرى';
-    return parts.map((part) => words[part]).join(' ') || 'صلاحية أخرى';
+    if (parts.some((part) => !words[part])) return `صلاحية أخرى [${id}]`;
+    return parts.map((part) => words[part]).join(' ') || `صلاحية أخرى [${id}]`;
   }
   return humanize(id); // readable English fallback; unknown IDs are still never blank
 }

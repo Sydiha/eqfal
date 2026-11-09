@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { capabilityLabel } from '../labels/capabilityLabels';
+import { capabilityGroupLabel, capabilityLabel } from '../labels/capabilityLabels';
 import { auditActionLabel } from '../labels/auditLabels';
 
 const IDS = readFileSync(resolve(__dirname, 'fixtures/capability-ids.txt'), 'utf8').trim().split('\n');
@@ -25,7 +25,8 @@ describe('capability labels', () => {
   });
   it('falls back readably for unknown capabilities', () => {
     expect(capabilityLabel('new_area.do_thing', 'en')).toBe('new area do thing');
-    expect(capabilityLabel('new_area.do_thing', 'ar')).toBe('صلاحية أخرى');
+    expect(capabilityLabel('new_area.do_thing', 'ar')).toBe('صلاحية أخرى [new_area.do_thing]');
+    expect(capabilityGroupLabel('new_area', 'ar')).toBe('صلاحيات أخرى [new_area]');
   });
 });
 
