@@ -10,10 +10,11 @@ const accounts = [
   { id: '00000000-0000-4000-8000-000000000002', code: '1100', name: 'Legacy Bank', name_ar: null, name_en: null, account_type: 'asset', parent_account_id: '00000000-0000-4000-8000-000000000001', is_active: true },
 ];
 const stub = () => {
+  const classificationAccounts = accounts.map((account) => ({ ...account, statement_category: 'current_asset', is_contra: false, cash_role: 'cash', cash_flow_category: 'operating' }));
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
     if (url === '/api/accounts' && options?.method === 'POST') return new Response(JSON.stringify({ id: 'new' }), { status: 201 });
     if (url === '/api/accounts') return new Response(JSON.stringify({ accounts }));
-    if (url.startsWith('/api/account-classifications')) return new Response(JSON.stringify({ accounts: [] }));
+    if (url.startsWith('/api/account-classifications')) return new Response(JSON.stringify({ accounts: classificationAccounts }));
     if (url === '/api/fiscal-years') return new Response(JSON.stringify({ fiscalYears: [] }));
     if (url === '/api/journals') return new Response(JSON.stringify({ journals: [] }));
     return new Response(JSON.stringify({ sources: [] }));
@@ -53,7 +54,7 @@ describe('bilingual account names', () => {
     expect(localizedLegacyAccountName({ name: 'Accounts receivable', name_ar: 'الذمم المدينة' }, 'ar')).toBe('الذمم المدينة');
   });
 
-  it('shows Arabic names in the Arabic UI and legacy names for legacy accounts, including the parent column', async () => {
+  it('shows Arabic names in both accounting tables and the parent column', async () => {
     await i18n.changeLanguage('ar');
     stub();
     render(ui());
@@ -61,14 +62,20 @@ describe('bilingual account names', () => {
     expect(within(table()).getByText('النقدية')).toBeInTheDocument();
     expect(within(table()).queryByText('Cash')).not.toBeInTheDocument();
     expect(within(table()).getByText('1000 — النقدية')).toBeInTheDocument();
+    const mappingTable = screen.getAllByRole('table').at(-1)!;
+    expect(within(mappingTable).getByText('النقدية', { selector: 'td.ac-mapping__name' })).toBeInTheDocument();
+    expect(within(mappingTable).queryByText('Cash', { selector: 'td.ac-mapping__name' })).not.toBeInTheDocument();
   });
 
-  it('shows English names in the English UI and searches across code, name, name_ar and name_en', async () => {
+  it('shows English names in both accounting tables and searches across code, name, name_ar and name_en', async () => {
     await i18n.changeLanguage('en');
     stub();
     render(ui());
     await screen.findAllByText('Legacy Bank');
     expect(within(table()).getByText('Cash')).toBeInTheDocument();
+    const mappingTable = screen.getAllByRole('table').at(-1)!;
+    expect(within(mappingTable).getByText('Cash', { selector: 'td.ac-mapping__name' })).toBeInTheDocument();
+    expect(within(mappingTable).queryByText('النقدية', { selector: 'td.ac-mapping__name' })).not.toBeInTheDocument();
     const search = screen.getByRole('searchbox');
     fireEvent.change(search, { target: { value: 'النقد' } });
     expect(within(table()).getByText('Cash')).toBeInTheDocument();

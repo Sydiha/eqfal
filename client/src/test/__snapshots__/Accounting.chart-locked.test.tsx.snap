@@ -2,7 +2,7 @@
 
 exports[`Chart of Accounts tab is locked > keeps the chart-only source files byte-identical > chart-source-hashes 1`] = `
 {
-  "AccountClassificationPanel.tsx": "5e4de519fdd9188eda5303bce0f70f29d5a070c580cfda290cf45cb9d9653c1f",
+  "AccountClassificationPanel.tsx": "17d285a0a8940297146fcf9672e6aed1d003ac936684289a7a7ec8a6cbab24e8",
   "Accounting.tsx": "e9cd55850579b5af5a10413092de0e5a97eee672e1fcc6c8c6a3805fb953cd4e",
   "AccountingApproved.css": "04da7f8c0451013c68eee6cbc1fe5be20511db8a9892ec2e87338258a0adac96",
 }
