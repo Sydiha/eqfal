@@ -36,6 +36,8 @@ type AccountClassification={
   company_id:string;
   code:string;
   name:string;
+  name_ar:string|null;
+  name_en:string|null;
   account_type:AccountType;
   parent_account_id:string|null;
   is_active:boolean;
@@ -151,7 +153,7 @@ export class AccountClassificationService{
     let where='company_id=$1';
     if(category!==undefined){params.push(category);where+=' AND statement_category=$2';}
     const {rows}=await this.db.query<AccountClassification>(
-      `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
+      `SELECT id,company_id,code,name,name_ar,name_en,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
        FROM accounts WHERE ${where} ORDER BY code,id`,
       params,
     );
@@ -163,7 +165,7 @@ export class AccountClassificationService{
     try{
       await client.query('BEGIN');
       const before=(await client.query<AccountClassification>(
-        `SELECT id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
+        `SELECT id,company_id,code,name,name_ar,name_en,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at
          FROM accounts WHERE id=$1 AND company_id=$2 FOR UPDATE`,
         [id,companyId],
       )).rows[0];
@@ -187,7 +189,7 @@ export class AccountClassificationService{
         `UPDATE accounts
          SET statement_category=$3,is_contra=$4,cash_role=$5,cash_flow_category=$6,updated_at=NOW()
          WHERE id=$1 AND company_id=$2
-         RETURNING id,company_id,code,name,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at`,
+         RETURNING id,company_id,code,name,name_ar,name_en,account_type,parent_account_id,is_active,statement_category,is_contra,cash_role,cash_flow_category,created_at,updated_at`,
         [id,companyId,statementCategory,isContra,cashRole,cashFlowCategory],
       )).rows[0]!;
       await this.audit.logEvent({

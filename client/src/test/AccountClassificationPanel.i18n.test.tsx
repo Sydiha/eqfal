@@ -12,7 +12,7 @@ const TYPES=['asset','liability','equity','revenue','expense'];
 const ARABIC=/[؀-ۿ]/;
 const LATIN=/[A-Za-z]/;
 
-const account={id:'11111111-1111-4111-8111-111111111111',code:'1000',name:'Cash',account_type:'asset' as const,parent_account_id:null,is_active:true,statement_category:'current_asset' as const,is_contra:false,cash_role:'cash' as const,cash_flow_category:'operating' as const};
+const account={id:'11111111-1111-4111-8111-111111111111',code:'1000',name:'النقدية',name_ar:'النقدية',name_en:'Cash',account_type:'asset' as const,parent_account_id:null,is_active:true,statement_category:'current_asset' as const,is_contra:false,cash_role:'cash' as const,cash_flow_category:'operating' as const};
 
 const mapping=(lang:'ar'|'en')=>(lang==='ar'?ar:en) as unknown as {accountMapping:Record<string,Record<string,string>|string>};
 
@@ -45,8 +45,9 @@ describe('Financial statement mapping localization',()=>{
     it('shows Arabic only in Arabic, English only in English, and keeps option values and selections when switching without remount',async()=>{
       await i18n.changeLanguage('ar');
       const {container}=render(<AccountClassificationPanel canView canManage autoOpen onUnauthorized={vi.fn()}/>);
-      await screen.findByRole('cell',{name:'Cash'});
+      await screen.findByRole('cell',{name:'النقدية'});
       const panel=container.querySelector('.ac-mapping') as HTMLElement;
+      expect(within(panel).getByRole('cell',{name:'النقدية'})).toBeInTheDocument();
 
       const texts=()=>[...panel.querySelectorAll('option,th,h2,p,button,.ac-mapping__prefix,.ac-mapping__footer span')].map(e=>e.textContent??'').join('|');
       expect(texts()).not.toMatch(LATIN);
@@ -59,6 +60,8 @@ describe('Financial statement mapping localization',()=>{
 
       await act(async()=>{await i18n.changeLanguage('en');});
       expect(container.querySelector('.ac-mapping')).toBe(panel);
+      expect(within(panel).getByRole('cell',{name:'Cash'})).toBeInTheDocument();
+      expect(within(panel).queryByRole('cell',{name:'النقدية'})).not.toBeInTheDocument();
       expect(texts()).not.toMatch(ARABIC);
       const cashRoleEn=within(panel).getByLabelText('Cash role 1000') as HTMLSelectElement;
       expect(cashRoleEn).toBe(cashRole);
@@ -75,7 +78,7 @@ describe('Financial statement mapping localization',()=>{
     it('localizes read-only values and the contra flag',async()=>{
       await i18n.changeLanguage('ar');
       render(<AccountClassificationPanel canView canManage={false} autoOpen onUnauthorized={vi.fn()}/>);
-      await screen.findByRole('cell',{name:'Cash'});
+      await screen.findByRole('cell',{name:'النقدية'});
       const row=screen.getByRole('row',{name:/1000/});
       expect(within(row).getByText('أصل متداول')).toBeInTheDocument();
       expect(within(screen.getByRole('row',{name:/1000/})).getByText('نقد')).toBeInTheDocument();

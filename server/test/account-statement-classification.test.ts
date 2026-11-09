@@ -30,6 +30,11 @@ describe('Phase 5A account statement classification',()=>{
     expect(router).toContain("WHERE id=$1 AND company_id=$2");
   });
 
+  it('exposes bilingual names in classification list and update responses',()=>{
+    expect(router).toMatch(/SELECT id,company_id,code,name,name_ar,name_en,account_type/);
+    expect(router).toMatch(/RETURNING id,company_id,code,name,name_ar,name_en,account_type/);
+  });
+
   it('protects read/write capabilities and audits classification changes',()=>{
     expect(router).toContain("requireCapability('accounting.view')");
     expect(router).toContain("requireCapability('accounting.chart.edit')");

@@ -1,10 +1,11 @@
 import {FormEvent,useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {StatusBadge,WorkspaceState} from './SharedUI';
+import {localizedAccountName} from './accounting-contracts';
 import './FixedAssets.css';
 
 type Category={id:string;name_ar:string;name_en:string;depreciable:boolean};
-type Account={id:string;code:string;name:string;account_type:string;is_active:boolean};
+type Account={id:string;code:string;name:string;name_ar?:string|null;name_en?:string|null;account_type:string;is_active:boolean};
 type Asset={id:string;asset_category_id:string;asset_number:string;name:string;status:string;depreciation_policy_version_id:string|null;useful_life_months:number|null;residual_value:string};
 type Policy={id:string;asset_category_id:string;version_number:number;effective_from:string|null;depreciation_method:'straight_line'|null;useful_life_mode:'fixed'|'asset_specific'|'not_applicable';useful_life_months:number|null;residual_value_policy:'zero'|'asset_specific'|'not_applicable';depreciation_start_basis:'placed_in_service'|'explicit_date'|'not_applicable';asset_account_id:string|null;accumulated_depreciation_account_id:string|null;depreciation_expense_account_id:string|null;status:'draft'|'approved'|'superseded';is_legacy_migrated:boolean;reviewed_at:string|null;approved_at:string|null};
 type EstimateChange={id:string;effective_from:string;old_useful_life_months:number|null;new_remaining_useful_life_months:number|null;old_residual_value:string;new_residual_value:string|null;reason:string;policy_exception:boolean;policy_exception_reason:string|null;status:'draft'|'reviewed'|'approved';reviewed_at:string|null;approved_at:string|null};
@@ -27,7 +28,7 @@ export function AssetPolicyOperations({canView,canManagePolicy,canCreateEstimate
  const selectedCategory=categories.find(c=>c.id===categoryId),selectedAsset=assets.find(a=>a.id===assetId);
  const currentPolicy=policies.find(p=>p.status==='approved')??null;
  const activeAccounts=(type:string)=>accounts.filter(a=>a.is_active&&a.account_type===type);
- const accountLabel=(a:Account)=>`${a.code} — ${a.name}`;
+ const accountLabel=(a:Account)=>`${a.code} — ${localizedAccountName(a,i18n.language)}`;
  const nextMonthStart=()=>{const d=new Date();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+1);return d.toISOString().slice(0,10)};
  const reloadPolicies=async()=>{if(!categoryId)return;setPolicies((await(await request(`/api/asset-categories/${categoryId}/policies`)).json()).policies)};
  const reloadChanges=async()=>{if(!assetId)return;setChanges((await(await request(`/api/assets/${assetId}/estimate-changes`)).json()).changes);const a=(await(await request(`/api/assets/${assetId}`)).json()) as Asset;setAssets(list=>list.map(x=>x.id===a.id?{...x,...a}:x))};
