@@ -23,6 +23,14 @@ export type NavigationPage =
   | 'auditLog'
   | 'account';
 
+export const NAVIGATION_PAGES: readonly NavigationPage[] = [
+  'home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents',
+  'banks', 'partners', 'obligations', 'accounting', 'openingBalances',
+  'periodicAdjustments', 'sales', 'purchases', 'invoiceMappings', 'assets',
+  'companyProfile', 'access', 'companies', 'sourceAuthority', 'historicalRecords',
+  'auditLog', 'account',
+];
+
 const has = (capabilities: readonly string[], capability: string) => capabilities.includes(capability);
 
 export function canShowNavigationPage(page: NavigationPage, capabilities: readonly string[]): boolean {
