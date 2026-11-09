@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import './ZakatWorksheet.css';
 import { formatMinorUnits } from '../money-format';
 import { localizedAccountName } from './accounting-contracts';
+import { Dialog } from './Dialog';
 
 // G6-1 preparation workflow inside the existing TaxWorkpaper page. It never shows a Zakat payable amount: the calculation is withheld
 // until the regulatory gates are verified by the company's qualified accountant.
@@ -42,6 +43,11 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
   const [entityClass, setEntityClass] = useState('saudi_natural');
+  const [endingEligibility, setEndingEligibility] = useState<Eligibility | null>(null);
+  const [endDate, setEndDate] = useState('');
+  const [endReason, setEndReason] = useState('');
+  const [endDateError, setEndDateError] = useState(false);
+  const [endReasonError, setEndReasonError] = useState(false);
 
   const money = (cents: string) => formatMinorUnits(cents);
   const pct = (bps4: string) => (Number(bps4) / 10000).toLocaleString(ar ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -106,6 +112,17 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
     if (await ws('/adjustments', 'POST', { description: val(f, 'description'), direction: val(f, 'direction'), amount: val(f, 'amount'), reg_article: val(f, 'reg_article'), evidence_document_id: val(f, 'evidence_document_id'), evidence_note: val(f, 'evidence_note'), professional_review_required: f.get('professional_review_required') === 'on', version: w!.version })) (e.target as HTMLFormElement).reset();
   };
   const workflow = (name: string, extra: object = {}) => ws(`/${name}`, 'POST', { version: w!.version, ...extra });
+  const submitEndEligibility = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const missingDate = !endDate;
+    const missingReason = !endReason.trim();
+    setEndDateError(missingDate);
+    setEndReasonError(missingReason);
+    if (missingDate || missingReason || !endingEligibility) return;
+    if (await call(`/api/zakat-eligibility/${endingEligibility.id}/end`, 'POST', { version: endingEligibility.version, effective_to: endDate, reason: endReason.trim() })) {
+      setEndingEligibility(null); setEndDate(''); setEndReason('');
+    }
+  };
 
   return (
     <section className="zw" aria-labelledby="zw-title">
@@ -134,7 +151,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
               <td className="zw-actions">
                 {e.verification_status === 'unconfirmed' && p.canConfirmOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => void call(`/api/zakat-eligibility/${e.id}/confirm`, 'POST', { version: e.version })}>{t('zakatWorksheet.confirm')}</button>}
                 {e.verification_status === 'unconfirmed' && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => void call(`/api/zakat-eligibility/${e.id}`, 'DELETE', { version: e.version })}>{t('zakatWorksheet.remove')}</button>}
-                {e.verification_status === 'confirmed' && !e.effective_to && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => { const d = window.prompt(t('zakatWorksheet.endDatePrompt'), data.ownership_live.as_of_date); if (!d) return; const why = window.prompt(t('zakatWorksheet.endReasonPrompt')); if (why && why.trim()) void call(`/api/zakat-eligibility/${e.id}/end`, 'POST', { version: e.version, effective_to: d, reason: why.trim() }); }}>{t('zakatWorksheet.end')}</button>}
+                {e.verification_status === 'confirmed' && !e.effective_to && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => { setEndingEligibility(e); setEndDate(data.ownership_live.as_of_date); setEndReason(''); setEndDateError(false); setEndReasonError(false); }}>{t('zakatWorksheet.end')}</button>}
               </td></tr>)}</tbody></table></div>}
         {p.canCreateOwnership && <form className="zw-form" onSubmit={(e) => void addEligibility(e)}>
           <label>{t('zakatWorksheet.partner')}<select name="partner_id" required>{data.ownership_live.partners.map((o) => <option key={o.partner_id} value={o.partner_id}>{o.name}</option>)}</select></label>
@@ -207,6 +224,15 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <h5>{t('zakatWorksheet.revisionsTitle')}</h5>
         <ul>{data.revisions.map((v) => <li key={v.id}><bdi>#{v.revision_no}</bdi> — {t(`zakatWorksheet.statuses.${v.status}`)}{v.revision_reason ? ` — ${v.revision_reason}` : ''}</li>)}</ul>
       </div>}
+      {endingEligibility && <Dialog title={t('zakatWorksheet.end')} busy={busy} onClose={() => setEndingEligibility(null)}>
+        <form noValidate onSubmit={(event) => void submitEndEligibility(event)}>
+          <label>{t('zakatWorksheet.effectiveTo')}<input autoFocus type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); if (event.target.value) setEndDateError(false); }} aria-invalid={endDateError} aria-describedby={endDateError ? 'zakat-end-date-error' : undefined}/></label>
+          {endDateError && <p id="zakat-end-date-error" role="alert" className="zw-error">{t('common.required')}</p>}
+          <label>{t('zakatWorksheet.endReasonPrompt')}<textarea value={endReason} onChange={(event) => { setEndReason(event.target.value); if (event.target.value.trim()) setEndReasonError(false); }} aria-invalid={endReasonError} aria-describedby={endReasonError ? 'zakat-end-reason-error' : undefined}/></label>
+          {endReasonError && <p id="zakat-end-reason-error" role="alert" className="zw-error">{t('common.required')}</p>}
+          <div className="zw-actions"><button type="button" className="ac-btn" disabled={busy} onClick={() => setEndingEligibility(null)}>{t('common.cancel')}</button><button type="submit" className="ac-btn ac-btn--primary" disabled={busy}>{t('common.confirm')}</button></div>
+        </form>
+      </Dialog>}
     </section>
   );
 }

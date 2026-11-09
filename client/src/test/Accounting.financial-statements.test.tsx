@@ -89,4 +89,20 @@ describe('Accounting financial statements',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Run report'}));
   expect(await screen.findByText(/cash flow statement is blocked/i)).toBeInTheDocument();
  });
+
+ it('localizes reversal journal descriptions in the UI without changing the server description',async()=>{
+  const reversal={id:'55555555-5555-4555-8555-555555555555',fiscal_year_id:year.id,accounting_date:'2026-08-02',description:'Reversal of journal: Original expense',reference:'REV-1',entry_type:'standard' as const,status:'posted' as const,reversal_of_journal_id:'66666666-6666-4666-8666-666666666666'};
+  const fetchMock=vi.fn(async(url:string)=>new Response(JSON.stringify(url==='/api/journals'?{journals:[reversal]}:url===`/api/journals/${reversal.id}`?{...reversal,lines:[]}:base(url))));
+  vi.stubGlobal('fetch',fetchMock);
+  await i18n.changeLanguage('ar');
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal={false} canEditJournal={false} canPost={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('tab',{name:i18n.t('accounting.tabs.journals')}));
+  const localized=await screen.findByRole('button',{name:/عكس القيد: Original expense/});
+  expect(localized).toBeInTheDocument();
+  expect(screen.queryByText('Reversal of journal: Original expense')).not.toBeInTheDocument();
+  fireEvent.click(localized);
+  expect(await screen.findByRole('heading',{name:'عكس القيد: Original expense',level:3})).toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([url])=>url===`/api/journals/${reversal.id}`)).toBe(true);
+  expect(reversal.description).toBe('Reversal of journal: Original expense');
+ });
 });
