@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState } from './SharedUI';
+import { localizedLegacyAccountName } from './accounting-contracts';
 import './InvoiceAccountMappings.css';
 
 type Account = { id: string; code: string; name: string; name_ar: string | null };
@@ -22,7 +23,6 @@ const STATUS_BADGE: Record<Mapping['status'], string> = { missing: 'incomplete',
  */
 export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: { canView: boolean; canManage: boolean; onUnauthorized: () => void }) {
   const { t, i18n } = useTranslation();
-  const ar = i18n.language === 'ar';
   const [rows, setRows] = useState<Mapping[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [choice, setChoice] = useState<Record<string, string>>({});
@@ -30,7 +30,7 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
   const busyRef = useRef(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState<Mapping | null>(null);
-  const accountName = (a: Account) => ar ? (a.name_ar ?? a.name) : a.name;
+  const accountName = (a: Account) => localizedLegacyAccountName(a, i18n.language);
   const optionLabel = (a: Account) => `${a.code} — ${accountName(a)}`;
   const accountLabel = (account: Account) => <span className="invoice-mappings__account-label"><bdi className="invoice-mappings__code">{account.code}</bdi> — <bdi>{accountName(account)}</bdi></span>;
   const keyName = (key: string) => t(`invoiceMappings.keys.${key}`);

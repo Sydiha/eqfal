@@ -57,6 +57,10 @@ export const localizedAccountName=(account:AccountNames,language:string)=>{
  return own||other||account.name||'';
 };
 
+/** Display helper for legacy API payloads that expose `name_ar` but omit `name_en`. */
+export const localizedLegacyAccountName=(account:{name:string;name_ar?:string|null},language:string)=>
+ language.startsWith('ar')?(account.name_ar||account.name):account.name;
+
 /** Accept plain decimals or correctly grouped thousands; return an ungrouped decimal for APIs. */
 export const normalizeFinancialAmount=(value:string):string|null=>{
  const input=value.trim();

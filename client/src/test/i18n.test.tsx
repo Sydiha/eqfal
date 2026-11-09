@@ -13,6 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { useEffect } from 'react';
 import { DirectionProvider, useDirection } from '@mantine/core';
 import i18n, { getSavedLang, LANG_KEY } from '../i18n';
+import ar from '../i18n/locales/ar';
+import en from '../i18n/locales/en';
 import { MantineDirectionSync } from '../App';
 
 // ── helper: minimal component that mirrors App's dir/lang effect ─────────────
@@ -141,5 +143,26 @@ describe('i18n — Task 35D Phase 2 error codes', () => {
       expect(ar).not.toBe(en);
     }
     expect(PHASE2_ERROR_CODES).toHaveLength(19);
+  });
+});
+
+describe('i18n — centralized shell labels', () => {
+  it('provides Arabic and English labels for every shared shell control', () => {
+    const keys = ['shell.searchDocuments', 'shell.fiscalYear', 'shell.selectYear', 'shell.period', 'shell.allPeriods', 'shell.selectPeriod', 'shell.attention', 'shell.logout', 'shell.groupInvoices', 'shell.groupOperations', 'shell.groupAccounting', 'shell.groupClosing', 'shell.groupAdministration'];
+    for (const key of keys) {
+      expect(i18n.getResource('ar', 'translation', key), `ar ${key}`).toBeTruthy();
+      expect(i18n.getResource('en', 'translation', key), `en ${key}`).toBeTruthy();
+    }
+  });
+});
+
+describe('i18n — translation resource coverage', () => {
+  it('has an Arabic translation for every English message key', () => {
+    const leafKeys = (value: Record<string, unknown>, prefix = ''): string[] => Object.entries(value).flatMap(([key, item]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return item !== null && typeof item === 'object' ? leafKeys(item as Record<string, unknown>, path) : [path];
+    });
+    const arabicKeys = new Set(leafKeys(ar as unknown as Record<string, unknown>));
+    expect(leafKeys(en as unknown as Record<string, unknown>).filter((key) => !arabicKeys.has(key))).toEqual([]);
   });
 });

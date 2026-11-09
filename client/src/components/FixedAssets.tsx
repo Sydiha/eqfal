@@ -7,9 +7,10 @@ import {useActiveCompanyName} from '../context/CompanyContext';
 import {fixedAssetsExport,generatedStamp} from '../export/reportExport';
 import './FixedAssets.css';
 import { formatMoney, normalizeMoneyInput, sumMoney } from '../money-format';
+import { localizedAccountName } from './accounting-contracts';
 
 type Category={id:string;name_ar:string;name_en:string;default_useful_life_months:number|null;asset_account_id:string|null;accumulated_depreciation_account_id:string|null;depreciation_expense_account_id:string|null};
-type Account={id:string;code:string;name:string;account_type:'asset'|'expense'|string;is_active:boolean};
+type Account={id:string;code:string;name:string;name_ar?:string|null;name_en?:string|null;account_type:'asset'|'expense'|string;is_active:boolean};
 type Sale={id:string;status:string;reference_number:string|null;original_filename:string;document_date:string|null;total_amount:string|null};
 type Asset={id:string;version?:number;asset_category_id:string;asset_number:string;name:string;description:string|null;source_type:string;source_document_id:string|null;source_reference:string|null;category_name_ar:string;category_name_en:string;acquisition_cost:string;acquisition_date:string;placed_in_service_date:string;depreciation_start_date:string|null;residual_value:string;opening_accumulated_depreciation:string;posted_depreciation:string;net_book_value:string;useful_life_months:number|null;status:string;disposal_id?:string|null;disposal_type?:string|null;disposal_date?:string|null;disposal_proceeds?:string|null;nbv_at_disposal?:string|null;calculated_gain_loss?:string|null;disposal_reason?:string|null;source_sale_document_id?:string|null};
 type Entry={id:string;period_start:string;period_end:string;depreciation_amount:string;closing_nbv:string;status:string};
@@ -46,7 +47,7 @@ export function FixedAssets({canView,canCreate,canEdit,canCancel,canManagePolicy
  if(!canView)return <WorkspacePage><WorkspaceState>{t('assets.noAccess')}</WorkspaceState></WorkspacePage>;
  const closePeriod=readClosePeriod();
  const visibleAssets=closePeriod?(assets??[]).filter(asset=>(asset.source_type==='document'&&asset.status==='draft'&&asset.acquisition_date>=closePeriod.from&&asset.acquisition_date<=closePeriod.to)||(discoveryEntries[asset.id]??[]).some(entry=>entry.status==='pending'&&entry.period_end>=closePeriod.from&&entry.period_end<=closePeriod.to)):(assets??[]);
- const categoryName=(c:Category)=>i18n.language==='ar'?c.name_ar:c.name_en,accountName=(a:Account)=>`${a.code} — ${a.name}`,activeAccounts=(type:string)=>accounts.filter(a=>a.is_active&&a.account_type===type),approvedSales=sales.filter(s=>s.status==='approved');
+ const categoryName=(c:Category)=>i18n.language==='ar'?c.name_ar:c.name_en,accountName=(a:Account)=>`${a.code} — ${localizedAccountName(a,i18n.language)}`,activeAccounts=(type:string)=>accounts.filter(a=>a.is_active&&a.account_type===type),approvedSales=sales.filter(s=>s.status==='approved');
  const accountSelect=(name:string,value:string|null,type:string)=><select name={name} defaultValue={value??''}><option value="">—</option>{activeAccounts(type).map(a=><option key={a.id} value={a.id}>{accountName(a)}</option>)}</select>;
  const ar=i18n.language==='ar',currency=ar?'ر.س':'SAR';
  const fmt=(v:string|number|null|undefined)=>formatMoney(v===''?null:v);

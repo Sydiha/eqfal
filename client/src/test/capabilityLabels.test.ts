@@ -8,7 +8,7 @@ const IDS = readFileSync(resolve(__dirname, 'fixtures/capability-ids.txt'), 'utf
 
 describe('capability labels', () => {
   it('covers every known capability with natural Arabic (no Latin text) and a non-fallback English label', () => {
-    expect(IDS.length).toBe(144);
+    expect(IDS.length).toBe(182);
     for (const id of IDS) {
       expect(capabilityLabel(id, 'ar'), id).not.toMatch(/[A-Za-z]/);
       expect(capabilityLabel(id, 'en'), id).not.toBe(id.replace(/[._]+/g, ' '));
@@ -25,6 +25,7 @@ describe('capability labels', () => {
   });
   it('falls back readably for unknown capabilities', () => {
     expect(capabilityLabel('new_area.do_thing', 'en')).toBe('new area do thing');
+    expect(capabilityLabel('new_area.do_thing', 'ar')).toBe('صلاحية أخرى');
   });
 });
 

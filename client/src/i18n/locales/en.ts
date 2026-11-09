@@ -6,7 +6,8 @@ const en = {
     switchLanguage: 'التبديل إلى العربية',
     loading: 'Loading…',
   },
-  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', monthlyClose:'Monthly Close', annualClosing:'Annual Closing', vat:'VAT', documents: 'Documents', banks: 'Banks', partners: 'Partners', obligations:'Obligations', sales:'Sales', purchases:'Purchases',invoiceMappings:'Invoice Account Mappings', accounting:'Accounting', assets:'Fixed Assets', access:'Users & Permissions',companies:'Companies', auditLog:'Audit Log', account:'Account Settings', openMenu: 'Open navigation menu' },
+  nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', monthlyClose:'Monthly Close', annualClosing:'Annual Closing', vat:'VAT', documents: 'Documents', banks: 'Banks', partners: 'Partners', obligations:'Obligations', sales:'Sales', purchases:'Purchases',salesInvoices:'Sales Invoices',purchaseInvoices:'Purchase Invoices',invoiceMappings:'Invoice Account Mappings', accounting:'Accounting', assets:'Fixed Assets', access:'Users & Permissions',companies:'Companies', auditLog:'Audit Log', account:'Account Settings', openMenu: 'Open navigation menu', historicalRecords:'Historical Records', sourceAuthority:'Ledger Source Authority', companyProfile:'Accounting & Tax Profile', openingBalances:'Opening Balances', periodicAdjustments:'Accruals & Prepayments' },
+  shell: { searchDocuments:'Search documents', fiscalYear:'Fiscal Year', selectYear:'Select Year', period:'Period', allPeriods:'All Periods in Year', selectPeriod:'Select Month', attentionItems:'Needs your attention: {{count}} items', attention:'Tasks waiting for you', logout:'Log out', groupInvoices:'Invoices', groupOperations:'Operations', groupAccounting:'Accounting', groupClosing:'Closing', groupAdministration:'Administration' },
   home: {
     workspace: 'Company workspace',
     welcome: 'Welcome back',
