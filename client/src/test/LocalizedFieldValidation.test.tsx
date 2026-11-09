@@ -71,9 +71,8 @@ describe('localized native field validation', () => {
     form.append(first, second);
     document.body.append(form);
 
-    first.dispatchEvent(new Event('invalid', { cancelable: true }));
-    second.dispatchEvent(new Event('invalid', { cancelable: true }));
-    first.dispatchEvent(new Event('invalid', { cancelable: true }));
+    form.requestSubmit();
+    form.requestSubmit();
     expect(form.querySelectorAll('[role="alert"]')).toHaveLength(2);
     first.value = 'ok';
     first.dispatchEvent(new Event('input', { bubbles: true }));
