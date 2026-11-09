@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Accounting } from '../components/Accounting';
 import { journalLineToEditor, serializeJournalLines } from '../components/accounting-contracts';
@@ -127,5 +127,29 @@ describe('Accounting integration contracts',()=>{
   expect(screen.queryByText('Saved successfully.')).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.filter(([url,options])=>url==='/api/accounts'&&options?.method==='POST')).toHaveLength(2);
   expect(fetchMock.mock.calls.filter(([,options])=>(options?.method??'GET')==='GET')).toHaveLength(getsBeforeRetry+4);
+ });
+
+ it('expires successful-save feedback after five seconds',async()=>{
+  let expireNotice:(()=>void)|null=null;
+  const nativeSetTimeout=window.setTimeout.bind(window);
+  vi.spyOn(window,'setTimeout').mockImplementation(((handler:TimerHandler,timeout?:number,...args:unknown[])=>{
+   if(timeout===5000&&typeof handler==='function'){expireNotice=handler as ()=>void;return 0;}
+   return nativeSetTimeout(handler,timeout,...args);
+  }) as typeof window.setTimeout);
+  const journal={id:'22222222-2222-4222-8222-222222222222',fiscal_year_id:year.id,accounting_date:'2026-08-01',description:'Expires once',reference:null,entry_type:'standard' as const,status:'draft' as const};
+  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{
+   if(url==='/api/journals'&&options?.method==='POST')return new Response(JSON.stringify(journal),{status:201});
+   const value=url==='/api/journals'?{journals:[journal]}:emptyResponses(url);
+   return new Response(JSON.stringify(value));
+  }));
+  render(<Accounting canView canCreateChart={false} canEditChart={false} canCreateJournal canEditJournal canPost={false} onUnauthorized={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('tab',{name:'Journals'}));
+  fireEvent.change(screen.getByLabelText('Accounting date'),{target:{value:'2026-08-01'}});
+  fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Expires once'}});
+  fireEvent.click(screen.getByRole('button',{name:'Create journal'}));
+  expect(await screen.findByText('Saved successfully.')).toBeInTheDocument();
+  expect(expireNotice).toBeTypeOf('function');
+  act(()=>expireNotice?.());
+  expect(screen.queryByText('Saved successfully.')).not.toBeInTheDocument();
  });
 });

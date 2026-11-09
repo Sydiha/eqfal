@@ -263,6 +263,11 @@ export function Accounting({
   const [editError, setEditError] = useState<"locked" | "duplicate" | "invalid" | "failed" | "nameRequired" | null>(null);
   const [createNameError, setCreateNameError] = useState(false);
   const [createServerError, setCreateServerError] = useState<"createDuplicate" | "createInvalid" | null>(null);
+  useEffect(() => {
+    if (!saved) return;
+    const timeout = window.setTimeout(() => setSaved(false), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [saved]);
   const setTab = (value: Tab) => {
     setTabState(value);
     if (value === "financialPosition" || value === "profitOrLoss" || value === "changesInEquity" || value === "cashFlow") {
@@ -465,6 +470,9 @@ export function Accounting({
     );
   }, [sources, sourceFilters, sourceTypes]);
   const changesInEquityYear = years.find((year) => year.id === changesInEquityYearId) ?? years[0];
+  const journalDescription = (journal: Journal) => journal.reversal_of_journal_id
+    ? t("journalReversal.description", { description: journal.description.replace(/^Reversal of journal:\s*/i, "") })
+    : journal.description;
   if (!canView)
     return (
       <section className="panel">
@@ -1398,7 +1406,7 @@ export function Accounting({
                           <td className="ac-tab__wide">
                             <button type="button" className="ac-tab__rowlink" onClick={() => void openJournal(j)}>
                               <span className="ac-tab__sr">{j.accounting_date} · </span>
-                              {j.description}
+                              {journalDescription(j)}
                             </button>
                           </td>
                           <td>
@@ -1419,7 +1427,7 @@ export function Accounting({
                   <h2 id="accounting-selected-title">{t("accounting.selectedJournal")}</h2>
                   <span className={`ac-tab__pill is-${selected.status}`}>{t(`accounting.${selected.status}`)}</span>
                 </div>
-                <h3>{selected.description}</h3>
+                <h3>{journalDescription(selected)}</h3>
                 {lines.map((l, i) => (
                   <div className="journal-line ac-tab__line" key={i}>
                     <div className="ac-tab__field ac-tab__field--full">

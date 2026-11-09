@@ -48,12 +48,12 @@ const ar = {
     switchAriaLabel: 'تبديل الشركة النشطة',
     switching: 'جارٍ تبديل الشركة…',
   },
-  common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة', loading: 'جارٍ التحميل…' },
+  common: { cancel: 'إلغاء', close: 'إغلاق', save: 'حفظ', confirm: 'تأكيد', retry: 'إعادة المحاولة', loading: 'جارٍ التحميل…', required: 'هذا الحقل مطلوب.' },
   journalReversal: {
     button: 'عكس القيد', title: 'عكس هذا القيد المرحَّل؟', confirm: 'عكس القيد', date: 'تاريخ العكس', reason: 'سبب العكس',
     confirmation: 'يُرحَّل قيد جديد مستقل بعكس المدين والدائن ويُربط بهذا القيد. يبقى القيد الأصلي دون تغيير في الدفاتر وسجل التدقيق. يجب أن يقع تاريخ العكس في فترة مفتوحة وألا يسبق تاريخ القيد الأصلي.',
     invalid: 'راجع تاريخ العكس والسبب ثم حاول مجدداً.', error: 'تعذر عكس القيد. حاول مرة أخرى.',
-    reversalOf: 'هذا القيد يعكس قيداً آخر.', reversedBy: 'تم عكس هذا القيد بقيد آخر.',
+    reversalOf: 'هذا القيد يعكس قيداً آخر.', reversedBy: 'تم عكس هذا القيد بقيد آخر.', description: 'عكس القيد: {{description}}',
     systemGenerated: 'هذا القيد منشأ من سجل آخر (فاتورة أو أصل أو تسوية أو غيره). يُصحَّح عبر ذلك السجل ولا يُعكس من هنا.',
   },
   carryforward: {
@@ -103,7 +103,7 @@ const ar = {
     balancesCaption: 'الأرصدة حتى {{date}}', signNote: 'الموجب = رصيد دائن (ما تحتفظ به الشركة أو تدين به للشريك). السالب = رصيد مدين (الشريك مدين للشركة).',
     statusColumn: 'الحالة', allStatuses: 'كل الحالات', status: { draft: 'مسودة', posted: 'مرحّلة', reversed: 'معكوسة' },
     date: 'التاريخ', type: 'النوع', amount: 'المبلغ (ريال)', channel: 'طريقة الدفع', channels: { bank: 'بنك', cash: 'نقد' }, linkedBank: 'مرتبطة بحركة بنكية',
-    empty: 'لا توجد معاملات شركاء بعد.', post: 'ترحيل', delete: 'حذف', deleteConfirm: 'هل تريد حذف هذه المسودة؟', reverse: 'عكس', reverseTitle: 'عكس معاملة شريك',
+    empty: 'لا توجد معاملات شركاء بعد.', post: 'ترحيل', delete: 'حذف', deleteDialogTitle: 'حذف مسودة المعاملة؟', deleteConfirm: 'ستُحذف مسودة المعاملة نهائياً. هل تريد المتابعة؟', reverse: 'عكس', reverseTitle: 'عكس معاملة شريك',
     reverseText: 'سيُنشأ قيد مستقل يلغي أثر {{type}} بمبلغ {{amount}} بتاريخ {{date}}. يبقى القيد الأصلي كما هو.', reversalDate: 'تاريخ العكس', reversalOf: 'عكس',
     types: { capital_contribution: 'مساهمة في رأس المال', current_deposit: 'إيداع في الحساب الجاري', current_withdrawal: 'سحب (من الحساب الجاري)', loan_received: 'قرض من الشريك', loan_repayment: 'سداد قرض للشريك' },
     typeHelp: {

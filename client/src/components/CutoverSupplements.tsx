@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import type { CutoverAccount } from './CutoverActivation';
 import { formatMoney } from '../money-format';
+import { Dialog } from './Dialog';
 
 // Cutover S2: pre-cut-over historical supplements (cash flows, equity movements) for one ACTIVE range. Report data with external evidence only:
 // nothing here posts to the ledger. Drafts need source_authority.supplement_manage; approval needs source_authority.supplement_approve.
@@ -76,6 +77,9 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ kind: Kind; version: Version | null } | null>(null);
+  const [voidTarget, setVoidTarget] = useState<Version | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidValidationError, setVoidValidationError] = useState(false);
   const [form, setForm] = useState({ source_system: '', evidence_reference: '', fx_translation_evidence: '', confirm: false });
   const [lines, setLines] = useState<SupplementLineDraft[]>([]);
   const base = `/api/ledger-source-authority/${rangeId}/supplements`;
@@ -126,7 +130,7 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
               <td>{v.evaluation ? <dl className="sa-totals">{Object.entries(v.evaluation.totals).map(([k, x]) => <div key={k}><dt>{TOTALS[k] ? tx(TOTALS[k]!.ar, TOTALS[k]!.en) : k}</dt><dd><bdi dir="ltr">{formatMoney(x)}</bdi></dd></div>)}</dl> : '—'}</td>
               <td>{v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => open(kind, v)}>{tx('تعديل', 'Edit')}</button>}
                 {v.status === 'draft' && canApprove && <button type="button" className="sa-primary" disabled={busy || !v.evaluation?.valid} onClick={() => void run(() => post(`${base}/${v.id}/approve`, { confirm: true, expected_row_version: v.row_version }))}>{tx('اعتماد', 'Approve')}</button>}
-                {v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => { const reason = window.prompt(tx('سبب إلغاء المسودة', 'Reason for voiding the draft')); if (reason?.trim()) void run(() => post(`${base}/${v.id}/void`, { confirm: true, expected_row_version: v.row_version, reason })); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table></div>}
+                {v.status === 'draft' && canManage && <button type="button" className="sa-ghost" disabled={busy} onClick={() => { setVoidTarget(v); setVoidReason(''); setVoidValidationError(false); }}>{tx('إلغاء', 'Void')}</button>}</td></tr>)}</tbody></table></div>}
         {draft?.evaluation && !draft.evaluation.valid && <ul className="sa-issues" aria-label={tx('فروقات المسودة', 'Draft differences')}>{draft.evaluation.issues.map((i, n) => <li key={n}>{ISSUES[i.code] ? tx(ISSUES[i.code]!.ar, ISSUES[i.code]!.en) : i.code}{i.account_id ? ` — ${name(i.account_id)}` : ''}{i.detail?.['difference'] ? <bdi dir="ltr"> ({formatMoney(i.detail['difference'])})</bdi> : null}</li>)}</ul>}
         {canManage && !draft && <button type="button" className="sa-ghost" disabled={busy} onClick={() => open(kind, null)}>{list.some((v) => v.status === 'approved') ? tx('إصدار تصحيحي جديد', 'New correcting version') : tx('إدخال البيانات', 'Enter data')}</button>}
       </div>;
@@ -156,5 +160,17 @@ export function CutoverSupplements({ rangeId, call, tx, canManage, canApprove }:
       <div className="sa-actions"><button type="button" className="sa-ghost" onClick={() => setEditing(null)}>{tx('رجوع', 'Back')}</button>
         <button type="submit" className="sa-primary" disabled={busy || !form.confirm}>{busy ? tx('جارٍ الحفظ…', 'Saving…') : tx('حفظ المسودة', 'Save draft')}</button></div>
     </form>}
+    {voidTarget && <Dialog title={tx('إلغاء مسودة الملحق؟', 'Void draft supplement?')} busy={busy} onClose={() => setVoidTarget(null)}>
+      <form noValidate onSubmit={(event) => {
+        event.preventDefault();
+        const reason = voidReason.trim();
+        if (!reason) { setVoidValidationError(true); return; }
+        void run(async () => { await post(`${base}/${voidTarget.id}/void`, { confirm: true, expected_row_version: voidTarget.row_version, reason }); setVoidTarget(null); });
+      }}>
+        <label>{tx('سبب إلغاء المسودة', 'Reason for voiding the draft')}<textarea autoFocus value={voidReason} onChange={(event) => { setVoidReason(event.target.value); if (event.target.value.trim()) setVoidValidationError(false); }} aria-invalid={voidValidationError} aria-describedby={voidValidationError ? 'supplement-void-reason-error' : undefined}/></label>
+        {voidValidationError && <p id="supplement-void-reason-error" role="alert" className="sa-error">{tx('سبب الإلغاء مطلوب.', 'A reason is required.')}</p>}
+        <div className="sa-actions"><button type="button" className="sa-ghost" disabled={busy} onClick={() => setVoidTarget(null)}>{tx('رجوع', 'Cancel')}</button><button type="submit" className="sa-primary" disabled={busy}>{tx('تأكيد الإلغاء', 'Confirm void')}</button></div>
+      </form>
+    </Dialog>}
   </section>;
 }

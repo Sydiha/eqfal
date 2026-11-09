@@ -60,6 +60,7 @@ import { AnnualClosing } from './components/AnnualClosing';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 import { roleDisplayName } from './labels/displayLabels';
+import { installLocalizedFieldValidation } from './forms/localizedFieldValidation';
 
 type DocumentEntryType = 'purchase' | 'expense' | 'sale';
 type DocumentEntryContext = {
@@ -264,5 +265,6 @@ function AppContent() {
 export default function App() {
   const { i18n } = useTranslation();
   const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  useEffect(() => installLocalizedFieldValidation(), []);
   return <DirectionProvider initialDirection={direction}><MantineDirectionSync /><MantineProvider theme={eqfalTheme} defaultColorScheme="light"><AppContent /></MantineProvider></DirectionProvider>;
 }

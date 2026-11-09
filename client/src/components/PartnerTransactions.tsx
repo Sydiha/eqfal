@@ -69,6 +69,8 @@ export function PartnerTransactions({ partners, selectedPartnerId, capabilities,
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<Tx | null | undefined>(undefined);
   const [reverseTarget, setReverseTarget] = useState<Tx | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tx | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const message = useCallback((e: unknown) => {
@@ -107,7 +109,6 @@ export function PartnerTransactions({ partners, selectedPartnerId, capabilities,
   };
   const act = async (fn: () => Promise<unknown>) => { try { await run(fn); } catch (e) { setError(message(e)); } };
   const post = (tx: Tx) => act(() => api(`/api/partners/transactions/${tx.id}/post`, jsonInit('POST', {}), onUnauthorized));
-  const remove = (tx: Tx) => act(() => api(`/api/partners/transactions/${tx.id}?version=${tx.version}`, { method: 'DELETE' }, onUnauthorized));
 
   if (!canView) return null;
 
@@ -156,7 +157,7 @@ export function PartnerTransactions({ partners, selectedPartnerId, capabilities,
                 <td><div className="pt-actions">
                   {tx.status === 'draft' && canCreate && <button className="pt-ghost" disabled={busy} onClick={() => setForm(tx)}>{t('partners.edit')}</button>}
                   {tx.status === 'draft' && canPost && <button className="pt-primary" disabled={busy} onClick={() => void post(tx)}>{t('partnerTx.post')}</button>}
-                  {tx.status === 'draft' && canCreate && <button className="pt-ghost" disabled={busy} onClick={() => { if (window.confirm(t('partnerTx.deleteConfirm'))) void remove(tx); }}>{t('partnerTx.delete')}</button>}
+                  {tx.status === 'draft' && canCreate && <button className="pt-ghost" disabled={busy} onClick={() => { setDeleteTarget(tx); setDeleteError(null); }}>{t('partnerTx.delete')}</button>}
                   {tx.status === 'posted' && canReverse && <button className="pt-ghost" disabled={busy} onClick={() => setReverseTarget(tx)}>{t('partnerTx.reverse')}</button>}
                 </div></td>
               </tr>)}
@@ -172,6 +173,17 @@ export function PartnerTransactions({ partners, selectedPartnerId, capabilities,
       onSave={async (payload) => { await run(() => api(form ? `/api/partners/transactions/${form.id}` : '/api/partners/transactions', jsonInit(form ? 'PATCH' : 'POST', form ? { ...payload, version: form.version } : payload), onUnauthorized)); setForm(undefined); }} />}
     {reverseTarget && <ReverseDialog tx={reverseTarget} busy={busy} message={message} onClose={() => setReverseTarget(null)}
       onConfirm={async (date, reason) => { await run(() => api(`/api/partners/transactions/${reverseTarget.id}/reverse`, jsonInit('POST', { reversal_date: date, reason }), onUnauthorized)); setReverseTarget(null); }} />}
+    {deleteTarget && <Dialog title={t('partnerTx.deleteDialogTitle')} busy={busy} onClose={() => { setDeleteTarget(null); setDeleteError(null); }}>
+      <p>{t('partnerTx.deleteConfirm')}</p>
+      {deleteError && <p role="alert" className="pt-alert">{deleteError}</p>}
+      <div className="modal-actions">
+        <button type="button" disabled={busy} onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</button>
+        <button type="button" className="is-danger" disabled={busy} onClick={() => {
+          void run(() => api(`/api/partners/transactions/${deleteTarget.id}?version=${deleteTarget.version}`, { method: 'DELETE' }, onUnauthorized))
+            .then(() => setDeleteTarget(null)).catch((reason: unknown) => setDeleteError(message(reason)));
+        }}>{t('partnerTx.delete')}</button>
+      </div>
+    </Dialog>}
   </section>;
 }
 

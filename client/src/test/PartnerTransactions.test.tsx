@@ -69,6 +69,17 @@ describe('PartnerTransactions', () => {
     });
   });
 
+  it('confirms draft deletion in an accessible localized dialog', async () => {
+    const calls = stubFetch([draftTx]);
+    renderIt(ALL);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete draft transaction?' });
+    expect(within(dialog).getByText('This draft transaction will be permanently removed. Continue?')).toBeInTheDocument();
+    expect(calls.some((call) => call.init?.method === 'DELETE')).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.some((call) => call.url === '/api/partners/transactions/t1?version=1' && call.init?.method === 'DELETE')).toBe(true));
+  });
+
   it('creates a draft with the typed fields and explains that a withdrawal is not a distribution', async () => {
     const calls = stubFetch([]);
     renderIt(ALL);
