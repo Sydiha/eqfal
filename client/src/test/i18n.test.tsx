@@ -148,7 +148,7 @@ describe('i18n — Task 35D Phase 2 error codes', () => {
 
 describe('i18n — centralized shell labels', () => {
   it('provides Arabic and English labels for every shared shell control', () => {
-    const keys = ['shell.searchDocuments', 'shell.fiscalYear', 'shell.selectYear', 'shell.period', 'shell.allPeriods', 'shell.selectPeriod', 'shell.attention', 'shell.logout', 'shell.groupInvoices', 'shell.groupOperations', 'shell.groupAccounting', 'shell.groupClosing', 'shell.groupAdministration'];
+    const keys = ['shell.searchDocuments', 'shell.globalSearch', 'shell.globalSearchTitle', 'shell.globalSearchLabel', 'shell.globalSearchPlaceholder', 'shell.globalSearchClear', 'shell.globalSearchStart', 'shell.globalSearchNoResults', 'shell.globalSearchResults', 'shell.fiscalYear', 'shell.selectYear', 'shell.period', 'shell.allPeriods', 'shell.selectPeriod', 'shell.attention', 'shell.logout', 'shell.groupInvoices', 'shell.groupOperations', 'shell.groupAccounting', 'shell.groupClosing', 'shell.groupAdministration'];
     for (const key of keys) {
       expect(i18n.getResource('ar', 'translation', key), `ar ${key}`).toBeTruthy();
       expect(i18n.getResource('en', 'translation', key), `en ${key}`).toBeTruthy();

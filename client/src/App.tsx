@@ -61,6 +61,7 @@ import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 import { roleDisplayName } from './labels/displayLabels';
 import { installLocalizedFieldValidation } from './forms/localizedFieldValidation';
+import { NAVIGATION_PAGES } from './components/navigationVisibility';
 
 type DocumentEntryType = 'purchase' | 'expense' | 'sale';
 type DocumentEntryContext = {
@@ -71,10 +72,8 @@ type DocumentEntryContext = {
   counterpartyType: 'supplier' | 'customer';
 };
 
-const pages: readonly Page[] = ['home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents', 'banks', 'partners', 'obligations', 'accounting', 'openingBalances', 'periodicAdjustments', 'sales', 'purchases', 'invoiceMappings', 'assets', 'companyProfile', 'access', 'companies', 'sourceAuthority', 'historicalRecords', 'auditLog', 'account'];
-
 function pageFromUrl(): Page {
-  return (readQueryParameter('page', { allowedValues: pages }) as Page | null) ?? 'home';
+  return (readQueryParameter('page', { allowedValues: NAVIGATION_PAGES }) as Page | null) ?? 'home';
 }
 
 function LanguageButton({ className = '' }: { className?: string }) {

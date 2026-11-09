@@ -5,6 +5,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { CompanySwitcher } from './CompanySwitcher';
 import { EqfalBrandLockup, EqfalBrandMark } from './EqfalBrand';
 import { canShowNavigationPage, type NavigationPage } from './navigationVisibility';
+import { GlobalPageSearch } from './GlobalPageSearch';
 import { useDateContext } from '../context/DateContext';
 import { IconHome, IconSales, IconPurchases, IconDocuments, IconBanks, IconObligations, IconAccounting, IconOpeningBalances, IconPeriodicAdjustments, IconFixedAssets, IconVAT, IconMonthlyClose, IconAnnualClose, IconFiscalYears, IconPartners, IconCompanyProfile } from './EqfalIcons';
 import { actionableCount, useHomeAlerts } from './homeAlerts';
@@ -144,11 +145,6 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
             <Text className="page-context-title" fw={750}>{pageLabel(page)}</Text>
           </Stack>
           <Group gap={8} wrap="nowrap" className="topbar-context">
-            {canShowNavigationPage('documents', capabilities) && (
-              <button type="button" className="topbar-icon-button" aria-label={t('shell.searchDocuments')} onClick={() => setPage('documents')}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-              </button>
-            )}
             <span className="topbar-company-group"><CompanySwitcher onSwitch={onSwitch} /></span>
 
             {/* Fiscal Year Selector */}
@@ -200,6 +196,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
           </Group>
           <Box className="topbar-spacer" />
           <Group gap={10} wrap="nowrap" className="topbar-user-group">
+            <GlobalPageSearch capabilities={capabilities} onNavigate={setPage} />
             <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={bellCount > 0 ? t('shell.attentionItems', { count: bellCount }) : t('shell.attention')} onClick={openAttention}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
             {bellCount > 0 && <span className="topbar-bell-badge" data-testid="bell-count" aria-hidden="true">{bellCount > 99 ? '99+' : bellCount}</span>}</button>
