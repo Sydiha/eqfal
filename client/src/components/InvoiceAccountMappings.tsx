@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from './Dialog';
 import { PageHeader, SectionCard, StatusBadge, WorkspacePage, WorkspaceState } from './SharedUI';
-import { localizedLegacyAccountName } from './accounting-contracts';
+import { localizedAccountName } from './accounting-contracts';
 import './InvoiceAccountMappings.css';
 
-type Account = { id: string; code: string; name: string; name_ar: string | null };
+type Account = { id: string; code: string; name: string; name_ar: string | null; name_en?: string | null };
 type Mapping = {
   key: string; section: 'sales' | 'purchases'; required_account_type: string; status: 'configured' | 'missing' | 'invalid';
   account: (Account & { is_active: boolean; account_type: string }) | null; eligible_accounts: Account[];
@@ -30,7 +30,7 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
   const busyRef = useRef(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState<Mapping | null>(null);
-  const accountName = (a: Account) => localizedLegacyAccountName(a, i18n.language);
+  const accountName = (a: Account) => localizedAccountName(a, i18n.language);
   const optionLabel = (a: Account) => `${a.code} — ${accountName(a)}`;
   const accountLabel = (account: Account) => <span className="invoice-mappings__account-label"><bdi className="invoice-mappings__code">{account.code}</bdi> — <bdi>{accountName(account)}</bdi></span>;
   const keyName = (key: string) => t(`invoiceMappings.keys.${key}`);

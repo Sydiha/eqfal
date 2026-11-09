@@ -4,9 +4,15 @@ import { describe, expect, it } from 'vitest';
 // G6-1 static contracts: every route is capability-gated with the existing capabilities; the migration adds no capability and no amount column.
 const router = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.router.ts', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../migrations/105_zakat_worksheets.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '');
+const service = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.service.ts', import.meta.url), 'utf8');
+const rules = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.rules.ts', import.meta.url), 'utf8');
 const cap = (needle: string) => router.split('\n').find((l) => l.includes(needle)) ?? '';
 
 describe('Zakat worksheet route contract', () => {
+  it('includes both stored account names in newly captured worksheet balance snapshots', () => {
+    expect(service).toContain("name_ar: (a['name_ar'] as string | null) ?? null, name_en: (a['name_en'] as string | null) ?? null");
+    expect(rules).toMatch(/BalanceAccount\s*=\s*\{[^}]*name_ar:\s*string\s*\|\s*null;\s*name_en:\s*string\s*\|\s*null/s);
+  });
   it.each([
     ["get('/zakat-worksheets/:fiscalYearId'", 'tax_workpaper.view'],
     ["post('/zakat-worksheets/:fiscalYearId',", 'tax_workpaper.create'],

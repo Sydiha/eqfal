@@ -5,8 +5,8 @@ import { InvoiceAccountMappings } from '../components/InvoiceAccountMappings';
 import { canShowNavigationPage } from '../components/navigationVisibility';
 import { NAV_GROUPS } from '../components/AppShell';
 
-const acct = (id: string, code: string, name: string, name_ar: string) => ({ id, code, name, name_ar });
-const asset = [acct('a1', '1100', 'Receivables', 'الذمم المدينة'), acct('a2', '1150', 'Other receivables', 'ذمم مدينة أخرى')];
+const acct = (id: string, code: string, name: string, name_ar: string | null, name_en?: string | null) => ({ id, code, name, name_ar, ...(name_en === undefined ? {} : { name_en }) });
+const asset = [acct('a1', '1100', 'Old receivables', 'الذمم المدينة', 'Receivables'), acct('a2', '1150', 'Old other receivables', 'ذمم مدينة أخرى', 'Other receivables')];
 const mk = (key: string, section: string, type: string, status: string, account: unknown, eligible: unknown[]) => ({ key, section, required_account_type: type, status, account, eligible_accounts: eligible });
 // Server order (receivable first); the page shows missing/invalid first within each section.
 const base = () => [
@@ -33,6 +33,21 @@ const ok = () => new Response(JSON.stringify({ mappings: base() }), { status: 20
 beforeEach(async () => { await i18n.changeLanguage('en'); vi.restoreAllMocks(); });
 
 describe('InvoiceAccountMappings', () => {
+  it('localizes configured and eligible accounts in Arabic and English, with legacy-name fallback', async () => {
+    const data = () => [
+      mk('receivable', 'sales', 'asset', 'configured', { ...asset[0], is_active: true, account_type: 'asset' }, [...asset, acct('a3', '1190', 'Legacy cash', null)]),
+      ...base().slice(1),
+    ];
+    mockApi(undefined, data);
+    render(<InvoiceAccountMappings canView canManage onUnauthorized={vi.fn()} />);
+    expect(await screen.findByTestId('mapping-receivable')).toHaveTextContent('1100 — Receivables');
+    expect(screen.getAllByRole('option', { name: '1150 — Other receivables' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: '1190 — Legacy cash' }).length).toBeGreaterThan(0);
+    await act(async () => { await i18n.changeLanguage('ar'); });
+    expect((await screen.findAllByText('الذمم المدينة')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: '1150 — ذمم مدينة أخرى' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: '1190 — Legacy cash' }).length).toBeGreaterThan(0);
+  });
   it('makes no request and shows no data without view permission', () => {
     const calls = mockApi();
     render(<InvoiceAccountMappings canView={false} canManage={false} onUnauthorized={vi.fn()} />);

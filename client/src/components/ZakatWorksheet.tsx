@@ -2,10 +2,11 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './ZakatWorksheet.css';
 import { formatMinorUnits } from '../money-format';
+import { localizedAccountName } from './accounting-contracts';
 
 // G6-1 preparation workflow inside the existing TaxWorkpaper page. It never shows a Zakat payable amount: the calculation is withheld
 // until the regulatory gates are verified by the company's qualified accountant.
-type Account = { account_id: string; code: string; name: string; name_ar: string | null; statement_category: string; amount_cents: string };
+type Account = { account_id: string; code: string; name: string; name_ar: string | null; name_en?: string | null; statement_category: string; amount_cents: string };
 type Classification = { id: string; account_id: string; zakat_type: string; reg_article: string; evidence_document_id: string | null; note: string | null };
 type Adjustment = { id: string; description: string; direction: 'add' | 'deduct'; professional_review_required?: boolean; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number };
 type Eligibility = { id: string; partner_id: string; partner_name: string; ownership_class: string; effective_from: string; effective_to: string | null; evidence_document_id: string; verification_status: string; entity_ultimate_ownership_note: string | null; version: number };
@@ -163,7 +164,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <h4>{t('zakatWorksheet.classTitle')}</h4>
         <p className="zw-muted">{t('zakatWorksheet.classHelp')}</p>
         <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
-          <tbody>{accounts.map((a) => { const c = classByAccount.get(a.account_id); const name = ar ? (a.name_ar || a.name) : a.name; return (
+          <tbody>{accounts.map((a) => { const c = classByAccount.get(a.account_id); const name = localizedAccountName(a, i18n.language); return (
             <tr key={`${a.account_id}-${c?.zakat_type ?? 'none'}-${w.version}`}><td><bdi>{a.code}</bdi> {name}</td><td>{t(`zakatWorksheet.categories.${a.statement_category}`)}</td><td className="zw-num"><bdi>{money(a.amount_cents)}</bdi></td>
               <td>{draft && p.canEdit ? <form className="zw-inline" onSubmit={(e) => void saveClassification(a)(e)}>
                 <select name="zakat_type" defaultValue={c?.zakat_type ?? ''} required aria-label={t('zakatWorksheet.classification')}><option value="">{t('zakatWorksheet.unclassified')}</option>{TYPES.map((x) => <option key={x} value={x}>{t(`zakatWorksheet.types.${x}`)}</option>)}</select>

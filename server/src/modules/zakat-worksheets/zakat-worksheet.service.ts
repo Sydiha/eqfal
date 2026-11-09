@@ -71,7 +71,7 @@ export class ZakatWorksheetService {
       for (const a of section.accounts) {
         const cents = toCents(String(a['amount']));
         accounts.push({
-          account_id: String(a['account_id']), code: String(a['code']), name: String(a['name']), name_ar: (a['name_ar'] as string | null) ?? null,
+          account_id: String(a['account_id']), code: String(a['code']), name: String(a['name']), name_ar: (a['name_ar'] as string | null) ?? null, name_en: (a['name_en'] as string | null) ?? null,
           statement_category: String(a['statement_category']), account_type: String(a['account_type']), is_contra: Boolean(a['is_contra']), amount_cents: cents.toString(),
         });
       }
