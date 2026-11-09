@@ -112,7 +112,7 @@ export function verifyOwnership(input: OwnershipInputs): OwnershipVerification {
   return { as_of_date: asOf, qualified: sortedBlockers.length === 0, blockers: sortedBlockers, total_ownership_bps4: total.toString(), profile: input.profile, partners: rows };
 }
 
-export type BalanceAccount = { account_id: string; code: string; name: string; name_ar: string | null; statement_category: string; account_type: string; is_contra: boolean; amount_cents: string };
+export type BalanceAccount = { account_id: string; code: string; name: string; name_ar: string | null; name_en: string | null; statement_category: string; account_type: string; is_contra: boolean; amount_cents: string };
 export type BalancesSnapshot = { as_of_date: string; accounts: BalanceAccount[]; current_period_earnings_cents: string; totals_cents: Record<string, string> };
 
 export function unclassifiedAccounts(balances: BalancesSnapshot | null, classified: Set<string>) {

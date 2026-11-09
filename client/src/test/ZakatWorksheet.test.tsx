@@ -7,7 +7,7 @@ const props = { yearId: 'fy', canCreate: true, canEdit: true, canCreateAdjustmen
 const gates = ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval', 'B1_hijri_denominator'].map((code) => ({ code, title: code, article_ref: 'Art.', blocks_approval: !code.startsWith('B1'), status: 'unverified' }));
 const payload = (over: object = {}, amountCents = '1234500') => ({
   scope: { unsupported_reason: null, fiscal_year: { start_date: '2026-01-01', end_date: '2026-12-31' } },
-  worksheet: { id: 'w', revision_no: 1, status: 'draft', version: 3, revision_reason: null, non_financing_confirmed: true, accounting_records_confirmed: true, snapshot_captured_at: '2027-01-02', balances_snapshot: { as_of_date: '2026-12-31', accounts: [{ account_id: 'a1', code: '1100', name: 'Cash', name_ar: 'النقدية', statement_category: 'current_asset', amount_cents: amountCents }] } },
+  worksheet: { id: 'w', revision_no: 1, status: 'draft', version: 3, revision_reason: null, non_financing_confirmed: true, accounting_records_confirmed: true, snapshot_captured_at: '2027-01-02', balances_snapshot: { as_of_date: '2026-12-31', accounts: [{ account_id: 'a1', code: '1100', name: 'Stale cash', name_ar: 'النقدية', name_en: 'Cash', statement_category: 'current_asset', amount_cents: amountCents }] } },
   revisions: [{ id: 'w', revision_no: 1, status: 'draft', revision_reason: null, approved_at: null }],
   classifications: [], adjustments: [], eligibility: [],
   ownership_live: { qualified: false, blockers: ['no_confirmed_ownership'], as_of_date: '2026-12-31', total_ownership_bps4: '0', partners: [] },
@@ -37,6 +37,17 @@ describe('Zakat worksheet', () => {
     await i18n.changeLanguage('ar'); mockFetch(); render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'عرض' }));
     await waitFor(() => expect(screen.getByText(/مبلغ الزكاة المستحق محجوب/)).toBeTruthy());
     expect(screen.getByText('B3 – قواعد التقريب')).toBeTruthy(); expect(screen.getByText('B9 – اعتماد المحاسب للحالات المرجعية')).toBeTruthy(); expect(screen.getByText('النقدية', { exact: false })).toBeTruthy();
+  });
+  it('renders the stored English account name in English UI and falls back for legacy snapshots', async () => {
+    mockFetch(); const first = render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByText(/Cash/)).toBeTruthy();
+    expect(screen.queryByText(/Stale cash/)).toBeNull();
+    first.unmount();
+    const legacy = payload();
+    legacy.worksheet!.balances_snapshot!.accounts[0] = { account_id: 'a1', code: '1100', name: 'Legacy cash', name_ar: '' as string, name_en: '' as string, statement_category: 'current_asset', amount_cents: '100' };
+    vi.stubGlobal('fetch', vi.fn(async (url) => String(url).includes('/api/documents') ? new Response(JSON.stringify({ documents: [] })) : new Response(JSON.stringify(legacy))));
+    render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByText(/Legacy cash/)).toBeTruthy();
   });
   it('formats large snapshot minor-unit balances exactly', async () => {
     mockFetch('1234567890123456789'); render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));

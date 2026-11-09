@@ -161,6 +161,27 @@ describe('InvoiceAccountMappingService validation', () => {
   });
 });
 
+describe('InvoiceAccountMappingService bilingual overview contract', () => {
+  it('returns stored localized names for configured and eligible accounts, preserving null legacy translations', async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ mapping_key: 'receivable', account_id: 'a1', code: '1100', name: 'Old bank', name_ar: 'البنك', name_en: 'Bank', is_active: true, account_type: 'asset' }] })
+      .mockResolvedValueOnce({ rows: [
+        { id: 'a1', code: '1100', name: 'Old bank', name_ar: 'البنك', name_en: 'Bank', account_type: 'asset' },
+        { id: 'a2', code: '1190', name: 'Legacy cash', name_ar: null, name_en: null, account_type: 'asset' },
+      ] });
+    const service = new InvoiceAccountMappingService({ query } as unknown as Pool);
+    const rows = await service.overview('company-a');
+    expect(rows.find((row) => row.key === 'receivable')).toMatchObject({
+      account: { name_ar: 'البنك', name_en: 'Bank' },
+      eligible_accounts: [
+        { id: 'a1', name_ar: 'البنك', name_en: 'Bank' },
+        { id: 'a2', name: 'Legacy cash', name_ar: null, name_en: null },
+      ],
+    });
+    expect(query.mock.calls.map(([sql]) => sql)).toEqual(expect.arrayContaining([expect.stringContaining('a.name_ar, a.name_en'), expect.stringContaining('name_ar, name_en')]));
+  });
+});
+
 describe('invoice approval with missing mappings', () => {
   it('reports the missing keys in the error body so the UI can name them', async () => {
     login(['invoice.approve']);
