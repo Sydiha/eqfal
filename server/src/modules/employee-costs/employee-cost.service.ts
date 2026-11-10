@@ -123,10 +123,11 @@ export class EmployeeCostService {
     });
   }
 
-  async correctCost(companyId: string, actor: string, id: string, reason: string, v: CostInput) {
+  async correctCost(companyId: string, actor: string, id: string, reason: string, v: CostInput, salaryVisible: boolean) {
     return this.tx(async c => {
       const before = (await c.query<CostRecord>('SELECT *,service_period_start::text,service_period_end::text FROM employee_cost_records WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];
       if (!before || before.status !== 'approved') throw missing();
+      if (!salaryVisible && (before.nature !== 'employer_cost' || v.nature !== 'employer_cost')) throw forbidden();
       const existing = await c.query('SELECT 1 FROM employee_cost_records WHERE company_id=$1 AND supersedes_id=$2',[companyId,id]);
       if (existing.rowCount) throw conflict('This approved record already has a correction');
       const replacement = await this.insertRecord(c,companyId,actor,before.employee_id,v,{supersedesId:id,reason});
@@ -137,10 +138,11 @@ export class EmployeeCostService {
     });
   }
 
-  async updateDraftCost(companyId: string, actor: string, id: string, expectedVersion: number, v: CostInput) {
+  async updateDraftCost(companyId: string, actor: string, id: string, expectedVersion: number, v: CostInput, salaryVisible: boolean) {
     return this.tx(async c => {
       const before = (await c.query<CostRecord>('SELECT *,service_period_start::text,service_period_end::text FROM employee_cost_records WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,companyId])).rows[0];
       if (!before) throw missing();
+      if (!salaryVisible && (before.nature !== 'employer_cost' || v.nature !== 'employer_cost')) throw forbidden();
       if (before.status !== 'draft' || before.version !== expectedVersion || before.supersedes_id) throw conflict();
       this.validateCost(v);
       await c.query('DELETE FROM employee_cost_allocations WHERE cost_record_id=$1 AND company_id=$2',[id,companyId]);
