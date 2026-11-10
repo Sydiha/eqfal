@@ -57,6 +57,7 @@ import { AccountSettings, RequiredPasswordChange } from './components/AccountSet
 import { OpeningBalanceReview } from './components/OpeningBalanceReview';
 import { PeriodicAdjustments } from './components/PeriodicAdjustments';
 import { AnnualClosing } from './components/AnnualClosing';
+import { EmployeeCostCenter } from './components/EmployeeCostCenter';
 import { eqfalTheme } from './theme';
 import { clearContextualQueryState, navigateToQueryState, readQueryParameter, writeQueryParameters } from './navigation/queryState';
 import { roleDisplayName } from './labels/displayLabels';
@@ -230,6 +231,7 @@ function CompanyContentForPage({ page, setPage, navigateToDiscovery, documentEnt
       onUnauthorized={handleUnauthorized}
     />}
     {page === 'partners' && <Partners canView={c.includes('partner.view')} canCreatePartner={c.includes('partner.create')} canEditPartner={c.includes('partner.edit')} canDisablePartner={c.includes('partner.disable')} canDeletePartner={c.includes('partner.delete')} canCreateOwnership={c.includes('partner.ownership.create')} canEditOwnership={c.includes('partner.ownership.edit')} canConfirmOwnership={c.includes('partner.ownership.confirm')} companyName={activeCompany?.name} capabilities={c} onUnauthorized={handleUnauthorized}/>}
+    {page === 'employeeCosts' && <EmployeeCostCenter capabilities={c} onUnauthorized={handleUnauthorized}/>}
     {page === 'historicalRecords' && <HistoricalRecords canManage={c.includes('historical.manage')} canApprove={c.includes('historical.approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'sourceAuthority' && <SourceAuthority canManage={c.includes('source_authority.manage')} canActivate={c.includes('source_authority.activate')} canManageSupplements={c.includes('source_authority.supplement_manage')} canApproveSupplements={c.includes('source_authority.supplement_approve')} onUnauthorized={handleUnauthorized}/>}
     {page === 'access' && <AccessAdministration capabilities={c} onAccessChanged={refreshSession} currentUserId={session.user.id} isSystemAdmin={session.user.isSystemAdmin === true} companyName={activeCompany?.name ?? ''} onUnauthorized={handleUnauthorized}/>}
