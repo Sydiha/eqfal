@@ -53,4 +53,11 @@ describe('manager workspace navigation boundary', () => {
     expect(canShowNavigationPage('purchases', ['document.view'])).toBe(false);
     expect(canShowNavigationPage('purchases', ['obligation.view'])).toBe(false);
   });
+
+  it('keeps employee costs behind company-scoped employee and cost visibility, independent of salary visibility', () => {
+    expect(canShowNavigationPage('employeeCosts', ['employee_cost.view'])).toBe(false);
+    expect(canShowNavigationPage('employeeCosts', ['employee.view'])).toBe(false);
+    expect(canShowNavigationPage('employeeCosts', ['employee.view', 'employee_cost.view'])).toBe(true);
+    expect(canShowNavigationPage('employeeCosts', ['employee.view', 'employee.manage'])).toBe(true);
+  });
 });

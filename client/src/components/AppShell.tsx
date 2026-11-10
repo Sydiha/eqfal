@@ -17,7 +17,7 @@ import '../shell-corrective.css';
 export type Page = NavigationPage;
 
 type IconComponent = React.FC<{ size?: number; stroke?: number; className?: string }>;
-type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'companyProfile' | 'access' | 'companies' | 'sourceAuthority' | 'auditLog' | 'account';
+type IconName = 'home' | 'sales' | 'purchases' | 'documents' | 'banks' | 'obligations' | 'accounting' | 'openingBalances' | 'periodicAdjustments' | 'fixedAssets' | 'vat' | 'monthlyClose' | 'annualClose' | 'fiscalYears' | 'partners' | 'employeeCosts' | 'companyProfile' | 'access' | 'companies' | 'sourceAuthority' | 'auditLog' | 'account';
 
 const iconMap: Record<IconName, IconComponent> = {
   home: IconHome,
@@ -35,6 +35,7 @@ const iconMap: Record<IconName, IconComponent> = {
   annualClose: IconAnnualClose,
   fiscalYears: IconFiscalYears,
   partners: IconPartners,
+  employeeCosts: IconPartners,
   companyProfile: IconCompanyProfile,
   access: IconPartners,
   companies: IconCompanyProfile,
@@ -48,12 +49,12 @@ function ShellIcon({ name }: { name: IconName }) {
   return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', historicalRecords: 'documents', auditLog: 'auditLog', account: 'account' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', employeeCosts: 'employeeCosts', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', historicalRecords: 'documents', auditLog: 'auditLog', account: 'account' };
 
 type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
   { id: 'invoices', pages: ['sales', 'purchases', 'invoiceMappings'] },
-  { id: 'operations', pages: ['documents', 'banks', 'obligations'] },
+  { id: 'operations', pages: ['documents', 'banks', 'obligations', 'employeeCosts'] },
   { id: 'accounting', pages: ['accounting', 'openingBalances', 'periodicAdjustments', 'assets', 'vat'] },
   { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears', 'historicalRecords'] },
   { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'sourceAuthority', 'auditLog'] },
