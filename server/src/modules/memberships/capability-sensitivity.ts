@@ -77,6 +77,9 @@ const SENSITIVE_EXACT = new Set([
   'employee_cost.create',
   'employee_cost.correct',
   'employee_cost.approve',
+  'employee_cost.payment.allocate',
+  'employee_cost.payment.reverse',
+  'employee_cost.payment.view',
   'employee.manage',
 ]);
 

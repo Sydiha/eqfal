@@ -34,8 +34,9 @@ const escapeLike = (value: string) => value.replace(/[\\%_]/g, (ch) => `\\${ch}`
  * Read-only audit log search. The company scope is a mandatory first argument and is
  * always the first bound parameter: callers can never widen it through filters.
  */
-export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: string, f: AuditLogFilters) {
+export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: string, f: AuditLogFilters, salaryVisible = true) {
   const where = ['a.company_id = $1'];
+  if (!salaryVisible) where.push("a.action NOT LIKE 'employee_cost_payment.%'");
   const params: unknown[] = [companyId];
   const add = (sql: string, value: unknown) => { params.push(value); where.push(sql.replace('?', `$${params.length}`)); };
 
@@ -70,12 +71,13 @@ export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: strin
 }
 
 /** Distinct values for the filter dropdowns, scoped to one company. */
-export async function auditLogFacets(pool: Pick<Pool, 'query'>, companyId: string) {
+export async function auditLogFacets(pool: Pick<Pool, 'query'>, companyId: string, salaryVisible = true) {
+  const privacy = salaryVisible ? '' : " AND action NOT LIKE 'employee_cost_payment.%'";
   const [actions, entityTypes, actors] = await Promise.all([
-    pool.query<{ v: string }>(`SELECT DISTINCT action AS v FROM audit_log WHERE company_id = $1 ORDER BY 1`, [companyId]),
-    pool.query<{ v: string }>(`SELECT DISTINCT entity_type AS v FROM audit_log WHERE company_id = $1 ORDER BY 1`, [companyId]),
+    pool.query<{ v: string }>(`SELECT DISTINCT action AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
+    pool.query<{ v: string }>(`SELECT DISTINCT entity_type AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
     pool.query<{ id: string; email: string | null }>(
-      `SELECT DISTINCT a.actor_user_id AS id, u.email FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id WHERE a.company_id = $1 ORDER BY 2`, [companyId]),
+      `SELECT DISTINCT a.actor_user_id AS id, u.email FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id WHERE a.company_id = $1${salaryVisible ? '' : " AND a.action NOT LIKE 'employee_cost_payment.%'"} ORDER BY 2`, [companyId]),
   ]);
   return { actions: actions.rows.map((r) => r.v), entity_types: entityTypes.rows.map((r) => r.v), actors: actors.rows };
 }
