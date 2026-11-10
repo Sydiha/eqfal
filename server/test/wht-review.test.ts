@@ -35,13 +35,16 @@ app.use((_error: unknown, _request: Request, response: Response, _next: NextFunc
 type Row = Record<string, unknown> & { id: string; company_id: string; fiscal_year_id: string; source_type: string; source_id: string; workflow_status: string; assessment_result: string | null; reviewer_note: string | null; professional_review_required: boolean; version: number };
 const initial = (): Row => ({ id: REVIEW, company_id: COMPANY, fiscal_year_id: YEAR, source_type: 'document', source_id: SOURCE, counterparty_id: null, non_resident_assessment: 'unknown', payment_service_category: 'Services', basis_reference: 'Contract', reviewer_note: null, professional_review_required: true, workflow_status: 'needs_review', assessment_result: null, reviewed_by_user_id: null, reviewed_at: null, version: 1 });
 
-function database(seed: Row[] = [], sourceDates: Record<string, string | null> = {}) {
+function database(seed: Row[] = [], sourceDates: Record<string, string | null> = {}, sourceReferences: Record<string, string | null> = {}) {
   const rows = seed.map(row => ({ ...row }));
   const sql: string[] = [];
   const query = async (statement: string, values: unknown[] = []) => {
     const normalized = statement.replace(/\s+/g, ' ').trim(); sql.push(normalized);
     if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(normalized)) return { rows: [], rowCount: 0 };
-    if (normalized.startsWith('SELECT r.*')) return { rows: rows.filter(row => row.company_id === values[0] && row.fiscal_year_id === values[1]), rowCount: rows.length };
+    if (normalized.startsWith('SELECT r.*')) {
+      const result = rows.filter(row => row.company_id === values[0] && row.fiscal_year_id === values[1]).map(row => ({ ...row, source_reference: sourceReferences[`${row.company_id}:${row.source_id}`] ?? null }));
+      return { rows: result, rowCount: result.length };
+    }
     if (normalized.startsWith('SELECT 1 FROM fiscal_years')) return { rows: values[1] === COMPANY && values[0] === YEAR ? [{ one: 1 }] : [], rowCount: values[1] === COMPANY && values[0] === YEAR ? 1 : 0 };
     if (/^SELECT 1 FROM (documents|obligations|bank_transactions) s JOIN fiscal_years/.test(normalized)) {
       const table = normalized.split(' ')[3]!;
@@ -118,6 +121,28 @@ describe('WHT review tenant and lifecycle protections', () => {
     const result = await new WhtReviewService(db as unknown as Pool).list(COMPANY, YEAR);
     expect(result).toHaveLength(1); expect(result[0]?.company_id).toBe(COMPANY);
     expect(db.sql[0]).toContain('r.company_id=$1 AND r.fiscal_year_id=$2');
+    expect(db.sql[0]).toContain('d.company_id=r.company_id');
+    expect(db.sql[0]).toContain('o.company_id=r.company_id');
+    expect(db.sql[0]).toContain('od.company_id=o.company_id');
+    expect(db.sql[0]).toContain('bt.company_id=r.company_id');
+    expect(db.sql[0]).toContain("d.reference_number");
+    expect(db.sql[0]).toContain("od.reference_number");
+    expect(db.sql[0]).toContain("bt.bank_reference");
+  });
+
+  it('returns only the matching company source reference and leaves absent references null', async () => {
+    const other = { ...initial(), id: OTHER_SOURCE, source_id: OTHER_SOURCE, company_id: OTHER_COMPANY };
+    const db = database([initial(), other], {}, {
+      [`${COMPANY}:${SOURCE}`]: 'INV-2026-18',
+      [`${OTHER_COMPANY}:${OTHER_SOURCE}`]: 'OTHER-COMPANY-PRIVATE-REF',
+    });
+    const result = await new WhtReviewService(db as unknown as Pool).list(COMPANY, YEAR);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ source_id: SOURCE, source_reference: 'INV-2026-18' });
+    expect(JSON.stringify(result)).not.toContain('OTHER-COMPANY-PRIVATE-REF');
+
+    const withoutReference = await new WhtReviewService(database([initial()]) as unknown as Pool).list(COMPANY, YEAR);
+    expect(withoutReference[0]?.source_reference).toBeNull();
   });
 
   it('rejects cross-company sources and counterparties', async () => {

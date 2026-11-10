@@ -5,6 +5,7 @@ type Review = {
   id: string;
   source_type: string;
   source_id: string;
+  source_reference?: string | null;
   counterparty_name?: string | null;
   non_resident_assessment: string;
   payment_service_category: string;
@@ -114,7 +115,7 @@ export function WhtReviews({ fiscalYearId, canView, canCreate, canEdit, canSubmi
       <button type="button" onClick={() => setEditing(null)}>{t('whtReviews.cancel')}</button>
     </form>}
     <div className="table-wrap"><table><thead><tr><th>{t('whtReviews.source')}</th><th>{t('whtReviews.counterparty')}</th><th>{t('whtReviews.assessment')}</th><th>{t('whtReviews.category')}</th><th>{t('whtReviews.basis')}</th><th>{t('whtReviews.reviewRequired')}</th><th>{t('annualClosing.state')}</th><th>{t('whtReviews.actions')}</th></tr></thead><tbody>
-      {items.map(review => <tr key={review.id}><td>{review.source_type?t(`whtReviews.sourceTypes.${review.source_type}`,{defaultValue:review.source_type}):'—'}: <bdi dir="auto">{review.source_id}</bdi></td><td>{review.counterparty_name ?? '—'}</td><td>{review.non_resident_assessment?t(`whtReviews.assessments.${review.non_resident_assessment}`,{defaultValue:review.non_resident_assessment}):'—'}</td><td>{review.payment_service_category}</td><td>{review.basis_reference}</td><td>{t(review.professional_review_required ? 'whtReviews.yes' : 'whtReviews.no')}</td><td>{t(`annualClosing.status.${review.workflow_status}`,{defaultValue:review.workflow_status})}</td><td>
+      {items.map(review => <tr key={review.id}><td>{review.source_type?t(`whtReviews.sourceTypes.${review.source_type}`,{defaultValue:review.source_type}):'—'}: <bdi dir="auto">{review.source_reference?.trim() || t('whtReviews.referenceUnavailable')}</bdi></td><td>{review.counterparty_name ?? '—'}</td><td>{review.non_resident_assessment?t(`whtReviews.assessments.${review.non_resident_assessment}`,{defaultValue:review.non_resident_assessment}):'—'}</td><td>{review.payment_service_category}</td><td>{review.basis_reference}</td><td>{t(review.professional_review_required ? 'whtReviews.yes' : 'whtReviews.no')}</td><td>{t(`annualClosing.status.${review.workflow_status}`,{defaultValue:review.workflow_status})}</td><td>
         {canEdit && <button type="button" onClick={() => startEdit(review)}>{t('whtReviews.edit')}</button>}
         {canSubmit && review.workflow_status === 'needs_review' && <button onClick={() => void request(`/${review.id}/submit`, 'POST', { version: review.version })}>{t('whtReviews.submit')}</button>}
         {canReview && ['needs_review', 'submitted'].includes(review.workflow_status) && <><button onClick={() => void request(`/${review.id}/review`, 'POST', { version: review.version, result: 'not_applicable' })}>{t('whtReviews.notApplicable')}</button><button onClick={() => void request(`/${review.id}/review`, 'POST', { version: review.version, result: 'applicable' })}>{t('whtReviews.applicable')}</button></>}
