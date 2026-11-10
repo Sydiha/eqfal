@@ -10,9 +10,10 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
   let h:Harness;let seq=0;
   beforeAll(async()=>{h=await startHarness();});afterAll(()=>h.close());
   async function setup(label:string){
-    const owner=await h.user(`${label}-owner`),viewer=await h.user(`${label}-viewer`),company=await h.company(`${label}-${++seq}`,owner.id);
+    const owner=await h.user(`${label}-owner`),viewer=await h.user(`${label}-viewer`),limited=await h.user(`${label}-limited`),company=await h.company(`${label}-${++seq}`,owner.id);
     await h.member(company,viewer.id,['employee.view','employee_cost.view','employee_cost.payment.view','employee_cost.payment.allocate','bank.view','audit.view']);
-    for(const user of [owner,viewer])await user.client.login();
+    await h.member(company,limited.id,['employee.view','employee_cost.view','employee_cost.payment.view','employee_cost.payment.allocate','employee_cost.payment.reverse']);
+    for(const user of [owner,viewer,limited])await user.client.login();
     const fy=await h.fiscalYear(company,'FY26','2026-01-01','2026-12-31');
     const employee=(await owner.client.req('POST','/employees',{employee_number:`E${seq}`,display_name:`Employee ${seq}`,employment_start:'2025-01-01',employment_end:null})).json;
     const draft=await owner.client.req('POST','/employee-costs',{employee_id:employee.id,record:costBody(fy)});
@@ -23,7 +24,7 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
       return (await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,$3,$4,'SAR','Payment test',$5,$6,'strong','manual',$7,$8) RETURNING id",[company,bank,date,amount,`ref-${randomUUID()}`,randomUUID().replaceAll('-',''),'other',owner.id]))[0]!.id;
     }
     const costId=draft.json.record.id,costAllocationId=(await h.q<{id:string}>('SELECT id FROM employee_cost_allocations WHERE cost_record_id=$1',[costId]))[0]!.id;
-    return{owner,viewer,company,fy,employee,costId,costAllocationId,bank,tx};
+    return{owner,viewer,limited,company,fy,employee,costId,costAllocationId,bank,tx};
   }
   it('supports partial and multi-employee allocations while serializing capacity across concurrent payments',async()=>{
     const x=await setup('ecc-pay-partial');
@@ -57,8 +58,8 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
     expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/payments`,request)).status).toBe(409);
     const clean=await x.tx('-100.00');request.bank_transaction_id=clean;
     expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/payments`,request)).status).toBe(201);
-    const correction=await x.owner.client.req('POST',`/employee-costs/${x.costId}/corrections`,{reason:'Correct cost',record:costBody(x.fy,'110.00')});
-    expect(correction.status).toBe(409);
+    const paidCorrection=await x.owner.client.req('POST',`/employee-costs/${x.costId}/corrections`,{reason:'Correct cost',record:costBody(x.fy,'110.00')});
+    expect(paidCorrection.status).toBe(409);
     const refund=await x.tx('20.00','2026-02-01');
     expect((await x.owner.client.req('POST',`/employee-cost-payments/${(await h.q<{id:string}>("SELECT id FROM employee_cost_payment_allocations WHERE bank_transaction_id=$1 AND allocation_type='payment'",[clean]))[0]!.id}/reversals`,{bank_transaction_id:refund,amount:'20.00',reason:'Bank refund'})).status).toBe(201);
     const badRefund=await x.tx('-20.00','2026-02-02');
@@ -66,7 +67,14 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
     expect((await x.owner.client.req('POST',`/employee-cost-payments/${paymentId}/reversals`,{bank_transaction_id:badRefund,amount:'1.00',reason:'Wrong direction'})).status).toBe(409);
     const full=await x.tx('30.00','2026-02-03');
     expect((await x.owner.client.req('POST',`/employee-cost-payments/${paymentId}/reversals`,{bank_transaction_id:full,amount:'30.00',reason:'Reverse remainder'})).status).toBe(201);
-    expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/corrections`,{reason:'Correct cost',record:costBody(x.fy,'110.00')})).status).toBe(201);
+    const correction=await x.owner.client.req('POST',`/employee-costs/${x.costId}/corrections`,{reason:'Correct cost',record:costBody(x.fy,'110.00')});
+    expect(correction.status).toBe(201);
+    const replacementId=correction.json.record.id,replacementAllocation=(await h.q<{id:string}>('SELECT id FROM employee_cost_allocations WHERE cost_record_id=$1',[replacementId]))[0]!.id;
+    const replacementBank=await x.tx('-110.00','2026-03-01');
+    expect((await x.owner.client.req('POST',`/employee-costs/${replacementId}/payments`,{cost_allocation_id:replacementAllocation,bank_transaction_id:replacementBank,amount:'110.00',beneficiary_type:'employee',counterparty_id:null})).status).toBe(201);
+    const supersededBank=await x.tx('-1.00','2026-03-02');
+    expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/payments`,{cost_allocation_id:x.costAllocationId,bank_transaction_id:supersededBank,amount:'1.00',beneficiary_type:'employee',counterparty_id:null})).status).toBe(409);
+    await expect(h.q("INSERT INTO employee_cost_payment_allocations(company_id,bank_transaction_id,cost_record_id,cost_allocation_id,allocation_type,beneficiary_type,amount,created_by) VALUES($1,$2,$3,$4,'payment','employee',1,$5)",[x.company,supersededBank,x.costId,x.costAllocationId,x.owner.id])).rejects.toThrow(/active approved cost/i);
   });
   it('enforces tenant and closed-period boundaries and hides salary payments from banking and audit views',async()=>{
     const x=await setup('ecc-pay-private'),y=await setup('ecc-pay-other');
@@ -81,6 +89,10 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
     const bankView=await x.viewer.client.req('GET','/bank-transactions');expect(JSON.stringify(bankView.json)).not.toContain('employee_cost_payment');
     const paymentOptions=await x.viewer.client.req('GET','/employee-costs/payment-options');expect(paymentOptions.status).toBe(200);expect(paymentOptions.json.bank_transactions.some((t:{id:string})=>t.id===bank)).toBe(false);
     expect((await x.viewer.client.req('GET',`/employee-costs/${x.costId}/payments`)).status).toBe(403);
+    expect((await x.limited.client.req('GET','/employee-costs/payment-options')).status).toBe(403);
+    expect((await x.limited.client.req('GET',`/employee-costs/${x.costId}/payments`)).status).toBe(403);
+    expect((await x.limited.client.req('POST',`/employee-costs/${x.costId}/payments`,{cost_allocation_id:x.costAllocationId,bank_transaction_id:bank,amount:'1.00',beneficiary_type:'employee',counterparty_id:null})).status).toBe(403);
+    expect((await x.limited.client.req('POST',`/employee-cost-payments/${randomUUID()}/reversals`,{bank_transaction_id:bank,amount:'1.00',reason:'test'})).status).toBe(403);
   });
   it('excludes obligation and custody explanations from employee-cost payment capacity',async()=>{
     const x=await setup('ecc-pay-exclusive');

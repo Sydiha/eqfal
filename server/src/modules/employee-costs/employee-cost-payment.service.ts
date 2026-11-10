@@ -73,7 +73,9 @@ export class EmployeeCostPaymentService {
       if(!bank)throw missing();
       await assertAccountingDateWritable(companyId,bank.transaction_date,c);
       const cost=await this.cost(c,companyId,costId,true);this.visible(cost,salaryVisible);
-      if(cost.status!=='approved'||cost.nature==='employee_deduction'||cost.supersedes_id)throw conflict('Only active approved earnings and employer costs can be paid');
+      if(cost.status!=='approved'||cost.nature==='employee_deduction')throw conflict('Only active approved earnings and employer costs can be paid');
+      const successor=(await c.query<{exists:boolean}>(`SELECT EXISTS(SELECT 1 FROM employee_cost_records WHERE company_id=$1 AND supersedes_id=$2 AND status='approved') exists`,[companyId,costId])).rows[0]!.exists;
+      if(successor)throw conflict('Only the latest active approved cost can be paid');
       if(!salaryVisible&&cost.nature!=='employer_cost')throw forbidden();
       if(bank.reconciliation_status==='reconciled'||bank.amount.startsWith('+')||!bank.amount.startsWith('-'))throw conflict('Choose an unreconciled company bank outflow');
       if(bank.currency_code.trim()!==cost.currency_code.trim())throw conflict('Bank transaction and cost currencies must match');
