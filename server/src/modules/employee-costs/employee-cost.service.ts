@@ -41,7 +41,7 @@ export class EmployeeCostService {
       const err = e as { code?: string; constraint?: string };
       if (err.code === '23503') throw missing();
       if (err.code === '23505') throw conflict(err.constraint === 'employee_cost_allocations_company_id_cost_record_id_allocation_month_key' ? 'An allocation for this record and month already exists' : 'The record conflicts with an existing employee or correction');
-      if (err.code === '23514' && err.constraint === 'employee_cost_payment_active') throw conflict('Reverse or reassign active payments before correcting this employee cost');
+      if (err.code === '23514' && err.constraint === 'employee_cost_payment_active') throw new EmployeeCostError(409, 'EMPLOYEE_COST_PAYMENT_ACTIVE', 'Reverse all active payments before correcting this employee cost');
       if (err.code === '23514') throw invalid('The record violates an allocation or status rule');
       if (err.code === '55000') throw conflict('Approved records and allocations are immutable');
       throw e;

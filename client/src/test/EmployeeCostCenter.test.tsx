@@ -10,7 +10,7 @@ const onUnauthorized=vi.fn();
 const employee={id:'e1',employee_number:'E1',display_name:'Employee One',employment_start:'2025-01-01',employment_end:null,is_active:true,version:1};
 const fiscalYear={id:'fy1',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'};
 const cost=(id:string,status:'draft'|'approved')=>({id,employee_id:'e1',employee_number:'E1',display_name:'Employee One',category:'salary',nature:'earning',currency_code:'SAR',total_amount:'100.00',service_period_start:'2026-01-01',service_period_end:'2026-01-31',description:'January salary',status,version:1,supersedes_id:null,correction_reason:null,allocations:[{id:`${id}-allocation`,fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
-function mockApi(records:unknown[]=[]){
+function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Record<string,unknown>}|null=null){
   const writes:Array<{url:string;method:string;body:Record<string,unknown>}> = [];
   vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
     const url=String(input),method=init?.method??'GET';
@@ -23,7 +23,8 @@ function mockApi(records:unknown[]=[]){
     else if(url==='/api/employee-costs/fiscal-years')body={fiscal_years:[fiscalYear]};
     else if(url==='/api/employee-costs')body={records};
     else if(url.includes('/reports/'))body={rows:[]};
-    return new Response(JSON.stringify(body),{status:method==='GET'?200:201});
+    const failed=method!=='GET'&&failure?.path===url;
+    return new Response(JSON.stringify(failed?failure.body:body),{status:failed?failure.status:method==='GET'?200:201});
   }));
   return writes;
 }
@@ -81,7 +82,7 @@ describe('Employee Cost Center',()=>{
     fireEvent.change(screen.getByLabelText('Month amount'),{target:{value:'99.99'}});
     fireEvent.change(screen.getByLabelText('Description'),{target:{value:'January salary'}});
     fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
-    expect(await screen.findByText('Total Amount must equal the sum of monthly allocations.')).toBeInTheDocument();
+    expect(await within(screen.getByRole('dialog')).findByText('Total Amount must equal the sum of monthly allocations.')).toBeInTheDocument();
     expect(writes).toHaveLength(0);
 
     first.unmount();
@@ -94,7 +95,7 @@ describe('Employee Cost Center',()=>{
     fireEvent.change(screen.getByLabelText('مبلغ الشهر'),{target:{value:'99.99'}});
     fireEvent.change(screen.getByLabelText('الوصف'),{target:{value:'راتب يناير'}});
     fireEvent.click(screen.getByRole('button',{name:'حفظ المسودة'}));
-    expect(await screen.findByText('يجب أن يساوي إجمالي المبلغ مجموع التوزيعات الشهرية.')).toBeInTheDocument();
+    expect(await within(screen.getByRole('dialog')).findByText('يجب أن يساوي إجمالي المبلغ مجموع التوزيعات الشهرية.')).toBeInTheDocument();
     expect(writes).toHaveLength(0);
   });
 
@@ -119,5 +120,41 @@ describe('Employee Cost Center',()=>{
     fireEvent.click(within(correctionDialog).getByRole('button',{name:'Correct approved cost'}));
     await waitFor(()=>expect(writes.some(w=>w.url==='/api/employee-costs/approved-1/corrections')).toBe(true));
     expect(writes.find(w=>w.url==='/api/employee-costs/approved-1/corrections')?.body.record).toMatchObject({total_amount:'100.00',allocations:[{fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
+  });
+
+  it('shows the active-payment correction rejection inside the open modal in English and Arabic',async()=>{
+    const path='/api/employee-costs/approved-1/corrections';
+    const failure={path,status:409,body:{code:'EMPLOYEE_COST_PAYMENT_ACTIVE'}};
+    const capabilities=['employee.view','employee_cost.view','employee_cost.approve','employee_cost.correct','employee_cost.salary.view'];
+    const februaryCost={...cost('approved-1','approved'),service_period_start:'2026-02-01',service_period_end:'2026-02-28',allocations:[{id:'approved-feb-allocation',fiscal_year_id:'fy1',allocation_month:'2026-02-01',amount:'100.00'}]};
+    const englishWrites=mockApi([februaryCost],failure);
+    const english=render(<EmployeeCostCenter capabilities={capabilities} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    fireEvent.click(screen.getByRole('button',{name:'Correct approved cost'}));
+    let dialog=screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Total amount'),{target:{value:'110'}});
+    fireEvent.change(within(dialog).getByLabelText('Month amount'),{target:{value:'110'}});
+    fireEvent.change(within(dialog).getByLabelText('Correction reason'),{target:{value:'Correct amount after full payment'}});
+    fireEvent.click(within(dialog).getByRole('button',{name:'Correct approved cost'}));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('This cost has active payments. Record full reversals for all payments before submitting the correction.');
+    expect(englishWrites.some(w=>w.url===path&&w.method==='POST')).toBe(true);
+    expect(englishWrites.find(w=>w.url===path)?.body.record).toMatchObject({total_amount:'110.00',allocations:[{allocation_month:'2026-02-01',amount:'110'}]});
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    english.unmount();
+    await i18n.changeLanguage('ar');
+    const arabicWrites=mockApi([februaryCost],failure);
+    render(<EmployeeCostCenter capabilities={capabilities} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    fireEvent.click(screen.getByRole('button',{name:'تصحيح تكلفة معتمدة'}));
+    dialog=screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('إجمالي المبلغ'),{target:{value:'110'}});
+    fireEvent.change(within(dialog).getByLabelText('مبلغ الشهر'),{target:{value:'110'}});
+    fireEvent.change(within(dialog).getByLabelText('سبب التصحيح'),{target:{value:'تصحيح المبلغ بعد السداد'}});
+    fireEvent.click(within(dialog).getByRole('button',{name:'تصحيح تكلفة معتمدة'}));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('لدى هذه التكلفة مدفوعات نشطة. سجّل عمليات عكس كاملة لجميع المدفوعات قبل إرسال التصحيح.');
+    expect(arabicWrites.some(w=>w.url===path&&w.method==='POST')).toBe(true);
+    expect(arabicWrites.find(w=>w.url===path)?.body.record).toMatchObject({total_amount:'110.00',allocations:[{allocation_month:'2026-02-01',amount:'110'}]});
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
