@@ -35,7 +35,7 @@ function stubFetch(extra: Record<string, () => Response> = {}) {
 const renderIt = (caps: string[]) => render(<PersonalPayments capabilities={caps} onUnauthorized={vi.fn()} />);
 
 describe('PersonalPayments', () => {
-  beforeEach(async () => { await i18n.changeLanguage('en'); });
+  beforeEach(async () => { await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); });
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it('shows a forbidden state and makes no request without the view capability', () => {

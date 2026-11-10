@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Stack, Tabs } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Banking } from './Banking';
@@ -9,8 +9,10 @@ import { BankStatementReconciliation } from './BankStatementReconciliation';
 import './banking-workspace.css';
 import './BankingApproved.css';
 import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
+import { canOpenDestination, destinationsFor, type DeepDestination } from '../navigation/pageDestinations';
 
 type Props = {
+  capabilities?: readonly string[];
   canView: boolean;
   canImport: boolean;
   canDeleteImport?: boolean;
@@ -31,7 +33,15 @@ type Props = {
 type BankingSection = 'transactions' | 'import' | 'accounts' | 'settlements' | 'custody' | 'reconciliation';
 type CoreSection = 'import' | 'accounts';
 const bankingSections = ['transactions', 'import', 'accounts', 'settlements', 'custody', 'reconciliation'] as const;
-const readSection = (): BankingSection => (readQueryParameter('section', { allowedValues: bankingSections }) as BankingSection | null) ?? 'transactions';
+const bankingDestinations = destinationsFor('banks');
+const legacyCapabilities = (props: Props): readonly string[] => props.capabilities ?? ['bank.view', ...(props.canImport ? ['bank.import'] : []), ...(props.canSettle ? ['payment.settle'] : []), ...(props.canViewCustody ? ['custody.view'] : [])];
+const readSection = (capabilities: readonly string[]): BankingSection => {
+  const available = bankingDestinations.filter(destination => canOpenDestination(destination, capabilities));
+  const requested = readQueryParameter('section', { allowedValues: bankingSections }) as BankingSection | null;
+  return requested && available.some(destination => destination.query?.section === requested)
+    ? requested
+    : (available[0]?.query?.section as BankingSection | undefined) ?? 'transactions';
+};
 
 const copy = {
   ar: {
@@ -89,17 +99,19 @@ const copy = {
 };
 
 export function BankingWorkspace(props: Props) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const s = i18n.language === 'ar' ? copy.ar : copy.en;
-  const [section, setSection] = useState<BankingSection>(readSection);
+  const capabilities = useMemo(() => legacyCapabilities(props), [props.capabilities, props.canImport, props.canSettle, props.canViewCustody]);
+  const [section, setSection] = useState<BankingSection>(() => readSection(capabilities));
   const coreSection: CoreSection | null = section === 'import' || section === 'accounts' ? section : null;
   useEffect(() => {
-    const restore = () => setSection(readSection());
+    const restore = () => setSection(readSection(capabilities));
     window.addEventListener('popstate', restore);
     return () => window.removeEventListener('popstate', restore);
-  }, []);
+  }, [capabilities]);
   const changeSection = (value: string | null) => {
-    if (!value || !bankingSections.includes(value as BankingSection)) return;
+    const destination = bankingDestinations.find(item => item.query?.section === value) as DeepDestination | undefined;
+    if (!value || !destination || !canOpenDestination(destination, capabilities)) return;
     setSection(value as BankingSection);
     writeQueryParameters({ section: value });
   };
@@ -110,12 +122,7 @@ export function BankingWorkspace(props: Props) {
     <Tabs value={section} onChange={changeSection} variant="unstyled" className="banking-workspace__tabs banking-approved__tabs">
       <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
       <Tabs.List aria-label={s.tabsLabel} onFocus={event => event.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })}>
-        <Tabs.Tab value="transactions"><i aria-hidden="true"/>{s.transactions}</Tabs.Tab>
-        {props.canImport && <Tabs.Tab value="import"><i aria-hidden="true"/>{s.import}</Tabs.Tab>}
-        <Tabs.Tab value="accounts"><i aria-hidden="true"/>{s.accounts}</Tabs.Tab>
-        {props.canSettle && <Tabs.Tab value="settlements"><i aria-hidden="true"/>{s.settlements}</Tabs.Tab>}
-        <Tabs.Tab value="reconciliation"><i aria-hidden="true"/>{s.reconciliation}</Tabs.Tab>
-        {props.canViewCustody && <Tabs.Tab value="custody"><i aria-hidden="true"/>{s.custody}</Tabs.Tab>}
+        {bankingDestinations.filter(destination => canOpenDestination(destination, capabilities)).map(destination => <Tabs.Tab key={destination.id} value={destination.query!.section}><i aria-hidden="true"/>{t(destination.labelKey)}</Tabs.Tab>)}
       </Tabs.List>
       <span className="banking-approved__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6"/></svg></span>
     </Tabs>

@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, parseApiError, screenErrorMessage, toApiError } from '../api/apiError';
 import { useTranslation } from 'react-i18next';
 import { formatDisplayDate } from '../date-format';
-import { readQueryParameter } from '../navigation/queryState';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 import { WorkspacePage, WorkspaceState } from './SharedUI';
 import { useDateContext } from '../context/DateContext';
 import { OpeningBalanceFileImport } from './OpeningBalanceFileImport';
@@ -35,7 +35,7 @@ export function OpeningBalanceReview({canView,canCreate,canDelete,canSubmit,canR
  const {t,i18n}=useTranslation();const l=i18n.language==='ar'?ar:en;
  const { selectedFiscalYearId } = useDateContext();
  const [years,setYears]=useState<FiscalYear[]>([]);const [yearId,setYearId]=useState('');const [accounts,setAccounts]=useState<Account[]>([]);const [review,setReview]=useState<Review|null>(null);const [items,setItems]=useState<Item[]>([]);const [summary,setSummary]=useState<Summary>({debit:'0.00',credit:'0.00',difference:'0.00',confidence:{high:0,medium:0,low:0}});const [suggestions,setSuggestions]=useState<Suggestion[]>([]);const [loading,setLoading]=useState(canView);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);const [returnReason,setReturnReason]=useState('');const [partners,setPartners]=useState<Partner[]>([]);const [cashDocuments,setCashDocuments]=useState<CashDocumentOption[]>([]);const [formCategory,setFormCategory]=useState('');
- const company=useOptionalCompany()?.activeCompany?.name;const [tab,setTab]=useState<ObTabKey>('items');const [readiness,setReadiness]=useState<Readiness|null>(null);const [historyHost,setHistoryHost]=useState<HTMLElement|null>(null);const [blockersOpen,toggleBlockers]=useBlockersOpen();const [addOpen,setAddOpen]=useState<boolean|null>(null);const [sugOpen,setSugOpen]=useState(false);
+ const company=useOptionalCompany()?.activeCompany?.name;const [tab,setTab]=useState<ObTabKey>(()=>readQueryParameter('openingBalanceTab',{allowedValues:['items','recon','review']}) as ObTabKey|null??'items');const selectTab=(next:ObTabKey)=>{setTab(next);writeQueryParameters({openingBalanceTab:next==='items'?null:next})};useEffect(()=>{const restore=()=>setTab(readQueryParameter('openingBalanceTab',{allowedValues:['items','recon','review']}) as ObTabKey|null??'items');window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);const [readiness,setReadiness]=useState<Readiness|null>(null);const [historyHost,setHistoryHost]=useState<HTMLElement|null>(null);const [blockersOpen,toggleBlockers]=useBlockersOpen();const [addOpen,setAddOpen]=useState<boolean|null>(null);const [sugOpen,setSugOpen]=useState(false);
  const yearRequest=useRef(0);const [reloadToken,setReloadToken]=useState(0);const [approvalGate,setApprovalGate]=useState(true);
  const activePartners=useMemo(()=>partners.filter(x=>x.is_active),[partners]);
  const partnerName=(id?:string|null)=>id?partners.find(x=>x.id===id)?.name??l.unknownAccount:l.partnerMissing;
@@ -63,7 +63,7 @@ export function OpeningBalanceReview({canView,canCreate,canDelete,canSubmit,canR
  const rows=buildRows({status,itemCount:items.length,differenceIsZero:diffZero,readiness:review?readiness:null});
  const submitBlocked=rows.some(r=>!r.later&&(r.kind==='blocked'||r.kind==='mismatch'));
  const describeItem=(id:string)=>{const it=items.find(x=>x.id===id);return it?`${l.categories[it.category as keyof typeof l.categories]??it.category} · ${accounts.find(a=>a.id===it.account_id)?.code??''} · ${groupThousands(it.amount)}`:x.unknownItem};
- const go=(to:ObTabKey,target?:string,itemId?:string|null)=>{setTab(to);window.setTimeout(()=>{const el=(itemId?document.getElementById(`ob-row-${itemId}`):null)??(target?document.querySelector<HTMLElement>(`[data-finding="${target}"],#${CSS.escape(target)}`):null)??document.getElementById(`ob-panel-${to}`);if(!el)return;if(el.tagName==='DETAILS'){(el as HTMLDetailsElement).open=true;if(target==='ob-add-item')setAddOpen(true)}if(!el.hasAttribute('tabindex'))el.setAttribute('tabindex','-1');el.scrollIntoView?.({block:'center'});el.focus({preventScroll:true})},0)};
+ const go=(to:ObTabKey,target?:string,itemId?:string|null)=>{selectTab(to);window.setTimeout(()=>{const el=(itemId?document.getElementById(`ob-row-${itemId}`):null)??(target?document.querySelector<HTMLElement>(`[data-finding="${target}"],#${CSS.escape(target)}`):null)??document.getElementById(`ob-panel-${to}`);if(!el)return;if(el.tagName==='DETAILS'){(el as HTMLDetailsElement).open=true;if(target==='ob-add-item')setAddOpen(true)}if(!el.hasAttribute('tabindex'))el.setAttribute('tabindex','-1');el.scrollIntoView?.({block:'center'});el.focus({preventScroll:true})},0)};
  const reconCount=rows.filter(r=>r.tab==='recon').length;const reviewCount=(status==='draft'?rows.filter(r=>!r.later):rows).length;
  const canSubmitNow=canSubmit&&status==='draft'&&items.length>0;
  const approveReason=!balanced||approvalGate;
@@ -85,7 +85,7 @@ export function OpeningBalanceReview({canView,canCreate,canDelete,canSubmit,canR
   {error&&<WorkspaceState tone="error" action={<button onClick={()=>void loadYear(yearId)}>{l.error}</button>}>{error}</WorkspaceState>}
   {loading?<WorkspaceState>{l.loading}</WorkspaceState>:<>
    <ObReadiness lang={lang} status={status} rows={status==='in_review'&&rows.length===0&&approveReason?[{key:'unknown',kind:'gate_checking',tab:'recon',later:false}]:rows} itemLine={describeItem} onGo={go} open={blockersOpen} onToggle={toggleBlockers} describedBy="ob-readiness"/>
-   <ObTabs tabs={[{key:'items',label:x.tItems},{key:'recon',label:x.tRecon,count:reconCount},{key:'review',label:x.tReview,count:reviewCount}]} active={tab} onChange={setTab} rtl={isAr} label={x.tabsLabel}/>
+   <ObTabs tabs={[{key:'items',label:t('globalNav.openingBalances.items')},{key:'recon',label:t('globalNav.openingBalances.reconciliation'),count:reconCount},{key:'review',label:t('globalNav.openingBalances.review'),count:reviewCount}]} active={tab} onChange={selectTab} rtl={isAr} label={x.tabsLabel}/>
    <ObPanel tab="items" active={tab==='items'}>
    <section className="ob-card ob-register" aria-labelledby="ob-register-title">
     <div className="ob-register__head"><div><h3 id="ob-register-title">{l.items}</h3><p className="ob-muted">{selectedYear?`${l.registerDesc} ${selectedYear.name}`:l.registerDesc}</p></div><span className="ob-muted">{l.itemCount}: <bdi dir="ltr">{items.length}</bdi></span></div>

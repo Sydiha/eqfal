@@ -71,7 +71,7 @@ function writeExpandedGroups(ids: NavGroupId[]) {
   try { window.localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(ids)); } catch { /* preference only */ }
 }
 
-export function AppShell({ page, setPage, capabilities, email, displayName, roleLabel, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; capabilities:string[]; email: string; displayName?: string | null; roleLabel?: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
+export function AppShell({ page, setPage, navigateToDestination = () => undefined, capabilities, isSystemAdmin = false, email, displayName, roleLabel, onSwitch, onLogout, children }: { page: Page; setPage: (page: Page) => void; navigateToDestination?: (page: Page, query: Record<string, string>) => void; capabilities:string[]; isSystemAdmin?:boolean; email: string; displayName?: string | null; roleLabel?: string; onSwitch: (id: string) => Promise<boolean>; onLogout: () => Promise<void>; children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [menuOpen, { toggle, close }] = useDisclosure(false);
   const { selectedFiscalYearId, availableFiscalYears, selectedPeriodId, availablePeriodsForSelectedYear, periodMode, onSelectFiscalYear, onSelectPeriod } = useDateContext();
@@ -196,7 +196,7 @@ export function AppShell({ page, setPage, capabilities, email, displayName, role
           </Group>
           <Box className="topbar-spacer" />
           <Group gap={10} wrap="nowrap" className="topbar-user-group">
-            <GlobalPageSearch capabilities={capabilities} onNavigate={setPage} />
+            <GlobalPageSearch capabilities={capabilities} isSystemAdmin={isSystemAdmin} onNavigate={navigateToDestination} />
             <button type="button" className="topbar-icon-button topbar-icon-button--round" aria-label={bellCount > 0 ? t('shell.attentionItems', { count: bellCount }) : t('shell.attention')} onClick={openAttention}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
             {bellCount > 0 && <span className="topbar-bell-badge" data-testid="bell-count" aria-hidden="true">{bellCount > 99 ? '99+' : bellCount}</span>}</button>

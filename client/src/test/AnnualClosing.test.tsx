@@ -8,7 +8,7 @@ import { AnnualClosing } from '../components/AnnualClosing';
 
 const openPackageTab=async()=>fireEvent.click(await screen.findByRole('tab',{name:/closing package|حزمة الإقفال/i}));
 describe('Annual Closing Center', () => {
-  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
+  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); });
   it('is capability gated', () => { render(<AnnualClosing canView={false} onUnauthorized={vi.fn()}/>); expect(screen.getByText(/permission to view annual closing/i)).toBeInTheDocument(); });
   it('loads a fiscal-year keyed readiness view and renders domains and manifest', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
@@ -233,7 +233,7 @@ describe('Annual Closing Center', () => {
 });
 
 describe('Annual Closing next actions (UI-07)', () => {
-  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
+  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); });
   const load = async (status: string) => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));
@@ -252,7 +252,7 @@ describe('Annual Closing next actions (UI-07)', () => {
 });
 
 describe('Annual Closing next actions across domains (review fix)', () => {
-  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
+  beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); });
   const load = async (domains: Record<string, string>, props: Record<string, unknown>) => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ fiscalYears: [{ id: 'fy-1', name: 'FY', start_date: '2025-01-01', end_date: '2025-12-31' }] }), { status: 200 }));

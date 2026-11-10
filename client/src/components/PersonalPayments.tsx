@@ -4,6 +4,7 @@ import { StatusBadge, WorkspaceState } from './SharedUI';
 import './PersonalPayments.css';
 import { formatMoney, normalizeMoneyInput } from '../money-format';
 import { DateInput } from './DateInput';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 
 // Personal expense payments made on behalf of the company: draft -> submit -> approve/reject -> reimbursement.
 // Presentation only: payer mapping, balanced journals, closed periods, duplicate prevention and permissions are all enforced by the server.
@@ -114,11 +115,13 @@ const money = (v: string | undefined) => formatMoney(v ?? '', '0.00');
 const emptyForm = { payer_id: '', treatment: 'new_expense' as Treatment, payment_date: '', amount: '', purpose: '', document_id: '', obligation_id: '', expense_account_id: '' };
 
 export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPaymentsProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const L = i18n.language === 'ar' ? TEXT.ar : TEXT.en;
   const can = (c: string) => capabilities.includes(c);
   const canView = can('personal_payment.view');
-  const [tab, setTab] = useState<'payments' | 'payables' | 'payers'>('payments');
+  const [tab, setTab] = useState<'payments' | 'payables' | 'payers'>(()=>readQueryParameter('personalPaymentsTab',{allowedValues:['payments','payables','payers']}) as 'payments'|'payables'|'payers'|null??'payments');
+  useEffect(()=>{const restore=()=>setTab(readQueryParameter('personalPaymentsTab',{allowedValues:['payments','payables','payers']}) as 'payments'|'payables'|'payers'|null??'payments');window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
+  const selectTab=(next:'payments'|'payables'|'payers')=>{setTab(next);writeQueryParameters({personalPaymentsTab:next==='payments'?null:next})};
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payables, setPayables] = useState<Payables | null>(null);
   const [payers, setPayers] = useState<{ payers: Payer[] } & PayerExtras | null>(null);
@@ -202,7 +205,7 @@ export function PersonalPayments({ capabilities, onUnauthorized }: PersonalPayme
   if (failed) return <WorkspaceState tone="error">{L.error}</WorkspaceState>;
 
   const set = (k: keyof typeof emptyForm, v: string) => setForm(f => f && ({ ...f, [k]: v }));
-  const tabs = (['payments', 'payables', 'payers'] as const).map(k => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{L.tabs[k]}</button>);
+  const tabs = (['payments', 'payables', 'payers'] as const).map(k => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => selectTab(k)}>{t(`globalNav.personalPayments.${k}`)}</button>);
 
   return (
     <section className="personal-payments" aria-labelledby="pp-title">
