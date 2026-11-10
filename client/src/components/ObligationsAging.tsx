@@ -8,6 +8,7 @@ import './ObligationsAging.css';
 import { formatMoney } from '../money-format';
 import { formatDisplayDateLtr } from '../date-format';
 import { DateInput } from './DateInput';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 
 type Bucket = 'current' | 'days_1_30' | 'days_31_60' | 'days_61_90' | 'days_over_90';
 type AgingItem = { obligation_id: string; counterparty_name: string; counterparty_labor_relationship?: string | null; source_type: string; recognized_on: string; due_on: string | null; original_amount: string; settled_amount: string; outstanding_amount: string; days_overdue: number; bucket: Bucket };
@@ -37,11 +38,13 @@ const labels = {
 const fmt = (value: string) => formatMoney(value);
 
 export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => void }) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const L = i18n.language === 'ar' ? labels.ar : labels.en;
   const [report, setReport] = useState<AgingReport | null>(null);
   const [asOf, setAsOf] = useState('');
-  const [side, setSide] = useState<'receivables' | 'payables'>('receivables');
+  const [side, setSide] = useState<'receivables' | 'payables'>(()=>readQueryParameter('agingSide',{allowedValues:['receivables','payables']}) as 'receivables'|'payables'|null??'receivables');
+  useEffect(()=>{const restore=()=>setSide(readQueryParameter('agingSide',{allowedValues:['receivables','payables']}) as 'receivables'|'payables'|null??'receivables');window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
+  const selectSide=(next:'receivables'|'payables')=>{setSide(next);writeQueryParameters({agingSide:next==='receivables'?null:next})};
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   // With no date the server picks the operational (Riyadh) date and echoes it back, so the
@@ -80,7 +83,7 @@ export function ObligationsAging({ onUnauthorized }: { onUnauthorized: () => voi
       <ExportButtons language={i18n.language} document={exportDoc} landscape />
     </div>
     <div className="workspace-tabs workspace-tabs--segmented ob-aging__sides" role="tablist" aria-label={L.sides}>
-      {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => setSide(key)}>{L[key]}</button>)}
+      {(['receivables', 'payables'] as const).map((key) => <button key={key} role="tab" aria-selected={side === key} className={side === key ? 'active' : ''} onClick={() => selectSide(key)}>{t(`globalNav.obligations.${key}`)}</button>)}
     </div>
     {state === 'loading' && <WorkspaceState>{L.loading}</WorkspaceState>}
     {state === 'error' && <WorkspaceState tone="error" action={<button onClick={() => void load(asOf || undefined)}>{L.retry}</button>}>{L.error}</WorkspaceState>}

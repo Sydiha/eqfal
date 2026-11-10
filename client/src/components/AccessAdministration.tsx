@@ -10,6 +10,8 @@ import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
 import { SystemAdministration } from './SystemAdministration';
 import { UserAccessDetails } from './UserAccessDetails';
 import './AccessAdministration.css';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
+import { canOpenDestination, destinationsFor } from '../navigation/pageDestinations';
 
 export interface AccessMembership { id: string; user_id: string; user_email: string; user_is_active: boolean; role_id: string | null; role_name: string | null; is_active: boolean; can_manage?: boolean }
 export interface AccessRole { id: string; name: string; is_full_access: boolean; capabilities: string[]; assignable?: boolean; editable?: boolean }
@@ -64,7 +66,11 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
   const can = (capability: string) => capabilities.includes(capability);
   const canView = can('access.view') || isSystemAdmin;
   const canViewCompany = can('access.view');
-  const [tab, setTab] = useState<Tab>(canViewCompany ? 'members' : 'global');
+  const accessDestinations=destinationsFor('access');
+  const readTab=():Tab=>{const requested=readQueryParameter('accessTab',{allowedValues:['members','roles','global']}) as Tab|null;const destination=accessDestinations.find(item=>item.query?.accessTab===requested);return destination&&canOpenDestination(destination,capabilities,isSystemAdmin)?requested!:canViewCompany?'members':isSystemAdmin?'global':'members'};
+  const [tab, setTab] = useState<Tab>(readTab);
+  const selectTab=(next:Tab)=>{const destination=accessDestinations.find(item=>item.query?.accessTab===next);if(!destination||!canOpenDestination(destination,capabilities,isSystemAdmin))return;setTab(next);writeQueryParameters({accessTab:next,systemAdminView:next==='global'?readQueryParameter('systemAdminView',{allowedValues:['users','companies']})??'users':null})};
+  useEffect(()=>{const restore=()=>setTab(readTab());window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[capabilities,isSystemAdmin]);
   const [members, setMembers] = useState<AccessMembership[]>([]);
   const [roles, setRoles] = useState<AccessRole[]>([]);
   const [allCapabilities, setAllCapabilities] = useState<string[]>([]);
@@ -231,9 +237,9 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
       {tab === 'roles' && can('access.role.create') && <button className="acc-primary" onClick={() => { setErrorKey(null); setDialog('createRole'); }}>{t('access.createRole')}</button>}
     </header>
     <div role="tablist" aria-label={t('access.tabs')} className="acc-tabs">
-      {canViewCompany && <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'is-active' : ''} onClick={() => setTab('members')}>{t('access.membersTab')}</button>}
-      {canViewCompany && <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => setTab('roles')}>{t('access.rolesTab')}</button>}
-      {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => setTab('global')}>{t('systemAdmin.tab')}</button>}
+      {canViewCompany && <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'is-active' : ''} onClick={() => selectTab('members')}>{t('access.membersTab')}</button>}
+      {canViewCompany && <button role="tab" aria-selected={tab === 'roles'} className={tab === 'roles' ? 'is-active' : ''} onClick={() => selectTab('roles')}>{t('access.rolesTab')}</button>}
+      {isSystemAdmin && <button role="tab" aria-selected={tab === 'global'} className={tab === 'global' ? 'is-active' : ''} onClick={() => selectTab('global')}>{t('systemAdmin.tab')}</button>}
     </div>
     {isSystemAdmin && <p className="acc-hint" data-testid="access-identity-note">{t('access.identityNote', { company: companyName, role: roleDisplayName(members.find((m) => m.user_id === currentUserId)?.role_name, t) || t('access.noRole') })}</p>}
     {tab === 'global' && isSystemAdmin && <SystemAdministration currentUserId={currentUserId} onUnauthorized={onUnauthorized} onAccessChanged={onAccessChanged}/>}

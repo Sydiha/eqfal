@@ -32,6 +32,7 @@ import {
   readQueryParameter,
   writeQueryParameters,
 } from "../navigation/queryState";
+import { destinationsFor } from "../navigation/pageDestinations";
 
 type Account = AccountResponse;
 type Year = { id: string; name: string; start_date: string; end_date: string };
@@ -103,17 +104,8 @@ type SourceFilters = {
   amountMin: string;
   amountMax: string;
 };
-const tabs: readonly Tab[] = [
-  "accounts",
-  "journals",
-  "sources",
-  "trial",
-  "ledger",
-  "financialPosition",
-  "profitOrLoss",
-  "changesInEquity",
-  "cashFlow",
-];
+const accountingDestinations = destinationsFor('accounting');
+const tabs: readonly Tab[] = accountingDestinations.map(destination => destination.query!.accountingTab as Tab);
 const journalFilterParameters = [
   "journalSearch",
   "journalStatus",
@@ -800,7 +792,9 @@ export function Accounting({
         description={t("accounting.description")}
       />
       <div className="workspace-tabs ac-approved__tabs" role="tablist">
-        {tabs.map((x) => (
+        {accountingDestinations.map((destination) => {
+          const x = destination.query!.accountingTab as Tab;
+          return (
           <button
             role="tab"
             aria-selected={tab === x}
@@ -808,9 +802,10 @@ export function Accounting({
             onClick={() => setTab(x)}
             key={x}
           >
-            {t(`accounting.tabs.${x}`)}
+            {t(destination.labelKey)}
           </button>
-        ))}
+          );
+        })}
       </div>
       {vatRecognitionError && (
         <WorkspaceState tone="error">{VAT_RECOGNITION_ERROR}</WorkspaceState>

@@ -1,40 +1,58 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NAVIGATION_PAGES, canShowNavigationPage, type NavigationPage } from './navigationVisibility';
+import { PAGE_DESTINATIONS, canOpenDestination, destinationQuery, type DeepDestination } from '../navigation/pageDestinations';
 import { Dialog } from './Dialog';
 import './GlobalPageSearch.css';
 
-type PageLabels = { en: string; ar: string };
+type SearchResult = { id: string; page: NavigationPage; query: Record<string, string>; en: string; ar: string };
 
-function labelsFor(page: NavigationPage, translate: (key: string, options: { lng: string }) => string): PageLabels {
+function pageLabel(page: NavigationPage, translate: (key: string, options: { lng: string }) => string): string {
   const key = page === 'sales' ? 'salesInvoices' : page === 'purchases' ? 'purchaseInvoices' : page;
-  return { en: translate(`nav.${key}`, { lng: 'en' }), ar: translate(`nav.${key}`, { lng: 'ar' }) };
+  return translate(`nav.${key}`, { lng: 'en' });
 }
 
 function normalize(value: string): string {
   return value.toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f\u064b-\u065f\u0670]/g, '').trim();
 }
 
-export function GlobalPageSearch({ capabilities, onNavigate }: { capabilities: string[]; onNavigate: (page: NavigationPage) => void }) {
+export function GlobalPageSearch({ capabilities, isSystemAdmin = false, onNavigate }: { capabilities: string[]; isSystemAdmin?: boolean; onNavigate: (page: NavigationPage, query: Record<string, string>) => void }) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const isArabic = i18n.language === 'ar';
   const direction = isArabic ? 'rtl' : 'ltr';
-  const pages = useMemo(() => NAVIGATION_PAGES
-    .filter((page) => canShowNavigationPage(page, capabilities))
-    .map((page) => ({ page, labels: labelsFor(page, t) })), [capabilities, t]);
+  const pages = useMemo(() => {
+    const topLevel: SearchResult[] = NAVIGATION_PAGES.filter(page => canShowNavigationPage(page, capabilities)).map(page => {
+      const en = pageLabel(page, (key, options) => t(key, options));
+      const key = page === 'sales' ? 'salesInvoices' : page === 'purchases' ? 'purchaseInvoices' : page;
+      return { id: `page:${page}`, page, query: {}, en, ar: t(`nav.${key}`, { lng: 'ar' }) };
+    });
+    const nested: SearchResult[] = PAGE_DESTINATIONS.filter(destination => canOpenDestination(destination, capabilities, isSystemAdmin)).map((destination: DeepDestination) => {
+      const pageKey = destination.page === 'sales' ? 'salesInvoices' : destination.page === 'purchases' ? 'purchaseInvoices' : destination.page;
+      const parentEn = t(`nav.${pageKey}`, { lng: 'en' });
+      const parentAr = t(`nav.${pageKey}`, { lng: 'ar' });
+      const crumbs = [...(destination.breadcrumbKeys ?? []), destination.labelKey];
+      const en = [parentEn, ...crumbs.map(key => t(key, { lng: 'en' }))].join(' › ');
+      const ar = [parentAr, ...crumbs.map(key => t(key, { lng: 'ar' }))].join(' / ');
+      return { id: `destination:${destination.id}`, page: destination.page, query: destinationQuery(destination), en, ar };
+    });
+    return [...topLevel, ...nested];
+  }, [capabilities, isSystemAdmin, t]);
   const results = useMemo(() => {
     const term = normalize(query);
     if (!term) return [];
-    return pages.filter(({ labels }) => normalize(`${labels.en} ${labels.ar}`).includes(term));
+    return pages.filter(({ en, ar }) => normalize(`${en} ${ar}`).includes(term));
   }, [pages, query]);
 
   const close = () => { setOpen(false); setQuery(''); setActiveIndex(0); };
-  const selectPage = (page: NavigationPage) => {
-    if (!canShowNavigationPage(page, capabilities)) return;
-    onNavigate(page);
+  const selectPage = (result: SearchResult) => {
+    if (result.id.startsWith('destination:')) {
+      const destination = PAGE_DESTINATIONS.find(item => `destination:${item.id}` === result.id);
+      if (!destination || !canOpenDestination(destination, capabilities, isSystemAdmin)) return;
+    } else if (!canShowNavigationPage(result.page, capabilities)) return;
+    onNavigate(result.page, result.query);
     close();
   };
   const moveActive = (step: number) => {
@@ -61,12 +79,12 @@ export function GlobalPageSearch({ capabilities, onNavigate }: { capabilities: s
           aria-haspopup="listbox"
           aria-expanded={results.length > 0}
           aria-controls={results.length > 0 ? 'global-page-search-results' : undefined}
-          aria-activedescendant={results.length > 0 ? `global-page-search-option-${results[activeIndex]?.page ?? results[0]?.page}` : undefined}
+          aria-activedescendant={results.length > 0 ? `global-page-search-option-${results[activeIndex]?.id ?? results[0]?.id}` : undefined}
           onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') { event.preventDefault(); moveActive(1); }
             else if (event.key === 'ArrowUp') { event.preventDefault(); moveActive(-1); }
-            else if (event.key === 'Enter' && results.length > 0) { event.preventDefault(); selectPage(results[activeIndex]?.page ?? results[0]!.page); }
+            else if (event.key === 'Enter' && results.length > 0) { event.preventDefault(); selectPage(results[activeIndex] ?? results[0]!); }
           }}
         />
         {query && <button type="button" className="global-page-search__clear" aria-label={t('shell.globalSearchClear')} onClick={() => { setQuery(''); setActiveIndex(0); }}>
@@ -74,18 +92,18 @@ export function GlobalPageSearch({ capabilities, onNavigate }: { capabilities: s
         </button>}
       </div>
       {results.length > 0 ? <ul id="global-page-search-results" className="global-page-search__results" role="listbox" aria-label={t('shell.globalSearchResults')} dir={direction}>
-        {results.map(({ page, labels }, index) => <li
-          id={`global-page-search-option-${page}`}
-          key={page}
+        {results.map((result, index) => <li
+          id={`global-page-search-option-${result.id}`}
+          key={result.id}
           role="option"
           aria-selected={index === activeIndex}
           className={index === activeIndex ? 'is-active' : undefined}
           onMouseMove={() => setActiveIndex(index)}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => selectPage(page)}
+          onClick={() => selectPage(result)}
         >
-          <span>{isArabic ? labels.ar : labels.en}</span>
-          <span className="global-page-search__secondary" lang={isArabic ? 'en' : 'ar'}>{isArabic ? labels.en : labels.ar}</span>
+          <span>{isArabic ? result.ar : result.en}</span>
+          <span className="global-page-search__secondary" lang={isArabic ? 'en' : 'ar'}>{isArabic ? result.en : result.ar}</span>
         </li>)}
       </ul> : <p className="global-page-search__empty" role="status" aria-live="polite">{query ? t('shell.globalSearchNoResults') : t('shell.globalSearchStart')}</p>}
     </Dialog>}

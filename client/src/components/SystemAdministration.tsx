@@ -6,6 +6,7 @@ import { Dialog } from './Dialog';
 import { StatusBadge, WorkspaceState } from './SharedUI';
 import { SensitivityMap, grantImpact, roleChangeImpact } from './accessRisk';
 import { GrantConfirmDialog, PendingGrant } from './GrantConfirmDialog';
+import { readQueryParameter, writeQueryParameters } from '../navigation/queryState';
 
 interface AdminUser { id: string; email: string; display_name?: string | null; is_active: boolean; is_system_admin: boolean; active_memberships: number }
 interface AdminCompany { id: string; slug: string; name: string; name_ar: string | null; is_active: boolean }
@@ -33,7 +34,9 @@ export function SystemAdministration({ currentUserId, onUnauthorized, onAccessCh
   const { t, i18n } = useTranslation();
   const rtl = i18n.language.startsWith('ar');
   const companyLabel = (c: { name: string; name_ar: string | null }) => (rtl && c.name_ar ? c.name_ar : c.name);
-  const [view, setView] = useState<View>('users');
+  const [view, setView] = useState<View>(()=>readQueryParameter('systemAdminView',{allowedValues:['users','companies']}) as View|null??'users');
+  const selectView=(next:View)=>{setView(next);writeQueryParameters({systemAdminView:next==='users'?null:next})};
+  useEffect(()=>{const restore=()=>setView(readQueryParameter('systemAdminView',{allowedValues:['users','companies']}) as View|null??'users');window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [companies, setCompanies] = useState<AdminCompany[]>([]);
   const [catalog, setCatalog] = useState<{ capabilities: string[]; sensitivity: SensitivityMap }>({ capabilities: [], sensitivity: {} });
@@ -151,8 +154,8 @@ export function SystemAdministration({ currentUserId, onUnauthorized, onAccessCh
   return <div className="acc-global">
     <p className="acc-hint">{t('systemAdmin.description')}</p>
     <div role="tablist" aria-label={t('systemAdmin.tab')} className="acc-tabs acc-subtabs">
-      <button role="tab" aria-selected={view === 'users'} className={view === 'users' ? 'is-active' : ''} onClick={() => setView('users')}>{t('systemAdmin.usersTab')}</button>
-      <button role="tab" aria-selected={view === 'companies'} className={view === 'companies' ? 'is-active' : ''} onClick={() => setView('companies')}>{t('systemAdmin.companiesTab')}</button>
+      <button role="tab" aria-selected={view === 'users'} className={view === 'users' ? 'is-active' : ''} onClick={() => selectView('users')}>{t('systemAdmin.usersTab')}</button>
+      <button role="tab" aria-selected={view === 'companies'} className={view === 'companies' ? 'is-active' : ''} onClick={() => selectView('companies')}>{t('systemAdmin.companiesTab')}</button>
     </div>
     {error && !dialog && <WorkspaceState tone="error">{error}</WorkspaceState>}
     {view === 'users' && <div className="acc-roles">

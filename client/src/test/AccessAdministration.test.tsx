@@ -27,7 +27,7 @@ function mockApi(sensitivity: Record<string, 'sensitive' | 'critical'> = {}) {
 }
 const renderIt = (caps: readonly string[]) => render(<AccessAdministration capabilities={caps} currentUserId="u-1" onUnauthorized={vi.fn()} />);
 
-beforeEach(async () => { await i18n.changeLanguage('en'); vi.restoreAllMocks(); });
+beforeEach(async () => { await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); });
 
 describe('AccessAdministration', () => {
   it('shows a no-access state and makes no request without access.view', () => {
