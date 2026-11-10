@@ -50,11 +50,13 @@ auditLogRouter.get('/audit-log', ...guards, asyncRoute(async (req, res) => {
   const filters = parseFilters(req.query);
   if (!filters) { res.status(400).json(BAD); return; }
   const companyId = getAuthenticatedContext(req)!.activeCompanyId!;
-  const result = await searchAuditLog(pool, companyId, filters);
+  const salaryVisible = getAuthenticatedContext(req)!.capabilities.includes('employee_cost.salary.view');
+  const result = await searchAuditLog(pool, companyId, filters, salaryVisible);
   res.json({ ...result, limit: filters.limit, offset: filters.offset });
 }));
 
 auditLogRouter.get('/audit-log/facets', ...guards, asyncRoute(async (req, res) => {
   if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return; }
-  res.json(await auditLogFacets(pool, getAuthenticatedContext(req)!.activeCompanyId!));
+  const context = getAuthenticatedContext(req)!;
+  res.json(await auditLogFacets(pool, context.activeCompanyId!, context.capabilities.includes('employee_cost.salary.view')));
 }));

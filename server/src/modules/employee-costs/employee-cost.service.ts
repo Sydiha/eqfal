@@ -41,6 +41,7 @@ export class EmployeeCostService {
       const err = e as { code?: string; constraint?: string };
       if (err.code === '23503') throw missing();
       if (err.code === '23505') throw conflict(err.constraint === 'employee_cost_allocations_company_id_cost_record_id_allocation_month_key' ? 'An allocation for this record and month already exists' : 'The record conflicts with an existing employee or correction');
+      if (err.code === '23514' && err.constraint === 'employee_cost_payment_active') throw conflict('Reverse or reassign active payments before correcting this employee cost');
       if (err.code === '23514') throw invalid('The record violates an allocation or status rule');
       if (err.code === '55000') throw conflict('Approved records and allocations are immutable');
       throw e;
@@ -155,7 +156,7 @@ export class EmployeeCostService {
 
   async listCosts(companyId: string, salaryVisible: boolean) {
     const rows=(await this.db.query(`SELECT r.id,r.employee_id,e.employee_number,e.display_name,r.category,r.nature,r.currency_code,r.total_amount::text,r.service_period_start::text,r.service_period_end::text,r.description,r.status,r.version,r.supersedes_id,r.correction_reason,r.created_at,r.approved_at::text,
-        COALESCE(json_agg(json_build_object('allocation_month',a.allocation_month::text,'fiscal_year_id',a.fiscal_year_id,'amount',a.amount::text) ORDER BY a.allocation_month) FILTER (WHERE a.id IS NOT NULL),'[]') allocations
+        COALESCE(json_agg(json_build_object('id',a.id,'allocation_month',a.allocation_month::text,'fiscal_year_id',a.fiscal_year_id,'amount',a.amount::text) ORDER BY a.allocation_month) FILTER (WHERE a.id IS NOT NULL),'[]') allocations
       FROM employee_cost_records r JOIN employees e ON e.id=r.employee_id AND e.company_id=r.company_id
       LEFT JOIN employee_cost_allocations a ON a.cost_record_id=r.id AND a.company_id=r.company_id
       WHERE r.company_id=$1 AND ($2::boolean OR r.nature='employer_cost')
