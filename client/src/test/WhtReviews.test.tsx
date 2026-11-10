@@ -4,7 +4,7 @@ import { WhtReviews } from '../components/WhtReviews';
 import i18n from '../i18n';
 
 const review = {
-  id: 'review-1', source_type: 'document', source_id: 'source-1', counterparty_name: 'Supplier',
+  id: 'review-1', source_type: 'document', source_id: '44444444-4444-4444-8444-444444444444', counterparty_name: 'Supplier',
   non_resident_assessment: 'unknown', payment_service_category: 'Services', basis_reference: 'Contract',
   professional_review_required: true, workflow_status: 'needs_review', version: 3,
 };
@@ -65,5 +65,25 @@ describe('WHT review granular capabilities', () => {
     expect(await screen.findByText('يحتاج مراجعة')).toBeInTheDocument();
     expect(screen.getByText('نعم')).toBeInTheDocument();
     expect(screen.queryByText('needs_review')).toBeNull();
+  });
+
+  it('shows an available business reference and never renders the source UUID', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ reviews: [{ ...review, source_reference: 'INV-2026-18' }] }), { status: 200 }));
+    renderReviews();
+    expect(await screen.findByText('INV-2026-18')).toBeInTheDocument();
+    expect(screen.queryByText(review.source_id)).toBeNull();
+    expect(screen.getByText('Document:')).toBeInTheDocument();
+  });
+
+  it('uses localized source and missing-reference labels in English and Arabic', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ reviews: [{ ...review, source_reference: null }] }), { status: 200 }));
+    const { rerender } = renderReviews();
+    expect(await screen.findByText('Reference unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(review.source_id)).toBeNull();
+    await i18n.changeLanguage('ar');
+    rerender(<WhtReviews fiscalYearId="fy-1" canView canCreate={false} canEdit={false} canSubmit={false} canReview={false} onUnauthorized={vi.fn()} onChanged={vi.fn()}/>);
+    expect(await screen.findByText('المرجع غير متاح')).toBeInTheDocument();
+    expect(screen.getByText('مستند:')).toBeInTheDocument();
+    expect(screen.queryByText(review.source_id)).toBeNull();
   });
 });
