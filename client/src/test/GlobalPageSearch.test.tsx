@@ -86,6 +86,20 @@ describe('global page navigation search', () => {
     await waitFor(() => expect(window.location.search).toContain('accountingTab=profitOrLoss'));
   });
 
+  it('uses the established AR/AP label for both search and the aging destination', async () => {
+    setSession(['obligation.view']);
+    render(<AuthProvider><App /></AuthProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Search pages' }));
+    const dialog = screen.getByRole('dialog', { name: 'Navigate to a page' });
+    const input = within(dialog).getByRole('combobox', { name: 'Search pages' });
+    fireEvent.change(input, { target: { value: 'Payables (AP)' } });
+    const result = within(dialog).getByRole('option', { name: /Obligations.*Aging report.*Payables \(AP\)/ });
+    fireEvent.click(result);
+    await waitFor(() => expect(window.location.search).toContain('agingSide=payables'));
+    expect(window.location.search).toContain('page=obligations');
+    expect(window.location.search).toContain('obligationsView=aging');
+  });
+
   it('enforces child capabilities and system administrator restrictions in deep results', async () => {
     setSession(['bank.view', 'annual_close.view', 'access.view']);
     render(<AuthProvider><App /></AuthProvider>);
