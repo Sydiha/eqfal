@@ -245,7 +245,7 @@ describe('Functional filters',()=>{
   const fetchMock=mockApi(base,()=>undefined,{invoices:rows,total:60,limit:25,offset:0});
   render(<InvoiceWorkspace {...caps} onUnauthorized={vi.fn()}/>);
   await screen.findByText('R-0');
-  expect(screen.getByText('60 invoices, total of this page: 2.50')).toBeInTheDocument();
+  expect(screen.getByText(/60 invoices, total of this page: \u20662\.50\u2069/)).toBeInTheDocument();
   expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Previous'})).toBeDisabled();
   fireEvent.click(screen.getByRole('button',{name:'Next'}));

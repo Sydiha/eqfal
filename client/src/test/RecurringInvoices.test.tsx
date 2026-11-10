@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,waitFor} from './test-utils';
+import {fireEvent,render,screen,waitFor,within} from './test-utils';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import i18n from '../i18n';
 import {RecurringInvoices} from '../components/RecurringInvoices';
@@ -30,6 +30,16 @@ describe('RecurringInvoices',()=>{
   expect(screen.getByText(/only creates draft invoices/)).toBeInTheDocument();
   expect(screen.getByText('Active')).toBeInTheDocument();expect(screen.getByText('Ended')).toBeInTheDocument();
   expect(screen.getAllByText('Monthly').length).toBeGreaterThan(0);
+ });
+ it('localizes Arabic schedule dates and isolates exact percentages and amounts',async()=>{
+  await i18n.changeLanguage('ar');mock([tpl()]);
+  render(<RecurringInvoices {...props}/>);
+  expect(await screen.findByText('28/02/2031')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Office rent'}));
+  const dialog=await screen.findByRole('dialog');
+  expect(within(dialog).getByText('15.00%')).toHaveAttribute('dir','ltr');
+  expect(within(dialog).getByText('1,000.00')).toHaveAttribute('dir','ltr');
+  expect(within(dialog).getAllByText('31/01/2031')).toHaveLength(2);
  });
  it('read-only users see schedules but no create, generate, edit, pause or end controls',async()=>{
   mock([tpl()]);

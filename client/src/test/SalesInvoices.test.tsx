@@ -38,6 +38,20 @@ describe('Sales invoices',()=>{
   expect(screen.getByText('15.00%')).toBeInTheDocument();
  });
 
+ it('localizes displayed dates in Arabic and isolates invoice financial values',async()=>{
+  await i18n.changeLanguage('ar');
+  mockApi();
+  render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);
+  const row=await screen.findByText('REF-1').then(node=>node.closest('tr')!);
+  expect(row.cells[2]).toHaveTextContent('01/10/2026');
+  expect(row.cells[2].querySelector('bdi[dir="ltr"]')).toBeInTheDocument();
+  expect(row.cells[4].querySelector('bdi[dir="ltr"]')).toHaveTextContent('115.00');
+  fireEvent.click(screen.getByText('REF-1'));
+  const dialog=await screen.findByRole('dialog');
+  expect(within(dialog).getByText('15.00%')).toHaveAttribute('dir','ltr');
+  expect(within(dialog).getAllByText('115.00 SAR').some(node=>node.getAttribute('dir')==='ltr')).toBe(true);
+ });
+
  it('creates a draft with grouped monetary input normalized for the API',async()=>{
   const fetchMock=mockApi(draft,{'POST /api/invoices':()=>json({invoice:draft},201)});
   render(<SalesInvoices {...caps} onUnauthorized={vi.fn()}/>);

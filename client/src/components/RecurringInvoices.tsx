@@ -1,7 +1,9 @@
 import {FormEvent,useCallback,useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Dialog} from './Dialog';
-import {formatDisplayDate} from '../date-format';
+import {formatDisplayDateLtr} from '../date-format';
+import {formatPercentage} from '../percentage-format';
+import {LtrValue} from './LtrValue';
 import './RecurringInvoices.css';
 import { formatMoney, normalizeMoneyInput, parseMoneyInput } from '../money-format';
 
@@ -67,6 +69,7 @@ export function RecurringInvoices({direction,canManage,canGenerate,onChanged,onU
  };
  const setLine=(i:number,patch:Partial<Line>)=>setForm(f=>f&&{...f,lines:f.lines.map((l,x)=>x===i?{...l,...patch}:l)});
  const money=(v:string|null|undefined)=>formatMoney(v,'0.00');
+ const displayDate=(value:string|null|undefined)=><LtrValue>{formatDisplayDateLtr(value,i18n.language)}</LtrValue>;
  const status=(s:string)=><span className={`recurring-invoices__status recurring-invoices__status--${s}`}>{t(`recurringInvoice.statuses.${s}`)}</span>;
  return <section className="recurring-invoices" aria-labelledby={`recurring-${direction}-title`} data-testid="recurring-invoices">
   <div className="recurring-invoices__head"><div><h3 id={`recurring-${direction}-title`}>{t('recurringInvoice.title')}</h3><p className="recurring-invoices__hint">{t('recurringInvoice.draftOnly')}</p></div>
@@ -76,17 +79,17 @@ export function RecurringInvoices({direction,canManage,canGenerate,onChanged,onU
   {error&&!form&&!detail&&<p role="status" className="recurring-invoices__error">{error}</p>}
   {list&&list.length===0&&<p className="recurring-invoices__hint">{t('recurringInvoice.empty')}</p>}
   {list&&list.length>0&&<div className="recurring-invoices__scroll"><table><thead><tr><th>{t('recurringInvoice.name')}</th><th>{t(purchase?'purchaseInvoice.counterparty':'salesInvoice.counterparty')}</th><th>{t('recurringInvoice.frequency')}</th><th>{t('recurringInvoice.nextRun')}</th><th>{t('recurringInvoice.endDate')}</th><th>{t('salesInvoice.status')}</th></tr></thead>
-   <tbody>{list.map(x=><tr key={x.id}><td><button type="button" className="recurring-invoices__link" onClick={()=>void openDetail(x.id)}>{x.name}</button>{x.last_error_code&&<span className="recurring-invoices__error"> ⚠ {t('recurringInvoice.needsAttention')}</span>}</td><td>{x.counterparty_name}</td><td>{t(`recurringInvoice.frequencies.${x.frequency}`)}</td><td>{x.status==='ended'?'—':formatDisplayDate(x.next_run_date,'en')}</td><td>{x.end_date?formatDisplayDate(x.end_date,'en'):'—'}</td><td>{status(x.status)}</td></tr>)}</tbody></table></div>}
+   <tbody>{list.map(x=><tr key={x.id}><td><button type="button" className="recurring-invoices__link" onClick={()=>void openDetail(x.id)}>{x.name}</button>{x.last_error_code&&<span className="recurring-invoices__error"> ⚠ {t('recurringInvoice.needsAttention')}</span>}</td><td>{x.counterparty_name}</td><td>{t(`recurringInvoice.frequencies.${x.frequency}`)}</td><td>{x.status==='ended'?'—':displayDate(x.next_run_date)}</td><td>{x.end_date?displayDate(x.end_date):'—'}</td><td>{status(x.status)}</td></tr>)}</tbody></table></div>}
   {detail&&!form&&<Dialog size="wide" title={`${t('recurringInvoice.detail')} | ${detail.name}`} busy={busy} onClose={()=>setDetail(null)}>
    <dl className="recurring-invoices__facts"><div><dt>{t(purchase?'purchaseInvoice.counterparty':'salesInvoice.counterparty')}</dt><dd>{detail.counterparty_name}</dd></div><div><dt>{t('salesInvoice.status')}</dt><dd>{status(detail.status)}</dd></div>
-    <div><dt>{t('recurringInvoice.frequency')}</dt><dd>{t(`recurringInvoice.frequencies.${detail.frequency}`)}</dd></div><div><dt>{t('recurringInvoice.startDate')}</dt><dd>{formatDisplayDate(detail.start_date,'en')}</dd></div>
-    <div><dt>{t('recurringInvoice.endDate')}</dt><dd>{detail.end_date?formatDisplayDate(detail.end_date,'en'):'—'}</dd></div><div><dt>{t('recurringInvoice.nextRun')}</dt><dd>{detail.status==='ended'?'—':formatDisplayDate(detail.next_run_date,'en')}</dd></div>
+    <div><dt>{t('recurringInvoice.frequency')}</dt><dd>{t(`recurringInvoice.frequencies.${detail.frequency}`)}</dd></div><div><dt>{t('recurringInvoice.startDate')}</dt><dd>{displayDate(detail.start_date)}</dd></div>
+    <div><dt>{t('recurringInvoice.endDate')}</dt><dd>{detail.end_date?displayDate(detail.end_date):'—'}</dd></div><div><dt>{t('recurringInvoice.nextRun')}</dt><dd>{detail.status==='ended'?'—':displayDate(detail.next_run_date)}</dd></div>
     <div><dt>{t('recurringInvoice.dueDays')}</dt><dd>{detail.due_days==null?'—':detail.due_days}</dd></div></dl>
    {detail.last_error_code&&<p role="alert" className="recurring-invoices__error">{t('recurringInvoice.lastError',{reason:errorText(detail.last_error_code)})}</p>}
-   <div className="recurring-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map((l,i)=><tr key={i}><td>{l.description}</td><td>{l.quantity}</td><td>{money(l.unit_price)}</td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td>{l.vat_rate}%</td></tr>)}</tbody></table></div>
+   <div className="recurring-invoices__scroll"><table><thead><tr>{['description','quantity','unitPrice','vatTreatment','vatRate'].map(k=><th key={k}>{t(`salesInvoice.${k}`)}</th>)}</tr></thead><tbody>{(detail.lines??[]).map((l,i)=><tr key={i}><td>{l.description}</td><td><LtrValue>{l.quantity??'—'}</LtrValue></td><td><LtrValue>{money(l.unit_price)}</LtrValue></td><td>{l.vat_treatment?t(`salesInvoice.treatments.${l.vat_treatment}`):'—'}</td><td><LtrValue>{formatPercentage(l.vat_rate??'')}</LtrValue></td></tr>)}</tbody></table></div>
    <h4>{t('recurringInvoice.generated')}</h4>
    {(detail.generated_invoices?.length??0)===0?<p className="recurring-invoices__hint">{t('recurringInvoice.noneGenerated')}</p>
-    :<ul className="recurring-invoices__generated" data-testid="recurring-generated">{detail.generated_invoices!.map(g=><li key={g.id}><span>{formatDisplayDate(g.occurrence_date,'en')}</span><span>{t(`salesInvoice.statuses.${g.status}`)}</span><strong>{money(g.total_amount)}</strong></li>)}</ul>}
+    :<ul className="recurring-invoices__generated" data-testid="recurring-generated">{detail.generated_invoices!.map(g=><li key={g.id}><span>{displayDate(g.occurrence_date)}</span><span>{t(`salesInvoice.statuses.${g.status}`)}</span><strong><LtrValue>{money(g.total_amount)}</LtrValue></strong></li>)}</ul>}
    {error&&<p role="alert" className="recurring-invoices__error">{error}</p>}
    {canManage&&detail.status!=='ended'&&(confirmEnd?<div className="recurring-invoices__confirm" role="group" aria-label={t('recurringInvoice.endTitle')}><p><strong>{t('recurringInvoice.endTitle')}</strong></p><p>{t('recurringInvoice.endBody')}</p>
      <div className="modal-actions"><button type="button" disabled={busy} onClick={()=>setConfirmEnd(false)}>{t('common.cancel')}</button><button type="button" className="primary" disabled={busy} onClick={()=>void transition(detail,'end')}>{t('recurringInvoice.confirmEnd')}</button></div></div>
