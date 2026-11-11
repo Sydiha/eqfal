@@ -23,8 +23,17 @@ describe('PAYROLL-02 accounting readiness contract', () => {
     expect(router).toContain("requireCapability('payroll.accounting.preview')");
     expect(router).toContain("'/payroll/drafts/:id/accounting-preview'");
     expect(service).toContain('side_effects: false');
+    expect(service).toContain("authority: 'informational_only'");
+    expect(service).toContain('posting_revalidation_required: true');
+    expect(service).toContain('ecc_employee_deduction_overlap');
     expect(service).not.toContain('INSERT INTO journal_entries');
     expect(service).not.toContain('postJournalInTransaction');
+  });
+
+  it('does not delegate accounting readiness capabilities through access.full_access.grant alone', () => {
+    const memberships = readFileSync(new URL('../src/modules/memberships/membership.service.ts', import.meta.url), 'utf8');
+    expect(memberships).toContain("new Set(['payroll.approve'])");
+    expect(memberships).not.toContain("'payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview'");
   });
 
   it('uses decimal-safe arithmetic and identifies supported ECC overlaps and source-less journal ambiguity', () => {

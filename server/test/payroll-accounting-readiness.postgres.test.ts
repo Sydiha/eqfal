@@ -20,8 +20,38 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     for (const u of [owner, editor, approver, viewOnly, outsider]) await u.client.login();
     const fullRole = (await h.q<{ id: string }>('SELECT role_id AS id FROM memberships WHERE company_id=$1 AND user_id=$2',[co,owner.id]))[0]!.id;
     expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(403);
-    for (const cap of ['payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']) expect((await owner.client.req('PUT',`/access/roles/${fullRole}/capabilities/${cap}`)).status).toBe(204);
-    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(200);
+    for (const cap of ['payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']) {
+      const denied = await owner.client.req('PUT',`/access/roles/${fullRole}/capabilities/${cap}`);
+      expect(denied.status).toBe(403);
+      expect(denied.json.code).toBe('ACCESS_FULL_ACCESS_IMMUTABLE');
+    }
+    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(403);
+
+    const delegatedAdmin = await h.user('pr2-delegated-admin');
+    await h.member(co,delegatedAdmin.id,['payroll.view','access.role.create','access.role.capability.grant','access.full_access.grant']);
+    await delegatedAdmin.client.login();
+    const restrictedRole = await delegatedAdmin.client.req('POST','/access/roles',{name:'Payroll accounting restricted'});
+    expect(restrictedRole.status).toBe(201);
+    for (const cap of ['payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']) {
+      const denied = await delegatedAdmin.client.req('PUT',`/access/roles/${restrictedRole.json.id}/capabilities/${cap}`);
+      expect(denied.status).toBe(403);
+      expect(denied.json.code).toBe('ACCESS_ROLE_CEILING');
+    }
+    const delegatedViewer = await h.user('pr2-capability-granter');
+    await h.member(co,delegatedViewer.id,['payroll.view','access.role.create','access.role.capability.grant','payroll.accounting.mapping.view']);
+    await delegatedViewer.client.login();
+    const viewRole = await delegatedViewer.client.req('POST','/access/roles',{name:'Payroll mapping viewer'});
+    expect(viewRole.status).toBe(201);
+    expect((await delegatedViewer.client.req('PUT',`/access/roles/${viewRole.json.id}/capabilities/payroll.accounting.mapping.view`)).status).toBe(204);
+    const noManage = await delegatedViewer.client.req('PUT',`/access/roles/${viewRole.json.id}/capabilities/payroll.accounting.mapping.manage`);
+    expect(noManage.status).toBe(403);
+    expect(noManage.json.code).toBe('ACCESS_ROLE_CEILING');
+    const delegatedManager = await h.user('pr2-capability-manager');
+    await h.member(co,delegatedManager.id,['payroll.view','access.role.create','access.role.capability.grant','payroll.accounting.mapping.manage']);
+    await delegatedManager.client.login();
+    const manageRole = await delegatedManager.client.req('POST','/access/roles',{name:'Payroll mapping manager'});
+    expect(manageRole.status).toBe(201);
+    expect((await delegatedManager.client.req('PUT',`/access/roles/${manageRole.json.id}/capabilities/payroll.accounting.mapping.manage`)).status).toBe(204);
 
     const employee = (await owner.client.req('POST','/employees',{employee_number:'PR2-1',display_name:'Payroll readiness employee',employment_start:'2025-01-01',employment_end:null})).json;
     const fy = await h.fiscalYear(co,'FY26','2026-01-01','2026-12-31');
@@ -66,10 +96,19 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     expect(clearPreview.can_preview).toBe(true);
     expect(clearPreview.blockers).toEqual([]);
 
+    const deductionCost = (await h.q<{id:string}>(
+      `INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by)
+       VALUES($1,$2,'employee_deduction','employee_deduction','SAR','0.50','2026-03-01','2026-03-31','Existing ECC deduction',$3) RETURNING id`,[co,employee.id,owner.id]))[0]!.id;
+    await h.q('INSERT INTO employee_cost_allocations(company_id,cost_record_id,fiscal_year_id,allocation_month,amount) VALUES($1,$2,$3,$4,$5)',[co,deductionCost,fy,'2026-03-01','0.50']);
+    await h.q("UPDATE employee_cost_records SET status='approved',approved_by=$2,approved_at=NOW() WHERE id=$1",[deductionCost,owner.id]);
+    const deductionPreview = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).json;
+    expect(deductionPreview.can_preview).toBe(false);
+    expect(deductionPreview.blockers).toContainEqual(expect.objectContaining({code:'ecc_employee_deduction_overlap',count:1,details:[expect.objectContaining({employee_number:'PR2-1',category:'employee_deduction',amount:'0.50'})]}));
+
     const manualId = await h.postedJournal(co,fy,'2026-03-20',owner.id,[[accountIds[0]!, '1.00','0.00'],[accountIds[2]!, '0.00','1.00']]);
     const manualOnlyPreview = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).json;
     expect(manualOnlyPreview.can_preview).toBe(false);
-    expect(manualOnlyPreview.blockers).toEqual([]);
+    expect(manualOnlyPreview.blockers).toContainEqual(expect.objectContaining({code:'ecc_employee_deduction_overlap',count:1}));
     expect(manualOnlyPreview.warnings).toContainEqual({code:'manual_journal_review',count:1});
 
     const overlapId = (await h.q<{id:string}>(
@@ -86,9 +125,10 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     const previewResponse = await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`);
     expect(previewResponse.status,JSON.stringify(previewResponse.json)).toBe(200);
     const preview = previewResponse.json;
-    expect(preview).toMatchObject({balanced:true,can_preview:false,side_effects:false,totals:{earnings:'101.00',employee_deductions:'0.50',net_payable:'100.50',employer_contributions:'0.60',debit_total:'101.60',credit_total:'101.60'}});
+    expect(preview).toMatchObject({balanced:true,can_preview:false,side_effects:false,authority:'informational_only',posting_revalidation_required:true,totals:{earnings:'101.00',employee_deductions:'0.50',net_payable:'100.50',employer_contributions:'0.60',debit_total:'101.60',credit_total:'101.60'}});
     expect(preview.lines).toHaveLength(5);
     expect(preview.blockers).toContainEqual(expect.objectContaining({code:'ecc_overlap',count:1}));
+    expect(preview.blockers).toContainEqual(expect.objectContaining({code:'ecc_employee_deduction_overlap',count:1}));
     expect(preview.warnings).toContainEqual({code:'manual_journal_review',count:1});
     expect(preview.blockers[0].details[0]).toMatchObject({employee_number:'PR2-1',category:'salary',amount:'100.00'});
     expect((await viewOnly.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).status).toBe(403);

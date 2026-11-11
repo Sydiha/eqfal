@@ -223,7 +223,7 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
   };
   const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
   const roleEditable = selectedRole?.editable !== false;
-  const fullAccessExplicitCapabilities = ['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview'];
+  const fullAccessExplicitCapabilities = ['payroll.approve'];
   const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') && (can(id) || (fullAccessExplicitCapabilities.includes(id) && can('access.full_access.grant')));
   const canRevokeId = () => roleEditable && can('access.role.capability.revoke');
 

@@ -30,6 +30,33 @@ it('ignores an older month response after rapid period switching',async()=>{
  ui.unmount();
 });
 
+it('ignores an accounting preview response after switching approved payroll drafts',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
+ const pending=new Map<string,(value:unknown)=>void>();
+ vi.stubGlobal('fetch',vi.fn((url:string)=>{
+  if(url==='/api/payroll/account-mappings')return Promise.resolve(response({mappings:[],accounts:[]}));
+  if(url.includes('/accounting-preview'))return new Promise(resolve=>pending.set(url,resolve));
+  const period=new URL(url,'http://local').searchParams.get('month')!;
+  const id=period.startsWith('2026-01')?'draft-january':'draft-february';
+  return Promise.resolve(response({draft:{id,period_month:period,currency_code:'SAR',version:1,status:'approved',approved_at:'2026-01-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'1.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'1.00'},employees:[{id:`line-${id}`,employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'1.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'0.00',employer_contributions:'0.00',gross_earnings:'1.00',net_payable:'1.00'}],available_employees:[]}));
+ }));
+ const ui=render(<MonthlyPayroll capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
+ const monthInput=document.querySelector('input[type="month"]') as HTMLInputElement;
+ const first=monthInput.value,second=first==='2026-01'?'2026-02':'2026-01';
+ const oldUrl=`/api/payroll/drafts/draft-${first.endsWith('01')?'january':'february'}/accounting-preview`;
+ await waitFor(()=>expect(pending.has(oldUrl)).toBe(true));
+ fireEvent.change(monthInput,{target:{value:second}});
+ await waitFor(()=>expect(pending.has(`/api/payroll/drafts/draft-${second.endsWith('01')?'january':'february'}/accounting-preview`)).toBe(true));
+ const newUrl=`/api/payroll/drafts/draft-${second.endsWith('01')?'january':'february'}/accounting-preview`;
+ const makePreview=(name:string)=>response({totals:{earnings:'1.00',employee_deductions:'0.00',net_payable:'1.00',employer_contributions:'0.00',debit_total:'1.00',credit_total:'1.00'},mappings:[{mapping_key:'earnings_expense',account_id:name,code:name,name,name_ar:null,account_type:'expense',is_active:true}],lines:[{mapping_key:'earnings_expense',account_id:name,debit:'1.00',credit:'0.00'}],blockers:[],warnings:[],balanced:true,can_preview:true,authority:'informational_only',posting_revalidation_required:true,side_effects:false});
+ pending.get(newUrl)!(makePreview('CURRENT-DRAFT-ACCOUNT'));
+ await screen.findByText(/CURRENT-DRAFT-ACCOUNT/);
+ pending.get(oldUrl)!(makePreview('STALE-DRAFT-ACCOUNT'));
+ await waitFor(()=>expect(screen.queryByText(/STALE-DRAFT-ACCOUNT/)).toBeNull());
+ expect(screen.getByText(/CURRENT-DRAFT-ACCOUNT/)).toBeInTheDocument();
+ ui.unmount();
+});
+
 it('keeps confirmation focus inside one dialog and restores focus on discard',async()=>{
  const {fireEvent}=await import('@testing-library/react');
  vi.stubGlobal('fetch',vi.fn(async()=>response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'},employees:[{id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'10.00',employer_contributions:'5.00',gross_earnings:'100.00',net_payable:'90.00'}],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]})));
@@ -135,7 +162,7 @@ it('shows read-only mapped preview, blockers and manual-journal warning in Engli
   expect(screen.getByText(/Approved Employee Cost Center allocations overlap/)).toBeInTheDocument();
   expect(screen.getByText(/Source-less journals exist in this month/)).toBeInTheDocument();
   expect(screen.getAllByRole('option',{name:/5000.*Salaries/}).length).toBeGreaterThan(0);
-  expect(screen.getByText(/Preview only; no journal or ledger changes were made/)).toBeInTheDocument();
+  expect(screen.getByText(/Informational preview only; no journal or ledger changes were made/)).toBeInTheDocument();
   await act(async()=>{await i18n.changeLanguage('ar');});
   expect(screen.getByText('معاينة قيد للقراءة فقط')).toBeInTheDocument();
   expect(screen.getByText(/تتداخل تخصيصات معتمدة من مركز تكاليف الموظفين/)).toBeInTheDocument();

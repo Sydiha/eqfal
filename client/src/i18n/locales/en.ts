@@ -83,7 +83,7 @@ const en = {
     previewUnbalanced: 'Preview does not balance',
     previewReady: 'Ready for future posting workflow',
     previewBlocked: 'Review warnings and resolve blockers before future posting',
-    previewReadOnly: 'Preview only; no journal or ledger changes were made.',
+    previewReadOnly: 'Informational preview only; no journal or ledger changes were made. A future posting action must reload and revalidate payroll, mappings, accounts, overlaps, and blockers transactionally.',
     blocker_payroll_not_approved: 'Payroll must be approved before previewing.',
     blocker_payroll_empty: 'Payroll has no employee lines.',
     blocker_payroll_no_postable_amount: 'Payroll amounts are zero; there is no journal amount to preview.',
@@ -91,6 +91,7 @@ const en = {
     blocker_mapping_account_inactive: 'The mapped account is inactive; choose an active account.',
     blocker_mapping_account_type_invalid: 'The mapped account has the wrong account type.',
     blocker_ecc_overlap: 'Approved Employee Cost Center allocations overlap this payroll. Review the listed employee and categories; no records were changed.',
+    blocker_ecc_employee_deduction_overlap: 'An approved Employee Cost Center employee deduction overlaps this payroll. This blocks posting readiness because the existing record does not establish whether the deduction is already included in payroll withholding; review and resolve it before any future posting.',
     warning_manual_journal_review: 'Source-less journals exist in this month. Review them for possible payroll overlap; this check cannot determine their content.',
   },
   employeeCostCenter: {

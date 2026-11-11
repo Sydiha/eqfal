@@ -95,11 +95,16 @@ export class PayrollAccountingService {
        JOIN employees e ON e.id=r.employee_id AND e.company_id=r.company_id
        JOIN employee_cost_allocations a ON a.cost_record_id=r.id AND a.company_id=r.company_id
        WHERE r.company_id=$1 AND r.status='approved' AND r.currency_code=$4 AND a.allocation_month=$2::date
-         AND r.category IN ('salary','allowances','bonus','overtime','employer_gosi')
+         AND r.category IN ('salary','allowances','bonus','overtime','employer_gosi','employee_deduction')
          AND EXISTS (SELECT 1 FROM payroll_draft_employees p WHERE p.company_id=r.company_id AND p.draft_id=$3 AND p.employee_id=r.employee_id)
          AND NOT EXISTS (SELECT 1 FROM employee_cost_records newer WHERE newer.company_id=r.company_id AND newer.supersedes_id=r.id AND newer.status='approved')
        GROUP BY r.employee_id,e.employee_number,e.display_name,r.category ORDER BY e.employee_number,r.category`, [companyId, draft.period_month, draftId, draft.currency_code])).rows;
-    if (overlaps.length) blockers.push({ code: 'ecc_overlap', count: overlaps.length, details: overlaps });
+    const deductionOverlaps = overlaps.filter(row => row.category === 'employee_deduction');
+    const expenseOverlaps = overlaps.filter(row => row.category !== 'employee_deduction');
+    if (expenseOverlaps.length) blockers.push({ code: 'ecc_overlap', count: expenseOverlaps.length, details: expenseOverlaps });
+    // Treat ECC employee deductions as a blocker: the current records do not establish whether a deduction
+    // was already included in payroll withholding, so posting readiness cannot safely assume they are separate.
+    if (deductionOverlaps.length) blockers.push({ code: 'ecc_employee_deduction_overlap', count: deductionOverlaps.length, details: deductionOverlaps });
 
     const manual = (await this.db.query<{ count: string }>(
       `SELECT COUNT(*)::text count FROM journal_entries WHERE company_id=$1 AND source_type IS NULL
@@ -127,6 +132,9 @@ export class PayrollAccountingService {
       warnings: manualJournalCount ? [{ code: 'manual_journal_review', count: manualJournalCount }] : [],
       balanced: earnings + employer === net + deductions + employer,
       can_preview: draft.status === 'approved' && lines.length > 0 && earnings + employer > 0n && complete && overlaps.length === 0 && manualJournalCount === 0,
+      authority: 'informational_only',
+      posting_revalidation_required: true,
+      posting_revalidation: 'A future posting operation must transactionally reload and revalidate payroll lines, mappings, account status and types, ECC overlaps, manual-journal review conditions, and all other blockers before creating a journal.',
       side_effects: false,
     };
   }

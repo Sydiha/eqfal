@@ -9,7 +9,9 @@ import { AccessPolicyError } from './access-policy-error';
 import { SessionRepository } from '../auth/session.repository';
 import { generateTemporaryPassword } from '../users/password-policy';
 
-const FULL_ACCESS_EXPLICIT_CAPABILITIES = new Set(['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']);
+// Full Access delegation may preserve the established payroll approval exception. Accounting readiness
+// capabilities require the granter to hold the same capability; access.full_access.grant alone is insufficient.
+const FULL_ACCESS_EXPLICIT_CAPABILITIES = new Set(['payroll.approve']);
 
 /** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
