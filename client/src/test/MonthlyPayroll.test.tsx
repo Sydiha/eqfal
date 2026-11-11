@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MonthlyPayroll } from '../components/MonthlyPayroll';
+import { MonthlyPayroll, normalizeAmount } from '../components/MonthlyPayroll';
 import '../i18n';
 
 const response=(data:unknown)=>({ok:true,status:200,json:async()=>data});
@@ -52,3 +52,24 @@ it('keeps confirmation focus inside one dialog and restores focus on discard',as
 });
 
 afterEach(()=>vi.unstubAllGlobals());
+
+it('accepts grouped positive amounts and submits canonical decimals',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
+ const sent:unknown[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.body)sent.push(JSON.parse(String(options.body)));return response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,gross_earnings:'6700.00',employee_deductions:'300.00',employer_contributions:'600.00',net_payable:'6400.00'},employees:[{id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'5000.00',allowances:'1000.00',bonus:'500.00',overtime:'200.00',deductions:'300.00',employer_contributions:'600.00',gross_earnings:'6700.00',net_payable:'6400.00'}],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]});}));
+ render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit']} onUnauthorized={()=>{}}/>);
+ await screen.findAllByText(/6,400\.00/);
+ fireEvent.click(screen.getAllByRole('button',{name:/تعديل|Edit/})[0]!);
+ for(const [label,value] of [[/الراتب الأساسي|Base salary/,'5,000'],[/البدلات|Allowances/,'1,000'],[/المكافآت|Bonus/,'500'],[/العمل الإضافي|Overtime/,'200'],[/استقطاعات الموظف|Employee deductions/,'300'],[/مساهمات صاحب العمل|Employer contributions/,'600']] as const)fireEvent.change(screen.getByLabelText(label),{target:{value}});
+ expect(screen.getByRole('dialog').textContent).toMatch(/6,700\.00/);
+ expect(screen.getByRole('dialog').textContent).toMatch(/6,400\.00/);
+ fireEvent.click(screen.getByRole('button',{name:/حفظ المسودة|Save draft/}));
+ await waitFor(()=>expect(sent).toHaveLength(1));
+ expect(sent[0]).toMatchObject({salary:'5000',allowances:'1000',bonus:'500',overtime:'200',deductions:'300',employer_contributions:'600'});
+});
+
+it('keeps decimal precision and rejects malformed or negative amounts',()=>{
+ expect(normalizeAmount('1,234.56')).toBe('1234.56');
+ expect(normalizeAmount('0.01')).toBe('0.01');
+ for(const value of ['1,00','1,234.567','-1','1.234','1,23,456','abc'])expect(normalizeAmount(value)).toBeNull();
+});
