@@ -29,6 +29,8 @@ const CRITICAL = new Set([
   'personal_payment.reimburse',
   'personal_payment.review',
   'employee_cost.salary.view',
+  'payroll.view',
+  'payroll.edit',
   'periodic_adjustment.post',
   'source_authority.activate',
   'source_authority.manage',

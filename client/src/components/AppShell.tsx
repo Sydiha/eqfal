@@ -49,12 +49,13 @@ function ShellIcon({ name }: { name: IconName }) {
   return <Icon size={24} stroke={2} className="shell-icon" />;
 }
 
-const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', employeeCosts: 'employeeCosts', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', historicalRecords: 'documents', auditLog: 'auditLog', account: 'account' };
+const navIcons: Record<Page, IconName> = { home: 'home', fiscalYears: 'fiscalYears', monthlyClose: 'monthlyClose', annualClosing: 'annualClose', vat: 'vat', documents: 'documents', banks: 'banks', partners: 'partners', employeeCosts: 'employeeCosts', monthlyPayroll: 'employeeCosts', obligations: 'obligations', accounting: 'accounting', openingBalances: 'openingBalances', periodicAdjustments: 'periodicAdjustments', sales: 'sales', purchases: 'purchases', invoiceMappings: 'accounting', assets: 'fixedAssets', companyProfile: 'companyProfile', access: 'access', companies: 'companies', sourceAuthority: 'sourceAuthority', historicalRecords: 'documents', auditLog: 'auditLog', account: 'account' };
 
-type NavGroupId = 'invoices' | 'operations' | 'accounting' | 'closing' | 'administration';
+type NavGroupId = 'invoices' | 'payroll' | 'operations' | 'accounting' | 'closing' | 'administration';
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; pages: readonly Page[] }> = [
   { id: 'invoices', pages: ['sales', 'purchases', 'invoiceMappings'] },
-  { id: 'operations', pages: ['documents', 'banks', 'obligations', 'employeeCosts'] },
+  { id: 'operations', pages: ['documents', 'banks', 'obligations'] },
+  { id: 'payroll', pages: ['monthlyPayroll', 'employeeCosts'] },
   { id: 'accounting', pages: ['accounting', 'openingBalances', 'periodicAdjustments', 'assets', 'vat'] },
   { id: 'closing', pages: ['monthlyClose', 'annualClosing', 'fiscalYears', 'historicalRecords'] },
   { id: 'administration', pages: ['partners', 'companyProfile', 'companies', 'access', 'sourceAuthority', 'auditLog'] },
@@ -127,7 +128,7 @@ export function AppShell({ page, setPage, navigateToDestination = () => undefine
   const isAr = i18n.language === 'ar';
   const mobileLogoutLabel = t('shell.logout');
   const userInitial = (displayName?.trim() || email.trim()).charAt(0).toUpperCase() || 'U';
-  const groupLabels = { invoices: t('shell.groupInvoices'), operations: t('shell.groupOperations'), accounting: t('shell.groupAccounting'), closing: t('shell.groupClosing'), administration: t('shell.groupAdministration') };
+  const groupLabels = { invoices: t('shell.groupInvoices'), operations: t('shell.groupOperations'), payroll: t('shell.groupPayroll'), accounting: t('shell.groupAccounting'), closing: t('shell.groupClosing'), administration: t('shell.groupAdministration') };
 
   return (
     <MantineAppShell

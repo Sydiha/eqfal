@@ -8,6 +8,7 @@ export type NavigationPage =
   | 'banks'
   | 'partners'
   | 'employeeCosts'
+  | 'monthlyPayroll'
   | 'obligations'
   | 'accounting'
   | 'openingBalances'
@@ -26,7 +27,7 @@ export type NavigationPage =
 
 export const NAVIGATION_PAGES: readonly NavigationPage[] = [
   'home', 'fiscalYears', 'monthlyClose', 'annualClosing', 'vat', 'documents',
-  'banks', 'partners', 'employeeCosts', 'obligations', 'accounting', 'openingBalances',
+  'banks', 'partners', 'employeeCosts', 'monthlyPayroll', 'obligations', 'accounting', 'openingBalances',
   'periodicAdjustments', 'sales', 'purchases', 'invoiceMappings', 'assets',
   'companyProfile', 'access', 'companies', 'sourceAuthority', 'historicalRecords',
   'auditLog', 'account',
@@ -58,6 +59,8 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
       return has(capabilities, 'asset.view');
     case 'partners':
       return has(capabilities, 'partner.view');
+    case 'monthlyPayroll':
+      return has(capabilities, 'payroll.view');
     case 'employeeCosts':
       return has(capabilities, 'employee.view') && (has(capabilities, 'employee_cost.view') || has(capabilities, 'employee.manage'));
     case 'accounting':
