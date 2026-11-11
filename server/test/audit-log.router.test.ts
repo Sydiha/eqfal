@@ -126,6 +126,25 @@ describe('audit log filtering and search', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('hides payroll-only actors without payroll.view and retains salary filtering', async () => {
+    const payrollActor = { id: ID, email: 'payroll-only@example.com' };
+    query.mockImplementation(async (sql: string) => {
+      if (sql.includes('actor_user_id AS id')) return { rows: sql.includes("a.action NOT LIKE 'payroll.%'") ? [] : [payrollActor] };
+      return { rows: [] };
+    });
+    login(['audit.view']);
+    const hidden = await request(app).get('/api/audit-log/facets').set(...cookie);
+    expect(hidden.body.actors).toEqual([]);
+    const actorSql = query.mock.calls.find(([sql]) => sql.includes('actor_user_id AS id'))![0];
+    expect(actorSql).toContain("a.action NOT LIKE 'payroll.%'");
+    expect(actorSql).toContain("a.action NOT LIKE 'employee_cost_payment.%'");
+    query.mockClear();
+    login(['audit.view', 'payroll.view']);
+    const visible = await request(app).get('/api/audit-log/facets').set(...cookie);
+    expect(visible.body.actors).toEqual([payrollActor]);
+    expect(query.mock.calls.find(([sql]) => sql.includes('actor_user_id AS id'))![0]).toContain("a.action NOT LIKE 'employee_cost_payment.%'");
+  });
+
   it('returns facets for the dropdowns', async () => {
     login(['audit.view']);
     query.mockReset();

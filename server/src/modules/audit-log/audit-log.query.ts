@@ -78,7 +78,7 @@ export async function auditLogFacets(pool: Pick<Pool, 'query'>, companyId: strin
     pool.query<{ v: string }>(`SELECT DISTINCT action AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
     pool.query<{ v: string }>(`SELECT DISTINCT entity_type AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
     pool.query<{ id: string; email: string | null }>(
-      `SELECT DISTINCT a.actor_user_id AS id, u.email FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id WHERE a.company_id = $1${salaryVisible ? '' : " AND a.action NOT LIKE 'employee_cost_payment.%'"} ORDER BY 2`, [companyId]),
+      `SELECT DISTINCT a.actor_user_id AS id, u.email FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id WHERE a.company_id = $1${salaryVisible ? '' : " AND a.action NOT LIKE 'employee_cost_payment.%'"}${payrollVisible ? '' : " AND a.action NOT LIKE 'payroll.%'"} ORDER BY 2`, [companyId]),
   ]);
   return { actions: actions.rows.map((r) => r.v), entity_types: entityTypes.rows.map((r) => r.v), actors: actors.rows };
 }
