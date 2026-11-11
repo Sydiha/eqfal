@@ -251,12 +251,12 @@ interface FakeDb {
 /**
  * In-memory pg Pool. For the real getActiveCapabilities() SQL it evaluates the same semantics
  * the SQL expresses: membership(user, company, active) JOIN active company JOIN role with
- * r.company_id = m.company_id, then every capability row when r.is_full_access, otherwise only
+ * r.company_id = m.company_id, then implicit capabilities when r.is_full_access, otherwise only
  * explicit role_capabilities rows. The SQL text itself is asserted by the guard test below.
  */
 function makeFakePool(db: FakeDb): Pool {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (!/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
+    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
       throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
     }
     const [userId, companyId] = params as [string, string];
@@ -320,9 +320,9 @@ describe('Real repository authorization', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('m.is_active  = TRUE');
-    // Full Access is a wildcard over every registered capability (no implicit_full_access exception since 075).
-    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/);
-    expect(sql).not.toContain('implicit_full_access');
+    // Full Access includes implicit capabilities; payroll.approve requires an explicit grant.
+    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/);
+    expect(sql).toContain('cap.implicit_full_access = TRUE');
     expect(sql).toMatch(/u\.is_system_admin = TRUE/);
   });
 

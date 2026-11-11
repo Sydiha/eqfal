@@ -144,7 +144,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(session.allowedCompanies.map((c: { id: string }) => c.id).sort()).toEqual([ids.coA, ids.coB].sort());
     const inB = await clients.sa!.use(ids.coB!);
     expect(inB.activeCompanyId).toBe(ids.coB);
-    expect([...inB.capabilities].sort()).toEqual(await allCaps());
+    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>id!=='payroll.approve'));
   });
 
   it('System Admin performs financial operations in a company it is not a member of; business validation still applies', async () => {
@@ -201,15 +201,16 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM role_capabilities WHERE role_id=$1', [roles['Full AccessA']])).toBe(0);
     const caps = (await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).sort();
-    expect(caps).toEqual(await allCaps());
+    expect(caps).toEqual((await allCaps()).filter((id:string)=>id!=='payroll.approve'));
     for (const c of ['invoice.view', 'invoice.approve', 'invoice.adjust_approve', 'invoice.cancel', 'invoice.recurring', 'access.full_access.grant']) expect(caps).toContain(c);
     await q("INSERT INTO capabilities(id) VALUES('zz_future.capability')");
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.staffA!, ids.coA!)).not.toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).not.toContain('zz_future.capability');
-    // The explicit-only exception cannot come back.
-    await expect(q("INSERT INTO capabilities(id, implicit_full_access) VALUES('zz_excluded.capability', FALSE)")).rejects.toMatchObject({ code: '23514' });
+    await q("INSERT INTO capabilities(id, implicit_full_access) VALUES('zz_excluded.capability', FALSE)");
+    expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).not.toContain('zz_excluded.capability');
+    await q("DELETE FROM capabilities WHERE id='zz_excluded.capability'");
     await q("DELETE FROM capabilities WHERE id='zz_future.capability'");
   });
 
