@@ -12,7 +12,8 @@ const keys=['salary','allowances','bonus','overtime','deductions','employer_cont
 type Values=Record<typeof keys[number],string>;
 const empty:Values={salary:'0.00',allowances:'0.00',bonus:'0.00',overtime:'0.00',deductions:'0.00',employer_contributions:'0.00'};
 const currentMonth=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;};
-function toCents(v:string){if(!/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/.test(v))return null;const [a,b='']=v.split('.');return BigInt(a)*100n+BigInt(b.padEnd(2,'0'));}
+export function normalizeAmount(v:string){const value=v.trim();if(!/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/.test(value)&&!/^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d{1,2})?$/.test(value))return null;return value.replace(/,/g,'');}
+function toCents(v:string){const normalized=normalizeAmount(v);if(normalized===null)return null;const [a,b='']=normalized.split('.');return BigInt(a)*100n+BigInt(b.padEnd(2,'0'));}
 function amount(v:string){return <bdi className="fin-amount">{formatMoney(v,'0.00')} SAR</bdi>;}
 export function MonthlyPayroll({capabilities,onUnauthorized}:{capabilities:string[];onUnauthorized:()=>void}){
  const {t}=useTranslation();const l=(k:string)=>t(`payroll.${k}`);const canEdit=capabilities.includes('payroll.edit');
@@ -27,7 +28,7 @@ export function MonthlyPayroll({capabilities,onUnauthorized}:{capabilities:strin
  const close=()=>{if(JSON.stringify(values)!==baseline){setConfirmClose(true);return;}setSelected(null);};
  const sums=keys.map(k=>toCents(values[k]));const gross=sums.slice(0,4).every(x=>x!==null)?sums.slice(0,4).reduce<bigint>((a,b)=>a+b!,0n):null;const net=gross!==null&&sums[4]!==null?gross-sums[4]!:null;
  const moneyString=(n:bigint)=>`${n/100n}.${String(n%100n).padStart(2,'0')}`;
- const save=async(e:React.FormEvent)=>{e.preventDefault();const selectedMonth=month,draftId=draft!.id;if(sums.some(x=>x===null)||net===null||net<0n){setFieldError(l('validation'));return;}setBusy(true);setFieldError('');try{const data=await request(`/api/payroll/drafts/${draft!.id}/employees/${selected}`,'PUT',{...values,version});if(selectedMonth!==monthRef.current||draftId!==data.draft.id)return;setDraft(data.draft);setLines(data.employees);setEmployees(data.available_employees);setSelected(null);}catch(e){if(selectedMonth!==monthRef.current)return;setFieldError((e as Error).message==='PAYROLL_CONFLICT'?l('conflict'):l('saveError'));}finally{setBusy(false);}};
+ const save=async(e:React.FormEvent)=>{e.preventDefault();const selectedMonth=month,draftId=draft!.id;if(sums.some(x=>x===null)||net===null||net<0n){setFieldError(l('validation'));return;}setBusy(true);setFieldError('');try{const data=await request(`/api/payroll/drafts/${draft!.id}/employees/${selected}`,'PUT',{...Object.fromEntries(keys.map(k=>[k,normalizeAmount(values[k])])),version});if(selectedMonth!==monthRef.current||draftId!==data.draft.id)return;setDraft(data.draft);setLines(data.employees);setEmployees(data.available_employees);setSelected(null);}catch(e){if(selectedMonth!==monthRef.current)return;setFieldError((e as Error).message==='PAYROLL_CONFLICT'?l('conflict'):l('saveError'));}finally{setBusy(false);}};
  const names=employees.filter(e=>e.is_active||lines.some(x=>x.employee_id===e.id));
  return <WorkspacePage className="payroll-page" labelledBy="payroll-title"><PageHeader titleId="payroll-title" title={l('title')} description={l('intro')}/>
  <div className="payroll-content"><div className="payroll-toolbar"><label>{l('period')}<input type="month" value={month} onChange={e=>{monthRef.current=e.target.value;requestSeq.current++;setLoading(true);setDraft(null);setLines([]);setEmployees([]);setMonth(e.target.value);}} /></label></div>
