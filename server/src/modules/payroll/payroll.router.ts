@@ -105,7 +105,7 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
 }));
 
 const accountingService=(res:Response)=>pool?new PayrollAccountingService(pool):(res.status(503).json({error:'Database unavailable',code:'DB_UNAVAILABLE'}),null);
-function accountingFailure(error:unknown,res:Response){if(error instanceof PayrollAccountingError){res.status(error.status).json({error:error.code,code:error.code});return true;}return false;}
+function accountingFailure(error:unknown,res:Response){if(error instanceof PayrollAccountingError){res.status(error.status).json({error:error.code,code:error.code,details:error.details});return true;}return false;}
 payrollRouter.get('/payroll/account-mappings',...read,requireCapability('payroll.accounting.mapping.view'),route(async(q,s)=>{
  const service=accountingService(s);if(service)s.json(await service.mappings(company(q)));
 }));
@@ -120,4 +120,16 @@ payrollRouter.get('/payroll/drafts/:id/accounting-preview',...read,requireCapabi
  if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
  const service=accountingService(s);if(!service)return;
  try{s.json(await service.preview(company(q),q.params.id));}catch(e){if(!accountingFailure(e,s))throw e;}
+}));
+
+payrollRouter.post('/payroll/drafts/:id/accounting-post',requireSameOrigin,...read,requireCapability('payroll.accounting.post'),route(async(q,s)=>{
+ if(!uuid.test(q.params.id)||!q.body||typeof q.body!=='object'||Array.isArray(q.body)||Object.keys(q.body).length)return void error(s,'PAYROLL_INVALID');
+ const service=accountingService(s);if(!service)return;
+ try{const result=await service.post(company(q),q.params.id,getAuthenticatedContext(q)!.user.id);s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
+}));
+
+payrollRouter.get('/payroll/drafts/:id/accounting-post-status',...read,requireCapability('payroll.accounting.post'),route(async(q,s)=>{
+ if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
+ const service=accountingService(s);if(!service)return;
+ try{s.json(await service.postingStatus(company(q),q.params.id,getAuthenticatedContext(q)!.user.id));}catch(e){if(!accountingFailure(e,s))throw e;}
 }));

@@ -17,7 +17,7 @@ describe('PAYROLL-02 accounting readiness contract', () => {
     expect(service).toContain('!account.is_active');
   });
 
-  it('requires explicit payroll/mapping permissions and exposes preview-only reads with no posting route', () => {
+  it('requires explicit payroll/mapping permissions and keeps preview reads informational', () => {
     expect(router).toContain("requireCapability('payroll.accounting.mapping.view')");
     expect(router).toContain("requireCapability('payroll.accounting.mapping.manage')");
     expect(router).toContain("requireCapability('payroll.accounting.preview')");
@@ -26,8 +26,9 @@ describe('PAYROLL-02 accounting readiness contract', () => {
     expect(service).toContain("authority: 'informational_only'");
     expect(service).toContain('posting_revalidation_required: true');
     expect(service).toContain('ecc_employee_deduction_overlap');
-    expect(service).not.toContain('INSERT INTO journal_entries');
-    expect(service).not.toContain('postJournalInTransaction');
+    const readiness = service.slice(service.indexOf('  private async calculateReadiness'));
+    expect(readiness).not.toContain('INSERT INTO journal_entries');
+    expect(readiness).not.toContain('postJournalInTransaction');
   });
 
   it('does not delegate accounting readiness capabilities through access.full_access.grant alone', () => {
