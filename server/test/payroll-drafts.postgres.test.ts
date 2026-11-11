@@ -1,0 +1,32 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { startHarness } from './helpers/http-pg';
+const describeDatabase=process.env['DATABASE_URL']?describe:describe.skip;
+type Harness=Awaited<ReturnType<typeof startHarness>>;
+const values=(version:number,salary='100.10')=>({version,salary,allowances:'0.20',bonus:'0.30',overtime:'0.40',deductions:'0.50',employer_contributions:'0.60'});
+describeDatabase('PAYROLL-01A PostgreSQL',()=>{
+ let h:Harness;beforeAll(async()=>{h=await startHarness();});afterAll(()=>h.close());
+ it('covers migration, company isolation, permissions, duplicate months, concurrent edits, exact totals and audit privacy',async()=>{
+  const owner=await h.user('payroll-owner'),viewer=await h.user('payroll-viewer'),editor=await h.user('payroll-editor'),auditor=await h.user('payroll-auditor'),outsider=await h.user('payroll-outsider');
+  const co=await h.company('payroll-main',owner.id);await h.company('payroll-other',outsider.id);
+  await h.member(co,viewer.id,['payroll.view']);await h.member(co,editor.id,['payroll.view','payroll.edit']);await h.member(co,auditor.id,['audit.view']);
+  for(const u of [owner,viewer,editor,auditor,outsider])await u.client.login();
+  expect(await h.count("SELECT COUNT(*)::text n FROM information_schema.tables WHERE table_name IN ('payroll_drafts','payroll_draft_employees')")).toBe(2);
+  const employee=(await owner.client.req('POST','/employees',{employee_number:'P1',display_name:'Employee',employment_start:'2025-01-01',employment_end:null})).json;
+  expect((await viewer.client.req('GET','/payroll/drafts?month=2026-03-01')).status).toBe(200);
+  expect((await viewer.client.req('POST','/payroll/drafts',{month:'2026-03-01'})).status).toBe(403);
+  const created=await editor.client.req('POST','/payroll/drafts',{month:'2026-03-01'});expect(created.status).toBe(201);const id=created.json.draft.id;
+  expect((await owner.client.req('POST','/payroll/drafts',{month:'2026-03-01'})).status).toBe(409);
+  expect((await outsider.client.req('GET','/payroll/drafts?month=2026-03-01')).json.draft).toBeNull();
+  const url=`/payroll/drafts/${id}/employees/${employee.id}`;
+  expect((await viewer.client.req('PUT',url,values(0))).status).toBe(403);
+  expect((await outsider.client.req('PUT',url,values(0))).status).toBe(404);
+  const pair=await Promise.all([owner.client.req('PUT',url,values(0)),editor.client.req('PUT',url,values(0,'200.10'))]);expect(pair.map(x=>x.status).sort()).toEqual([200,409]);
+  const update=await owner.client.req('PUT',url,values(1,'0.10'));expect(update.status).toBe(200);
+  expect(update.json.draft).toMatchObject({gross_earnings:'1.00',employee_deductions:'0.50',employer_contributions:'0.60',net_payable:'0.50'});
+  expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND action LIKE 'payroll.%'",[co])).toBe(3);
+  const events=await h.q<{actor_user_id:string;before_data:Record<string,string>|null;after_data:Record<string,string>|null}>("SELECT actor_user_id,before_data,after_data FROM audit_log WHERE company_id=$1 AND action='payroll.draft_employee.update'",[co]);
+  expect(events[0]).toMatchObject({actor_user_id:owner.id,before_data:{salary:expect.any(String)},after_data:{salary:'0.10'}});
+  expect((await auditor.client.req('GET','/audit-log')).json.entries.some((e:{action:string})=>e.action.startsWith('payroll.'))).toBe(false);
+  expect((await auditor.client.req('GET','/audit-log/facets')).json.actions.some((a:string)=>a.startsWith('payroll.'))).toBe(false);
+ });
+});

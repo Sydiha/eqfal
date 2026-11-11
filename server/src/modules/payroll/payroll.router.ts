@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import pool from '../../db/pool';
+import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { requireAuth, requireActiveCompany, requireCapability, getAuthenticatedContext } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 
@@ -12,6 +13,7 @@ const read=[requireAuth,requireActiveCompany,requireCapability('payroll.view')];
 const write=[requireSameOrigin,...read,requireCapability('payroll.edit')];
 const route=(fn:(q:Request,s:Response)=>Promise<void>)=>(q:Request,s:Response,n:NextFunction)=>void fn(q,s).catch(n);
 const company=(q:Request)=>getAuthenticatedContext(q)!.activeCompanyId!;
+const audit=new AuditLogRepository();
 const error=(s:Response,code:string,status=400)=>s.status(status).json({code,error:code});
 const validMonth=(v:unknown):v is string=>typeof v==='string'&&month.test(v)&&!Number.isNaN(Date.parse(v));
 const summary=`SELECT d.id,d.period_month::text,d.currency_code,d.version,d.created_at::text,d.updated_at::text,
@@ -33,8 +35,8 @@ async function detail(q:Request,s:Response,period:string){
 payrollRouter.get('/payroll/drafts',...read,route(async(q,s)=>{if(!validMonth(q.query.month))return void error(s,'PAYROLL_INVALID');await detail(q,s,q.query.month);}));
 payrollRouter.post('/payroll/drafts',...write,route(async(q,s)=>{
  if(!q.body||Object.keys(q.body).sort().join(',')!=='month'||!validMonth(q.body.month))return void error(s,'PAYROLL_INVALID');
- try{await pool!.query('INSERT INTO payroll_drafts(company_id,period_month,created_by) VALUES($1,$2,$3)',[company(q),q.body.month,getAuthenticatedContext(q)!.user.id]);}
- catch(e){if((e as {code?:string}).code==='23505')return void error(s,'PAYROLL_PERIOD_EXISTS',409);throw e;}
+ const c=await pool!.connect();try{await c.query('BEGIN');const created=(await c.query<{id:string}>('INSERT INTO payroll_drafts(company_id,period_month,created_by) VALUES($1,$2,$3) RETURNING id',[company(q),q.body.month,getAuthenticatedContext(q)!.user.id])).rows[0]!;await audit.logEvent({company_id:company(q),actor_user_id:getAuthenticatedContext(q)!.user.id,action:'payroll.draft.create',entity_type:'payroll_draft',entity_id:created.id,after_data:{period_month:q.body.month}},c);await c.query('COMMIT');}
+ catch(e){await c.query('ROLLBACK');if((e as {code?:string}).code==='23505')return void error(s,'PAYROLL_PERIOD_EXISTS',409);throw e;}finally{c.release();}
  s.status(201);await detail(q,s,q.body.month);
 }));
 payrollRouter.put('/payroll/drafts/:id/employees/:employeeId',...write,route(async(q,s)=>{
@@ -47,11 +49,12 @@ payrollRouter.put('/payroll/drafts/:id/employees/:employeeId',...write,route(asy
   if(!draft){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}
   const employee=(await c.query('SELECT id FROM employees WHERE id=$1 AND company_id=$2 FOR SHARE',[q.params.employeeId,company(q)])).rows[0];
   if(!employee){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}
-  const prior=(await c.query('SELECT version FROM payroll_draft_employees WHERE draft_id=$1 AND company_id=$2 AND employee_id=$3 FOR UPDATE',[q.params.id,company(q),q.params.employeeId])).rows[0];
+  const prior=(await c.query('SELECT version,salary::text,allowances::text,bonus::text,overtime::text,deductions::text,employer_contributions::text FROM payroll_draft_employees WHERE draft_id=$1 AND company_id=$2 AND employee_id=$3 FOR UPDATE',[q.params.id,company(q),q.params.employeeId])).rows[0];
   if((prior?.version??0)!==b.version){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
   await c.query(`INSERT INTO payroll_draft_employees(company_id,draft_id,employee_id,salary,allowances,bonus,overtime,deductions,employer_contributions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT(company_id,draft_id,employee_id) DO UPDATE SET salary=$4,allowances=$5,bonus=$6,overtime=$7,deductions=$8,employer_contributions=$9,version=payroll_draft_employees.version+1,updated_at=NOW()`,[company(q),q.params.id,q.params.employeeId,...fields.map(f=>b[f])]);
   await c.query('UPDATE payroll_drafts SET version=version+1,updated_at=NOW() WHERE id=$1 AND company_id=$2',[q.params.id,company(q)]);
+  await audit.logEvent({company_id:company(q),actor_user_id:getAuthenticatedContext(q)!.user.id,action:prior?'payroll.draft_employee.update':'payroll.draft_employee.create',entity_type:'payroll_draft_employee',entity_id:q.params.employeeId,before_data:prior?Object.fromEntries(fields.map(f=>[f,prior[f]])):null,after_data:{draft_id:q.params.id,employee_id:q.params.employeeId,version:(prior?.version??0)+1,...Object.fromEntries(fields.map(f=>[f,b[f]]))}},c);
   await c.query('COMMIT');await detail(q,s,draft.period_month);
  }catch(e){await c.query('ROLLBACK');if((e as {code?:string}).code==='23514')return void error(s,'PAYROLL_INVALID');throw e;}finally{c.release();}
 }));

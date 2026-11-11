@@ -34,9 +34,10 @@ const escapeLike = (value: string) => value.replace(/[\\%_]/g, (ch) => `\\${ch}`
  * Read-only audit log search. The company scope is a mandatory first argument and is
  * always the first bound parameter: callers can never widen it through filters.
  */
-export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: string, f: AuditLogFilters, salaryVisible = true) {
+export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: string, f: AuditLogFilters, salaryVisible = true, payrollVisible = true) {
   const where = ['a.company_id = $1'];
   if (!salaryVisible) where.push("a.action NOT LIKE 'employee_cost_payment.%'");
+  if (!payrollVisible) where.push("a.action NOT LIKE 'payroll.%'");
   const params: unknown[] = [companyId];
   const add = (sql: string, value: unknown) => { params.push(value); where.push(sql.replace('?', `$${params.length}`)); };
 
@@ -71,8 +72,8 @@ export async function searchAuditLog(pool: Pick<Pool, 'query'>, companyId: strin
 }
 
 /** Distinct values for the filter dropdowns, scoped to one company. */
-export async function auditLogFacets(pool: Pick<Pool, 'query'>, companyId: string, salaryVisible = true) {
-  const privacy = salaryVisible ? '' : " AND action NOT LIKE 'employee_cost_payment.%'";
+export async function auditLogFacets(pool: Pick<Pool, 'query'>, companyId: string, salaryVisible = true, payrollVisible = true) {
+  const privacy = `${salaryVisible ? '' : " AND action NOT LIKE 'employee_cost_payment.%'"}${payrollVisible ? '' : " AND action NOT LIKE 'payroll.%'"}`;
   const [actions, entityTypes, actors] = await Promise.all([
     pool.query<{ v: string }>(`SELECT DISTINCT action AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
     pool.query<{ v: string }>(`SELECT DISTINCT entity_type AS v FROM audit_log WHERE company_id = $1${privacy} ORDER BY 1`, [companyId]),
