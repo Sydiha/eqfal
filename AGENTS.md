@@ -143,7 +143,7 @@ Mandatory rules:
 
 ## 6A. Mandatory Codex Model and Reasoning Routing
 
-Before every Codex task, EQFAL must apply [CODEX_MODEL_ROUTING_POLICY.md](CODEX_MODEL_ROUTING_POLICY.md) and present the model/reasoning recommendation, relative usage estimate, available economical alternative, escalation conditions, and manual override option to the Owner. Verify actual model availability; never invent model names, quota costs, or measured usage. Use simple rules without a separate model run when possible. Financial/security correctness and review gates take precedence over usage savings. This policy does not grant execution authority or alter Owner Approval, No Agents, or merge/deploy restrictions.
+Before every Codex task, EQFAL must apply [CODEX_MODEL_ROUTING_POLICY.md](CODEX_MODEL_ROUTING_POLICY.md) and present the model/reasoning recommendation, relative usage estimate, available economical alternative, escalation conditions, and manual override option to the Owner. Verify model availability specifically in the Codex execution environment; ChatGPT UI model names are not proof of Codex availability. Never invent model names, quota costs, or measured usage. Start with the lowest sufficient reasoning effort; do not default to High. Use simple rules without a separate model run when possible. Financial/security correctness and review gates take precedence over usage savings. This policy does not grant execution authority or alter Owner Approval, No Agents, or merge/deploy restrictions.
 
 ## 7. Codex Repository Access / Execution Preflight
 
