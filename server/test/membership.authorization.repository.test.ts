@@ -28,21 +28,21 @@ describe('MembershipRepository authorization queries', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('m.is_active  = TRUE');
     expect(sql).toContain('c.is_active = TRUE');
-    expect(sql).toContain('JOIN capabilities cap ON r.is_full_access = TRUE');
+    expect(sql).toContain('JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)');
     expect(sql).toContain('FROM role_capabilities rc');
     expect(sql).toContain('rc.capability_id = cap.id');
     expect(result).toEqual(['report.view']);
   });
 
-  it('keeps normal roles on explicit role_capabilities while Full Access reads every capability row dynamically', async () => {
+  it('keeps normal roles on explicit grants while Full Access reads implicit capabilities dynamically', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
     const repo = new MembershipRepository({ query } as unknown as Pool);
 
     await repo.getActiveCapabilities('user-1', 'company-a');
 
     const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toMatch(/JOIN capabilities cap ON r\.is_full_access = TRUE\s+OR EXISTS/i);
-    expect(sql).not.toContain('implicit_full_access');
+    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/i);
+    expect(sql).toContain('cap.implicit_full_access = TRUE');
     expect(sql).toMatch(/FROM role_capabilities rc[\s\S]*rc\.role_id = r\.id[\s\S]*rc\.capability_id = cap\.id/i);
     expect(sql).not.toMatch(/INSERT INTO role_capabilities/i);
   });

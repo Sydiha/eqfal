@@ -6,8 +6,8 @@
  * module; a contract test parses the SQL and asserts exact set equality.
  *
  * Hierarchy: Viewer is a subset of Accountant, which is a subset of Finance Manager.
- * Full Access is not listed here: it resolves every registered capability dynamically
- * (roles.is_full_access) and has no explicit role_capabilities rows.
+ * Full Access is not listed here: it resolves standard capabilities dynamically
+ * (roles.is_full_access). Payroll approval requires an explicit role grant.
  * Viewer, Accountant and Finance Manager hold no access.* capability. Company Manager (migration 075) is the
  * conservative company administrator described below.
  */

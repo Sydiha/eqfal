@@ -9,7 +9,7 @@ const ar = {
   nav: { main: 'التنقل الرئيسي', home: 'الرئيسية', fiscalYears: 'السنوات المالية', monthlyClose:'الإقفال الشهري', annualClosing:'الإقفال السنوي', vat:'ضريبة القيمة المضافة', documents: 'المستندات', banks: 'البنوك', partners:'الشركاء', monthlyPayroll:'مسير الرواتب الشهري', employeeCosts:'مركز تكاليف الموظفين', obligations:'الذمم', sales:'المبيعات', purchases:'المشتريات',salesInvoices:'فواتير المبيعات',purchaseInvoices:'فواتير المشتريات', invoiceMappings: 'ربط حسابات الفواتير', accounting:'المحاسبة', assets:'الأصول الثابتة', access:'المستخدمون والصلاحيات',companies:'الشركات', auditLog:'سجل التدقيق', account:'إعدادات الحساب', openMenu: 'فتح قائمة التنقل', historicalRecords:'السجلات التاريخية', sourceAuthority:'صلاحية مصدر الدفتر', companyProfile:'الملف المحاسبي والضريبي', openingBalances:'الأرصدة الافتتاحية', periodicAdjustments:'الاستحقاقات والمقدمات' },
   payroll: {
     title: 'مسير الرواتب الشهري',
-    intro: 'إعداد مسودة الرواتب يدويًا. لم تُعتمد أو تُرحّل هذه المبالغ.',
+    intro: 'إعداد مسير الرواتب واعتماده يدويًا. الاعتماد لا يرحّل قيودًا محاسبية ولا ينفذ مدفوعات.',
     period: 'الشهر',
     create: 'إنشاء مسودة',
     saving: 'جارٍ الحفظ…',
@@ -19,6 +19,7 @@ const ar = {
     loadError: 'تعذّر تحميل مسودة الرواتب.',
     saveError: 'تعذّر حفظ المسودة.',
     periodExists: 'توجد مسودة لهذا الشهر.',
+    approvedStatus: 'معتمد', approvedBy: 'اعتمده', approvedOn: 'في', approve: 'اعتماد المسير', approveConfirm: 'هل تريد اعتماد مسير الرواتب وقفل تعديله؟ لا يمكن تغيير التفاصيل بعد الاعتماد.', permissionDenied: 'ليست لديك صلاحية اعتماد الرواتب.', selfApproval: 'يجب أن يعتمد المسير مستخدم مخوّل آخر إذا أنشأته أو عدّلته.', approvalConflict: 'تغيّر المسير. حدّث الصفحة وراجعه قبل الاعتماد.', alreadyApproved: 'اعتمد هذا المسير بالفعل وأُقفل تعديله.', emptyApproval: 'أضف موظفًا واحدًا على الأقل قبل الاعتماد.', approvalError: 'تعذّر اعتماد المسير. راجع المسودة وحاول مجددًا.',
     draftStatus: 'مسودة',
     readOnly: 'للقراءة فقط',
     gross: 'إجمالي الاستحقاقات',
@@ -243,7 +244,7 @@ const ar = {
     addMember: 'إضافة عضو', addMemberTitle: 'إضافة عضو إلى الشركة', email: 'البريد الإلكتروني للمستخدم', emailHint: 'يجب أن يكون للمستخدم حساب قائم في النظام.', add: 'إضافة',
     membersEmpty: 'لا يوجد أعضاء في هذه الشركة.', rolesEmpty: 'لا توجد أدوار في هذه الشركة.',
     createRole: 'دور جديد', createRoleTitle: 'إنشاء دور', roleName: 'اسم الدور', create: 'إنشاء',
-    fullAccess: 'وصول كامل', fullAccessNote: 'هذا الدور يملك كل الصلاحيات في هذه الشركة، ومنها الصلاحيات التي تُضاف مستقبلاً. قائمة صلاحياته ثابتة ولا يمكن تعديلها.',
+    fullAccess: 'وصول كامل', fullAccessNote: 'يملك هذا الدور الصلاحيات المعتادة تلقائيًا. اعتماد الرواتب يتطلب منحًا صريحًا منفصلًا أدناه.',
     expandGroup: 'توسيع', collapseGroup: 'طيّ', selectAll: 'تحديد الكل', clearAll: 'مسح الكل', bulkActions: 'إجراءات الصلاحيات الجماعية', selectRole: 'اختر دوراً لعرض صلاحياته', capabilities: 'صلاحيات الدور', capabilityCount: '{{count}} صلاحية',
     details: {
       title: 'تفاصيل الوصول: {{email}}', open: 'التفاصيل', scopeNote: 'تظهر فقط الشركات التي أنت مخوّل بإدارتها. صلاحيات الدور هي ما أُسند إلى الدور، والصلاحيات الفعلية هي ما يستطيع المستخدم فعله الآن.',

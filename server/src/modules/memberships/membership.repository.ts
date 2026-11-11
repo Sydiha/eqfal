@@ -369,7 +369,7 @@ export class MembershipRepository {
     const { rows } = await runner.query<{ capability_id: string }>(
       `SELECT cap.id AS capability_id
        FROM capabilities cap
-       WHERE EXISTS (
+       WHERE cap.implicit_full_access = TRUE AND EXISTS (
          SELECT 1 FROM users u JOIN companies c ON c.id = $2 AND c.is_active = TRUE
          WHERE u.id = $1 AND u.is_active = TRUE AND u.is_system_admin = TRUE
        )
@@ -378,7 +378,7 @@ export class MembershipRepository {
        FROM memberships m
        JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON r.is_full_access = TRUE
+       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
          OR EXISTS (
            SELECT 1
            FROM role_capabilities rc

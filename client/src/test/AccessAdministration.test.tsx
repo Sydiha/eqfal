@@ -206,12 +206,12 @@ describe('AccessAdministration', () => {
     expect(screen.getByLabelText('Documents')).toBeDisabled();
   });
 
-  it('shows a Full Access role as holding every current and future permission, with nothing to edit', async () => {
+  it('shows Full Access standard permissions and keeps ordinary grants immutable', async () => {
     mockApi();
     renderIt(ALL);
     fireEvent.click(await screen.findByRole('tab', { name: 'Roles & permissions' }));
     fireEvent.click(await screen.findByRole('button', { name: /Owner/ }));
-    expect(screen.getByText(/every permission in this company, including permissions added in the future/)).toBeInTheDocument();
+    expect(screen.getByText(/Payroll approval requires a separate explicit grant/)).toBeInTheDocument();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
