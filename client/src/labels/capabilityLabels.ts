@@ -104,6 +104,7 @@ const OVERRIDES: Record<string, Pair> = {
   'employee.manage': ['Manage employee records', 'إدارة سجلات الموظفين'],
   'payroll.view': ['View monthly payroll (sensitive)', 'عرض مسير الرواتب الشهري (حساس)'],
   'payroll.edit': ['Edit monthly payroll drafts (sensitive)', 'تعديل مسودات الرواتب الشهرية (حساس)'],
+  'payroll.approve': ['Approve monthly payroll (sensitive)', 'اعتماد مسير الرواتب الشهري (حساس)'],
   'employee_cost.view': ['View employee cost reports', 'عرض تقارير تكاليف الموظفين'],
   'employee_cost.salary.view': ['View employee earnings and deductions (sensitive)', 'عرض استحقاقات الموظفين واستقطاعاتهم (حساس)'],
   'employee_cost.create': ['Record employee costs', 'تسجيل تكاليف الموظفين'],

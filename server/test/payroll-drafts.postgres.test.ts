@@ -46,8 +46,60 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   expect((await auditor.client.req('GET','/audit-log')).json.entries.some((e:{action:string})=>e.action.startsWith('payroll.'))).toBe(false);
   expect((await auditor.client.req('GET','/audit-log/facets')).json.actions.some((a:string)=>a.startsWith('payroll.'))).toBe(false);
  });
+ it('requires explicit approval, separates contributors, locks approved data, and records admin self approval',async()=>{
+  const owner=await h.user('approval-owner'),editor=await h.user('approval-editor'),approver=await h.user('approval-approver'),manager=await h.user('approval-manager'),auditor=await h.user('approval-auditor'),outsider=await h.user('approval-outsider');
+  const co=await h.company('approval-main',owner.id);await h.company('approval-other',outsider.id);
+  await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.approve']);
+  await h.member(co,approver.id,['payroll.view','payroll.approve']);
+  await h.member(co,manager.id,['payroll.view','payroll.edit','payroll.approve','access.role.capability.grant']);
+  await h.member(co,auditor.id,['audit.view']);
+  for(const u of [owner,editor,approver,manager,auditor,outsider])await u.client.login();
+  const employee=(await owner.client.req('POST','/employees',{employee_number:'PA1',display_name:'Approval employee',employment_start:'2025-01-01',employment_end:null})).json;
+  const empty=(await editor.client.req('POST','/payroll/drafts',{month:'2026-05-01'})).json.draft;
+  const approveEmpty=`/payroll/drafts/${empty.id}/approve`;
+  expect((await editor.client.req('POST',approveEmpty,{version:empty.version})).json.code).toBe('PAYROLL_SELF_APPROVAL');
+  expect((await approver.client.req('POST',approveEmpty,{version:empty.version})).json.code).toBe('PAYROLL_EMPTY');
+  expect((await owner.client.req('POST',approveEmpty,{version:empty.version})).status).toBe(403);
+  const fullRole=(await h.q<{id:string}>('SELECT role_id AS id FROM memberships WHERE company_id=$1 AND user_id=$2',[co,owner.id]))[0]!.id;
+  expect((await owner.client.req('PUT',`/access/roles/${fullRole}/capabilities/payroll.approve`)).status).toBe(204);
+  expect((await owner.client.req('POST',approveEmpty,{version:empty.version})).json.code).toBe('PAYROLL_EMPTY');
+  expect((await outsider.client.req('POST',approveEmpty,{version:empty.version})).status).toBe(403);
+  const line=`/payroll/drafts/${empty.id}/employees/${employee.id}`;
+  const edited=await editor.client.req('PUT',line,values(0));expect(edited.status).toBe(200);
+  expect((await editor.client.req('POST',approveEmpty,{version:edited.json.draft.version})).json.code).toBe('PAYROLL_SELF_APPROVAL');
+  const approved=await approver.client.req('POST',approveEmpty,{version:edited.json.draft.version});expect(approved.status).toBe(200);
+  expect(approved.json.draft).toMatchObject({status:'approved',approved_by_email:approver.email,gross_earnings:edited.json.draft.gross_earnings,net_payable:edited.json.draft.net_payable});
+  expect(approved.json.draft.approved_at).toBeTruthy();
+  expect((await auditor.client.req('GET','/audit-log')).json.entries.some((e:{action:string})=>e.action==='payroll.draft.approve')).toBe(false);
+  expect((await auditor.client.req('GET','/audit-log/facets')).json.actions).not.toContain('payroll.draft.approve');
+  expect((await approver.client.req('POST',approveEmpty,{version:edited.json.draft.version})).json.code).toBe('PAYROLL_ALREADY_APPROVED');
+  expect((await editor.client.req('PUT',line,values(1))).json.code).toBe('PAYROLL_ALREADY_APPROVED');
+  expect((await h.q<{user_id:string}>('SELECT user_id FROM payroll_draft_contributors WHERE draft_id=$1',[empty.id])).map(x=>x.user_id)).toContain(editor.id);
+  const racing=(await editor.client.req('POST','/payroll/drafts',{month:'2026-07-01'})).json.draft;
+  const racingLine=`/payroll/drafts/${racing.id}/employees/${employee.id}`;
+  const initial=await editor.client.req('PUT',racingLine,values(0));expect(initial.status).toBe(200);
+  const concurrent=await Promise.all([
+   approver.client.req('POST',`/payroll/drafts/${racing.id}/approve`,{version:initial.json.draft.version}),
+   editor.client.req('PUT',racingLine,values(1,'200.10')),
+  ]);
+  expect(concurrent.map(x=>x.status).sort()).toEqual([200,409]);
+  const raceState=(await approver.client.req('GET','/payroll/drafts?month=2026-07-01')).json.draft;
+  if(raceState.status==='approved')expect(raceState.gross_earnings).toBe(initial.json.draft.gross_earnings);
+  else expect(raceState.status).toBe('draft');
+  const modified=(await owner.client.req('POST','/payroll/drafts',{month:'2026-08-01'})).json.draft;
+  const modifiedLine=await editor.client.req('PUT',`/payroll/drafts/${modified.id}/employees/${employee.id}`,values(0));
+  expect(modifiedLine.status).toBe(200);
+  expect((await editor.client.req('POST',`/payroll/drafts/${modified.id}/approve`,{version:modifiedLine.json.draft.version})).json.code).toBe('PAYROLL_SELF_APPROVAL');
+  const own=(await manager.client.req('POST','/payroll/drafts',{month:'2026-06-01'})).json.draft;
+  const ownLine=`/payroll/drafts/${own.id}/employees/${employee.id}`;
+  const ownEdit=await manager.client.req('PUT',ownLine,values(0));expect(ownEdit.status).toBe(200);
+  const self=await manager.client.req('POST',`/payroll/drafts/${own.id}/approve`,{version:ownEdit.json.draft.version});expect(self.status).toBe(200);
+  const audit=await h.q<{after_data:{self_approval:boolean;administrator_override:boolean};actor_user_id:string}>("SELECT after_data,actor_user_id FROM audit_log WHERE company_id=$1 AND action='payroll.draft.approve' AND entity_id=$2",[co,own.id]);
+  expect(audit[0]).toMatchObject({actor_user_id:manager.id,after_data:{self_approval:true,administrator_override:true}});
+  expect((await h.q<{n:string}>("SELECT COUNT(*)::text n FROM payroll_draft_employees WHERE draft_id=$1",[own.id]))[0]?.n).toBe('1');
+ });
  it('keeps pre-migration allowances unclassified through reopen and edits',async()=>{
-  const owner=await h.user('payroll-legacy');const co=await h.company('payroll-legacy',owner.id);await owner.client.login();
+  const owner=await h.user('payroll-legacy'),approver=await h.user('payroll-legacy-approver');const co=await h.company('payroll-legacy',owner.id);await h.member(co,approver.id,['payroll.view','payroll.approve']);await owner.client.login();await approver.client.login();
   const employee=(await owner.client.req('POST','/employees',{employee_number:'LEG1',display_name:'Legacy employee',employment_start:'2025-01-01',employment_end:null})).json;
   const draft=(await owner.client.req('POST','/payroll/drafts',{month:'2026-04-01'})).json.draft;
   await h.q('INSERT INTO payroll_draft_employees(company_id,draft_id,employee_id,salary,allowances,bonus,overtime,deductions,employer_contributions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[co,draft.id,employee.id,'1000.01','123.45','0.01','0.00','0.02','0.03']);
@@ -64,5 +116,9 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   expect(reopened.employees[0].legacy_allowances).toBe('123.45');
   const stored=await h.q<{legacy_allowances:string}>("SELECT legacy_allowances::text FROM payroll_draft_employees WHERE draft_id=$1 AND employee_id=$2",[draft.id,employee.id]);
   expect(stored[0]?.legacy_allowances).toBe('123.45');
+  const approved=await approver.client.req('POST',`/payroll/drafts/${draft.id}/approve`,{version:reopened.draft.version});
+  expect(approved.status).toBe(200);
+  expect(approved.json.draft).toMatchObject({status:'approved',gross_earnings:'1123.53',net_payable:'1123.51'});
+  expect(approved.json.employees[0]).toMatchObject({allowances:'123.51',legacy_allowances:'123.45'});
  });
 });

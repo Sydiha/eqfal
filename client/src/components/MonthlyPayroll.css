@@ -8,3 +8,5 @@
 .payroll-editor .fin-summary dd{max-width:100%}
 .payroll-legacy-note{margin:0;color:var(--muted);font-size:.85rem}
 @media(max-width:48em){.payroll-content{padding-inline:12px}.payroll-employee-card>div{grid-template-columns:minmax(0,1fr) minmax(0,max-content)}.payroll-employee-card .payroll-amount{white-space:nowrap}.payroll-editor .fin-summary>div{align-items:start}.payroll-editor .fin-summary dt{overflow-wrap:anywhere}}
+
+.payroll-status{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap}.payroll-status button{margin-inline-start:auto}@media(max-width:48em){.payroll-status{align-items:stretch;flex-direction:column}.payroll-status button{width:100%;margin-inline-start:0}}

@@ -9,7 +9,7 @@ const en = {
   nav: { main: 'Main navigation', home: 'Home', fiscalYears: 'Fiscal Years', monthlyClose:'Monthly Close', annualClosing:'Annual Closing', vat:'VAT', documents: 'Documents', banks: 'Banks', partners: 'Partners', monthlyPayroll:'Monthly Payroll', employeeCosts:'Employee Cost Center', obligations:'Obligations', sales:'Sales', purchases:'Purchases',salesInvoices:'Sales Invoices',purchaseInvoices:'Purchase Invoices',invoiceMappings:'Invoice Account Mappings', accounting:'Accounting', assets:'Fixed Assets', access:'Users & Permissions',companies:'Companies', auditLog:'Audit Log', account:'Account Settings', openMenu: 'Open navigation menu', historicalRecords:'Historical Records', sourceAuthority:'Ledger Source Authority', companyProfile:'Accounting & Tax Profile', openingBalances:'Opening Balances', periodicAdjustments:'Accruals & Prepayments' },
   payroll: {
     title: 'Monthly Payroll',
-    intro: 'Prepare payroll drafts manually. These amounts are not approved or posted.',
+    intro: 'Prepare and approve monthly payroll manually. Approval does not post accounting entries or make payments.',
     period: 'Month',
     create: 'Create draft',
     saving: 'Saving…',
@@ -19,6 +19,7 @@ const en = {
     loadError: 'Could not load the payroll draft.',
     saveError: 'Could not save the draft.',
     periodExists: 'A draft already exists for this month.',
+    approvedStatus: 'Approved', approvedBy: 'Approved by', approvedOn: 'on', approve: 'Approve payroll', approveConfirm: 'Approve and lock this payroll? Its details cannot be changed afterward.', permissionDenied: 'You do not have permission to approve payroll.', selfApproval: 'Another authorized user must approve payroll you created or edited.', approvalConflict: 'The payroll changed. Refresh and review it before approving.', alreadyApproved: 'This payroll has already been approved and is locked.', emptyApproval: 'Add at least one employee before approving.', approvalError: 'Could not approve payroll. Review the draft and try again.',
     draftStatus: 'Draft',
     readOnly: 'Read only',
     gross: 'Gross earnings',
@@ -243,7 +244,7 @@ const en = {
     addMember: 'Add member', addMemberTitle: 'Add a member to the company', email: 'User email', emailHint: 'The user must already have an account in the system.', add: 'Add',
     membersEmpty: 'This company has no members.', rolesEmpty: 'This company has no roles.',
     createRole: 'New role', createRoleTitle: 'Create role', roleName: 'Role name', create: 'Create',
-    fullAccess: 'Full Access', fullAccessNote: 'This role holds every permission in this company, including permissions added in the future. Its permission list is fixed and cannot be edited.',
+    fullAccess: 'Full Access', fullAccessNote: 'This role holds standard permissions automatically. Payroll approval requires a separate explicit grant below.',
     expandGroup: 'Expand', collapseGroup: 'Collapse', selectAll: 'Select all', clearAll: 'Clear all', bulkActions: 'Bulk permission actions', selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
     details: {
       title: 'Access details: {{email}}', open: 'Details', scopeNote: 'Only companies you are authorized to administer are shown. Role permissions are the permissions assigned to the role; effective permissions are what the user can actually do now.',
