@@ -223,7 +223,8 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
   };
   const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
   const roleEditable = selectedRole?.editable !== false;
-  const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') && (can(id) || (id === 'payroll.approve' && can('access.full_access.grant')));
+  const fullAccessExplicitCapabilities = ['payroll.approve'];
+  const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') && (can(id) || (fullAccessExplicitCapabilities.includes(id) && can('access.full_access.grant')));
   const canRevokeId = () => roleEditable && can('access.role.capability.revoke');
 
   const errorText = errorKey ? (failure && apiErrorMessage(failure, t)) || t(`access.${errorKey}`) : '';
@@ -280,7 +281,7 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
           {selectedRole.is_full_access && can('access.role.create') && <p className="acc-hint">{t('access.fullAccessProtected')}</p>}
           {selectedRole.is_full_access ? <>
             <p className="acc-hint">{t('access.fullAccessNote')}</p>
-            {allCapabilities.includes('payroll.approve') && <label title="payroll.approve"><input type="checkbox" checked={selectedRole.capabilities.includes('payroll.approve')} disabled={busy || !(selectedRole.capabilities.includes('payroll.approve') ? canRevokeId() : canGrantId('payroll.approve'))} onChange={() => void toggleCapability(selectedRole, 'payroll.approve', !selectedRole.capabilities.includes('payroll.approve'))} />{capabilityLabel('payroll.approve', lang)}</label>}
+            {fullAccessExplicitCapabilities.filter(id => allCapabilities.includes(id)).map(id => <label key={id} title={id}><input type="checkbox" checked={selectedRole.capabilities.includes(id)} disabled={busy || !(selectedRole.capabilities.includes(id) ? canRevokeId() : canGrantId(id))} onChange={() => void toggleCapability(selectedRole, id, !selectedRole.capabilities.includes(id))} />{capabilityLabel(id, lang)}</label>)}
           </> : <>
             <p className="acc-hint">{t('access.ceilingNote')}</p>
             {(() => {
