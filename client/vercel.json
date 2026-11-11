@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "codex/fin-payroll-03": false
+    }
+  }
+}

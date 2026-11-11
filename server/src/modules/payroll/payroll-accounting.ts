@@ -2,7 +2,7 @@ import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import { postJournalInTransaction, FiscalYearClosedError, LedgerSourceAuthorityBlockedError, JournalPostingConflictError, JournalPostingValidationError } from '../accounting/journal-posting';
-import { lockPayrollEccMonths } from './payroll-ecc-lock';
+import { lockPayrollEccMonths, PAYROLL_ECC_CATEGORIES } from './payroll-ecc-lock';
 
 export const PAYROLL_ACCOUNT_MAPPINGS = [
   { key: 'earnings_expense', type: 'expense', label: 'Earnings expense' },
@@ -166,10 +166,10 @@ export class PayrollAccountingService {
        JOIN employees e ON e.id=r.employee_id AND e.company_id=r.company_id
        JOIN employee_cost_allocations a ON a.cost_record_id=r.id AND a.company_id=r.company_id
        WHERE r.company_id=$1 AND r.status='approved' AND r.currency_code=$4 AND a.allocation_month=$2::date
-         AND r.category IN ('salary','allowances','bonus','overtime','employer_gosi','employee_deduction')
+         AND r.category = ANY($5::text[])
          AND EXISTS (SELECT 1 FROM payroll_draft_employees p WHERE p.company_id=r.company_id AND p.draft_id=$3 AND p.employee_id=r.employee_id)
          AND NOT EXISTS (SELECT 1 FROM employee_cost_records newer WHERE newer.company_id=r.company_id AND newer.supersedes_id=r.id AND newer.status='approved')
-       GROUP BY r.employee_id,e.employee_number,e.display_name,r.category ORDER BY e.employee_number,r.category`, [companyId, draft.period_month, draftId, draft.currency_code])).rows;
+       GROUP BY r.employee_id,e.employee_number,e.display_name,r.category ORDER BY e.employee_number,r.category`, [companyId, draft.period_month, draftId, draft.currency_code, PAYROLL_ECC_CATEGORIES])).rows;
     const deductionOverlaps = overlaps.filter(row => row.category === 'employee_deduction');
     const expenseOverlaps = overlaps.filter(row => row.category !== 'employee_deduction');
     if (expenseOverlaps.length) blockers.push({ code: 'ecc_overlap', count: expenseOverlaps.length, details: expenseOverlaps });

@@ -119,4 +119,63 @@ db('payroll posting (PostgreSQL)',()=>{
   } finally {await client.query('ROLLBACK');client.release();}
  });
 
+ const payrollCategories=['salary','allowances','bonus','overtime','employer_gosi','employee_deduction'] as const;
+ const costBody=(fy:string,category:string,month='2026-03-01',currency='SAR')=>({category,nature:category==='employee_deduction'?'employee_deduction':['salary','allowances','bonus','overtime'].includes(category)?'earning':'employer_cost',currency_code:currency,total_amount:'1.00',service_period_start:month,service_period_end:month,description:'Cost allocation',allocations:[{fiscal_year_id:fy,allocation_month:month,amount:'1.00'}]});
+ it('blocks each payroll category from ECC approval after posting but permits unrelated allocations',async()=>{
+  const x=await fixture('ecc-after-post'); expect((await x.post()).status).toBe(201);
+  const reportBefore=await x.poster.client.req('GET',`/financial-statements/profit-or-loss?fiscal_year_id=${x.fy}&start_date=2026-03-01&end_date=2026-03-31`);
+  for(const category of payrollCategories){
+   const draft=await x.owner.client.req('POST','/employee-costs',{employee_id:x.employee,record:costBody(x.fy,category)}); expect(draft.status,category).toBe(201);
+   const result=await x.owner.client.req('POST',`/employee-costs/${draft.json.record.id}/approve`,{version:1});
+   expect(result.status,category).toBe(409);expect(result.json.code).toBe('EMPLOYEE_COST_PAYROLL_POSTED_OVERLAP');
+   expect(await h.count("SELECT COUNT(*)::text n FROM employee_cost_records WHERE id=$1 AND status='draft'",[draft.json.record.id])).toBe(1);
+   expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE entity_id=$1 AND action='employee_cost.approve'",[draft.json.record.id])).toBe(0);
+  }
+  const otherEmployee=(await h.q<{id:string}>("INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,'E2','Other',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  for(const [employee,record] of [[x.employee,costBody(x.fy,'other')],[x.employee,costBody(x.fy,'salary','2026-02-01')],[x.employee,costBody(x.fy,'salary','2026-03-01','USD')],[otherEmployee,costBody(x.fy,'salary')]] as const){
+   const draft=await x.owner.client.req('POST','/employee-costs',{employee_id:employee,record});expect(draft.status).toBe(201);
+   expect((await x.owner.client.req('POST',`/employee-costs/${draft.json.record.id}/approve`,{version:1})).status).toBe(200);
+  }
+  expect((await x.poster.client.req('GET',`/financial-statements/profit-or-loss?fiscal_year_id=${x.fy}&start_date=2026-03-01&end_date=2026-03-31`)).json).toEqual(reportBefore.json);
+  expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1',[x.co])).toBe(1);
+ });
+ it('rolls back conflicting corrections after posting for every payroll category and allows unrelated corrections',async()=>{
+  const x=await fixture('ecc-correction-after');expect((await x.post()).status).toBe(201);
+  for(const category of payrollCategories){
+   const draft=await x.owner.client.req('POST','/employee-costs',{employee_id:x.employee,record:costBody(x.fy,'other')});expect(draft.status).toBe(201);
+   const id=draft.json.record.id;expect((await x.owner.client.req('POST',`/employee-costs/${id}/approve`,{version:1})).status).toBe(200);
+   const result=await x.owner.client.req('POST',`/employee-costs/${id}/corrections`,{reason:'Correction',record:costBody(x.fy,category)});
+   expect(result.status,category).toBe(409);expect(result.json.code).toBe('EMPLOYEE_COST_PAYROLL_POSTED_OVERLAP');
+   expect(await h.count('SELECT COUNT(*)::text n FROM employee_cost_records WHERE company_id=$1 AND supersedes_id=$2',[x.co,id])).toBe(0);
+   expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE entity_id=$1 AND action='employee_cost.corrected'",[id])).toBe(0);
+   expect(await h.count("SELECT COUNT(*)::text n FROM employee_cost_records WHERE id=$1 AND status='approved'",[id])).toBe(1);
+  }
+  const draft=await x.owner.client.req('POST','/employee-costs',{employee_id:x.employee,record:costBody(x.fy,'other')});const id=draft.json.record.id;
+  expect((await x.owner.client.req('POST',`/employee-costs/${id}/approve`,{version:1})).status).toBe(200);
+  expect((await x.owner.client.req('POST',`/employee-costs/${id}/corrections`,{reason:'Allowed',record:costBody(x.fy,'medical_insurance')})).status).toBe(201);
+  // A legacy overlap is left intact; correcting it to an unrelated category remains possible.
+  const legacy=(await h.q<{id:string}>(`INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by) VALUES($1,$2,'salary','earning','SAR',1,'2026-03-01','2026-03-31','Legacy',$3) RETURNING id`,[x.co,x.employee,x.owner.id]))[0]!.id;
+  await h.q("INSERT INTO employee_cost_allocations(company_id,cost_record_id,fiscal_year_id,allocation_month,amount) VALUES($1,$2,$3,'2026-03-01',1)",[x.co,legacy,x.fy]);
+  await h.q("UPDATE employee_cost_records SET status='approved',approved_by=$2,approved_at=NOW() WHERE id=$1",[legacy,x.owner.id]);
+  expect((await x.owner.client.req('POST',`/employee-costs/${legacy}/corrections`,{reason:'Resolve legacy overlap',record:costBody(x.fy,'other')})).status).toBe(201);
+  expect(await h.count("SELECT COUNT(*)::text n FROM employee_cost_records WHERE id=$1 AND status='approved' AND category='salary'",[legacy])).toBe(1);
+  expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1',[x.co])).toBe(1);
+ });
+ it('orders payroll before a concurrent ECC approval and rejects the later overlap',async()=>{
+  const x=await fixture('payroll-before-ecc');
+  const draft=await x.owner.client.req('POST','/employee-costs',{employee_id:x.employee,record:costBody(x.fy,'salary')});expect(draft.status).toBe(201);
+  const lock=await h.db.connect();await lock.query('BEGIN');await lock.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`payroll-ecc:${x.co}:2026-03`]);
+  const pid=(await lock.query<{pid:number}>('SELECT pg_backend_pid() pid')).rows[0]!.pid;
+  const waiters=async()=>Number((await h.q<{n:string}>(`SELECT COUNT(*)::text n FROM pg_locks w JOIN pg_locks held ON held.locktype=w.locktype AND held.classid=w.classid AND held.objid=w.objid AND held.objsubid=w.objsubid WHERE held.pid=$1 AND held.granted AND w.locktype='advisory' AND NOT w.granted`,[pid]))[0]!.n);
+  const waitFor=async(n:number)=>{for(let i=0;i<150;i++){if(await waiters()>=n)return;await new Promise(r=>setTimeout(r,20));}throw Error(`Expected ${n} waiters`);};
+  try {
+   const posting=x.post();await waitFor(1);
+   const approval=x.owner.client.req('POST',`/employee-costs/${draft.json.record.id}/approve`,{version:1});await waitFor(2);
+   await lock.query('COMMIT');expect((await posting).status).toBe(201);
+   const result=await approval;expect(result.status).toBe(409);expect(result.json.code).toBe('EMPLOYEE_COST_PAYROLL_POSTED_OVERLAP');
+   expect(await h.count("SELECT COUNT(*)::text n FROM employee_cost_records WHERE id=$1 AND status='draft'",[draft.json.record.id])).toBe(1);
+   expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1',[x.co])).toBe(1);
+  } finally {await lock.query('ROLLBACK');lock.release();}
+ });
+
 });
