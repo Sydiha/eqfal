@@ -107,6 +107,7 @@ const OVERRIDES: Record<string, Pair> = {
   'payroll.approve': ['Approve monthly payroll (sensitive)', 'اعتماد مسير الرواتب الشهري (حساس)'],
   'payroll.accounting.mapping.view': ['View payroll account mappings', 'عرض ربط حسابات الرواتب'],
   'payroll.accounting.mapping.manage': ['Manage payroll account mappings', 'إدارة ربط حسابات الرواتب'],
+  'payroll.accounting.post': ['Post payroll accounting', 'ترحيل محاسبة الرواتب'],
   'payroll.accounting.preview': ['Preview payroll accounting (sensitive)', 'معاينة محاسبة الرواتب (حساس)'],
   'employee_cost.view': ['View employee cost reports', 'عرض تقارير تكاليف الموظفين'],
   'employee_cost.salary.view': ['View employee earnings and deductions (sensitive)', 'عرض استحقاقات الموظفين واستقطاعاتهم (حساس)'],

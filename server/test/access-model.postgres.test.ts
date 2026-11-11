@@ -144,7 +144,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(session.allowedCompanies.map((c: { id: string }) => c.id).sort()).toEqual([ids.coA, ids.coB].sort());
     const inB = await clients.sa!.use(ids.coB!);
     expect(inB.activeCompanyId).toBe(ids.coB);
-    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview'].includes(id)));
+    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview','payroll.accounting.post'].includes(id)));
   });
 
   it('System Admin performs financial operations in a company it is not a member of; business validation still applies', async () => {
@@ -201,7 +201,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM role_capabilities WHERE role_id=$1', [roles['Full AccessA']])).toBe(0);
     const caps = (await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).sort();
-    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview'].includes(id)));
+    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview','payroll.accounting.post'].includes(id)));
     for (const c of ['invoice.view', 'invoice.approve', 'invoice.adjust_approve', 'invoice.cancel', 'invoice.recurring', 'access.full_access.grant']) expect(caps).toContain(c);
     await q("INSERT INTO capabilities(id) VALUES('zz_future.capability')");
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).toContain('zz_future.capability');

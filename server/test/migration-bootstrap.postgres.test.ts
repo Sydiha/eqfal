@@ -27,7 +27,7 @@ describeDatabase('migration bootstrap on an empty PostgreSQL database', () => {
     await runMigrations(pool);
     const { rows } = await pool.query<{ filename: string }>('SELECT filename FROM _schema_migrations');
     const names = rows.map((r) => r.filename);
-    for (const prefix of ['059_', '060_', '061_', '117_']) {
+    for (const prefix of ['059_', '060_', '061_', '117_', '118_']) {
       expect(names.some((n) => n.startsWith(prefix))).toBe(true);
     }
     expect((await pool.query("SELECT to_regclass('company_logos') AS t")).rows[0].t).toBe('company_logos');

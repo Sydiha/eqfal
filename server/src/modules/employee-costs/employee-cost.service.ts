@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { lockPayrollEccMonths, hasPostedPayrollOverlap } from '../payroll/payroll-ecc-lock';
 
 export const EMPLOYEE_COST_CATEGORIES = ['salary','allowances','bonus','overtime','employer_gosi','employee_deduction','residency','work_permit','medical_insurance','travel_benefit','end_of_service','other'] as const;
 export const EMPLOYEE_COST_NATURES = ['earning','employer_cost','employee_deduction'] as const;
@@ -118,6 +119,9 @@ export class EmployeeCostService {
       if (!before) throw missing();
       if (before.nature !== 'employer_cost' && !salaryVisible) throw forbidden();
       if (before.status !== 'draft' || before.version !== expectedVersion || before.supersedes_id) throw conflict();
+      const months = (await c.query<{allocation_month:string}>('SELECT allocation_month::text AS allocation_month FROM employee_cost_allocations WHERE company_id=$1 AND cost_record_id=$2 ORDER BY allocation_month',[companyId,id])).rows.map(x=>x.allocation_month);
+      await lockPayrollEccMonths(c,companyId,months);
+      if (await hasPostedPayrollOverlap(c,companyId,id)) throw new EmployeeCostError(409,'EMPLOYEE_COST_PAYROLL_POSTED_OVERLAP','The allocation overlaps posted payroll for this employee and month');
       const after = (await c.query<CostRecord>(`UPDATE employee_cost_records SET status='approved',approved_by=$3,approved_at=NOW(),version=version+1 WHERE id=$1 AND company_id=$2 RETURNING *,service_period_start::text,service_period_end::text,approved_at::text,created_at::text`,[id,companyId,actor])).rows[0]!;
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'employee_cost.approve',entity_type:'employee_cost_record',entity_id:id,before_data:{status:before.status,version:before.version},after_data:{status:'approved',version:after.version}},c);
       return after;
@@ -132,6 +136,9 @@ export class EmployeeCostService {
       const existing = await c.query('SELECT 1 FROM employee_cost_records WHERE company_id=$1 AND supersedes_id=$2',[companyId,id]);
       if (existing.rowCount) throw conflict('This approved record already has a correction');
       const replacement = await this.insertRecord(c,companyId,actor,before.employee_id,v,{supersedesId:id,reason});
+      const oldMonths = (await c.query<{allocation_month:string}>('SELECT allocation_month::text AS allocation_month FROM employee_cost_allocations WHERE company_id=$1 AND cost_record_id=$2 ORDER BY allocation_month',[companyId,id])).rows.map(x=>x.allocation_month);
+      await lockPayrollEccMonths(c,companyId,[...oldMonths,...v.allocations.map(x=>x.allocation_month)]);
+      if (await hasPostedPayrollOverlap(c,companyId,replacement.id)) throw new EmployeeCostError(409,'EMPLOYEE_COST_PAYROLL_POSTED_OVERLAP','The allocation overlaps posted payroll for this employee and month');
       const after = (await c.query<CostRecord>(`UPDATE employee_cost_records SET status='approved',approved_by=$3,approved_at=NOW(),version=version+1 WHERE id=$1 AND company_id=$2 RETURNING *,service_period_start::text,service_period_end::text,approved_at::text,created_at::text`,[replacement.id,companyId,actor])).rows[0]!;
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'employee_cost.corrected',entity_type:'employee_cost_record',entity_id:id,after_data:{replacement_id:after.id}},c);
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'employee_cost.correction_approve',entity_type:'employee_cost_record',entity_id:after.id,after_data:{status:'approved',version:after.version,supersedes_id:id}},c);

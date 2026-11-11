@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import { payrollJournalIsExact } from '../payroll/payroll-journal-verification';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { assertCustodyJournalControls } from './custody-posting';
@@ -50,7 +51,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -179,7 +180,11 @@ export async function postJournalInTransaction(
   if (summary.count !== summary.active) throw new JournalPostingValidationError('Inactive accounts cannot receive postings');
   if (summary.debit !== summary.credit) throw new JournalPostingValidationError('Journal is not balanced');
 
-  if (journal.source_type && journal.source_id) {
+  if (journal.source_type === 'payroll') {
+    if (!internal.payrollDraftId || journal.source_id !== internal.payrollDraftId || journal.entry_type !== 'standard' || !(await payrollJournalIsExact(client,companyId,id,internal.payrollDraftId))) {
+      throw new JournalPostingValidationError('Payroll journals can only be posted by the payroll workflow');
+    }
+  } else if (journal.source_type && journal.source_id) {
     const operationalSource = await source(companyId, journal.source_type, journal.source_id, client);
     if (journal.accounting_date !== operationalSource.accounting_date) {
       throw new JournalPostingValidationError('Operational source date changed');

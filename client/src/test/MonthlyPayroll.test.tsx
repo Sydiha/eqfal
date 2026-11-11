@@ -173,3 +173,18 @@ it('shows read-only mapped preview, blockers and manual-journal warning in Engli
   expect(css).toContain('grid-template-columns:1fr');
  }finally{await i18n.changeLanguage(original);}
 });
+
+it('confirms posting and shows the existing journal reference',async()=>{
+ const {fireEvent}=await import('@testing-library/react'); let posted=false;
+ vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{
+  if(url.endsWith('/accounting-post-status'))return response(posted?{journal:{id:'journal-123',reference:'PAYROLL 2026-03'},eligible:false,blockers:[]}:{journal:null,eligible:true,blockers:[]});
+  if(url.endsWith('/accounting-post')&&options?.method==='POST'){posted=true;return response({journal:{id:'journal-123'},existing:false});}
+  return response({draft:{id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'},employees:[],available_employees:[]});
+ }));
+ render(<MonthlyPayroll capabilities={['payroll.view','payroll.accounting.post']} onUnauthorized={()=>{}}/>);
+ const button=await screen.findByRole('button',{name:/ترحيل القيد|Post journal/}); fireEvent.click(button);
+ expect(screen.getByRole('dialog')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('dialog').querySelector('button.primary')!);
+ expect(await screen.findByText(/PAYROLL 2026-03/)).toBeInTheDocument();
+ expect(screen.getByText(/journal-123/)).toBeInTheDocument();
+});
