@@ -3,13 +3,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import '../i18n';
 import i18n from '../i18n';
 import { EmployeeCostCenter } from '../components/EmployeeCostCenter';
+import { EmployeeCostPayments } from '../components/EmployeeCostPayments';
 
 beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();});
 const onUnauthorized=vi.fn();
 
 const employee={id:'e1',employee_number:'E1',display_name:'Employee One',employment_start:'2025-01-01',employment_end:null,is_active:true,version:1};
 const fiscalYear={id:'fy1',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'};
-const cost=(id:string,status:'draft'|'approved')=>({id,employee_id:'e1',employee_number:'E1',display_name:'Employee One',category:'salary',nature:'earning',currency_code:'SAR',total_amount:'100.00',service_period_start:'2026-01-01',service_period_end:'2026-01-31',description:'January salary',status,version:1,supersedes_id:null,correction_reason:null,allocations:[{id:`${id}-allocation`,fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
+const cost=(id:string,status:'draft'|'approved')=>({id,employee_id:'e1',employee_number:'E1',display_name:'Employee One',category:'salary',nature:'earning' as const,currency_code:'SAR',total_amount:'100.00',service_period_start:'2026-01-01',service_period_end:'2026-01-31',description:'January salary',status,version:1,supersedes_id:null,correction_reason:null,allocations:[{id:`${id}-allocation`,fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
 function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Record<string,unknown>}|null=null){
   const writes:Array<{url:string;method:string;body:Record<string,unknown>}> = [];
   vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
@@ -104,7 +105,7 @@ describe('Employee Cost Center',()=>{
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.approve','employee_cost.correct','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
     const draftRow=screen.getByRole('row',{name:/Draft/});
-    fireEvent.click(within(draftRow).getByRole('button',{name:'common.edit'}));
+    fireEvent.click(within(draftRow).getByRole('button',{name:'Edit'}));
     const editDialog=screen.getByRole('dialog');
     expect(within(editDialog).getByLabelText('Total amount')).toHaveValue(100);
     expect(within(editDialog).getByLabelText('Month amount')).toHaveValue(100);
@@ -120,6 +121,69 @@ describe('Employee Cost Center',()=>{
     fireEvent.click(within(correctionDialog).getByRole('button',{name:'Correct approved cost'}));
     await waitFor(()=>expect(writes.some(w=>w.url==='/api/employee-costs/approved-1/corrections')).toBe(true));
     expect(writes.find(w=>w.url==='/api/employee-costs/approved-1/corrections')?.body.record).toMatchObject({total_amount:'100.00',allocations:[{fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
+  });
+
+  it('uses translated actions, automatic report filters, and current cost guidance',async()=>{
+    const writes=mockApi([cost('approved-1','approved')]);
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.getByText(/Current approved costs are listed here/)).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Correction history'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'personalPayments.history'})).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Fiscal year')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Show report'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Fiscal year'}));
+    expect(screen.queryByLabelText('Allocation month')).not.toBeInTheDocument();
+    expect(writes).toHaveLength(0);
+  });
+
+  it('labels current and superseded correction history in Arabic',async()=>{
+    await i18n.changeLanguage('ar');
+    vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request)=>{
+      const url=String(input);
+      const body=url==='/api/employees'?{employees:[employee]}:url==='/api/employee-costs/fiscal-years'?{fiscal_years:[fiscalYear]}:url==='/api/employee-costs'?{records:[cost('current','approved')]}:url.endsWith('/history')?{history:[{...cost('old','approved'),supersedes_id:null},{...cost('current','approved'),supersedes_id:'old'}]}:{rows:[]};
+      return new Response(JSON.stringify(body),{status:200});
+    }));
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    fireEvent.click(screen.getByRole('button',{name:'سجل التصحيحات'}));
+    expect(await screen.findByText('تصحيح مستبدل')).toBeInTheDocument();
+    expect(screen.getByText('التكلفة المعتمدة الحالية')).toBeInTheDocument();
+    expect(screen.queryByText('personalPayments.history')).not.toBeInTheDocument();
+  });
+
+  it('keeps correction actions outside the scrolling fields with multiple allocations',async()=>{
+    mockApi([cost('approved-1','approved')]);
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.approve','employee_cost.correct','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    fireEvent.click(screen.getByRole('button',{name:'Correct approved cost'}));
+    const dialog=screen.getByRole('dialog');
+    for(let i=0;i<3;i++)fireEvent.click(within(dialog).getByRole('button',{name:'Add month'}));
+    const form=dialog.querySelector('.ecc-dialog-form');
+    const body=form?.querySelector('.ecc-dialog-body');
+    const footer=form?.querySelector('.ecc-dialog-actions');
+    expect(body).toBeInTheDocument();
+    expect(footer).toBeInTheDocument();
+    expect(body?.parentElement).toBe(form);
+    expect(footer?.parentElement).toBe(form);
+    expect(body).toContainElement(within(dialog).getByLabelText('Correction reason'));
+    expect(body?.querySelectorAll('.ecc-allocation')).toHaveLength(4);
+    expect(footer).toContainElement(within(dialog).getByRole('button',{name:'Cancel'}));
+    expect(footer).toContainElement(within(dialog).getByRole('button',{name:'Correct approved cost'}));
+  });
+
+  it('keeps payment history actions inside a native table cell',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request)=>{
+      const url=String(input);
+      const body=url.endsWith('/payments')?{payments:[{id:'p1',allocation_type:'payment',cost_allocation_id:'a1',bank_transaction_id:'b1',transaction_date:'2026-01-01',amount:'20.00',beneficiary_type:'employee',counterparty_name:null,bank_reference:null,bank_description:null,reason:null,note:null,reverses_allocation_id:null,reversible_amount:'20.00'}]}:url.includes('/reconciliation/')?{rows:[],paid_as_of:'2026-01-31'}:{bank_transactions:[],refund_transactions:[],counterparties:[]};
+      return new Response(JSON.stringify(body),{status:200});
+    }));
+    render(<EmployeeCostPayments records={[cost('approved-1','approved')]} years={[fiscalYear]} capabilities={['employee_cost.view','employee_cost.payment.view','employee_cost.payment.reverse','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
+    const reverse=await screen.findByRole('button',{name:'Record refund / reversal'});
+    const cell=reverse.closest('td');
+    expect(cell).toHaveClass('ecc-action-cell');
+    expect(cell).not.toHaveClass('ecc-actions');
+    expect(cell?.querySelector('.ecc-actions')).toContainElement(reverse);
   });
 
   it('shows the active-payment correction rejection inside the open modal in English and Arabic',async()=>{
