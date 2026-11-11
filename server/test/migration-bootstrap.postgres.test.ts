@@ -23,20 +23,23 @@ describeDatabase('migration bootstrap on an empty PostgreSQL database', () => {
     await admin.end();
   });
 
-  it('applies every migration from 001 to the latest (059, 060, 061 included)', async () => {
+  it('applies every migration from 001 to the latest, including payroll accounting readiness', async () => {
     await runMigrations(pool);
     const { rows } = await pool.query<{ filename: string }>('SELECT filename FROM _schema_migrations');
     const names = rows.map((r) => r.filename);
-    for (const prefix of ['059_', '060_', '061_']) {
+    for (const prefix of ['059_', '060_', '061_', '117_']) {
       expect(names.some((n) => n.startsWith(prefix))).toBe(true);
     }
     expect((await pool.query("SELECT to_regclass('company_logos') AS t")).rows[0].t).toBe('company_logos');
+    expect((await pool.query("SELECT to_regclass('payroll_account_mappings') AS t")).rows[0].t).toBe('payroll_account_mappings');
   });
 
   it('seeds no environment-specific roles or monthly-close periods', async () => {
     expect((await pool.query('SELECT count(*)::int AS n FROM roles')).rows[0].n).toBe(0);
     expect((await pool.query('SELECT count(*)::int AS n FROM monthly_close_periods')).rows[0].n).toBe(0);
     expect((await pool.query('SELECT count(*)::int AS n FROM capabilities')).rows[0].n).toBeGreaterThan(100);
+    expect((await pool.query("SELECT count(*)::int AS n FROM role_capabilities WHERE capability_id LIKE 'payroll.accounting.%'")).rows[0].n).toBe(0);
+    expect((await pool.query("SELECT count(*)::int AS n FROM payroll_account_mappings")).rows[0].n).toBe(0);
   });
 
   it('rerunning the runner is a no-op', async () => {

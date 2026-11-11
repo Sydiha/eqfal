@@ -3,6 +3,7 @@ import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { requireAuth, requireActiveCompany, requireCapability, getAuthenticatedContext } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
+import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 
 export const payrollRouter=Router();
 const month=/^\d{4}-(0[1-9]|1[0-2])-01$/;
@@ -101,4 +102,22 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
     after_data:{period_month:draft.period_month,version:draft.version+1,self_approval:contributed&&admin,administrator_override:contributed&&admin}},c);
   await c.query('COMMIT');await detail(q,s,draft.period_month);
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+}));
+
+const accountingService=(res:Response)=>pool?new PayrollAccountingService(pool):(res.status(503).json({error:'Database unavailable',code:'DB_UNAVAILABLE'}),null);
+function accountingFailure(error:unknown,res:Response){if(error instanceof PayrollAccountingError){res.status(error.status).json({error:error.code,code:error.code});return true;}return false;}
+payrollRouter.get('/payroll/account-mappings',...read,requireCapability('payroll.accounting.mapping.view'),route(async(q,s)=>{
+ const service=accountingService(s);if(service)s.json(await service.mappings(company(q)));
+}));
+payrollRouter.put('/payroll/account-mappings/:key',requireSameOrigin,...read,requireCapability('payroll.accounting.mapping.view'),requireCapability('payroll.accounting.mapping.manage'),route(async(q,s)=>{
+ const body=q.body;
+ if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='account_id'||typeof body.account_id!=='string'||!uuid.test(body.account_id)||!PAYROLL_ACCOUNT_MAPPINGS.some(x=>x.key===q.params.key))return void error(s,'PAYROLL_MAPPING_INVALID');
+ const service=accountingService(s);if(!service)return;
+ try{s.json(await service.setMapping(company(q),getAuthenticatedContext(q)!.user.id,q.params.key as PayrollMappingKey,body.account_id));}
+ catch(e){if(!accountingFailure(e,s))throw e;}
+}));
+payrollRouter.get('/payroll/drafts/:id/accounting-preview',...read,requireCapability('payroll.accounting.mapping.view'),requireCapability('payroll.accounting.preview'),route(async(q,s)=>{
+ if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
+ const service=accountingService(s);if(!service)return;
+ try{s.json(await service.preview(company(q),q.params.id));}catch(e){if(!accountingFailure(e,s))throw e;}
 }));

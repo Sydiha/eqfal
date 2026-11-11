@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MonthlyPayroll, normalizeAmount } from '../components/MonthlyPayroll';
 import '../i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const response=(data:unknown)=>({ok:true,status:200,json:async()=>data});
 describe('Monthly Payroll draft visibility',()=>{
@@ -118,5 +120,29 @@ it('shows approval confirmation, then locks the approved payroll in English and 
   expect(screen.queryByRole('button',{name:'Edit'})).toBeNull();
   await i18n.changeLanguage('ar');
   expect(screen.getByText(/معتمد · للقراءة فقط/)).toBeInTheDocument();
+ }finally{await i18n.changeLanguage(original);}
+});
+
+it('shows read-only mapped preview, blockers and manual-journal warning in English and Arabic with responsive RTL styles',async()=>{
+ const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ const draft={id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T12:00:00.000Z',approved_by_email:'approver@example.test',gross_earnings:'101.00',employee_deductions:'0.50',employer_contributions:'0.60',net_payable:'100.50'};
+ const mapping={mapping_key:'earnings_expense',account_id:'a1',account_code:'5000',account_name:'Salaries',account_name_ar:'رواتب',account_type:'expense',account_active:true};
+ const preview={totals:{earnings:'101.00',employee_deductions:'0.50',net_payable:'100.50',employer_contributions:'0.60',debit_total:'101.60',credit_total:'101.60'},mappings:[{mapping_key:'earnings_expense',account_id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],lines:[{mapping_key:'earnings_expense',account_id:'a1',debit:'101.00',credit:'0.00'}],blockers:[{code:'ecc_overlap',count:1,details:[{employee_number:'001',display_name:'Ali',category:'salary',amount:'100.00'}]}],warnings:[{code:'manual_journal_review',count:1}],balanced:true,can_preview:false,side_effects:false};
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/payroll/account-mappings'?response({mappings:[mapping],accounts:[{id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],requirements:[]}):url.endsWith('/accounting-preview')?response(preview):response({draft,employees:[],available_employees:[]})));
+ try{
+  render(<MonthlyPayroll capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
+  expect(await screen.findByText('Read-only journal preview')).toBeInTheDocument();
+  expect(screen.getByText(/Approved Employee Cost Center allocations overlap/)).toBeInTheDocument();
+  expect(screen.getByText(/Source-less journals exist in this month/)).toBeInTheDocument();
+  expect(screen.getAllByRole('option',{name:/5000.*Salaries/}).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Preview only; no journal or ledger changes were made/)).toBeInTheDocument();
+  await act(async()=>{await i18n.changeLanguage('ar');});
+  expect(screen.getByText('معاينة قيد للقراءة فقط')).toBeInTheDocument();
+  expect(screen.getByText(/تتداخل تخصيصات معتمدة من مركز تكاليف الموظفين/)).toBeInTheDocument();
+  expect(screen.getAllByRole('option',{name:/5000.*رواتب/}).length).toBeGreaterThan(0);
+  const css=readFileSync(resolve(__dirname,'../components/MonthlyPayroll.css'),'utf8');
+  expect(css).toContain('@media(max-width:48em)');
+  expect(css).toContain('margin-inline-start');
+  expect(css).toContain('grid-template-columns:1fr');
  }finally{await i18n.changeLanguage(original);}
 });

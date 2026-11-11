@@ -9,6 +9,8 @@ import { AccessPolicyError } from './access-policy-error';
 import { SessionRepository } from '../auth/session.repository';
 import { generateTemporaryPassword } from '../users/password-policy';
 
+const FULL_ACCESS_EXPLICIT_CAPABILITIES = new Set(['payroll.approve','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']);
+
 /** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
 
@@ -306,7 +308,7 @@ export class MembershipService {
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([capabilityId], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-        if (!actorCapabilities.includes(capabilityId) && !(capabilityId === 'payroll.approve' && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+        if (!actorCapabilities.includes(capabilityId) && !(FULL_ACCESS_EXPLICIT_CAPABILITIES.has(capabilityId) && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
         await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
@@ -331,7 +333,7 @@ export class MembershipService {
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([...grants, ...revokes], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-        for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id) && !(id === 'payroll.approve' && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+        for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id) && !(FULL_ACCESS_EXPLICIT_CAPABILITIES.has(id) && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
         await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
@@ -342,9 +344,9 @@ export class MembershipService {
     });
   }
 
-  /** Full Access remains immutable except for the explicit payroll approval grant. */
+  /** Full Access remains immutable except for explicitly managed payroll approval/accounting permissions. */
   private async assertCanChangeFullAccessCapabilities(ids: string[], companyId: string, actorUserId: string, client: PoolClient): Promise<void> {
-    if (ids.every(id => id === 'payroll.approve') && await this.holdsFullAccessAuthority(actorUserId, companyId, client)) return;
+    if (ids.every(id => FULL_ACCESS_EXPLICIT_CAPABILITIES.has(id)) && await this.holdsFullAccessAuthority(actorUserId, companyId, client)) return;
     throw new AccessPolicyError('Full Access role capabilities cannot be changed', 'ACCESS_FULL_ACCESS_IMMUTABLE');
   }
 

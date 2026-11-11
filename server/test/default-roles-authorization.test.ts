@@ -320,7 +320,7 @@ describe('Real repository authorization', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('m.is_active  = TRUE');
-    // Full Access includes implicit capabilities; payroll.approve requires an explicit grant.
+    // Full Access includes implicit capabilities; payroll approval/accounting permissions require explicit grants.
     expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/);
     expect(sql).toContain('cap.implicit_full_access = TRUE');
     expect(sql).toMatch(/u\.is_system_admin = TRUE/);
