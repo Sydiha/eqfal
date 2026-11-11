@@ -93,9 +93,12 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   const own=(await manager.client.req('POST','/payroll/drafts',{month:'2026-06-01'})).json.draft;
   const ownLine=`/payroll/drafts/${own.id}/employees/${employee.id}`;
   const ownEdit=await manager.client.req('PUT',ownLine,values(0));expect(ownEdit.status).toBe(200);
-  const self=await manager.client.req('POST',`/payroll/drafts/${own.id}/approve`,{version:ownEdit.json.draft.version});expect(self.status).toBe(200);
-  const audit=await h.q<{after_data:{self_approval:boolean;administrator_override:boolean};actor_user_id:string}>("SELECT after_data,actor_user_id FROM audit_log WHERE company_id=$1 AND action='payroll.draft.approve' AND entity_id=$2",[co,own.id]);
-  expect(audit[0]).toMatchObject({actor_user_id:manager.id,after_data:{self_approval:true,administrator_override:true}});
+  const self=await manager.client.req('POST',`/payroll/drafts/${own.id}/approve`,{version:ownEdit.json.draft.version});expect(self.json.code).toBe('PAYROLL_SELF_APPROVAL');
+  const fullDraft=(await owner.client.req('POST','/payroll/drafts',{month:'2026-09-01'})).json.draft;
+  const fullEdit=await owner.client.req('PUT',`/payroll/drafts/${fullDraft.id}/employees/${employee.id}`,values(0));expect(fullEdit.status).toBe(200);
+  const fullApproval=await owner.client.req('POST',`/payroll/drafts/${fullDraft.id}/approve`,{version:fullEdit.json.draft.version});expect(fullApproval.status).toBe(200);
+  const audit=await h.q<{after_data:{self_approval:boolean;administrator_override:boolean};actor_user_id:string}>("SELECT after_data,actor_user_id FROM audit_log WHERE company_id=$1 AND action='payroll.draft.approve' AND entity_id=$2",[co,fullDraft.id]);
+  expect(audit[0]).toMatchObject({actor_user_id:owner.id,after_data:{self_approval:true,administrator_override:true}});
   expect((await h.q<{n:string}>("SELECT COUNT(*)::text n FROM payroll_draft_employees WHERE draft_id=$1",[own.id]))[0]?.n).toBe('1');
  });
  it('keeps pre-migration allowances unclassified through reopen and edits',async()=>{

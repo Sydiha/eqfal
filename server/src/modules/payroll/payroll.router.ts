@@ -85,8 +85,7 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   const admin=(await c.query<{ok:boolean}>(`SELECT EXISTS (
     SELECT 1 FROM memberships m JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
     WHERE m.user_id=$1 AND m.company_id=$2 AND m.is_active=TRUE
-      AND (r.is_full_access=TRUE OR EXISTS (
-        SELECT 1 FROM role_capabilities rc WHERE rc.role_id=r.id AND rc.capability_id='access.role.capability.grant'))
+      AND r.is_full_access=TRUE
   ) AS ok`,[actor,company(q)])).rows[0]!.ok;
   const contributed=(await c.query<{ok:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) AS ok',[company(q),q.params.id,actor])).rows[0]!.ok;
   if(contributed&&!admin){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
