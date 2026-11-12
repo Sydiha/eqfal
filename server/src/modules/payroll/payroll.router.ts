@@ -139,15 +139,15 @@ payrollRouter.get('/payroll/settlements/liabilities',...read,requireCapability('
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
  s.json({liabilities:await new PayrollSettlementService(pool).liabilities(company(q))});
 }));
-payrollRouter.get('/payroll/settlements/bank-transactions',...read,requireCapability('payroll.settlement.view'),route(async(q,s)=>{
+payrollRouter.get('/payroll/settlements/bank-transactions',...read,requireCapability('payroll.settlement.view'),requireCapability('bank.view'),route(async(q,s)=>{
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
  s.json({bank_transactions:await new PayrollSettlementService(pool).banks(company(q))});
 }));
-payrollRouter.get('/payroll/settlements',...read,requireCapability('payroll.settlement.view'),route(async(q,s)=>{
+payrollRouter.get('/payroll/settlements',...read,requireCapability('payroll.settlement.view'),requireCapability('bank.view'),route(async(q,s)=>{
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
  s.json({settlements:await new PayrollSettlementService(pool).history(company(q))});
 }));
-payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),route(async(q,s)=>{
+payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),requireCapability('bank.view'),route(async(q,s)=>{
  const b=q.body;
  if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='amount,bank_transaction_id,idempotency_key,liability_line_id'
    ||![b.bank_transaction_id,b.idempotency_key,b.liability_line_id].every(v=>typeof v==='string'&&uuid.test(v))

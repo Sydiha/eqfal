@@ -25,14 +25,18 @@ export class PayrollSettlementService {
   }
   async history(company:string) {
     return (await this.db.query(`SELECT p.id,p.bank_transaction_id,p.liability_line_id,p.journal_entry_id,p.amount::text,p.created_at::text,
-      l.memo category,j.source_id payroll_draft_id,t.transaction_date::text
+      l.memo category,j.source_id payroll_draft_id,t.transaction_date::text,t.bank_reference,
+      t.reconciliation_status,t.amount::text bank_amount,
+      (SELECT COALESCE(SUM(x.amount),0)::text FROM payroll_settlement_allocations x WHERE x.company_id=p.company_id AND x.bank_transaction_id=p.bank_transaction_id) bank_allocated_amount,
+      settlement_journal.reference journal_reference
       FROM payroll_settlement_allocations p JOIN journal_lines l ON l.id=p.liability_line_id AND l.company_id=p.company_id
       JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
       JOIN bank_transactions t ON t.id=p.bank_transaction_id AND t.company_id=p.company_id
+      JOIN journal_entries settlement_journal ON settlement_journal.id=p.journal_entry_id AND settlement_journal.company_id=p.company_id AND settlement_journal.status='posted'
       WHERE p.company_id=$1 ORDER BY p.created_at DESC,p.id`,[company])).rows;
   }
   async banks(company:string) {
-    return (await this.db.query(`SELECT t.id,t.transaction_date::text,t.amount::text,t.bank_account_id,
+    return (await this.db.query(`SELECT t.id,t.transaction_date::text,t.amount::text,t.bank_account_id,t.bank_reference,
       COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0)::text allocated_amount,
       (ABS(t.amount)-COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0))::text remaining_amount
       FROM bank_transactions t WHERE t.company_id=$1 AND t.amount<0 AND t.currency_code='SAR' AND t.reconciliation_status<>'reconciled'

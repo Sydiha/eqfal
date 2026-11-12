@@ -39,6 +39,9 @@ db('payroll settlement API (PostgreSQL)',()=>{
   expect((await withoutPayroll.client.req('GET',`/bank-transactions/${bank}/match-candidates`)).status).toBe(403);
   expect((await withoutPayroll.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(403);
   expect((await x.actor.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(200);
+  const history=await x.actor.client.req('GET','/payroll/settlements');
+  expect(history.status).toBe(200);expect(history.json.settlements).toHaveLength(2);
+  expect(history.json.settlements[0]).toMatchObject({bank_transaction_id:bank,reconciliation_status:'reconciled',bank_allocated_amount:'100.00',bank_amount:'-100.00'});
   expect((await x.actor.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(409);
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'1'))).status).toBe(409);
   const rows=await h.q<{account_id:string;debit:string;credit:string}>('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',[a.json.allocation.journal_entry_id]);
@@ -51,8 +54,12 @@ db('payroll settlement API (PostgreSQL)',()=>{
  it('enforces capabilities, tenant isolation and closed periods',async()=>{
   const x=await fixture('api-auth'),bank=await x.tx();
   expect((await x.owner.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(403);
+  const noBank=await h.user('settler-without-bank');await h.member(x.co,noBank.id,['payroll.view','payroll.settlement.view','payroll.settlement.create']);await noBank.client.login();
+  expect((await noBank.client.req('GET','/payroll/settlements/bank-transactions')).status).toBe(403);
+  expect((await noBank.client.req('GET','/payroll/settlements')).status).toBe(403);
+  expect((await noBank.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(403);
   expect((await x.other.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(403);
-  const foreignActor=await h.user('foreign-settler');await h.member(x.foreign,foreignActor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create']);await foreignActor.client.login();
+  const foreignActor=await h.user('foreign-settler');await h.member(x.foreign,foreignActor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view']);await foreignActor.client.login();
   expect((await foreignActor.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(404);
   await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1",[x.fy]);
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(409);
