@@ -93,6 +93,7 @@ export class PayrollSettlementService {
       const allocation=(await c.query(`INSERT INTO payroll_settlement_allocations(id,company_id,bank_transaction_id,liability_line_id,journal_entry_id,amount,idempotency_key,created_by)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,bank_transaction_id,liability_line_id,journal_entry_id,amount::text`,[id,company,bank.id,input.liabilityLineId,journal,input.amount,input.idempotencyKey,actor])).rows[0];
       await postJournalInTransaction(c,company,actor,journal,{payrollSettlementId:id});
+      if(bank.reconciliation_status==='unmatched') await c.query("UPDATE bank_transactions SET reconciliation_status='matched',reconciled_by_user_id=NULL,reconciled_at=NULL WHERE id=$1 AND company_id=$2",[bank.id,company]);
       await this.audit.logEvent({company_id:company,actor_user_id:actor,action:'payroll.settlement.create',entity_type:'payroll_settlement',entity_id:id,after_data:allocation},c);
       await c.query('COMMIT');return {allocation,existing:false};
     } catch(e) {

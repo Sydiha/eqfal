@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
+import { UNRESOLVED_BANK_TRANSACTION_SQL } from '../src/modules/banking/bank-reconciliation-core';
 const db=process.env.DATABASE_URL?describe:describe.skip;
 db('payroll settlement API (PostgreSQL)',()=>{
  let h:Awaited<ReturnType<typeof startHarness>>;
@@ -8,7 +9,7 @@ db('payroll settlement API (PostgreSQL)',()=>{
  async function fixture(label:string){
   const owner=await h.user(label+'owner'),actor=await h.user(label+'actor'),other=await h.user(label+'other');
   const co=await h.company(label,owner.id),foreign=await h.company(label+'foreign',other.id);
-  await h.member(co,actor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create']);
+  await h.member(co,actor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view','bank.reconcile']);
   for(const u of [owner,actor,other])await u.client.login();
   const fy=await h.fiscalYear(co,'FY26','2026-01-01','2026-12-31');
   const expense=await h.account(co,'E','expense','operating_expense'),liability=await h.account(co,'L','liability','current_liability'),cash=await h.account(co,'B','asset','current_asset');
@@ -25,10 +26,20 @@ db('payroll settlement API (PostgreSQL)',()=>{
  it('posts partial and full settlement once with exact liability and bank lines',async()=>{
   const x=await fixture('api-post'),bank=await x.tx(),input=x.body(bank,'40');
   const a=await x.actor.client.req('POST','/payroll/settlements',input);expect(a.status,JSON.stringify(a.json)).toBe(201);
+  expect((await h.q<{unresolved:boolean}>(`SELECT ${UNRESOLVED_BANK_TRANSACTION_SQL} unresolved FROM bank_transactions t WHERE t.id=$1`,[bank]))[0]!.unresolved).toBe(true);
+  const candidates=await x.actor.client.req('GET',`/bank-transactions/${bank}/match-candidates`);
+  expect(candidates.json).toMatchObject({allocated_amount:'40.00',unallocated_amount:'60.00',documents:[]});
+  expect((await x.actor.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(409);
   const banks=await x.actor.client.req('GET','/payroll/settlements/bank-transactions');expect(banks.json.bank_transactions.find((t:{id:string})=>t.id===bank).remaining_amount).toBe('60.00');
   expect((await x.actor.client.req('POST','/payroll/settlements',input)).status).toBe(200);
   expect((await x.actor.client.req('POST','/payroll/settlements',{...input,amount:'41'})).status).toBe(409);
   const b=await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'60'));expect(b.status,JSON.stringify(b.json)).toBe(201);
+  expect((await h.q<{unresolved:boolean}>(`SELECT ${UNRESOLVED_BANK_TRANSACTION_SQL} unresolved FROM bank_transactions t WHERE t.id=$1`,[bank]))[0]!.unresolved).toBe(false);
+  const withoutPayroll=await h.user('bank-only');await h.member(x.co,withoutPayroll.id,['bank.view','bank.reconcile']);await withoutPayroll.client.login();
+  expect((await withoutPayroll.client.req('GET',`/bank-transactions/${bank}/match-candidates`)).status).toBe(403);
+  expect((await withoutPayroll.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(403);
+  expect((await x.actor.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(200);
+  expect((await x.actor.client.req('POST',`/bank-transactions/${bank}/reconciliation`,{status:'reconciled'})).status).toBe(409);
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'1'))).status).toBe(409);
   const rows=await h.q<{account_id:string;debit:string;credit:string}>('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',[a.json.allocation.journal_entry_id]);
   expect(rows).toEqual([{account_id:x.liability,debit:'40.00',credit:'0.00'},{account_id:x.cash,debit:'0.00',credit:'40.00'}]);
@@ -64,6 +75,13 @@ db('payroll settlement API (PostgreSQL)',()=>{
   const bank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Unlinked','SAR',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
   const t=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-02-10',-20,'SAR','Payroll',$3,$4,'strong','manual','other',$5) RETURNING id",[x.co,bank,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(t,'10'))).status).toBe(409);
+ });
+ it('serializes a payroll claim against a concurrent document match',async()=>{
+  const x=await fixture('api-cross-race'),bank=await x.tx();
+  const doc=(await h.q<{id:string}>("INSERT INTO documents(company_id,uploaded_by_user_id,original_filename,mime_type,size_bytes,storage_key,sha256,status,document_type,document_date,total_amount) VALUES($1,$2,'i.pdf','application/pdf',4,$3,$4,'approved','purchase','2026-02-01',100) RETURNING id",[x.co,x.owner.id,randomUUID(),'a'.repeat(64)]))[0]!.id;
+  const [payment,match]=await Promise.all([x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100')),h.q("INSERT INTO bank_transaction_matches(company_id,document_id,bank_transaction_id,matched_by_user_id,match_type) VALUES($1,$2,$3,$4,'document')",[x.co,doc,bank,x.owner.id]).then(()=>true,()=>false)]);
+  expect([payment.status===201,match].filter(Boolean)).toHaveLength(1);
+  expect([201,409]).toContain(payment.status);
  });
  it('rolls back the allocation and journal if audit recording fails',async()=>{
   const x=await fixture('api-rollback'),bank=await x.tx();

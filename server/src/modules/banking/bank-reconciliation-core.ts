@@ -32,6 +32,7 @@ export const UNRESOLVED_BANK_TRANSACTION_SQL = `NOT (
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
         OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
         OR EXISTS(SELECT 1 FROM personal_payment_reimbursements pr WHERE pr.company_id=t.company_id AND pr.bank_transaction_id=t.id AND pr.journal_entry_id IS NOT NULL)
+        OR COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p JOIN journal_entries j ON j.id=p.journal_entry_id AND j.company_id=p.company_id AND j.status='posted' WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0)=ABS(t.amount) AND t.amount<>0
         OR COALESCE((SELECT SUM(s.amount) FROM bank_transaction_matches m JOIN document_settlements s ON s.company_id=m.company_id AND s.bank_transaction_id=m.bank_transaction_id AND s.document_id=m.document_id WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type='document'),0)=ABS(t.amount) AND t.amount<>0
       )`;
 
@@ -110,6 +111,10 @@ const EVIDENCE_SQL = `WITH src AS (
   SELECT j.id, r.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN personal_payment_reimbursements r ON r.id=j.source_id AND r.company_id=j.company_id
    WHERE j.company_id=$1 AND j.source_type='personal_payment_reimbursement'
+  UNION ALL
+  SELECT j.id, p.bank_transaction_id, 'payroll_settlement'::text
+    FROM journal_entries j JOIN payroll_settlement_allocations p ON p.id=j.source_id AND p.company_id=j.company_id AND p.journal_entry_id=j.id
+   WHERE j.company_id=$1 AND j.source_type='payroll_settlement'
 )
 SELECT j.id journal_id, src.kind, j.accounting_date::text, j.description, bt.id bank_transaction_id, bt.transaction_date::text bank_transaction_date,
        bt.amount::text bank_amount,
@@ -174,7 +179,7 @@ async function evaluateAccount(db: Queryable, companyId: string, bank: Candidate
   for (const row of rawRows) grouped.set(row.bank_transaction_id, [...(grouped.get(row.bank_transaction_id) ?? []), row]);
   const evidenceRows: Array<EvidenceRow & { journal_ids: string[] }> = [];
   for (const rows of grouped.values()) {
-    if (rows.length > 1 && rows.every(r => r.kind === 'document_settlement')) {
+    if (rows.length > 1 && (rows.every(r => r.kind === 'document_settlement') || rows.every(r => r.kind === 'payroll_settlement'))) {
       const first = rows[0]!;
       evidenceRows.push({ ...first, accounting_date: rows.map(r => r.accounting_date).sort().at(-1)!, net: fromCents(rows.reduce((n, r) => n + toCents(r.net), 0n)), journal_ids: rows.map(r => r.journal_id) });
     } else for (const row of rows) evidenceRows.push({ ...row, journal_ids: [row.journal_id] });
