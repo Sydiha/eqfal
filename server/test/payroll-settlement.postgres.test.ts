@@ -99,4 +99,21 @@ db('payroll settlement API (PostgreSQL)',()=>{
   expect(await h.count('SELECT count(*)::text n FROM payroll_settlement_allocations WHERE company_id=$1',[x.co])).toBe(0);
   expect(await h.count("SELECT count(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='payroll_settlement'",[x.co])).toBe(0);
  });
+ it('settles all liability categories across posted payroll runs using their original accounts',async()=>{
+  const x=await fixture('api-categories'),bank=await x.tx('-130');
+  const deduction=await h.account(x.co,'D','liability','current_liability'),contribution=await h.account(x.co,'C','liability','current_liability');
+  const expense=await h.account(x.co,'E2','expense','operating_expense');
+  const draft=(await h.q<{id:string}>("INSERT INTO payroll_drafts(company_id,period_month,created_by,status,approved_by,approved_at) VALUES($1,'2026-01-01',$2,'approved',$2,NOW()) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  const journal=(await h.q<{id:string}>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,source_type,source_id,created_by) VALUES($1,$2,'2026-01-01','Payroll','payroll',$3,$4) RETURNING id",[x.co,x.fy,draft,x.owner.id]))[0]!.id;
+  await h.q("INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,30,0,'earnings_expense',1),($1,$2,$4,0,10,'employee_deduction_liability',2),($1,$2,$5,0,20,'employer_contribution_liability',3)",[x.co,journal,expense,deduction,contribution]);
+  await h.q("UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1",[journal,x.owner.id]);
+  const lines=await h.q<{id:string;memo:string;account_id:string}>("SELECT id,memo,account_id FROM journal_lines WHERE journal_entry_id=$1 AND credit>0 ORDER BY sequence",[journal]);
+  for(const [line,amount] of [[x.line,'100'],[lines[0]!.id,'10'],[lines[1]!.id,'20']]){
+   const result=await x.actor.client.req('POST','/payroll/settlements',{...x.body(bank!,amount!),liability_line_id:line});
+   expect(result.status,JSON.stringify(result.json)).toBe(201);
+  }
+  const status=await x.actor.client.req('GET','/payroll/settlements/liabilities');
+  expect(status.json.liabilities).toHaveLength(3);expect(status.json.liabilities.every((l:{remaining_amount:string})=>l.remaining_amount==='0.00')).toBe(true);
+  expect(await h.count("SELECT count(*)::text n FROM payroll_settlement_allocations p JOIN journal_lines original ON original.id=p.liability_line_id JOIN journal_lines settled ON settled.journal_entry_id=p.journal_entry_id AND settled.account_id=original.account_id AND settled.debit=p.amount WHERE p.company_id=$1",[x.co])).toBe(3);
+ });
 });
