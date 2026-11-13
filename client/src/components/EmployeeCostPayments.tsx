@@ -46,6 +46,8 @@ export function EmployeeCostPayments({records,years,capabilities,onUnauthorized}
   return <section className="ecc-card" aria-labelledby="ecc-payments-title" dir={ar?'rtl':'ltr'}>
     <div className="ecc-card-head"><h3 id="ecc-payments-title">{l('title')}</h3><span className="ecc-report-caption">{l('unallocated')}</span></div>
     {error&&<p role="alert" className="ecc-message">{error}</p>}
+    {canView&&!canAllocate&&<p role="note" className="ecc-muted">{l('allocationUnavailable')}</p>}
+    {canView&&!canReverse&&<p role="note" className="ecc-muted">{l('reversalUnavailable')}</p>}
     {canView&&<>
       {!salaryVisible&&<p className="ecc-muted" role="note">{l('paymentsHidden')}</p>}
       <div className="ecc-report-filters"><label>{t('employeeCostCenter.fiscalYear')}<select value={year} onChange={e=>setYear(e.target.value)}>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label><div className="ecc-switch" role="group" aria-label={l('reportedAt')}><button type="button" aria-pressed={mode==='monthly'} onClick={()=>setMode('monthly')}>{t('employeeCostCenter.monthly')}</button><button type="button" aria-pressed={mode==='annual'} onClick={()=>setMode('annual')}>{t('employeeCostCenter.annual')}</button></div>{mode==='monthly'&&<label>{t('employeeCostCenter.month')}<input type="month" value={month.slice(0,7)} onChange={e=>e.target.value&&setMonth(`${e.target.value}-01`)}/></label>}<button type="button" className="ecc-primary" onClick={()=>void runReport()}>{t('employeeCostCenter.runReport')}</button></div>

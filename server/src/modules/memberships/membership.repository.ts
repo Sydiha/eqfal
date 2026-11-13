@@ -345,9 +345,9 @@ export class MembershipRepository {
 
   /**
    * The single source of capability resolution (session context, administration ceilings, company management).
-   *  - Active System Admin: every registered capability in every ACTIVE company, with or without membership.
-   *  - Otherwise: the active membership's role in this active company. A Full Access role is a wildcard over every
-   *    registered capability (current and future); any other role holds exactly its role_capabilities rows.
+   *  - Active System Admin: implicit capabilities and payroll accounting read capabilities in every ACTIVE company.
+   *  - Otherwise: the active membership's role in this active company. Full Access includes implicit capabilities
+   *    and payroll accounting reads; sensitive payroll mutations still require explicit role_capabilities rows.
    * The explicit roles/company join is defense-in-depth against a corrupted or manually-written cross-company role_id.
    */
   /** Role of the user's ACTIVE membership in an active company (display only; authorization uses capabilities). */
@@ -369,7 +369,7 @@ export class MembershipRepository {
     const { rows } = await runner.query<{ capability_id: string }>(
       `SELECT cap.id AS capability_id
        FROM capabilities cap
-       WHERE cap.implicit_full_access = TRUE AND EXISTS (
+       WHERE (cap.implicit_full_access = TRUE OR cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview')) AND EXISTS (
          SELECT 1 FROM users u JOIN companies c ON c.id = $2 AND c.is_active = TRUE
          WHERE u.id = $1 AND u.is_active = TRUE AND u.is_system_admin = TRUE
        )
@@ -378,7 +378,7 @@ export class MembershipRepository {
        FROM memberships m
        JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
        JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
+       JOIN capabilities cap ON (r.is_full_access = TRUE AND (cap.implicit_full_access = TRUE OR cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview')))
          OR EXISTS (
            SELECT 1
            FROM role_capabilities rc

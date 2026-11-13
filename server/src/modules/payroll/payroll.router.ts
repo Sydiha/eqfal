@@ -17,6 +17,11 @@ const maxMoney=9999999999999999n;
 const read=[requireAuth,requireActiveCompany,requireCapability('payroll.view')];
 const write=[requireSameOrigin,...read,requireCapability('payroll.edit')];
 const approve=[requireSameOrigin,...read,requireCapability('payroll.approve')];
+const requirePostingStatusRead=(q:Request,s:Response,n:NextFunction)=>{
+ const capabilities=getAuthenticatedContext(q)!.capabilities;
+ if(capabilities.includes('payroll.accounting.preview')||capabilities.includes('payroll.accounting.post'))return n();
+ s.status(403).json({code:'FORBIDDEN',error:'Forbidden'});
+};
 const route=(fn:(q:Request,s:Response)=>Promise<void>)=>(q:Request,s:Response,n:NextFunction)=>void fn(q,s).catch(n);
 const company=(q:Request)=>getAuthenticatedContext(q)!.activeCompanyId!;
 const audit=new AuditLogRepository();
@@ -128,7 +133,7 @@ payrollRouter.post('/payroll/drafts/:id/accounting-post',requireSameOrigin,...re
  try{const result=await service.post(company(q),q.params.id,getAuthenticatedContext(q)!.user.id);s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
 }));
 
-payrollRouter.get('/payroll/drafts/:id/accounting-post-status',...read,requireCapability('payroll.accounting.post'),route(async(q,s)=>{
+payrollRouter.get('/payroll/drafts/:id/accounting-post-status',...read,requirePostingStatusRead,route(async(q,s)=>{
  if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
  const service=accountingService(s);if(!service)return;
  try{s.json(await service.postingStatus(company(q),q.params.id,getAuthenticatedContext(q)!.user.id));}catch(e){if(!accountingFailure(e,s))throw e;}
