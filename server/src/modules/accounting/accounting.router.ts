@@ -19,6 +19,7 @@ import { assertRevision, readExpectedRevision, StaleRevisionError } from '../../
 import { CASH_FLOW_CATEGORIES, CASH_ROLES, STATEMENT_CATEGORIES } from './account-classification.router';
 
 export const accountingRouter = Router();
+const uncertaintyAudit = new AuditLogRepository();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const ACCOUNT_TYPES=['asset','liability','equity','revenue','expense'] as const;
@@ -105,6 +106,62 @@ function cashFlowStatementHandle(error:unknown,res:Response){if(error instanceof
 function statementQuery(req:Request){if(typeof req.query.fiscal_year_id!=='string'||!UUID.test(req.query.fiscal_year_id)||(req.query.start_date!==undefined&&!validDate(req.query.start_date))||(req.query.end_date!==undefined&&!validDate(req.query.end_date)))throw new FinancialStatementValidationError('Invalid request');return{fiscalYearId:req.query.fiscal_year_id,start:req.query.start_date as string|undefined,end:req.query.end_date as string|undefined};}
 function cashFlowQuery(req:Request){if(typeof req.query.fiscal_year_id!=='string'||!UUID.test(req.query.fiscal_year_id)||(req.query.start_date!==undefined&&!validDate(req.query.start_date))||(req.query.end_date!==undefined&&!validDate(req.query.end_date)))throw new CashFlowValidationError('Invalid request');return{fiscalYearId:req.query.fiscal_year_id,start:req.query.start_date as string|undefined,end:req.query.end_date as string|undefined};}
 const base=[requireAuth,requireActiveCompany] as const;
+const MANUAL_BANK_UNCERTAINTY_SQL=`SELECT l.id journal_line_id,j.id journal_entry_id,b.bank_account_id,b.account_id bank_ledger_account_id,
+  ba.display_name bank_account_name,j.accounting_date::text,j.reference,j.description,l.debit::text,l.credit::text,
+  j.created_by,j.posted_by
+  FROM bank_account_ledger_links b
+  JOIN bank_accounts ba ON ba.id=b.bank_account_id AND ba.company_id=b.company_id
+  JOIN journal_lines l ON l.company_id=b.company_id AND l.account_id=b.account_id
+  JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+  LEFT JOIN manual_bank_journal_uncertainty_reviews r
+    ON r.company_id=l.company_id AND r.journal_line_id=l.id AND r.bank_account_id=b.bank_account_id
+  WHERE b.company_id=$1 AND b.bank_account_id=$2 AND b.valid_from<=j.accounting_date
+    AND (b.valid_to IS NULL OR b.valid_to>=j.accounting_date)
+    AND l.bank_transaction_id IS NULL AND j.status='posted' AND j.entry_type='standard'
+    AND j.source_type IS NULL AND j.reversal_of_journal_id IS NULL AND r.id IS NULL`;
+accountingRouter.get('/accounting/bank-journal-uncertainties',...base,requireCapability('accounting.view'),route(async(req,res)=>{
+ if(!pool)return void res.status(503).json({code:'DB_UNAVAILABLE'});
+ const rows=(await pool.query(`SELECT b.bank_account_id,ba.display_name bank_account_name,l.id journal_line_id,j.id journal_entry_id,
+   j.accounting_date::text,j.reference,j.description,l.account_id bank_ledger_account_id,l.debit::text,l.credit::text
+   FROM bank_account_ledger_links b JOIN bank_accounts ba ON ba.id=b.bank_account_id AND ba.company_id=b.company_id
+   JOIN journal_lines l ON l.company_id=b.company_id AND l.account_id=b.account_id
+   JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+   LEFT JOIN manual_bank_journal_uncertainty_reviews r ON r.company_id=l.company_id AND r.journal_line_id=l.id AND r.bank_account_id=b.bank_account_id
+   WHERE b.company_id=$1 AND b.valid_from<=j.accounting_date AND (b.valid_to IS NULL OR b.valid_to>=j.accounting_date)
+     AND l.bank_transaction_id IS NULL AND j.status='posted' AND j.entry_type='standard'
+     AND j.source_type IS NULL AND j.reversal_of_journal_id IS NULL AND r.id IS NULL
+   ORDER BY b.bank_account_id,j.accounting_date,j.id,l.sequence,l.id`,[context(req).activeCompanyId])).rows;
+ res.json({uncertainties:rows});
+}));
+accountingRouter.post('/accounting/bank-journal-uncertainties/:lineId/clear',requireSameOrigin,...base,requireCapability('accounting.journal.post'),route(async(req,res)=>{
+ const body=req.body;
+ if(!UUID.test(req.params.lineId)||!body||typeof body!=='object'||Array.isArray(body)
+   ||Object.keys(body).sort().join(',')!=='bank_account_id,evidence_reference,rationale'
+   ||!UUID.test(body.bank_account_id)||typeof body.evidence_reference!=='string'||body.evidence_reference.trim().length<3||body.evidence_reference.trim().length>500
+   ||typeof body.rationale!=='string'||body.rationale.trim().length<10||body.rationale.trim().length>2000) return void res.status(400).json({code:'ACCOUNTING_UNCERTAINTY_INVALID'});
+ if(!pool)return void res.status(503).json({code:'DB_UNAVAILABLE'});
+ const companyId=context(req).activeCompanyId,actor=context(req).user.id,client=await pool.connect();
+ try {
+  await client.query('BEGIN');
+  await client.query('SELECT id FROM bank_accounts WHERE id=$1 AND company_id=$2 FOR UPDATE',[body.bank_account_id,companyId]);
+  const uncertainty=(await client.query(`SELECT * FROM (${MANUAL_BANK_UNCERTAINTY_SQL}) u WHERE u.journal_line_id=$3`,[companyId,body.bank_account_id,req.params.lineId])).rows[0];
+  if(!uncertainty){await client.query('ROLLBACK');return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_NOT_OPEN'});}
+  if(uncertainty.posted_by===actor||uncertainty.created_by===actor){await client.query('ROLLBACK');return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_SELF_REVIEW'});}
+  const review=(await client.query(`INSERT INTO manual_bank_journal_uncertainty_reviews
+    (company_id,journal_line_id,journal_entry_id,bank_account_id,bank_ledger_account_id,reviewed_by,evidence_reference,rationale)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,reviewed_at::text`,
+    [companyId,uncertainty.journal_line_id,uncertainty.journal_entry_id,body.bank_account_id,uncertainty.bank_ledger_account_id,actor,body.evidence_reference.trim(),body.rationale.trim()])).rows[0]!;
+  await uncertaintyAudit.logEvent({company_id:companyId,actor_user_id:actor,action:'accounting.manual_bank_uncertainty.clear',entity_type:'journal_line',entity_id:req.params.lineId,
+    after_data:{review_id:review.id,bank_account_id:body.bank_account_id,journal_entry_id:uncertainty.journal_entry_id,
+      bank_ledger_account_id:uncertainty.bank_ledger_account_id,evidence_reference:body.evidence_reference.trim(),rationale:body.rationale.trim()}},client);
+  const remaining=Number((await client.query(`SELECT COUNT(*)::text count FROM (${MANUAL_BANK_UNCERTAINTY_SQL}) u`,[companyId,body.bank_account_id])).rows[0]!.count);
+  await client.query('COMMIT');res.status(201).json({review,bank_account_id:body.bank_account_id,quarantined:remaining>0,unresolved_count:remaining});
+ } catch(error) {
+  await client.query('ROLLBACK');
+  if(['23503','23505','23514'].includes((error as{code?:string}).code??''))return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_CONFLICT'});
+  throw error;
+ } finally {client.release();}
+}));
 accountingRouter.get('/accounting/operational-sources',...base,requireCapability('accounting.view'),route(async(req,res)=>{try{if(req.query.source_type!==undefined&&typeof req.query.source_type!=='string')throw new AccountingValidationError('Invalid request');const s=service(res);if(s)res.json(await s.listOperationalSources(context(req).activeCompanyId,req.query.source_type as string|undefined));}catch(e){handle(e,res);}}));
 accountingRouter.post('/accounting/obligation-settlements/:id/journal',requireSameOrigin,...base,requireCapability('accounting.journal.create'),route(async(req,res)=>{try{if(!UUID.test(req.params.id))throw new AccountingNotFoundError();const s=service(res);if(s)res.status(201).json(await s.prepareObligationSettlementJournal(context(req).activeCompanyId,context(req).user.id,req.params.id));}catch(e){handle(e,res);}}));
 accountingRouter.get('/accounts',...base,requireCapability('accounting.view'),route(async(req,res)=>{const s=service(res);if(s)res.json(await s.listAccounts(context(req).activeCompanyId));}));

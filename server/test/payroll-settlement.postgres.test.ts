@@ -93,12 +93,45 @@ db('payroll settlement API (PostgreSQL)',()=>{
   const t=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-02-10',-20,'SAR','Payroll',$3,$4,'strong','manual','other',$5) RETURNING id",[x.co,bank,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(t,'10'))).status).toBe(409);
  });
- it('rejects an unbound source-less bank credit before it can duplicate payroll settlement',async()=>{
+ it('allows an unbound source-less bank credit and quarantines its account from payroll settlement',async()=>{
   const x=await fixture('api-manual-bank-credit'),bank=await x.tx('-100');
   const journal=await x.manualJournal(null);
-  expect((await x.owner.client.req('POST',`/journals/${journal}/post`,{})).status).toBe(400);
-  expect((await h.q<{status:string}>('SELECT status FROM journal_entries WHERE id=$1',[journal]))[0]!.status).toBe('draft');
-  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100'))).status).toBe(201);
+  expect((await x.owner.client.req('POST',`/journals/${journal}/post`,{})).status).toBe(200);
+  expect((await h.q<{status:string}>('SELECT status FROM journal_entries WHERE id=$1',[journal]))[0]!.status).toBe('posted');
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100'))).json.code).toBe('PAYROLL_SETTLEMENT_BANK_ACCOUNT_QUARANTINED');
+  expect(await h.count('SELECT count(*)::text n FROM payroll_settlement_allocations WHERE company_id=$1',[x.co])).toBe(0);
+  const draft=(await h.q<{id:string}>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by) VALUES($1,$2,'2026-02-10','Direct guard probe',$3) RETURNING id",[x.co,x.fy,x.owner.id]))[0]!.id;
+  await expect(h.q("INSERT INTO payroll_settlement_allocations(company_id,bank_transaction_id,liability_line_id,journal_entry_id,amount,idempotency_key,created_by) VALUES($1,$2,$3,$4,10,$5,$6)",[x.co,bank,x.line,draft,randomUUID(),x.actor.id])).rejects.toThrow(/unresolved manual journal uncertainty/);
+ });
+ it('quarantines only the affected account and requires authorized evidence review of every unresolved posting',async()=>{
+  const x=await fixture('api-manual-account-quarantine'),bank=await x.tx('-100');
+  const journalA=await x.manualJournal(null),journalB=await x.manualJournal(null);
+  expect((await x.owner.client.req('POST',`/journals/${journalA}/post`,{})).status).toBe(200);
+  expect((await x.owner.client.req('POST',`/journals/${journalB}/post`,{})).status).toBe(200);
+  const otherBank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Other bank','SAR',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  const otherCash=await h.account(x.co,'B2','asset','current_asset');await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[otherCash]);
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,otherBank,otherCash,x.owner.id]);
+  const otherTx=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-02-10',-20,'SAR','Other payment',$3,$4,'strong','manual','other',$5) RETURNING id",[x.co,otherBank,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  const candidates=await x.actor.client.req('GET','/payroll/settlements/bank-transactions');
+  expect(candidates.json.bank_transactions.some((t:{id:string})=>t.id===bank)).toBe(false);
+  expect(candidates.json.bank_transactions.some((t:{id:string})=>t.id===otherTx)).toBe(true);
+  const affectedBankAccount=(await h.q<{id:string}>("SELECT bank_account_id id FROM bank_transactions WHERE company_id=$1 AND id=$2",[x.co,bank]))[0]!.id;
+  const lineA=(await h.q<{id:string}>("SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND account_id=$2",[journalA,x.cash]))[0]!.id;
+  expect((await x.actor.client.req('POST',`/accounting/bank-journal-uncertainties/${lineA}/clear`,{bank_account_id:affectedBankAccount,evidence_reference:'statement:review-1',rationale:'Verified unrelated adjustment evidence'})).status).toBe(403);
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(otherTx,'10'))).status).toBe(201);
+  const reviewer=await h.user('quarantine-reviewer');
+  await h.member(x.co,reviewer.id,['accounting.view','accounting.journal.post']);await reviewer.client.login();
+  const uncertainties=await reviewer.client.req('GET','/accounting/bank-journal-uncertainties');
+  const affected=uncertainties.json.uncertainties.filter((u:{bank_account_id:string})=>u.bank_account_id===affectedBankAccount);
+  expect(affected).toHaveLength(2);
+  const first=affected[0]!,second=affected[1]!;
+  const clear1=await reviewer.client.req('POST',`/accounting/bank-journal-uncertainties/${first.journal_line_id}/clear`,{bank_account_id:first.bank_account_id,evidence_reference:'statement:review-1',rationale:'Verified this adjustment is unrelated to a bank payment'});
+  expect(clear1.status,JSON.stringify(clear1.json)).toBe(201);expect(clear1.json).toMatchObject({quarantined:true,unresolved_count:1});
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(409);
+  expect((await reviewer.client.req('POST',`/accounting/bank-journal-uncertainties/${second.journal_line_id}/clear`,{bank_account_id:second.bank_account_id,evidence_reference:'statement:review-2',rationale:'Verified this second adjustment is unrelated'})).json).toMatchObject({quarantined:false,unresolved_count:0});
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'10'))).status).toBe(201);
+  expect(await h.count("SELECT count(*)::text n FROM audit_log WHERE company_id=$1 AND action='accounting.manual_bank_uncertainty.clear'",[x.co])).toBe(2);
+  await expect(h.q("UPDATE manual_bank_journal_uncertainty_reviews SET rationale='edited' WHERE company_id=$1",[x.co])).rejects.toThrow(/immutable/);
  });
  it('binds a manual bank journal deterministically and blocks payroll reuse',async()=>{
   const x=await fixture('api-manual-bank-binding'),bank=await x.tx('-100'),journal=await x.manualJournal(bank);

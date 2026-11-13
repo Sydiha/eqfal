@@ -44,6 +44,13 @@ export class PayrollSettlementService {
       AND (t.source_kind<>'manual' OR t.manual_category IN ('supplier_payment','government_payment','other'))
       AND EXISTS(SELECT 1 FROM bank_account_ledger_links b JOIN accounts a ON a.id=b.account_id AND a.company_id=b.company_id
         WHERE b.company_id=t.company_id AND b.bank_account_id=t.bank_account_id AND b.valid_from<=t.transaction_date AND (b.valid_to IS NULL OR b.valid_to>=t.transaction_date) AND a.is_active)
+      AND NOT EXISTS(SELECT 1 FROM bank_account_ledger_links b
+        JOIN journal_lines l ON l.company_id=b.company_id AND l.account_id=b.account_id
+        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+        LEFT JOIN manual_bank_journal_uncertainty_reviews r ON r.company_id=l.company_id AND r.journal_line_id=l.id AND r.bank_account_id=b.bank_account_id
+        WHERE b.company_id=t.company_id AND b.bank_account_id=t.bank_account_id AND b.valid_from<=j.accounting_date
+          AND (b.valid_to IS NULL OR b.valid_to>=j.accounting_date) AND l.bank_transaction_id IS NULL
+          AND j.status='posted' AND j.entry_type='standard' AND j.source_type IS NULL AND j.reversal_of_journal_id IS NULL AND r.id IS NULL)
       AND NOT EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id)
       AND NOT EXISTS(SELECT 1 FROM document_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
       AND NOT EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
@@ -78,6 +85,19 @@ export class PayrollSettlementService {
       if(!bank) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
       if(bank.transaction_date!==bankDate) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
       if(!bank.manual_journal_binding_protected||!bank.amount.startsWith('-')||bank.reconciliation_status==='reconciled'||bank.currency_code.trim()!=='SAR'||(bank.source_kind==='manual'&&!['supplier_payment','government_payment','other'].includes(bank.manual_category??''))) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
+      await c.query('SELECT id FROM bank_accounts WHERE id=$1 AND company_id=$2 FOR UPDATE',[bank.bank_account_id,company]);
+      const uncertain=(await c.query<{yes:boolean}>(`SELECT EXISTS(
+        SELECT 1 FROM bank_account_ledger_links b
+        JOIN journal_lines l ON l.company_id=b.company_id AND l.account_id=b.account_id
+        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+        LEFT JOIN manual_bank_journal_uncertainty_reviews r
+          ON r.company_id=l.company_id AND r.journal_line_id=l.id AND r.bank_account_id=b.bank_account_id
+        WHERE b.company_id=$1 AND b.bank_account_id=$2 AND b.valid_from<=j.accounting_date
+          AND (b.valid_to IS NULL OR b.valid_to>=j.accounting_date) AND l.bank_transaction_id IS NULL
+          AND j.status='posted' AND j.entry_type='standard' AND j.source_type IS NULL
+          AND j.reversal_of_journal_id IS NULL AND r.id IS NULL
+      ) yes`,[company,bank.bank_account_id])).rows[0]!.yes;
+      if(uncertain) throw conflict('PAYROLL_SETTLEMENT_BANK_ACCOUNT_QUARANTINED');
       const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,d.period_month::text,d.currency_code FROM journal_lines l
         JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id JOIN payroll_drafts d ON d.id=j.source_id AND d.company_id=j.company_id
         WHERE l.company_id=$1 AND l.id=$2 AND j.source_type='payroll' AND j.status='posted' AND d.status='approved' AND l.debit=0 AND l.credit>0
