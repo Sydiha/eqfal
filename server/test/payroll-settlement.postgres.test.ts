@@ -21,7 +21,17 @@ db('payroll settlement API (PostgreSQL)',()=>{
   await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[co,bank,cash,owner.id]);
   async function tx(amount='-100'){return (await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-02-10',$3,'SAR','Payroll',$4,$5,'strong','manual','other',$6) RETURNING id",[co,bank,amount,randomUUID(),randomUUID().replaceAll('-',''),owner.id]))[0]!.id;}
   const body=(bank_transaction_id:string,amount:string,key=randomUUID())=>({bank_transaction_id,liability_line_id:line,amount,idempotency_key:key});
-  return {owner,actor,other,co,foreign,fy,line,original,liability,cash,tx,body};
+  async function manualJournal(bankTransactionId:string|null){
+   const created=await owner.client.req('POST','/journals',{fiscal_year_id:fy,accounting_date:'2026-02-10',description:'Manual bank payment',reference:null,entry_type:'standard'});
+   expect(created.status,JSON.stringify(created.json)).toBe(201);
+   const saved=await owner.client.req('PUT',`/journals/${created.json.id}/lines`,{lines:[
+    {account_id:liability,bank_transaction_id:null,debit:'100',credit:'0',memo:null},
+    {account_id:cash,bank_transaction_id:bankTransactionId,debit:'0',credit:'100',memo:null},
+   ]},{'if-match':'1'});
+   expect(saved.status,JSON.stringify(saved.json)).toBe(200);
+   return created.json.id as string;
+  }
+  return {owner,actor,other,co,foreign,fy,line,original,liability,cash,tx,body,manualJournal};
  }
  it('posts partial and full settlement once with exact liability and bank lines',async()=>{
   const x=await fixture('api-post'),bank=await x.tx(),input=x.body(bank,'40');
@@ -82,6 +92,52 @@ db('payroll settlement API (PostgreSQL)',()=>{
   const bank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Unlinked','SAR',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
   const t=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-02-10',-20,'SAR','Payroll',$3,$4,'strong','manual','other',$5) RETURNING id",[x.co,bank,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
   expect((await x.actor.client.req('POST','/payroll/settlements',x.body(t,'10'))).status).toBe(409);
+ });
+ it('rejects an unbound source-less bank credit before it can duplicate payroll settlement',async()=>{
+  const x=await fixture('api-manual-bank-credit'),bank=await x.tx('-100');
+  const journal=await x.manualJournal(null);
+  expect((await x.owner.client.req('POST',`/journals/${journal}/post`,{})).status).toBe(400);
+  expect((await h.q<{status:string}>('SELECT status FROM journal_entries WHERE id=$1',[journal]))[0]!.status).toBe('draft');
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100'))).status).toBe(201);
+ });
+ it('binds a manual bank journal deterministically and blocks payroll reuse',async()=>{
+  const x=await fixture('api-manual-bank-binding'),bank=await x.tx('-100'),journal=await x.manualJournal(bank);
+  expect((await x.owner.client.req('POST',`/journals/${journal}/post`,{})).status).toBe(200);
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100'))).status).toBe(409);
+  expect(await h.count("SELECT count(*)::text n FROM bank_transaction_accounting_claims WHERE company_id=$1 AND bank_transaction_id=$2 AND owner_type='manual_journal_line'",[x.co,bank])).toBe(1);
+  expect(await h.count('SELECT count(*)::text n FROM bank_transaction_journal_evidence WHERE company_id=$1 AND journal_entry_id=$2',[x.co,journal])).toBe(1);
+ });
+ it('preserves unrelated manual journals and audited reversal of a bound bank journal',async()=>{
+  const x=await fixture('api-manual-preserve'),bank=await x.tx('-100'),journal=await x.manualJournal(bank);
+  expect((await x.owner.client.req('POST',`/journals/${journal}/post`,{})).status).toBe(200);
+  const reversed=await x.owner.client.req('POST',`/journals/${journal}/reverse`,{accounting_date:'2026-02-11',reason:'Correct the manual bank posting'});
+  expect(reversed.status,JSON.stringify(reversed.json)).toBe(201);
+  expect(await h.count('SELECT count(*)::text n FROM journal_lines WHERE journal_entry_id=$1 AND bank_transaction_id IS NOT NULL',[reversed.json.reversal.id])).toBe(0);
+  const unrelated=await x.owner.client.req('POST','/journals',{fiscal_year_id:x.fy,accounting_date:'2026-02-12',description:'Non-bank adjustment',reference:null,entry_type:'standard'});
+  const other=await h.account(x.co,'OTHER','expense','operating_expense');
+  expect((await x.owner.client.req('PUT',`/journals/${unrelated.json.id}/lines`,{lines:[{account_id:x.liability,debit:'1',credit:'0',memo:null},{account_id:other,debit:'0',credit:'1',memo:null}]},{'if-match':'1'})).status).toBe(200);
+  expect((await x.owner.client.req('POST',`/journals/${unrelated.json.id}/post`,{})).status).toBe(200);
+ });
+ it('serializes a bound manual bank posting against payroll settlement',async()=>{
+  const x=await fixture('api-manual-payroll-race'),bank=await x.tx('-100'),journal=await x.manualJournal(bank);
+  const [manual,payroll]=await Promise.all([
+   x.owner.client.req('POST',`/journals/${journal}/post`,{}),
+   x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100')),
+  ]);
+  expect([manual.status===200,payroll.status===201].filter(Boolean)).toHaveLength(1);
+  expect([manual.status,manual.json,payroll.status,payroll.json],JSON.stringify({manual:manual.json,payroll:payroll.json})).toEqual(expect.arrayContaining([expect.anything()]));
+  expect([manual.status,409],JSON.stringify({manual:manual.json,payroll:payroll.json})).toContain(manual.status);expect([201,409],JSON.stringify({manual:manual.json,payroll:payroll.json})).toContain(payroll.status);
+  const effects=await h.count(`SELECT count(*)::text n FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+    WHERE l.company_id=$1 AND l.account_id=$2 AND l.credit=100 AND j.status='posted'`,[x.co,x.cash]);
+  expect(effects).toBe(1);
+ });
+ it('fails closed for bank transactions predating deterministic manual binding',async()=>{
+  const x=await fixture('api-prebinding-bank');
+  await x.tx('-1');
+  const bank=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id,manual_journal_binding_protected) SELECT company_id,bank_account_id,'2026-02-10',-100,'SAR','Historical',$2,$3,'strong','manual','other',$4,FALSE FROM bank_transactions WHERE company_id=$1 LIMIT 1 RETURNING id",[x.co,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  const listed=await x.actor.client.req('GET','/payroll/settlements/bank-transactions');
+  expect(listed.json.bank_transactions.some((t:{id:string})=>t.id===bank)).toBe(false);
+  expect((await x.actor.client.req('POST','/payroll/settlements',x.body(bank,'100'))).status).toBe(409);
  });
  it('serializes a payroll claim against a concurrent document match',async()=>{
   const x=await fixture('api-cross-race'),bank=await x.tx();

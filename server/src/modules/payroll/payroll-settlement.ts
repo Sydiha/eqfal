@@ -40,6 +40,7 @@ export class PayrollSettlementService {
       COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0)::text allocated_amount,
       (ABS(t.amount)-COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0))::text remaining_amount
       FROM bank_transactions t WHERE t.company_id=$1 AND t.amount<0 AND t.currency_code='SAR' AND t.reconciliation_status<>'reconciled'
+      AND t.manual_journal_binding_protected
       AND (t.source_kind<>'manual' OR t.manual_category IN ('supplier_payment','government_payment','other'))
       AND EXISTS(SELECT 1 FROM bank_account_ledger_links b JOIN accounts a ON a.id=b.account_id AND a.company_id=b.company_id
         WHERE b.company_id=t.company_id AND b.bank_account_id=t.bank_account_id AND b.valid_from<=t.transaction_date AND (b.valid_to IS NULL OR b.valid_to>=t.transaction_date) AND a.is_active)
@@ -63,19 +64,26 @@ export class PayrollSettlementService {
         if(!same||existing.bank_transaction_id!==input.bankTransactionId||existing.liability_line_id!==input.liabilityLineId) throw conflict('PAYROLL_SETTLEMENT_IDEMPOTENCY_CONFLICT');
         await c.query('COMMIT');return {allocation:existing,existing:true};
       }
-      const bank=(await c.query<{id:string;bank_account_id:string;amount:string;transaction_date:string;currency_code:string;reconciliation_status:string;source_kind:string;manual_category:string|null}>(
-        'SELECT id,bank_account_id,amount::text,transaction_date::text,currency_code,reconciliation_status,source_kind,manual_category FROM bank_transactions WHERE company_id=$1 AND id=$2 FOR UPDATE',[company,input.bankTransactionId])).rows[0];
+      // Read the bank date first so fiscal-year/month locks follow the canonical
+      // journal order (year, accounting period, then bank row). Re-read and lock
+      // the transaction after the period guard before making eligibility decisions.
+      const bankDate=(await c.query<{transaction_date:string}>(
+        'SELECT transaction_date::text FROM bank_transactions WHERE company_id=$1 AND id=$2',[company,input.bankTransactionId])).rows[0]?.transaction_date;
+      if(!bankDate) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
+      const year=(await c.query<{id:string}>("SELECT id FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date AND status='open' FOR SHARE",[company,bankDate])).rows;
+      if(year.length!==1) throw conflict('PAYROLL_SETTLEMENT_PERIOD_INELIGIBLE');
+      await assertAccountingDateWritable(company,bankDate,c);
+      const bank=(await c.query<{id:string;bank_account_id:string;amount:string;transaction_date:string;currency_code:string;reconciliation_status:string;source_kind:string;manual_category:string|null;manual_journal_binding_protected:boolean}>(
+        'SELECT id,bank_account_id,amount::text,transaction_date::text,currency_code,reconciliation_status,source_kind,manual_category,manual_journal_binding_protected FROM bank_transactions WHERE company_id=$1 AND id=$2 FOR UPDATE',[company,input.bankTransactionId])).rows[0];
       if(!bank) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
-      if(!bank.amount.startsWith('-')||bank.reconciliation_status==='reconciled'||bank.currency_code.trim()!=='SAR'||(bank.source_kind==='manual'&&!['supplier_payment','government_payment','other'].includes(bank.manual_category??''))) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
+      if(bank.transaction_date!==bankDate) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
+      if(!bank.manual_journal_binding_protected||!bank.amount.startsWith('-')||bank.reconciliation_status==='reconciled'||bank.currency_code.trim()!=='SAR'||(bank.source_kind==='manual'&&!['supplier_payment','government_payment','other'].includes(bank.manual_category??''))) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
       const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,d.period_month::text,d.currency_code FROM journal_lines l
         JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id JOIN payroll_drafts d ON d.id=j.source_id AND d.company_id=j.company_id
         WHERE l.company_id=$1 AND l.id=$2 AND j.source_type='payroll' AND j.status='posted' AND d.status='approved' AND l.debit=0 AND l.credit>0
           AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability') FOR UPDATE OF l`,[company,input.liabilityLineId])).rows[0];
       if(!liability) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
       if(bank.transaction_date<liability.period_month||bank.currency_code.trim()!==liability.currency_code.trim()) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
-      const year=(await c.query<{id:string}>("SELECT id FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date AND status='open' FOR SHARE",[company,bank.transaction_date])).rows;
-      if(year.length!==1) throw conflict('PAYROLL_SETTLEMENT_PERIOD_INELIGIBLE');
-      await assertAccountingDateWritable(company,bank.transaction_date,c);
       const account=await resolveBankLedgerAccount(c,company,bank.bank_account_id,bank.transaction_date,true);
       if(!account||account===liability.account_id) throw conflict('PAYROLL_SETTLEMENT_BANK_UNLINKED');
       // All recognized bank-linked sources must be absent, except our own
@@ -87,6 +95,8 @@ export class PayrollSettlementService {
         UNION ALL SELECT 1 FROM employee_cost_payment_allocations WHERE company_id=$1 AND bank_transaction_id=$2
         UNION ALL SELECT 1 FROM personal_payment_reimbursements WHERE company_id=$1 AND bank_transaction_id=$2
         UNION ALL SELECT 1 FROM partner_transactions WHERE company_id=$1 AND bank_transaction_id=$2
+        UNION ALL SELECT 1 FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+          WHERE l.company_id=$1 AND l.bank_transaction_id=$2 AND j.status='posted'
       ) yes`,[company,bank.id])).rows[0]!.yes;
       if(claimed) throw conflict('PAYROLL_SETTLEMENT_BANK_CLAIMED');
       const id=randomUUID(), journal=randomUUID();
