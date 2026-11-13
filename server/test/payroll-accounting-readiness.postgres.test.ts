@@ -19,13 +19,13 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     await h.member(co, viewOnly.id, ['payroll.view','payroll.accounting.preview']);
     for (const u of [owner, editor, approver, viewOnly, outsider]) await u.client.login();
     const fullRole = (await h.q<{ id: string }>('SELECT role_id AS id FROM memberships WHERE company_id=$1 AND user_id=$2',[co,owner.id]))[0]!.id;
-    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(403);
+    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(200);
     for (const cap of ['payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']) {
       const denied = await owner.client.req('PUT',`/access/roles/${fullRole}/capabilities/${cap}`);
       expect(denied.status).toBe(403);
       expect(denied.json.code).toBe('ACCESS_FULL_ACCESS_IMMUTABLE');
     }
-    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(403);
+    expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(200);
 
     const delegatedAdmin = await h.user('pr2-delegated-admin');
     await h.member(co,delegatedAdmin.id,['payroll.view','access.role.create','access.role.capability.grant','access.full_access.grant']);
@@ -65,6 +65,7 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     await h.q('UPDATE accounts SET is_active=FALSE WHERE id=$1',[inactive]);
     const foreignAccount = await h.account(other,'PR2-FOREIGN','expense','operating_expense');
     expect((await viewOnly.client.req('GET','/payroll/account-mappings')).status).toBe(403);
+    expect((await owner.client.req('PUT','/payroll/account-mappings/earnings_expense',{account_id:accountIds[0]})).status).toBe(403);
     expect((await viewOnly.client.req('GET','/payroll/drafts/00000000-0000-4000-8000-000000000001/accounting-preview')).status).toBe(403);
     expect((await editor.client.req('PUT','/payroll/account-mappings/earnings_expense',{account_id:wrongType})).json.code).toBe('PAYROLL_MAPPING_ACCOUNT_TYPE');
     expect((await editor.client.req('PUT','/payroll/account-mappings/earnings_expense',{account_id:inactive})).json.code).toBe('PAYROLL_MAPPING_ACCOUNT_INACTIVE');
