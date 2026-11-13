@@ -32,18 +32,18 @@ export type AccountResponse={
  has_children?:boolean;
 };
 export type JournalResponse={id:string;version?:number;fiscal_year_id:string;accounting_date:string;description:string;reference:string|null;entry_type:'standard'|'opening_balance';status:'draft'|'posted'|'voided';source_type?:string|null;reversal_of_journal_id?:string|null;reversed_by_journal_id?:string|null};
-export type JournalLineResponse={id:string;company_id:string;journal_entry_id:string;account_id:string;debit:string;credit:string;memo:string|null;sequence:number};
+export type JournalLineResponse={id:string;company_id:string;journal_entry_id:string;account_id:string;bank_transaction_id?:string|null;debit:string;credit:string;memo:string|null;sequence:number};
 
-export type JournalLineEditor={account_id:string;debit:string;credit:string;memo:string};
-export type JournalLineWriteDTO={account_id:string;debit:string;credit:string;memo:string|null};
+export type JournalLineEditor={account_id:string;bank_transaction_id?:string|null;debit:string;credit:string;memo:string};
+export type JournalLineWriteDTO={account_id:string;bank_transaction_id?:string;debit:string;credit:string;memo:string|null};
 export type JournalLinesWriteDTO={lines:JournalLineWriteDTO[]};
 
 export function journalLineToEditor(line:JournalLineResponse):JournalLineEditor{
- return{account_id:line.account_id,debit:line.debit,credit:line.credit,memo:line.memo??''};
+ return{account_id:line.account_id,...(line.bank_transaction_id?{bank_transaction_id:line.bank_transaction_id}:{}),debit:line.debit,credit:line.credit,memo:line.memo??''};
 }
 
 export function serializeJournalLines(lines:JournalLineEditor[]):JournalLinesWriteDTO{
- return{lines:lines.map(line=>({account_id:line.account_id,debit:line.debit,credit:line.credit,memo:line.memo||null}))};
+ return{lines:lines.map(line=>({account_id:line.account_id,...(line.bank_transaction_id?{bank_transaction_id:line.bank_transaction_id}:{}),debit:line.debit,credit:line.credit,memo:line.memo||null}))};
 }
 
 export type AccountNames={name:string;name_ar?:string|null;name_en?:string|null};

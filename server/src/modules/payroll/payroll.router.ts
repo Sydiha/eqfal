@@ -4,6 +4,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { requireAuth, requireActiveCompany, requireCapability, getAuthenticatedContext } from '../auth/auth.middleware';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
+import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
 
 export const payrollRouter=Router();
 const month=/^\d{4}-(0[1-9]|1[0-2])-01$/;
@@ -132,4 +133,26 @@ payrollRouter.get('/payroll/drafts/:id/accounting-post-status',...read,requireCa
  if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
  const service=accountingService(s);if(!service)return;
  try{s.json(await service.postingStatus(company(q),q.params.id,getAuthenticatedContext(q)!.user.id));}catch(e){if(!accountingFailure(e,s))throw e;}
+}));
+
+payrollRouter.get('/payroll/settlements/liabilities',...read,requireCapability('payroll.settlement.view'),route(async(q,s)=>{
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ s.json({liabilities:await new PayrollSettlementService(pool).liabilities(company(q))});
+}));
+payrollRouter.get('/payroll/settlements/bank-transactions',...read,requireCapability('payroll.settlement.view'),requireCapability('bank.view'),route(async(q,s)=>{
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ s.json({bank_transactions:await new PayrollSettlementService(pool).banks(company(q))});
+}));
+payrollRouter.get('/payroll/settlements',...read,requireCapability('payroll.settlement.view'),requireCapability('bank.view'),route(async(q,s)=>{
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ s.json({settlements:await new PayrollSettlementService(pool).history(company(q))});
+}));
+payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),requireCapability('bank.view'),route(async(q,s)=>{
+ const b=q.body;
+ if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='amount,bank_transaction_id,idempotency_key,liability_line_id'
+   ||![b.bank_transaction_id,b.idempotency_key,b.liability_line_id].every(v=>typeof v==='string'&&uuid.test(v))
+   ||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n||cents(b.amount)>maxMoney) return void error(s,'PAYROLL_SETTLEMENT_INVALID');
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key});s.status(result.existing?200:201).json(result);}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
 }));

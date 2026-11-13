@@ -77,6 +77,17 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
     expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/payments`,{cost_allocation_id:x.costAllocationId,bank_transaction_id:supersededBank,amount:'1.00',beneficiary_type:'employee',counterparty_id:null})).status).toBe(409);
     await expect(h.q("INSERT INTO employee_cost_payment_allocations(company_id,bank_transaction_id,cost_record_id,cost_allocation_id,allocation_type,beneficiary_type,amount,created_by) VALUES($1,$2,$3,$4,'payment','employee',1,$5)",[x.company,supersededBank,x.costId,x.costAllocationId,x.owner.id])).rejects.toThrow(/active approved cost/i);
   });
+  it('shows combined document and employee allocations only to an authorized bank viewer',async()=>{
+    const x=await setup('ecc-bank-totals'),bank=await x.tx('-100.00');
+    const doc=(await h.q<{id:string}>("INSERT INTO documents(company_id,uploaded_by_user_id,original_filename,mime_type,size_bytes,storage_key,sha256,status,document_type,document_date,total_amount) VALUES($1,$2,'i.pdf','application/pdf',4,$3,$4,'approved','purchase','2026-01-02','60.00') RETURNING id",[x.company,x.owner.id,randomUUID(),'a'.repeat(64)]))[0]!.id;
+    await h.q("INSERT INTO bank_transaction_matches(company_id,document_id,bank_transaction_id,matched_by_user_id,match_type) VALUES($1,$2,$3,$4,'document')",[x.company,doc,bank,x.owner.id]);
+    await h.q("INSERT INTO document_settlements(company_id,document_id,bank_transaction_id,amount,created_by_user_id) VALUES($1,$2,$3,60,$4)",[x.company,doc,bank,x.owner.id]);
+    expect((await x.owner.client.req('POST',`/employee-costs/${x.costId}/payments`,{cost_allocation_id:x.costAllocationId,bank_transaction_id:bank,amount:'40.00',beneficiary_type:'employee',counterparty_id:null})).status).toBe(201);
+    const authorized=await h.user('bank-salary-viewer');await h.member(x.company,authorized.id,['bank.view','employee_cost.salary.view']);await authorized.client.login();
+    const response=await authorized.client.req('GET',`/bank-transactions/${bank}/match-candidates`);
+    expect(response.status).toBe(200);expect(response.json).toMatchObject({allocated_amount:'100.00',unallocated_amount:'0.00'});
+    expect((await x.viewer.client.req('GET',`/bank-transactions/${bank}/match-candidates`)).status).toBe(403);
+  });
   it('enforces tenant and closed-period boundaries and hides salary payments from banking and audit views',async()=>{
     const x=await setup('ecc-pay-private'),y=await setup('ecc-pay-other');
     const bank=await x.tx('-100.00');
