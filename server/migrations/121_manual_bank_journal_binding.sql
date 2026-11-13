@@ -209,6 +209,11 @@ BEGIN
       AND l.bank_transaction_id IS NULL AND j.status='posted' AND j.entry_type='standard'
       AND j.source_type IS NULL AND j.reversal_of_journal_id IS NULL
       AND j.accounting_date>=OLD.valid_from AND (OLD.valid_to IS NULL OR j.accounting_date<=OLD.valid_to)
+      AND (TG_OP='DELETE'
+        OR NEW.bank_account_id IS DISTINCT FROM OLD.bank_account_id
+        OR NEW.account_id IS DISTINCT FROM OLD.account_id
+        OR j.accounting_date<NEW.valid_from
+        OR NEW.valid_to IS NOT NULL AND j.accounting_date>NEW.valid_to)
       AND r.id IS NULL
   ) THEN
     RAISE EXCEPTION 'bank ledger link has unresolved manual journal uncertainty' USING ERRCODE='55000';
