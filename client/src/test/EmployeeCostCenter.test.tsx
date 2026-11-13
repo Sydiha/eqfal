@@ -31,6 +31,20 @@ function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Re
 }
 
 describe('Employee Cost Center',()=>{
+  it('does not show bank payment reconciliation to users holding only allocation authority',async()=>{
+    mockApi([cost('approved-1','approved')]);
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.payment.allocate','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.queryByRole('heading',{name:'Bank payment reconciliation'})).toBeNull();
+  });
+
+  it('shows bank payment reconciliation to read-only users without settlement controls',async()=>{
+    mockApi([cost('approved-1','approved')]);
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.payment.view','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
+    expect(await screen.findByRole('heading',{name:'Bank payment reconciliation'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Save payment allocation'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Save reversal'})).toBeNull();
+  });
   it('labels report values as recorded costs and excludes salary data without its dedicated capability',async()=>{
     const responses:Record<string,unknown>={
       '/api/employees':{employees:[{id:'e1',employee_number:'E1',display_name:'Employee One',employment_start:null,employment_end:null,is_active:true,version:1}]},

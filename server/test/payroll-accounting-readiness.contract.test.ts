@@ -31,6 +31,17 @@ describe('PAYROLL-02 accounting readiness contract', () => {
     expect(readiness).not.toContain('postJournalInTransaction');
   });
 
+  it('lets preview readers inspect posting blockers while leaving posting behind its explicit capability', () => {
+    expect(router).toContain("capabilities.includes('payroll.accounting.preview')||capabilities.includes('payroll.accounting.post')");
+    expect(router).toContain("'/payroll/drafts/:id/accounting-post-status',...read,requirePostingStatusRead");
+    expect(router).toContain("'/payroll/drafts/:id/accounting-post',requireSameOrigin,...read,requireCapability('payroll.accounting.post')");
+    expect(router).toContain("'/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),requireCapability('bank.view')");
+    const status = service.slice(service.indexOf('  async postingStatus('), service.indexOf('  async post('));
+    expect(status).toContain('this.preview(companyId, draftId)');
+    expect(status).toContain('WHERE d.company_id=$1 AND d.id=$2');
+    expect(status).not.toMatch(/\b(INSERT|UPDATE|DELETE|postJournalInTransaction)\b/);
+  });
+
   it('does not delegate accounting readiness capabilities through access.full_access.grant alone', () => {
     const memberships = readFileSync(new URL('../src/modules/memberships/membership.service.ts', import.meta.url), 'utf8');
     expect(memberships).toContain("new Set(['payroll.approve'])");

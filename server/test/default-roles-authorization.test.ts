@@ -256,7 +256,7 @@ interface FakeDb {
  */
 function makeFakePool(db: FakeDb): Pool {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
+    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND \(cap\.implicit_full_access = TRUE OR cap\.id IN \('payroll\.accounting\.mapping\.view', 'payroll\.accounting\.preview', 'payroll\.settlement\.view'\)\)\)\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
       throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
     }
     const [userId, companyId] = params as [string, string];
@@ -320,9 +320,11 @@ describe('Real repository authorization', () => {
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('m.is_active  = TRUE');
-    // Full Access includes implicit capabilities; payroll approval/accounting permissions require explicit grants.
-    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND cap\.implicit_full_access = TRUE\)\s+OR EXISTS/);
+    // Full Access includes implicit capabilities plus payroll accounting read access; mutations require explicit grants.
+    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND \(cap\.implicit_full_access = TRUE OR cap\.id IN \('payroll\.accounting\.mapping\.view', 'payroll\.accounting\.preview', 'payroll\.settlement\.view'\)\)\)\s+OR EXISTS/);
     expect(sql).toContain('cap.implicit_full_access = TRUE');
+    expect(sql).toContain("cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view')");
+    expect(sql).not.toContain("cap.id IN ('payroll.accounting.post'");
     expect(sql).toMatch(/u\.is_system_admin = TRUE/);
   });
 
