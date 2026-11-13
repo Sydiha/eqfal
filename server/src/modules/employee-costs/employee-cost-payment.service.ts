@@ -41,6 +41,7 @@ export class EmployeeCostPaymentService {
         AND ($2::boolean OR NOT EXISTS(SELECT 1 FROM employee_cost_payment_allocations hidden JOIN employee_cost_records hidden_cost ON hidden_cost.id=hidden.cost_record_id AND hidden_cost.company_id=hidden.company_id WHERE hidden.company_id=t.company_id AND hidden.bank_transaction_id=t.id AND hidden_cost.nature<>'employer_cost'))
         AND (t.source_kind<>'manual' OR t.manual_category IN ('supplier_payment','government_payment','customer_receipt','other'))
         AND NOT EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
+        AND NOT EXISTS(SELECT 1 FROM payroll_settlement_allocations s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         AND NOT EXISTS(SELECT 1 FROM personal_payment_reimbursements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         AND NOT EXISTS(SELECT 1 FROM partner_transactions s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id AND s.status IN ('draft','posted'))
         AND NOT EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type<>'document')

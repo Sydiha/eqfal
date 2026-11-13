@@ -51,7 +51,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string; payrollSettlementId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -184,6 +184,23 @@ export async function postJournalInTransaction(
     if (!internal.payrollDraftId || journal.source_id !== internal.payrollDraftId || journal.entry_type !== 'standard' || !(await payrollJournalIsExact(client,companyId,id,internal.payrollDraftId))) {
       throw new JournalPostingValidationError('Payroll journals can only be posted by the payroll workflow');
     }
+  } else if (journal.source_type === 'payroll_settlement') {
+    if (!internal.payrollSettlementId || internal.payrollSettlementId !== journal.source_id || journal.entry_type !== 'standard') {
+      throw new JournalPostingValidationError('Payroll settlement journals can only be posted by the settlement workflow');
+    }
+    const valid = (await client.query<{valid:boolean}>(`SELECT EXISTS (
+      SELECT 1 FROM payroll_settlement_allocations p
+      JOIN journal_lines original ON original.id=p.liability_line_id AND original.company_id=p.company_id
+      JOIN bank_transactions t ON t.id=p.bank_transaction_id AND t.company_id=p.company_id
+      JOIN bank_account_ledger_links b ON b.company_id=t.company_id AND b.bank_account_id=t.bank_account_id
+        AND b.valid_from<=t.transaction_date AND (b.valid_to IS NULL OR b.valid_to>=t.transaction_date)
+      WHERE p.id=$3 AND p.company_id=$1 AND p.journal_entry_id=$2 AND t.transaction_date=$4::date
+        AND b.account_id<>original.account_id
+        AND (SELECT COUNT(*) FROM journal_lines l WHERE l.company_id=$1 AND l.journal_entry_id=$2)=2
+        AND EXISTS(SELECT 1 FROM journal_lines l WHERE l.company_id=$1 AND l.journal_entry_id=$2 AND l.account_id=original.account_id AND l.debit=p.amount AND l.credit=0)
+        AND EXISTS(SELECT 1 FROM journal_lines l WHERE l.company_id=$1 AND l.journal_entry_id=$2 AND l.account_id=b.account_id AND l.credit=p.amount AND l.debit=0)
+    ) valid`,[companyId,id,internal.payrollSettlementId,journal.accounting_date])).rows[0]?.valid;
+    if (!valid) throw new JournalPostingValidationError('Payroll settlement journal does not match its allocation');
   } else if (journal.source_type && journal.source_id) {
     const operationalSource = await source(companyId, journal.source_type, journal.source_id, client);
     if (journal.accounting_date !== operationalSource.accounting_date) {

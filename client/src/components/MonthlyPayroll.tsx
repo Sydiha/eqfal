@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '../money-format';
 import { Dialog } from './Dialog';
+import { PayrollSettlement } from './PayrollSettlement';
 import { Metric, MetricStrip, PageHeader, SectionCard, WorkspacePage, WorkspaceState } from './SharedUI';
 import './MonthlyPayroll.css';
 
@@ -47,7 +48,7 @@ export function MonthlyPayroll({capabilities,onUnauthorized}:{capabilities:strin
  const editable=canEdit&&draft?.status==='draft';
  const names=employees.filter(e=>e.is_active||lines.some(x=>x.employee_id===e.id));
  return <WorkspacePage className="payroll-page" labelledBy="payroll-title"><PageHeader titleId="payroll-title" title={l('title')} description={l('intro')}/>
- <div className="payroll-content"><div className="payroll-toolbar"><label>{l('period')}<input type="month" value={month} onChange={e=>{monthRef.current=e.target.value;requestSeq.current++;previewSeq.current++;postSeq.current++;setPreview(null);setPreviewBusy(false);setLoading(true);setDraft(null);setLines([]);setEmployees([]);setMonth(e.target.value);}} /></label></div>
+ <div className="payroll-content"><PayrollSettlement capabilities={capabilities} onUnauthorized={onUnauthorized}/><div className="payroll-toolbar"><label>{l('period')}<input type="month" value={month} onChange={e=>{monthRef.current=e.target.value;requestSeq.current++;previewSeq.current++;postSeq.current++;setPreview(null);setPreviewBusy(false);setLoading(true);setDraft(null);setLines([]);setEmployees([]);setMonth(e.target.value);}} /></label></div>
  {error&&<p role="alert" className="form-validation-error">{error} <button onClick={()=>void load()}>{l('retry')}</button></p>}
  {loading?<WorkspaceState>{l('loading')}</WorkspaceState>:!draft?<WorkspaceState kind="empty" action={canEdit?<button className="primary" disabled={busy} onClick={()=>void create()}>{l('create')}</button>:undefined}>{l('empty')}</WorkspaceState>:<>
  <div className="payroll-status" role="status"><span>{draft.status==='approved'?l('approvedStatus'):l('draftStatus')}{!editable&&` · ${l('readOnly')}`}</span>{draft.status==='approved'&&<span>{l('approvedBy')} <bdi>{draft.approved_by_email}</bdi> · {l('approvedOn')} <bdi>{draft.approved_at&&new Intl.DateTimeFormat(i18n.language.startsWith('ar')?'ar-SA':'en-US',{dateStyle:'medium',timeStyle:'short'}).format(new Date(draft.approved_at))}</bdi></span>}{draft.status==='draft'&&canApprove&&<button className="primary" disabled={busy||lines.length===0} onClick={()=>setConfirmApprove(true)}>{l('approve')}</button>}</div>
