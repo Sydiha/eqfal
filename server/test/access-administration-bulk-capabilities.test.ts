@@ -108,6 +108,7 @@ describe('MembershipService.changeRoleCapabilities — atomic validation', () =>
     vi.spyOn(repo, 'isActiveSystemAdmin').mockResolvedValue(opts.admin ?? false);
     vi.spyOn(repo, 'isUserAssignedRole').mockResolvedValue(opts.assigned ?? false);
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['document.view']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockImplementation(async (roleId) => repo.getRoleCapabilities(roleId));
     const add = vi.spyOn(repo, 'addCapabilityToRole').mockResolvedValue();
     const remove = vi.spyOn(repo, 'removeCapabilityFromRole').mockResolvedValue();
     return { service, client, repo, add, remove, audit };

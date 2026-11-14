@@ -45,6 +45,7 @@ function setup() {
   vi.spyOn(repo, 'findRoleById').mockImplementation(async (id) => roles[id] ?? null);
   vi.spyOn(repo, 'getActiveCapabilities').mockImplementation(async (userId, company) => capsOf(userId, company));
   vi.spyOn(repo, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
+  vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
   vi.spyOn(repo, 'listCapabilities').mockResolvedValue(['invoice.view', 'invoice.approve', ...MANAGER]);
   vi.spyOn(repo, 'hasActiveFullAccessRole').mockImplementation(async (userId) => !!members[userId]?.role_id && roles[members[userId]!.role_id!]!.is_full_access);
   vi.spyOn(repo, 'isActiveSystemAdmin').mockImplementation(async (userId) => systemAdmins.has(userId));

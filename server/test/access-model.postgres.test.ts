@@ -136,6 +136,37 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     clients.sa = new Client(email('sa'));
   });
 
+  it('migration 122 keeps every role on v0 and resolves exactly the legacy grants', async () => {
+    const { MembershipRepository } = await import('../src/modules/memberships/membership.repository');
+    const repo = new MembershipRepository(pool);
+    expect(await n('SELECT count(*) n FROM roles WHERE authorization_policy_version <> 0')).toBe(0);
+    expect(await n('SELECT count(*) n FROM users WHERE system_admin_policy_version <> 0')).toBe(0);
+
+    const legacyCapabilities = async (userId: string, companyId: string) => (await q<{ id: string }>(
+      `SELECT cap.id
+       FROM capabilities cap
+       WHERE EXISTS (
+         SELECT 1
+         FROM users u
+         LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = $2 AND m.is_active = TRUE
+         LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+         WHERE u.id = $1 AND u.is_active = TRUE
+           AND ((u.is_system_admin AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
+             OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
+               OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id))))
+       )
+       ORDER BY cap.id`,
+      [userId, companyId, ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']],
+    )).map((row) => row.id).sort();
+
+    for (const user of ['sa', 'ownerA', 'mgrA', 'multi', 'staffA']) {
+      for (const company of ['coA', 'coB']) {
+        expect((await repo.getActiveCapabilities(ids[user]!, ids[company]!)).sort())
+          .toEqual(await legacyCapabilities(ids[user]!, ids[company]!));
+      }
+    }
+  });
+
   // ── 2. System Admin global access without memberships ───────────────────
   it('System Admin can select any active company without a membership and holds every capability there', async () => {
     expect(await n('SELECT count(*) n FROM memberships WHERE user_id=$1', [ids.sa])).toBe(0);

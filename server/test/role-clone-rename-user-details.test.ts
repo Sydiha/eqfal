@@ -82,6 +82,7 @@ beforeEach(() => {
   });
   vi.spyOn(MembershipRepository.prototype, 'findRoleById').mockImplementation(async (id) => roles[id] ?? created.find((r) => r.id === id) ?? null);
   vi.spyOn(MembershipRepository.prototype, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
+  vi.spyOn(MembershipRepository.prototype, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? (created.some((r) => r.id === id) ? ['accounting.journal.create'] : []));
   vi.spyOn(MembershipRepository.prototype, 'isActiveSystemAdmin').mockImplementation(async (u) => systemAdmins.has(u));
   vi.spyOn(MembershipRepository.prototype, 'findUserSummary').mockImplementation(async (id) => ({ id, email: `${id}@example.com`, is_active: true, is_system_admin: systemAdmins.has(id) }));
   vi.spyOn(MembershipRepository.prototype, 'listMembershipsOfUser').mockImplementation(async (userId) => memberships.filter((m) => m.user === userId).map((m): UserMembershipRow => ({
@@ -203,6 +204,7 @@ describe('role cloning', () => {
     actor = 'mgr';
     const assign = vi.spyOn(MembershipRepository.prototype, 'assignRoleToMembership');
     vi.spyOn(MembershipRepository.prototype, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? (created.some((r) => r.id === id) ? ['accounting.journal.create'] : []));
+    vi.spyOn(MembershipRepository.prototype, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? (created.some((r) => r.id === id) ? ['accounting.journal.create'] : []));
     const copy = (await clone(ACCT, { name: 'Accountant 3' })).body.role;
     const response = await request(app).put(`/api/access/memberships/${uuid(102)}/role`).set('Cookie', cookie).set(origin).send({ role_id: copy.id });
     expect(response.status).toBe(403);

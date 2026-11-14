@@ -67,6 +67,7 @@ beforeEach(() => {
   vi.spyOn(MembershipRepository.prototype, 'findMembershipById').mockImplementation(async (id) => Object.values(members).find((m) => m.id === id) ?? null);
   vi.spyOn(MembershipRepository.prototype, 'findRoleById').mockImplementation(async (id) => roles[id] ?? null);
   vi.spyOn(MembershipRepository.prototype, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
+  vi.spyOn(MembershipRepository.prototype, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
   vi.spyOn(MembershipRepository.prototype, 'isActiveSystemAdmin').mockImplementation(async (userId) => (userId === actor && actorIsSystemAdmin) || userId === 'sa');
   vi.spyOn(MembershipRepository.prototype, 'hasMembershipOutsideCompany').mockImplementation(async (userId) => outsideCompany.has(userId));
   setPassword = vi.spyOn(UserRepository.prototype, 'setPassword').mockResolvedValue();
