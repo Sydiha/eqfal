@@ -111,6 +111,7 @@ const OVERRIDES: Record<string, Pair> = {
   'payroll.accounting.preview': ['Preview payroll accounting (sensitive)', 'معاينة محاسبة الرواتب (حساس)'],
   'payroll.settlement.view': ['View payroll settlements (sensitive)', 'عرض تسويات الرواتب (حساس)'],
   'payroll.settlement.create': ['Post payroll settlements (sensitive)', 'ترحيل تسويات الرواتب (حساس)'],
+  'payroll.settlement.exception.approve': ['Approve a one-time payroll settlement SoD exception (critical)', 'اعتماد استثناء لمرة واحدة للفصل بين مهام تسوية الرواتب (حرج)'],
   'employee_cost.view': ['View employee cost reports', 'عرض تقارير تكاليف الموظفين'],
   'employee_cost.salary.view': ['View employee earnings and deductions (sensitive)', 'عرض استحقاقات الموظفين واستقطاعاتهم (حساس)'],
   'employee_cost.create': ['Record employee costs', 'تسجيل تكاليف الموظفين'],

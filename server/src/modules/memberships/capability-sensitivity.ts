@@ -35,6 +35,7 @@ const CRITICAL = new Set([
   'payroll.accounting.preview',
   'payroll.accounting.post',
   'payroll.settlement.create',
+  'payroll.settlement.exception.approve',
   'periodic_adjustment.post',
   'source_authority.activate',
   'source_authority.manage',

@@ -2,9 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { requireAuth, requireActiveCompany, requireCapability, getAuthenticatedContext } from '../auth/auth.middleware';
+import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships/authorization-policy';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
+import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
 
 export const payrollRouter=Router();
 const month=/^\d{4}-(0[1-9]|1[0-2])-01$/;
@@ -88,14 +90,10 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   if(!draft){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}
   if(draft.status==='approved'){await c.query('ROLLBACK');return void error(s,'PAYROLL_ALREADY_APPROVED',409);}
   if(draft.version!==b.version){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
-  // Verify the role in the database; a client-supplied role or display-only session role is not authority.
-  const admin=(await c.query<{ok:boolean}>(`SELECT EXISTS (
-    SELECT 1 FROM memberships m JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
-    WHERE m.user_id=$1 AND m.company_id=$2 AND m.is_active=TRUE
-      AND r.is_full_access=TRUE
-  ) AS ok`,[actor,company(q)])).rows[0]!.ok;
+  // Privileged payroll authority is role-specific; company Full Access is not a bypass.
+  const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
   const contributed=(await c.query<{ok:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) AS ok',[company(q),q.params.id,actor])).rows[0]!.ok;
-  if(contributed&&!admin){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
+  if(contributed&&!privileged){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
   const totals=(await c.query<{count:string;invalid:string}>(`SELECT COUNT(*)::text AS count,
     COUNT(*) FILTER (WHERE salary+allowances+bonus+overtime<deductions
       OR (legacy_allowances IS NOT NULL AND allowances<>legacy_allowances+housing_allowance+transportation_allowance+other_allowance)
@@ -105,7 +103,7 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   if(totals.invalid!=='0'){await c.query('ROLLBACK');return void error(s,'PAYROLL_INVALID',400);}
   await c.query("UPDATE payroll_drafts SET status='approved',approved_by=$3,approved_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1 AND company_id=$2",[q.params.id,company(q),actor]);
   await audit.logEvent({company_id:company(q),actor_user_id:actor,action:'payroll.draft.approve',entity_type:'payroll_draft',entity_id:q.params.id,
-    after_data:{period_month:draft.period_month,version:draft.version+1,self_approval:contributed&&admin,administrator_override:contributed&&admin}},c);
+    after_data:{period_month:draft.period_month,version:draft.version+1,self_approval:contributed&&privileged,privileged_role_override:contributed&&privileged}},c);
   await c.query('COMMIT');await detail(q,s,draft.period_month);
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }));
@@ -152,12 +150,35 @@ payrollRouter.get('/payroll/settlements',...read,requireCapability('payroll.sett
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
  s.json({settlements:await new PayrollSettlementService(pool).history(company(q))});
 }));
+payrollRouter.post('/payroll/settlements/sod-exceptions',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),route(async(q,s)=>{
+ const body=q.body;
+ if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='liability_line_id,reason'
+   ||typeof body.liability_line_id!=='string'||!uuid.test(body.liability_line_id)||typeof body.reason!=='string'||body.reason.trim().length<8||body.reason.trim().length>1000)return void error(s,'PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.status(201).json(await new PayrollSettlementService(pool).requestSodException(company(q),getAuthenticatedContext(q)!.user.id,body.liability_line_id,body.reason));}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
+payrollRouter.get('/payroll/settlements/sod-exceptions',...read,requireCapability('payroll.settlement.view'),route(async(q,s)=>{
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.json({exceptions:await new PayrollSettlementService(pool).listSodExceptions(company(q),getAuthenticatedContext(q)!.user.id)});}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
+payrollRouter.post('/payroll/settlements/sod-exceptions/:id/decision',requireSameOrigin,...read,requireCapability(PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY),route(async(q,s)=>{
+ const body=q.body;
+ if(!uuid.test(q.params.id)||!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='decision,reason'
+   ||!['approve','reject'].includes(body.decision)||typeof body.reason!=='string'||body.reason.trim().length<8||body.reason.trim().length>1000)return void error(s,'PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.json(await new PayrollSettlementService(pool).decideSodException(company(q),getAuthenticatedContext(q)!.user.id,q.params.id,body.decision,body.reason));}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
 payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),requireCapability('bank.view'),route(async(q,s)=>{
  const b=q.body;
- if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='amount,bank_transaction_id,idempotency_key,liability_line_id'
+ if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['amount','bank_transaction_id','idempotency_key','liability_line_id','sod_exception_id'].includes(k))
+   ||Object.keys(b).sort().join(',')!==['amount','bank_transaction_id','idempotency_key','liability_line_id',...(b.sod_exception_id===undefined?[]:['sod_exception_id'])].sort().join(',')
    ||![b.bank_transaction_id,b.idempotency_key,b.liability_line_id].every(v=>typeof v==='string'&&uuid.test(v))
+   ||(b.sod_exception_id!==undefined&&(typeof b.sod_exception_id!=='string'||!uuid.test(b.sod_exception_id)))
    ||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n||cents(b.amount)>maxMoney) return void error(s,'PAYROLL_SETTLEMENT_INVALID');
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
- try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key});s.status(result.existing?200:201).json(result);}
+ try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key,sodExceptionId:b.sod_exception_id});s.status(result.existing?200:201).json(result);}
  catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
 }));

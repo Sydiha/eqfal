@@ -3,6 +3,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import { postJournalInTransaction, FiscalYearClosedError, LedgerSourceAuthorityBlockedError, JournalPostingConflictError, JournalPostingValidationError } from '../accounting/journal-posting';
 import { lockPayrollEccMonths, PAYROLL_ECC_CATEGORIES } from './payroll-ecc-lock';
+import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
 
 export const PAYROLL_ACCOUNT_MAPPINGS = [
   { key: 'earnings_expense', type: 'expense', label: 'Earnings expense' },
@@ -64,6 +65,7 @@ export class PayrollAccountingService {
 
   async postingStatus(companyId: string, draftId: string, actor: string) {
     const plan = await this.preview(companyId, draftId);
+    const privileged = await hasPrivilegedPayrollSodAuthority(this.db, companyId, actor);
     const result = await this.db.query<{journal_id:string|null;reference:string|null;journal_status:string|null;separated:boolean;eligible:boolean}>(`
       SELECT j.id journal_id,j.reference,j.status journal_status,
         (d.approved_by IS DISTINCT FROM $3::uuid AND NOT EXISTS (SELECT 1 FROM payroll_draft_contributors c WHERE c.company_id=d.company_id AND c.draft_id=d.id AND c.user_id=$3)) separated,
@@ -74,10 +76,10 @@ export class PayrollAccountingService {
       WHERE d.company_id=$1 AND d.id=$2`,[companyId,draftId,actor]);
     const row = result.rows[0]!;
     const blockers = [...plan.blockers, ...plan.warnings];
-    if (!row.separated) blockers.push({code:'separation_of_duties'});
+    if (!row.separated && !privileged) blockers.push({code:'separation_of_duties'});
     if (!row.eligible) blockers.push({code:'period_ineligible'});
     if (row.journal_id && row.journal_status !== 'posted') blockers.push({code:'journal_invalid'});
-    return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, eligible:!row.journal_id && plan.can_preview && row.separated && row.eligible};
+    return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, eligible:!row.journal_id && plan.can_preview && (row.separated || privileged) && row.eligible};
   }
 
   async post(companyId: string, draftId: string, actor: string) {
@@ -87,8 +89,9 @@ export class PayrollAccountingService {
       const draft = (await client.query<{period_month:string; status:string; approved_by:string}>(
         'SELECT period_month::text,status,approved_by FROM payroll_drafts WHERE id=$1 AND company_id=$2 FOR UPDATE', [draftId, companyId])).rows[0];
       if (!draft) throw new PayrollAccountingError('PAYROLL_NOT_FOUND', 404);
+      const privileged = await hasPrivilegedPayrollSodAuthority(client, companyId, actor);
       const contributor = (await client.query<{yes:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) yes', [companyId,draftId,actor])).rows[0]!.yes;
-      if (contributor || draft.approved_by === actor) throw new PayrollAccountingError('PAYROLL_POST_SEPARATION_OF_DUTIES', 403);
+      if ((contributor || draft.approved_by === actor) && !privileged) throw new PayrollAccountingError('PAYROLL_POST_SEPARATION_OF_DUTIES', 403);
       const existing = (await client.query<{id:string; reference:string; status:string}>("SELECT id,reference,status FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2", [companyId,draftId])).rows[0];
       if (existing) {
         if (existing.status !== 'posted') throw new PayrollAccountingError('PAYROLL_JOURNAL_INVALID',409);
