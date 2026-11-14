@@ -30,6 +30,46 @@ const renderIt = (caps: readonly string[]) => render(<AccessAdministration capab
 beforeEach(async () => { await i18n.changeLanguage('en'); window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); });
 
 describe('AccessAdministration', () => {
+  it('shows verified System Admin delegation on another ordinary role with company, role and capability in confirmation', async () => {
+    const finance=['payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create'];
+    const calls: string[]=[];
+    vi.stubGlobal('fetch',vi.fn(async (url:string,init?:RequestInit)=>{
+      if(init?.method==='PUT')calls.push(url);
+      if(url==='/api/access/memberships')return new Response(JSON.stringify({memberships:members}),{status:200});
+      if(url==='/api/access/roles')return new Response(JSON.stringify({roles}),{status:200});
+      if(url==='/api/access/capabilities')return new Response(JSON.stringify({capabilities:finance,sensitivity:Object.fromEntries(finance.map(id=>[id,'critical']))}),{status:200});
+      return new Response('{}',{status:200});
+    }));
+    render(<AccessAdministration capabilities={['access.view','access.role.capability.grant']} currentUserId="u-1" isSystemAdmin companyName="Test Co" onUnauthorized={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('tab',{name:'Roles & permissions'}));
+    fireEvent.click(await screen.findByRole('button',{name:/Clerk/}));
+    fireEvent.click(screen.getByRole('button',{name:'payroll: Expand'}));
+    fireEvent.click(screen.getByLabelText('Manage payroll account mappings'));
+    const dialog=await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Test Co');expect(dialog).toHaveTextContent('Clerk');
+    expect(dialog).toHaveTextContent('payroll.accounting.mapping.manage');
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    fireEvent.click(within(dialog).getByRole('button',{name:'Grant'}));
+    await waitFor(()=>expect(calls).toContain('/api/access/roles/r-clerk/capabilities/payroll.accounting.mapping.manage'));
+  });
+  it('does not offer delegated execution capabilities on the administrator’s own role or to ordinary users', async () => {
+    const id='payroll.accounting.post';
+    vi.stubGlobal('fetch',vi.fn(async (url:string)=>{
+      if(url==='/api/access/memberships')return new Response(JSON.stringify({memberships:[{...members[0],role_id:'r-clerk'},members[1]]}),{status:200});
+      if(url==='/api/access/roles')return new Response(JSON.stringify({roles}),{status:200});
+      if(url==='/api/access/capabilities')return new Response(JSON.stringify({capabilities:[id],sensitivity:{[id]:'critical'}}),{status:200});
+      return new Response('{}',{status:200});
+    }));
+    const ui=render(<AccessAdministration capabilities={['access.view','access.role.capability.grant']} currentUserId="u-1" isSystemAdmin onUnauthorized={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('tab',{name:'Roles & permissions'}));fireEvent.click(await screen.findByRole('button',{name:/Clerk/}));
+    fireEvent.click(screen.getByRole('button',{name:'payroll: Expand'}));
+    expect(screen.getByLabelText('Post payroll accounting')).toBeDisabled();
+    ui.unmount();
+    render(<AccessAdministration capabilities={['access.view','access.role.capability.grant']} currentUserId="u-2" onUnauthorized={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('tab',{name:'Roles & permissions'}));fireEvent.click(await screen.findByRole('button',{name:/Clerk/}));
+    fireEvent.click(screen.getByRole('button',{name:'payroll: Expand'}));
+    expect(screen.getByLabelText('Post payroll accounting')).toBeDisabled();
+  });
   it('shows a no-access state and makes no request without access.view', () => {
     const calls = mockApi();
     renderIt(['access.membership.create']);
