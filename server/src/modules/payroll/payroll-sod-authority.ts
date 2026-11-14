@@ -12,6 +12,7 @@ export async function hasPrivilegedPayrollSodAuthority(client: Pick<PoolClient, 
       WHERE u.id=$2 AND u.is_active=TRUE AND (
         u.is_system_admin=TRUE OR EXISTS (
           SELECT 1 FROM memberships m
+          JOIN companies company ON company.id=m.company_id AND company.is_active=TRUE
           JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
           WHERE m.user_id=u.id AND m.company_id=$1 AND m.is_active=TRUE
             AND r.is_full_access=FALSE

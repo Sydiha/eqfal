@@ -1,5 +1,6 @@
 import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
+import { PayrollSettlementService } from '../src/modules/payroll/payroll-settlement';
 const db=process.env.DATABASE_URL?describe:describe.skip;
 const EXCEPTION_CAP='payroll.settlement.exception.approve';
 db('payroll settlement SoD exceptions (PostgreSQL)',()=>{
@@ -53,6 +54,18 @@ db('payroll settlement SoD exceptions (PostgreSQL)',()=>{
   const response=await x.contributor.client.req('POST','/payroll/settlements',x.body(await x.bank()));
   expect(response.status,JSON.stringify(response.json)).toBe(201);
   expect(response.json.allocation.sod_exception_id).toBeNull();
+ });
+ it('does not treat an inactive Company Manager membership as a payroll SoD bypass',async()=>{
+  const x=await fixture('sod-inactive-manager');
+  let role=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=\'company_manager\' LIMIT 1',[x.company]))[0];
+  if(!role)role=(await h.q<{id:string}>("UPDATE roles r SET authorization_policy_key='company_manager' FROM memberships m WHERE m.role_id=r.id AND m.company_id=r.company_id AND m.company_id=$1 AND m.user_id=$2 RETURNING r.id",[x.company,x.contributor.id]))[0];
+  expect(role).toBeTruthy();
+  await h.q('UPDATE memberships SET role_id=$3,is_active=FALSE WHERE company_id=$1 AND user_id=$2',[x.company,x.contributor.id,role!.id]);
+  const bank=await x.bank();
+  const service=new PayrollSettlementService(h.db);
+  await expect(service.create(x.company,x.contributor.id,{bankTransactionId:bank,liabilityLineId:x.line,amount:'10.00',idempotencyKey:randomUUID()}))
+    .rejects.toMatchObject({code:'PAYROLL_SETTLEMENT_SOD_REQUIRED'});
+  expect(await h.count('SELECT COUNT(*)::text n FROM payroll_settlement_allocations WHERE company_id=$1 AND bank_transaction_id=$2',[x.company,bank])).toBe(0);
  });
  it('requires an independent explicit approver and permits exactly the approved actor, company, liability and one settlement',async()=>{
   const x=await fixture('sod-approved');

@@ -103,6 +103,7 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   const fullEdit=await owner.client.req('PUT',`/payroll/drafts/${fullDraft.id}/employees/${employee.id}`,values(0));expect(fullEdit.status).toBe(200);
   const fullApproval=await owner.client.req('POST',`/payroll/drafts/${fullDraft.id}/approve`,{version:fullEdit.json.draft.version});expect(fullApproval.json.code).toBe('PAYROLL_SELF_APPROVAL');
   const globalAdmin=await h.user('approval-global-admin');await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[globalAdmin.id]);await globalAdmin.client.login();
+  expect((await globalAdmin.client.req('POST','/auth/switch-company',{companyId:co})).status).toBe(200);
   const adminDraft=(await globalAdmin.client.req('POST','/payroll/drafts',{month:'2026-10-01'})).json.draft;
   const adminLine=(await globalAdmin.client.req('PUT',`/payroll/drafts/${adminDraft.id}/employees/${employee.id}`,values(0))).json.draft;
   expect((await globalAdmin.client.req('POST',`/payroll/drafts/${adminDraft.id}/approve`,{version:adminLine.version})).status).toBe(200);

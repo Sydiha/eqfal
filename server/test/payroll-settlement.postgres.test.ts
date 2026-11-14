@@ -194,6 +194,7 @@ db('payroll settlement API (PostgreSQL)',()=>{
   const deduction=await h.account(x.co,'D','liability','current_liability'),contribution=await h.account(x.co,'C','liability','current_liability');
   const expense=await h.account(x.co,'E2','expense','operating_expense');
   const draft=(await h.q<{id:string}>("INSERT INTO payroll_drafts(company_id,period_month,created_by,status,approved_by,approved_at) VALUES($1,'2026-01-01',$2,'approved',$2,NOW()) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  await h.q('INSERT INTO payroll_draft_contributors(company_id,draft_id,user_id) VALUES($1,$2,$3)',[x.co,draft,x.owner.id]);
   const journal=(await h.q<{id:string}>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,source_type,source_id,created_by) VALUES($1,$2,'2026-01-01','Payroll','payroll',$3,$4) RETURNING id",[x.co,x.fy,draft,x.owner.id]))[0]!.id;
   await h.q("INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,30,0,'earnings_expense',1),($1,$2,$4,0,10,'employee_deduction_liability',2),($1,$2,$5,0,20,'employer_contribution_liability',3)",[x.co,journal,expense,deduction,contribution]);
   await h.q("UPDATE journal_entries SET status='posted',posted_by=$2,posted_at=NOW() WHERE id=$1",[journal,x.owner.id]);
