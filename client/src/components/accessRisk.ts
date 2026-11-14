@@ -32,14 +32,14 @@ export function grantImpact(granted: readonly string[], sensitivity: Sensitivity
 /** Explicit confirmation (an "I understand" tick) is required for critical authority and for Full Access. */
 export const needsExplicitConfirmation = (risk: GrantRisk) => risk === 'critical' || risk === 'full_access';
 
-export interface RoleLike { id: string; is_full_access: boolean; capabilities: readonly string[] }
+export interface RoleLike { id: string; is_full_access: boolean; capabilities: readonly string[]; effective_capabilities?: readonly string[] }
 
 /**
  * Impact of moving a member from currentRole to nextRole: only authority the member does not already have counts.
  * Moving onto Full Access is always the strongest warning unless the member already holds Full Access.
  */
 export function roleChangeImpact(currentRole: RoleLike | null, nextRole: RoleLike, allCapabilities: readonly string[], sensitivity: SensitivityMap): GrantImpact & { granted: string[] } {
-  const effective = (role: RoleLike | null) => (!role ? [] : role.is_full_access ? allCapabilities : role.capabilities);
+  const effective = (role: RoleLike | null) => (!role ? [] : role.is_full_access ? allCapabilities : role.effective_capabilities ?? role.capabilities);
   const granted = newlyGranted(effective(currentRole), effective(nextRole));
   const toFullAccess = nextRole.is_full_access && !currentRole?.is_full_access;
   return { ...grantImpact(granted, sensitivity, toFullAccess), granted };

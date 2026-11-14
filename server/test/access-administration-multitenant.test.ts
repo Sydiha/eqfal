@@ -97,15 +97,16 @@ describe('tenant leakage prevention', () => {
 describe('multi-company membership isolation', () => {
   it('evaluates capabilities per company with membership/role/company scope in SQL', async () => {
     const query = vi.fn().mockImplementation(async (_sql: string, params: string[]) => ({
-      rows: params[1] === 'company-a' ? [{ capability_id: 'document.view' }] : [{ capability_id: 'vat.view' }, { capability_id: 'vat.edit' }],
+      rows: params[1] === 'company-a' ? [{ capability_id: 'document.view', currently_authorized: true }] : [{ capability_id: 'vat.view', currently_authorized: true }, { capability_id: 'vat.edit', currently_authorized: true }],
     }));
     const repo = new MembershipRepository({ query } as unknown as Pool);
     expect(await repo.getActiveCapabilities('user', 'company-a')).toEqual(['document.view']);
-    expect(await repo.getActiveCapabilities('user', 'company-b')).toEqual(['vat.view', 'vat.edit']);
+    expect((await repo.getActiveCapabilities('user', 'company-b')).sort()).toEqual(['vat.edit', 'vat.view']);
     const sql = query.mock.calls[0][0] as string;
-    expect(sql).toContain('m.is_active  = TRUE');
+    expect(sql).toMatch(/m\.is_active\s*= TRUE/);
     expect(sql).toContain('r.company_id = m.company_id');
-    expect(sql).toContain('m.company_id = $2');
+    expect(sql).toContain('c.id = $2');
+    expect(sql).toContain('m.company_id = c.id');
   });
 
   it('refuses to switch into a company whose membership is disabled, keeping the other company usable', async () => {

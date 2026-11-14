@@ -17,7 +17,7 @@ describe('MembershipRepository authorization queries', () => {
 
   it('requires role.company_id to match membership.company_id when resolving capabilities', async () => {
     const query = vi.fn().mockResolvedValue({
-      rows: [{ capability_id: 'report.view' }],
+      rows: [{ capability_id: 'report.view', currently_authorized: true, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false }],
       rowCount: 1,
     });
     const repo = new MembershipRepository({ query } as unknown as Pool);
@@ -26,9 +26,9 @@ describe('MembershipRepository authorization queries', () => {
 
     const sql = String(query.mock.calls[0]?.[0]);
     expect(sql).toContain('r.company_id = m.company_id');
-    expect(sql).toContain('m.is_active  = TRUE');
+    expect(sql).toContain('m.is_active = TRUE');
     expect(sql).toContain('c.is_active = TRUE');
-    expect(sql).toContain("JOIN capabilities cap ON (r.is_full_access = TRUE AND (cap.implicit_full_access = TRUE OR cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view')))");
+    expect(sql).toContain('CROSS JOIN capabilities cap');
     expect(sql).toContain('FROM role_capabilities rc');
     expect(sql).toContain('rc.capability_id = cap.id');
     expect(result).toEqual(['report.view']);
@@ -41,8 +41,9 @@ describe('MembershipRepository authorization queries', () => {
     await repo.getActiveCapabilities('user-1', 'company-a');
 
     const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND \(cap\.implicit_full_access = TRUE OR cap\.id IN \('payroll\.accounting\.mapping\.view', 'payroll\.accounting\.preview', 'payroll\.settlement\.view'\)\)\)\s+OR EXISTS/i);
-    expect(sql).toContain('cap.implicit_full_access = TRUE');
+    expect(sql).toMatch(/CROSS JOIN capabilities cap[\s\S]*FROM role_capabilities rc/);
+    expect(sql).toContain('cap.id = ANY($3::text[])');
+    expect(query).toHaveBeenCalledWith(expect.any(String), ['user-1', 'company-a', ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']]);
     expect(sql).toMatch(/FROM role_capabilities rc[\s\S]*rc\.role_id = r\.id[\s\S]*rc\.capability_id = cap\.id/i);
     expect(sql).not.toMatch(/INSERT INTO role_capabilities/i);
   });
@@ -56,9 +57,9 @@ describe('MembershipRepository authorization queries', () => {
     const sql = String(query.mock.calls[0]?.[0]);
     expect(sql).toContain('c.is_active = TRUE');
     expect(sql).toContain('r.company_id = m.company_id');
-    expect(sql).toContain('m.is_active  = TRUE');
-    expect(sql).toContain('m.company_id = $2');
-    expect(query).toHaveBeenCalledWith(expect.any(String), ['user-1', 'company-b']);
+    expect(sql).toContain('m.is_active = TRUE');
+    expect(sql).toContain('m.company_id = c.id');
+    expect(query).toHaveBeenCalledWith(expect.any(String), ['user-1', 'company-b', ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']]);
   });
 
   it('resolves Full Access authority only through active same-company membership state', async () => {

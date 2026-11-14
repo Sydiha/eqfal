@@ -249,35 +249,29 @@ interface FakeDb {
 }
 
 /**
- * In-memory pg Pool. For the real getActiveCapabilities() SQL it evaluates the same semantics
- * the SQL expresses: membership(user, company, active) JOIN active company JOIN role with
- * r.company_id = m.company_id, then implicit capabilities when r.is_full_access, otherwise only
- * explicit role_capabilities rows. The SQL text itself is asserted by the guard test below.
+ * In-memory pg Pool. It evaluates the current explicit grants returned by the centralized
+ * resolver and models the same active-company and same-company role joins as the SQL.
  */
 function makeFakePool(db: FakeDb): Pool {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-    if (!/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND \(cap\.implicit_full_access = TRUE OR cap\.id IN \('payroll\.accounting\.mapping\.view', 'payroll\.accounting\.preview', 'payroll\.settlement\.view'\)\)\)\s+OR EXISTS/.test(sql) || !/u\.is_system_admin = TRUE/.test(sql)) {
+    if (!/CROSS JOIN capabilities cap/.test(sql) || !/r\.company_id = m\.company_id/.test(sql) || !/u\.is_active = TRUE/.test(sql)) {
       throw new Error(`Unexpected SQL in fake pool: ${sql.slice(0, 80)}`);
     }
     const [userId, companyId] = params as [string, string];
-    const rows: Array<{ capability_id: string }> = [];
-    // UNION branch 1: an active System Admin holds every capability in every active company.
-    if ((db.system_admins ?? []).includes(userId) && db.companies.some((c) => c.id === companyId && c.is_active)) {
-      for (const cap of db.capabilities) rows.push({ capability_id: cap });
+    const activeCompany = db.companies.some((c) => c.id === companyId && c.is_active);
+    if (!activeCompany) return { rows: [], rowCount: 0 };
+    const isSystemAdmin = (db.system_admins ?? []).includes(userId);
+    const rows: Array<Record<string, unknown>> = [];
+    const currentAdminExceptions = new Set(['payroll.approve', 'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create']);
+    const m = db.memberships.find((membership) => membership.user_id === userId && membership.company_id === companyId && membership.is_active);
+    const role = m ? db.roles.find((entry) => entry.id === m.role_id && entry.company_id === m.company_id) : undefined;
+    for (const capability_id of db.capabilities) {
+      const currently_authorized = (isSystemAdmin && !currentAdminExceptions.has(capability_id)) || (!!role && (
+        (role.is_full_access && !currentAdminExceptions.has(capability_id)) || db.role_capabilities.some((rc) => rc.role_id === role.id && rc.capability_id === capability_id)
+      ));
+      if (currently_authorized) rows.push({ capability_id, currently_authorized, is_system_admin: isSystemAdmin, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: role?.is_full_access ?? false });
     }
-    for (const m of db.memberships) {
-      if (m.user_id !== userId || m.company_id !== companyId || !m.is_active) continue;
-      if (!db.companies.some((c) => c.id === m.company_id && c.is_active)) continue;
-      const r = db.roles.find((x) => x.id === m.role_id && x.company_id === m.company_id);
-      if (!r) continue;
-      for (const cap of db.capabilities) {
-        if (r.is_full_access || db.role_capabilities.some((rc) => rc.role_id === r.id && rc.capability_id === cap)) {
-          rows.push({ capability_id: cap });
-        }
-      }
-    }
-    const unique = [...new Map(rows.map((r) => [r.capability_id, r])).values()]; // UNION removes duplicates
-    return { rows: unique, rowCount: unique.length };
+    return { rows, rowCount: rows.length };
   });
   return { query, connect: vi.fn() } as unknown as Pool;
 }
@@ -319,13 +313,11 @@ describe('Real repository authorization', () => {
     const sql = String(spy.mock.calls[0]?.[0]);
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('c.is_active = TRUE');
-    expect(sql).toContain('m.is_active  = TRUE');
-    // Full Access includes implicit capabilities plus payroll accounting read access; mutations require explicit grants.
-    expect(sql).toMatch(/JOIN capabilities cap ON \(r\.is_full_access = TRUE AND \(cap\.implicit_full_access = TRUE OR cap\.id IN \('payroll\.accounting\.mapping\.view', 'payroll\.accounting\.preview', 'payroll\.settlement\.view'\)\)\)\s+OR EXISTS/);
-    expect(sql).toContain('cap.implicit_full_access = TRUE');
-    expect(sql).toContain("cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view')");
-    expect(sql).not.toContain("cap.id IN ('payroll.accounting.post'");
-    expect(sql).toMatch(/u\.is_system_admin = TRUE/);
+    expect(sql).toContain('m.is_active = TRUE');
+    // Full Access keeps existing payroll read exceptions; sensitive payroll mutations stay explicit.
+    expect(sql).toContain('CROSS JOIN capabilities cap');
+    expect(sql).toContain('cap.id = ANY($3::text[])');
+    expect(sql).toContain('u.is_system_admin');
   });
 
   describe('Multi-company isolation', () => {

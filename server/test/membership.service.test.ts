@@ -117,7 +117,10 @@ describe('MembershipRepository — create and read', () => {
 describe('MembershipRepository — getActiveCapabilities', () => {
   it('returns capabilities when membership is active and has a role', async () => {
     const pool = makePool({
-      rows: [{ capability_id: 'invoice.create' }, { capability_id: 'report.view' }],
+      rows: [
+        { capability_id: 'invoice.create', currently_authorized: true, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false },
+        { capability_id: 'report.view', currently_authorized: true, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false },
+      ],
       rowCount: 2,
     });
     const repo = new MembershipRepository(pool);
@@ -194,7 +197,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole());
     // Granter has: ['report.view'] — role requires: ['invoice.create', 'report.view']
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['report.view']);
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
 
     await expect(
       service.assignRole(MEM_1, ROLE_A, USER_2),
@@ -205,7 +208,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership());
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole());
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]);
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create']);
 
     await expect(
       service.assignRole(MEM_1, ROLE_A, USER_2),
@@ -216,7 +219,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership());
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole());
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]);
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create']);
     const writeSpy = vi.spyOn(repo, 'assignRoleToMembership');
 
     await expect(service.assignRole(MEM_1, ROLE_A, USER_2)).rejects.toThrow();
@@ -232,7 +235,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole({ company_id: COMPANY_A }));
 
     const capsSpy = vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]); // no caps in A
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create']);
     const writeSpy = vi.spyOn(repo, 'assignRoleToMembership');
 
     // Granter only supplies their userId — the service determines the company itself.
@@ -248,7 +251,7 @@ describe('MembershipService — capability ceiling', () => {
     vi.spyOn(repo, 'findMembershipById').mockResolvedValue(makeMembership());
     vi.spyOn(repo, 'findRoleById').mockResolvedValue(makeRole());
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create', 'report.view']);
     vi.spyOn(repo, 'assignRoleToMembership').mockResolvedValue(updated);
 
     const result = await service.assignRole(MEM_1, ROLE_A, USER_2);
@@ -323,7 +326,7 @@ describe('MembershipService — self-escalation prevention', () => {
     // USER_1 currently has no capabilities
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue([]);
     // Role they want includes 'invoice.create'
-    vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['invoice.create']);
+    vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockResolvedValue(['invoice.create']);
 
     await expect(
       service.assignRole(MEM_1, ROLE_A, USER_1),
@@ -354,14 +357,14 @@ describe('MembershipService — disabled membership', () => {
 
 describe('MembershipService — isAuthorized', () => {
   it('returns true when capability is present', async () => {
-    const pool = makePool({ rows: [{ capability_id: 'invoice.create' }], rowCount: 1 });
+    const pool = makePool({ rows: [{ capability_id: 'invoice.create', currently_authorized: true, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false }], rowCount: 1 });
     const service = new MembershipService(pool);
 
     expect(await service.isAuthorized(USER_1, COMPANY_A, 'invoice.create')).toBe(true);
   });
 
   it('returns false when capability is absent', async () => {
-    const pool = makePool({ rows: [{ capability_id: 'report.view' }], rowCount: 1 });
+    const pool = makePool({ rows: [{ capability_id: 'report.view', currently_authorized: true, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false }], rowCount: 1 });
     const service = new MembershipService(pool);
 
     expect(await service.isAuthorized(USER_1, COMPANY_A, 'invoice.create')).toBe(false);

@@ -11,6 +11,7 @@
     "orchestrator:typecheck": "tsc --noEmit -p tools/orchestrator/tsconfig.json",
     "orchestrator:test": "npm run orchestrator:build && node --test tools/orchestrator/test/*.test.js",
     "orchestrator:build": "tsc -p tools/orchestrator/tsconfig.json",
+    "authorization-policy:impact": "tsx tools/authorization/impact-projection.ts",
     "start": "npm run start -w server",
     "backup:test": "node --test tools/backup/test/*.test.js"
   }

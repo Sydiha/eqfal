@@ -15,6 +15,8 @@ export interface Role {
   company_id: string;
   name: string;
   is_full_access: boolean;
+  authorization_policy_key: 'accountant' | 'company_manager' | 'finance_manager' | null;
+  authorization_policy_version: number;
   created_at: Date;
 }
 
@@ -54,7 +56,10 @@ export interface MembershipListItem extends Membership {
 
 /** Role row with its explicit capability ids (Full Access roles hold every capability implicitly). */
 export interface RoleListItem extends Role {
+  /** Explicit stored grants, unchanged by the versioned authorization overlay. */
   capabilities: string[];
+  /** Current effective grants, including an activated standard-role policy when applicable. */
+  effective_capabilities?: string[];
   /** Set when listed for an actor: may be assigned to others / may have its capabilities edited. */
   assignable?: boolean;
   editable?: boolean;

@@ -156,4 +156,14 @@ describe('role clone and rename controls', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('already exists');
   });
+
+  it('marks a staged target policy inactive and keeps showing the current role grants', async () => {
+    const staged = { id: 'r-finance', name: 'Finance Manager', is_full_access: false, capabilities: ['document.view'], effective_capabilities: ['document.view'], authorization_policy_key: 'finance_manager', authorization_policy_version: 0, editable: true };
+    mockApi((url) => url === '/api/access/roles' ? new Response(JSON.stringify({ roles: [...roles, staged] }), { status: 200 }) : undefined);
+    renderIt(ALL);
+    await openRole('Finance Manager');
+    expect(await screen.findByRole('note')).toHaveTextContent('staged but inactive');
+    expect(screen.getByRole('heading', { name: /Finance Manager/ })).toBeInTheDocument();
+    expect(screen.queryByText(/target policy is active/i)).toBeNull();
+  });
 });
