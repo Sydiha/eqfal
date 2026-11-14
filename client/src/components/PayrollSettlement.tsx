@@ -6,6 +6,7 @@ import { SectionCard, WorkspaceState } from './SharedUI';
 type Liability={liability_line_id:string;period_month:string;category:string;original_amount:string;settled_amount:string;remaining_amount:string};
 type Bank={id:string;transaction_date:string;bank_reference:string|null;remaining_amount:string};
 type History={id:string;bank_transaction_id:string;bank_reference:string|null;journal_entry_id:string;journal_reference:string|null;category:string;amount:string;transaction_date:string;reconciliation_status:string;bank_amount:string;bank_allocated_amount:string};
+type SodException={id:string;payroll_draft_id:string;liability_line_id:string;intended_actor_id:string;request_reason:string;requested_at:string;status:'pending'|'approved'|'rejected'|'consumed';approval_expires_at:string|null;intended_for_current_user:boolean};
 const cents=(s:string):bigint|null=>{if(!/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/.test(s))return null;const [a,b='']=s.split('.');return BigInt(a)*100n+BigInt(b.padEnd(2,'0'));};
 const money=(s:string)=><bdi className="payroll-amount" dir="ltr">{formatMoney(s,'0.00')} SAR</bdi>;
 export function PayrollSettlement({capabilities,onUnauthorized}:{capabilities:string[];onUnauthorized:()=>void}){
@@ -14,29 +15,33 @@ export function PayrollSettlement({capabilities,onUnauthorized}:{capabilities:st
  const bankVisible=visible&&capabilities.includes('bank.view');
  const canCreate=bankVisible&&capabilities.includes('payroll.settlement.create');
  const [liabilities,setLiabilities]=useState<Liability[]>([]),[banks,setBanks]=useState<Bank[]>([]),[history,setHistory]=useState<History[]>([]);
- const [liability,setLiability]=useState(''),[bank,setBank]=useState(''),[amount,setAmount]=useState(''),[error,setError]=useState(''),[success,setSuccess]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
+ const [exceptions,setExceptions]=useState<SodException[]>([]),[liability,setLiability]=useState(''),[bank,setBank]=useState(''),[amount,setAmount]=useState(''),[exceptionReason,setExceptionReason]=useState(''),[approvalReason,setApprovalReason]=useState(''),[error,setError]=useState(''),[success,setSuccess]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const key=useRef<string|null>(null), sequence=useRef(0);
  const load=useCallback(async()=>{if(!visible)return;const n=++sequence.current;setLoading(true);setError('');try{
-  const urls=['/api/payroll/settlements/liabilities',...(bankVisible?['/api/payroll/settlements/bank-transactions','/api/payroll/settlements']:[])];
+  const urls=['/api/payroll/settlements/liabilities',...(bankVisible?['/api/payroll/settlements/bank-transactions','/api/payroll/settlements']:[]),'/api/payroll/settlements/sod-exceptions'];
   const responses=await Promise.all(urls.map(url=>fetch(url,{credentials:'same-origin'})));
   if(responses.some(r=>r.status===401)){onUnauthorized();return;}if(responses.some(r=>!r.ok))throw Error();
   const data=await Promise.all(responses.map(r=>r.json()));if(n!==sequence.current)return;
-  setLiabilities(data[0].liabilities);if(bankVisible){setBanks(data[1].bank_transactions);setHistory(data[2].settlements);}
+  setLiabilities(data[0].liabilities);if(bankVisible){setBanks(data[1].bank_transactions);setHistory(data[2].settlements);}setExceptions(data[data.length-1].exceptions);
  }catch{if(n===sequence.current)setError('loadError');}finally{if(n===sequence.current)setLoading(false);}},[visible,bankVisible,onUnauthorized]);
  useEffect(()=>{void load();return()=>{sequence.current++;};},[load]);
  const change=(fn:()=>void)=>{key.current=null;setError('');setSuccess('');fn();};
  const chosenLiability=liabilities.find(x=>x.liability_line_id===liability),chosenBank=banks.find(x=>x.id===bank);
+ const approvedException=exceptions.find(x=>x.liability_line_id===liability&&x.status==='approved'&&x.intended_for_current_user);
+ const canApproveException=capabilities.includes('payroll.settlement.exception.approve');
  const submit=async(e:FormEvent)=>{e.preventDefault();if(busy)return;setError('');setSuccess('');
   if(!chosenLiability){setError('chooseLiability');return;}if(!chosenBank){setError('chooseBank');return;}
   const value=cents(amount),remaining=cents(chosenLiability.remaining_amount),available=cents(chosenBank.remaining_amount);
   if(value===null||value<=0n){setError('invalidAmount');return;}
   if(remaining===null||value>remaining){setError('liabilityLimit');return;}if(available===null||value>available){setError('bankLimit');return;}
   key.current??=crypto.randomUUID();setBusy(true);
-  try{const response=await fetch('/api/payroll/settlements',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({bank_transaction_id:bank,liability_line_id:liability,amount,idempotency_key:key.current})});
+  try{const response=await fetch('/api/payroll/settlements',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({bank_transaction_id:bank,liability_line_id:liability,amount,idempotency_key:key.current,...(approvedException?{sod_exception_id:approvedException.id}:{})})});
    if(response.status===401){onUnauthorized();return;}if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.code||'server');}
    key.current=null;setSuccess('created');setAmount('');await load();
-  }catch(e){const code=(e as Error).message;setError(({PAYROLL_SETTLEMENT_CONFLICT:'conflict',PAYROLL_SETTLEMENT_BANK_CLAIMED:'bankClaimed',PAYROLL_SETTLEMENT_BANK_INELIGIBLE:'bankIneligible',PAYROLL_SETTLEMENT_BANK_UNLINKED:'bankUnlinked',PAYROLL_SETTLEMENT_PERIOD_INELIGIBLE:'periodClosed',PAYROLL_SETTLEMENT_POST_BLOCKED:'periodClosed',PAYROLL_SETTLEMENT_IDEMPOTENCY_CONFLICT:'conflict',PAYROLL_SETTLEMENT_NOT_FOUND:'notFound'} as Record<string,string>)[code]??'saveError');}finally{setBusy(false);}
+  }catch(e){const code=(e as Error).message;setError(({PAYROLL_SETTLEMENT_CONFLICT:'conflict',PAYROLL_SETTLEMENT_BANK_CLAIMED:'bankClaimed',PAYROLL_SETTLEMENT_BANK_INELIGIBLE:'bankIneligible',PAYROLL_SETTLEMENT_BANK_UNLINKED:'bankUnlinked',PAYROLL_SETTLEMENT_PERIOD_INELIGIBLE:'periodClosed',PAYROLL_SETTLEMENT_POST_BLOCKED:'periodClosed',PAYROLL_SETTLEMENT_IDEMPOTENCY_CONFLICT:'conflict',PAYROLL_SETTLEMENT_NOT_FOUND:'notFound',PAYROLL_SETTLEMENT_SOD_REQUIRED:'sodRequired',PAYROLL_SETTLEMENT_SOD_EXCEPTION_EXPIRED:'sodExpired',PAYROLL_SETTLEMENT_SOD_EXCEPTION_STALE:'sodStale'} as Record<string,string>)[code]??'saveError');}finally{setBusy(false);}
  };
+ const requestException=async()=>{if(!chosenLiability||exceptionReason.trim().length<8||busy)return;setBusy(true);setError('');setSuccess('');try{const r=await fetch('/api/payroll/settlements/sod-exceptions',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({liability_line_id:chosenLiability.liability_line_id,reason:exceptionReason.trim()})});if(r.status===401){onUnauthorized();return;}if(!r.ok){const b=await r.json().catch(()=>({}));throw Error(b.code||'server');}const result=await r.json();setExceptionReason('');setSuccess(result.status==='approved'?'exceptionApproved':'exceptionRequested');await load();}catch(e){setError((e as Error).message==='PAYROLL_SETTLEMENT_SOD_EXCEPTION_EXISTS'?'exceptionExists':'saveError');}finally{setBusy(false);}};
+ const decideException=async(id:string,decision:'approve'|'reject')=>{if(approvalReason.trim().length<8||busy)return;setBusy(true);setError('');try{const r=await fetch(`/api/payroll/settlements/sod-exceptions/${id}/decision`,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({decision,reason:approvalReason.trim()})});if(r.status===401){onUnauthorized();return;}if(!r.ok){const b=await r.json().catch(()=>({}));throw Error(b.code||'server');}setApprovalReason('');setSuccess(decision==='approve'?'exceptionApproved':'exceptionRejected');await load();}catch(e){setError((e as Error).message==='PAYROLL_SETTLEMENT_SOD_EXCEPTION_CONFLICTED_APPROVER'?'conflictedApprover':'saveError');}finally{setBusy(false);}};
  if(!visible)return null;
  return <SectionCard className="payroll-settlement"><h3>{l('title')}</h3><p>{l('intro')}</p>
  {loading?<WorkspaceState>{l('loading')}</WorkspaceState>:<>
@@ -50,6 +55,8 @@ export function PayrollSettlement({capabilities,onUnauthorized}:{capabilities:st
   <label>{l('amount')}<input value={amount} onChange={e=>change(()=>setAmount(e.target.value))} inputMode="decimal" dir="ltr" aria-invalid={['invalidAmount','liabilityLimit','bankLimit'].includes(error)||undefined} aria-describedby={['invalidAmount','liabilityLimit','bankLimit'].includes(error)?'payroll-settlement-error':undefined}/></label>
   <button className="primary" disabled={busy}>{busy?l('saving'):l('submit')}</button>
  </form>}
+ {canCreate&&chosenLiability&&<div className="payroll-settlement-form"><label>{l('exceptionRequestReason')}<textarea value={exceptionReason} onChange={e=>setExceptionReason(e.target.value)} maxLength={1000}/></label><button type="button" disabled={busy||exceptionReason.trim().length<8} onClick={()=>void requestException()}>{l('requestException')}</button>{approvedException&&<p role="status">{l('exceptionApprovedForYou')}</p>}</div>}
+ {canApproveException&&<section aria-label={l('exceptionQueue')}><h4>{l('exceptionQueue')}</h4><label>{l('exceptionDecisionReason')}<textarea value={approvalReason} onChange={e=>setApprovalReason(e.target.value)} maxLength={1000}/></label>{exceptions.filter(x=>x.status==='pending'&&!x.intended_for_current_user).map(x=><article className="payroll-settlement-item" key={x.id}><div>{l('exceptionRequest')} · <bdi>{x.liability_line_id}</bdi></div><p>{x.request_reason}</p><button type="button" disabled={busy||approvalReason.trim().length<8} onClick={()=>void decideException(x.id,'approve')}>{l('approveException')}</button><button type="button" disabled={busy||approvalReason.trim().length<8} onClick={()=>void decideException(x.id,'reject')}>{l('rejectException')}</button></article>)}</section>}
  {bankVisible&&<><h4>{l('history')}</h4>{history.length===0?<p>{l('noHistory')}</p>:<div className="payroll-settlement-list">{history.map(x=><article className="payroll-settlement-item" key={x.id}><strong>{l(x.category)} · {money(x.amount)}</strong><div>{l('bankReference')}: <bdi>{x.bank_reference||x.bank_transaction_id}</bdi> · <bdi>{x.transaction_date}</bdi></div><div>{l('journalReference')}: <bdi>{x.journal_reference||x.journal_entry_id}</bdi></div><div>{l('status')}: {l((cents(x.bank_allocated_amount)??0n)<(cents(x.bank_amount.replace(/^-/,''))??0n)?'partial':x.reconciliation_status==='reconciled'?'reconciled':'fullyAllocated')}</div></article>)}</div>}</>}
  </>}</SectionCard>;
 }

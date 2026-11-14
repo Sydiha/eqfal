@@ -15,6 +15,7 @@ db('payroll settlement API (PostgreSQL)',()=>{
   const expense=await h.account(co,'E','expense','operating_expense'),liability=await h.account(co,'L','liability','current_liability'),cash=await h.account(co,'B','asset','current_asset');
   await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[cash]);
   const draft=(await h.q<{id:string}>("INSERT INTO payroll_drafts(company_id,period_month,created_by,status,approved_by,approved_at) VALUES($1,'2026-02-01',$2,'approved',$2,NOW()) RETURNING id",[co,owner.id]))[0]!.id;
+  await h.q('INSERT INTO payroll_draft_contributors(company_id,draft_id,user_id) VALUES($1,$2,$3)',[co,draft,owner.id]);
   const original=await h.postedJournal(co,fy,'2026-02-01',owner.id,[[expense,'100','0'],[liability,'0','100']],{source_type:'payroll',source_id:draft,memo:'net_payroll_liability'});
   const line=(await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND account_id=$2',[original,liability]))[0]!.id;
   const bank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Bank','SAR',$2) RETURNING id",[co,owner.id]))[0]!.id;

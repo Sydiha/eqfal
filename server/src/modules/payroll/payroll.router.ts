@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import pool from '../../db/pool';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { requireAuth, requireActiveCompany, requireCapability, getAuthenticatedContext } from '../auth/auth.middleware';
+import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships/authorization-policy';
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
@@ -152,12 +153,35 @@ payrollRouter.get('/payroll/settlements',...read,requireCapability('payroll.sett
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
  s.json({settlements:await new PayrollSettlementService(pool).history(company(q))});
 }));
+payrollRouter.post('/payroll/settlements/sod-exceptions',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),route(async(q,s)=>{
+ const body=q.body;
+ if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='liability_line_id,reason'
+   ||typeof body.liability_line_id!=='string'||!uuid.test(body.liability_line_id)||typeof body.reason!=='string'||body.reason.trim().length<8||body.reason.trim().length>1000)return void error(s,'PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.status(201).json(await new PayrollSettlementService(pool).requestSodException(company(q),getAuthenticatedContext(q)!.user.id,body.liability_line_id,body.reason));}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
+payrollRouter.get('/payroll/settlements/sod-exceptions',...read,requireCapability('payroll.settlement.view'),route(async(q,s)=>{
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.json({exceptions:await new PayrollSettlementService(pool).listSodExceptions(company(q),getAuthenticatedContext(q)!.user.id)});}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
+payrollRouter.post('/payroll/settlements/sod-exceptions/:id/decision',requireSameOrigin,...read,requireCapability(PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY),route(async(q,s)=>{
+ const body=q.body;
+ if(!uuid.test(q.params.id)||!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='decision,reason'
+   ||!['approve','reject'].includes(body.decision)||typeof body.reason!=='string'||body.reason.trim().length<8||body.reason.trim().length>1000)return void error(s,'PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+ if(!pool)return void error(s,'DB_UNAVAILABLE',503);
+ try{s.json(await new PayrollSettlementService(pool).decideSodException(company(q),getAuthenticatedContext(q)!.user.id,q.params.id,body.decision,body.reason));}
+ catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
+}));
 payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapability('payroll.settlement.create'),requireCapability('bank.view'),route(async(q,s)=>{
  const b=q.body;
- if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='amount,bank_transaction_id,idempotency_key,liability_line_id'
+ if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['amount','bank_transaction_id','idempotency_key','liability_line_id','sod_exception_id'].includes(k))
+   ||Object.keys(b).sort().join(',')!==['amount','bank_transaction_id','idempotency_key','liability_line_id',...(b.sod_exception_id===undefined?[]:['sod_exception_id'])].sort().join(',')
    ||![b.bank_transaction_id,b.idempotency_key,b.liability_line_id].every(v=>typeof v==='string'&&uuid.test(v))
+   ||(b.sod_exception_id!==undefined&&(typeof b.sod_exception_id!=='string'||!uuid.test(b.sod_exception_id)))
    ||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n||cents(b.amount)>maxMoney) return void error(s,'PAYROLL_SETTLEMENT_INVALID');
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
- try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key});s.status(result.existing?200:201).json(result);}
+ try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key,sodExceptionId:b.sod_exception_id});s.status(result.existing?200:201).json(result);}
  catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
 }));

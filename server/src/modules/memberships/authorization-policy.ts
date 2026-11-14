@@ -6,6 +6,7 @@ import {
 
 export const TARGET_AUTHORIZATION_POLICY_VERSION = 1;
 export type AuthorizationPolicyKey = 'accountant' | 'company_manager' | 'finance_manager';
+export const PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY = 'payroll.settlement.exception.approve';
 
 /** Existing global wildcard read exceptions preserved for System Admin and company Full Access. */
 export const LEGACY_WILDCARD_READ_CAPABILITIES = [
@@ -32,12 +33,14 @@ export function targetRoleCapabilities(key: AuthorizationPolicyKey, capabilityId
   // Accountant grants remain explicit so company owners can keep them limited and configurable.
   if (key === 'accountant') return [];
   if (key === 'finance_manager') {
-    return capabilityIds.filter((id) => (FINANCIAL_DOMAINS.has(id.split('.')[0] ?? '') || id === 'company.view') && id !== 'company.create').sort();
+    return capabilityIds.filter((id) => (FINANCIAL_DOMAINS.has(id.split('.')[0] ?? '') || id === 'company.view')
+      && id !== 'company.create' && id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
   }
   // Company Manager receives company functional capabilities. Existing, explicit
   // access.* grants remain in place, while global access delegation and company lifecycle
   // actions stay outside the role; Full Access remains a distinct company role.
-  return capabilityIds.filter((id) => !id.startsWith('access.') && id !== 'company.create' && id !== 'company.status.edit').sort();
+  return capabilityIds.filter((id) => !id.startsWith('access.') && id !== 'company.create' && id !== 'company.status.edit'
+    && id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
 }
 
 export function effectiveRoleCapabilities(
@@ -58,7 +61,8 @@ export function isAuthorizationPolicyKey(value: unknown): value is Authorization
 }
 
 export function targetSystemAdministratorCapabilities(capabilityIds: readonly string[]): string[] {
-  return [...new Set(capabilityIds)].sort();
+  // Independent settlement SoD approval is explicitly delegated to a company reviewer; global authority must not auto-approve it.
+  return [...new Set(capabilityIds)].filter((id) => id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
 }
 
 /** Canonical current role snapshots used only for projection and impact review. */

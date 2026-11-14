@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { Membership, MembershipListItem, Role, RoleListItem, CreateMembershipInput, CreateRoleInput } from './membership.types';
-import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES } from './authorization-policy';
+import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES, PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY, targetSystemAdministratorCapabilities } from './authorization-policy';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -435,11 +435,13 @@ export class MembershipRepository {
       [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES]],
     );
     if (!rows.length) return [];
-    const result = new Set(rows.filter((row) => row.currently_authorized).map((row) => row.capability_id));
+    const result = new Set(rows.filter((row) => row.currently_authorized
+      && !(row.is_system_admin && row.capability_id === PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY)
+      && !(row.role_is_full_access && row.capability_id === PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY)).map((row) => row.capability_id));
     const catalog = rows.map((row) => row.capability_id);
     const first = rows[0]!;
     if (first.is_system_admin && Number(first.system_admin_policy_version) >= 1) {
-      for (const id of catalog) result.add(id);
+      for (const id of targetSystemAdministratorCapabilities(catalog)) result.add(id);
     }
     if (!first.role_is_full_access && Number(first.role_policy_version) >= 1 && isAuthorizationPolicyKey(first.role_policy_key)) {
       for (const id of effectiveRoleCapabilities(first.role_policy_key, 1, [], catalog)) result.add(id);
