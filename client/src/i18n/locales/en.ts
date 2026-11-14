@@ -305,6 +305,9 @@ const en = {
     membersEmpty: 'This company has no members.', rolesEmpty: 'This company has no roles.',
     createRole: 'New role', createRoleTitle: 'Create role', roleName: 'Role name', create: 'Create',
     fullAccess: 'Full Access', fullAccessNote: 'This role holds standard permissions automatically. Payroll approval requires a separate explicit grant below.',
+    targetPolicyInactive: 'The approved target policy is staged but inactive. The permissions listed here remain the current effective permissions.',
+    targetPolicyActive: 'The approved target policy is active. Effective permissions are shown; use a custom role for permission overrides.',
+    accountantPolicyActive: 'The Accountant policy keeps its grants explicit and configurable.',
     expandGroup: 'Expand', collapseGroup: 'Collapse', selectAll: 'Select all', clearAll: 'Clear all', bulkActions: 'Bulk permission actions', selectRole: 'Select a role to view its permissions', capabilities: 'Role permissions', capabilityCount: '{{count}} permissions',
     details: {
       title: 'Access details: {{email}}', open: 'Details', scopeNote: 'Only companies you are authorized to administer are shown. Role permissions are the permissions assigned to the role; effective permissions are what the user can actually do now.',

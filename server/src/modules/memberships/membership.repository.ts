@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { Membership, MembershipListItem, Role, RoleListItem, CreateMembershipInput, CreateRoleInput } from './membership.types';
+import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES } from './authorization-policy';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -227,6 +228,29 @@ export class MembershipRepository {
     return rows;
   }
 
+  /** Resolve one role's grants for delegation checks; policy overlays never mutate explicit grants. */
+  async getEffectiveRoleCapabilities(roleId: string, client?: PoolClient): Promise<string[]> {
+    const runner: QueryRunner = client ?? this.pool;
+    const role = (await runner.query<{ company_id: string; is_full_access: boolean; authorization_policy_key: string | null; authorization_policy_version: number }>(
+      'SELECT company_id, is_full_access, authorization_policy_key, authorization_policy_version FROM roles WHERE id = $1', [roleId],
+    )).rows[0];
+    if (!role) return [];
+    const [explicit, catalog] = await Promise.all([
+      this.getRoleCapabilities(roleId, client),
+      runner.query<{ id: string; implicit_full_access: boolean }>('SELECT id, implicit_full_access FROM capabilities'),
+    ]);
+    const capabilities = catalog.rows.map((row) => row.id);
+    const stored = role.is_full_access
+      ? [...new Set([...explicit, ...LEGACY_WILDCARD_READ_CAPABILITIES, ...catalog.rows.filter((row) => row.implicit_full_access).map((row) => row.id)])]
+      : explicit;
+    return effectiveRoleCapabilities(
+      !role.is_full_access && isAuthorizationPolicyKey(role.authorization_policy_key) ? role.authorization_policy_key : null,
+      Number(role.authorization_policy_version),
+      stored,
+      capabilities,
+    );
+  }
+
   async listCapabilities(): Promise<string[]> {
     const { rows } = await this.pool.query<{ id: string }>('SELECT id FROM capabilities ORDER BY id');
     return rows.map((row) => row.id);
@@ -354,10 +378,9 @@ export class MembershipRepository {
 
   /**
    * The single source of capability resolution (session context, administration ceilings, company management).
-   *  - Active System Admin: implicit capabilities and payroll accounting read capabilities in every ACTIVE company.
-   *  - Otherwise: the active membership's role in this active company. Full Access includes implicit capabilities
-   *    and payroll accounting reads; sensitive payroll mutations still require explicit role_capabilities rows.
-   * The explicit roles/company join is defense-in-depth against a corrupted or manually-written cross-company role_id.
+   * Version 0 preserves legacy grants and wildcard exceptions. Version 1 adds the central target policy for a
+   * System Administrator or standard company role. Full Access remains company-scoped and retains its existing
+   * payroll accounting and settlement read exceptions. The explicit roles/company join prevents cross-company role_id use.
    */
   /** Role of the user's ACTIVE membership in an active company (display only; authorization uses capabilities). */
   async getActiveRole(userId: string, companyId: string, client?: PoolClient): Promise<{ name: string; is_full_access: boolean } | null> {
@@ -375,30 +398,52 @@ export class MembershipRepository {
 
   async getActiveCapabilities(userId: string, companyId: string, client?: PoolClient): Promise<string[]> {
     const runner: QueryRunner = client ?? this.pool;
-    const { rows } = await runner.query<{ capability_id: string }>(
-      `SELECT cap.id AS capability_id
-       FROM capabilities cap
-       WHERE (cap.implicit_full_access = TRUE OR cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view')) AND EXISTS (
-         SELECT 1 FROM users u JOIN companies c ON c.id = $2 AND c.is_active = TRUE
-         WHERE u.id = $1 AND u.is_active = TRUE AND u.is_system_admin = TRUE
-       )
-       UNION
-       SELECT cap.id AS capability_id
-       FROM memberships m
-       JOIN companies c ON c.id = m.company_id AND c.is_active = TRUE
-       JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON (r.is_full_access = TRUE AND (cap.implicit_full_access = TRUE OR cap.id IN ('payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view')))
-         OR EXISTS (
-           SELECT 1
-           FROM role_capabilities rc
-           WHERE rc.role_id = r.id
-             AND rc.capability_id = cap.id
-         )
-       WHERE m.user_id    = $1
-         AND m.company_id = $2
-         AND m.is_active  = TRUE`,
-      [userId, companyId],
+    const { rows } = await runner.query<{
+      capability_id: string;
+      currently_authorized: boolean;
+      is_system_admin: boolean;
+      system_admin_policy_version: number;
+      role_policy_key: string | null;
+      role_policy_version: number;
+      role_is_full_access: boolean;
+    }>(
+      `SELECT cap.id AS capability_id,
+              ((cap.implicit_full_access OR cap.id = ANY($3::text[])) AND u.is_system_admin)
+                 OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[]))) OR EXISTS (
+                   SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id
+                 ))) AS currently_authorized,
+              u.is_system_admin,
+              u.system_admin_policy_version,
+              r.authorization_policy_key AS role_policy_key,
+              COALESCE(r.authorization_policy_version, 0) AS role_policy_version,
+              COALESCE(r.is_full_access, FALSE) AS role_is_full_access
+       FROM users u
+       JOIN companies c ON c.id = $2 AND c.is_active = TRUE
+       CROSS JOIN capabilities cap
+       LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = c.id AND m.is_active = TRUE
+       LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
+       WHERE u.id = $1 AND u.is_active = TRUE
+         AND (
+           ((cap.implicit_full_access OR cap.id = ANY($3::text[])) AND u.is_system_admin)
+           OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[]))) OR EXISTS (
+             SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id
+           )))
+           OR (u.is_system_admin AND u.system_admin_policy_version >= 1)
+           OR (NOT COALESCE(r.is_full_access, FALSE) AND r.authorization_policy_version >= 1
+               AND r.authorization_policy_key IN ('company_manager', 'finance_manager'))
+        )`,
+      [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES]],
     );
-    return rows.map((r) => r.capability_id);
+    if (!rows.length) return [];
+    const result = new Set(rows.filter((row) => row.currently_authorized).map((row) => row.capability_id));
+    const catalog = rows.map((row) => row.capability_id);
+    const first = rows[0]!;
+    if (first.is_system_admin && Number(first.system_admin_policy_version) >= 1) {
+      for (const id of catalog) result.add(id);
+    }
+    if (!first.role_is_full_access && Number(first.role_policy_version) >= 1 && isAuthorizationPolicyKey(first.role_policy_key)) {
+      for (const id of effectiveRoleCapabilities(first.role_policy_key, 1, [], catalog)) result.add(id);
+    }
+    return [...result].sort();
   }
 }

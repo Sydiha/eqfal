@@ -34,16 +34,17 @@ const FULL_ACCESS_ROLE_NAME = 'Full Access';
 interface DefaultRoleDefinition {
   name: string;
   is_full_access: boolean;
+  authorization_policy_key: 'accountant' | 'company_manager' | 'finance_manager' | null;
   capabilities: string[];
 }
 
 const DEFAULT_ROLES: DefaultRoleDefinition[] = [
-  { name: 'Viewer', is_full_access: false, capabilities: [...VIEWER_CAPABILITIES] },
-  { name: 'Accountant', is_full_access: false, capabilities: [...ACCOUNTANT_CAPABILITIES] },
-  { name: 'Finance Manager', is_full_access: false, capabilities: [...FINANCE_MANAGER_DEFAULT_CAPABILITIES] },
-  { name: 'Company Manager', is_full_access: false, capabilities: [...COMPANY_MANAGER_CAPABILITIES] },
-  { name: 'Operations', is_full_access: false, capabilities: [...OPERATIONS_CAPABILITIES] },
-  { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, capabilities: [] },
+  { name: 'Viewer', is_full_access: false, authorization_policy_key: null, capabilities: [...VIEWER_CAPABILITIES] },
+  { name: 'Accountant', is_full_access: false, authorization_policy_key: 'accountant', capabilities: [...ACCOUNTANT_CAPABILITIES] },
+  { name: 'Finance Manager', is_full_access: false, authorization_policy_key: 'finance_manager', capabilities: [...FINANCE_MANAGER_DEFAULT_CAPABILITIES] },
+  { name: 'Company Manager', is_full_access: false, authorization_policy_key: 'company_manager', capabilities: [...COMPANY_MANAGER_CAPABILITIES] },
+  { name: 'Operations', is_full_access: false, authorization_policy_key: null, capabilities: [...OPERATIONS_CAPABILITIES] },
+  { name: FULL_ACCESS_ROLE_NAME, is_full_access: true, authorization_policy_key: null, capabilities: [] },
 ];
 
 /**
@@ -150,8 +151,8 @@ export class CompanyManagementService {
       const roleMap: Record<string, string> = {};
       for (const roleDefn of DEFAULT_ROLES) {
         const roleResult = await client.query<{ id: string }>(
-          'INSERT INTO roles (company_id, name, is_full_access) VALUES ($1, $2, $3) RETURNING id',
-          [company.id, roleDefn.name, roleDefn.is_full_access],
+          'INSERT INTO roles (company_id, name, is_full_access, authorization_policy_key, authorization_policy_version) VALUES ($1, $2, $3, $4, 0) RETURNING id',
+          [company.id, roleDefn.name, roleDefn.is_full_access, roleDefn.authorization_policy_key],
         );
         const roleId = roleResult.rows[0]?.id;
         if (!roleId) throw new Error(`Failed to create role: ${roleDefn.name}`);

@@ -42,6 +42,7 @@ function setup() {
   vi.spyOn(repo, 'findRoleById').mockImplementation(async (id) => roles[id] ?? null);
   vi.spyOn(repo, 'getActiveCapabilities').mockImplementation(async (userId) => capsOf(userId));
   vi.spyOn(repo, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
+  vi.spyOn(repo, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
   vi.spyOn(repo, 'listCapabilities').mockResolvedValue(['sales.view', 'access.membership.status.edit', 'access.membership.role.assign', 'access.role.capability.revoke', 'access.role.capability.grant']);
   vi.spyOn(repo, 'hasActiveFullAccessRole').mockImplementation(async (userId) => {
     const m = members[userId];

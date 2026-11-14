@@ -101,7 +101,8 @@ describe('company default roles provisioning', () => {
   });
 
   it('creates roles with correct names and is_full_access flags', async () => {
-    const createdRoles: Array<{ name: string; is_full_access: boolean }> = [];
+    const createdRoles: Array<{ name: string; is_full_access: boolean; policy_key: string | null }> = [];
+    let roleInsertSql = '';
     const { pool, capturedParams, sqls } = fakePool((sql) => {
       if (sql.includes('INSERT INTO companies')) {
         return [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }];
@@ -123,8 +124,9 @@ describe('company default roles provisioning', () => {
         return { rows: [{ id: COMPANY_ID, slug: 'test-co', name: 'Test Co', name_ar: null, is_active: true, created_at: new Date() }] };
       }
       if (sql.includes('INSERT INTO roles')) {
-        const [_, name, is_full_access] = params as [string, string, boolean];
-        createdRoles.push({ name, is_full_access });
+        const [_, name, is_full_access, policy_key] = params as [string, string, boolean, string | null];
+        roleInsertSql = sql;
+        createdRoles.push({ name, is_full_access, policy_key });
         return { rows: [{ id: `role-${callIndex++}` }] };
       }
       if (sql.includes('INSERT INTO role_capabilities')) {
@@ -161,6 +163,11 @@ describe('company default roles provisioning', () => {
 
     const fullAccessRole = createdRoles.find((r) => r.name === 'Full Access');
     expect(fullAccessRole?.is_full_access).toBe(true);
+    expect(roleInsertSql).toContain('authorization_policy_version) VALUES ($1, $2, $3, $4, 0)');
+    expect(createdRoles.find((r) => r.name === 'Accountant')?.policy_key).toBe('accountant');
+    expect(createdRoles.find((r) => r.name === 'Finance Manager')?.policy_key).toBe('finance_manager');
+    expect(createdRoles.find((r) => r.name === 'Company Manager')?.policy_key).toBe('company_manager');
+    expect(fullAccessRole?.policy_key).toBeNull();
   });
 
   it('provisions Viewer role with exactly the canonical 20 capabilities', async () => {

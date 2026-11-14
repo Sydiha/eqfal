@@ -82,21 +82,28 @@ export class MembershipService {
       this.repo.listActiveSystemAdminIds(members.map((m) => m.user_id)),
     ]);
     const byRole = new Map(roles.map((r) => [r.id, r]));
-    return members.map((m) => {
+    return Promise.all(members.map(async (m) => {
       const role = m.role_id ? byRole.get(m.role_id) : undefined;
-      return { ...m, can_manage: !this.targetBlocked(m, actorUserId, hasGrant, actorIsSystemAdmin, systemAdmins.has(m.user_id), role, role?.capabilities ?? []) };
-    });
+      const roleCaps = role ? await this.repo.getEffectiveRoleCapabilities(role.id) : [];
+      return { ...m, can_manage: !this.targetBlocked(m, actorUserId, hasGrant, actorIsSystemAdmin, systemAdmins.has(m.user_id), role, roleCaps) };
+    }));
   }
 
   /** Roles of the company. With an actor: assignable (may be given to others) and editable (capabilities may change). */
   async listRoles(companyId: string, actorUserId?: string): Promise<RoleListItem[]> {
     const roles = await this.repo.listRoles(companyId);
-    if (!actorUserId) return roles;
-    const [actorCaps, hasGrant] = await Promise.all([this.repo.getActiveCapabilities(actorUserId, companyId), this.holdsFullAccessAuthority(actorUserId, companyId)]);
-    return roles.map((r) => ({
-      ...r,
-      assignable: r.is_full_access ? hasGrant : r.capabilities.filter(isAdministrativeCapability).every((id) => actorCaps.includes(id)),
-      editable: r.is_full_access ? hasGrant : (hasGrant || !r.capabilities.some(isAdministrativeCapability)),
+    const [actorCaps, hasGrant] = actorUserId
+      ? await Promise.all([this.repo.getActiveCapabilities(actorUserId, companyId), this.holdsFullAccessAuthority(actorUserId, companyId)])
+      : [[], false] as [string[], boolean];
+    return Promise.all(roles.map(async (r) => {
+      const effective = await this.repo.getEffectiveRoleCapabilities(r.id);
+      if (!actorUserId) return { ...r, effective_capabilities: effective };
+      return {
+        ...r,
+        effective_capabilities: effective,
+        assignable: r.is_full_access ? hasGrant : effective.filter(isAdministrativeCapability).every((id) => actorCaps.includes(id)),
+        editable: r.is_full_access ? hasGrant : (r.authorization_policy_version >= 1 && r.authorization_policy_key !== 'accountant' ? false : hasGrant || !effective.some(isAdministrativeCapability)),
+      };
     }));
   }
 
@@ -236,6 +243,8 @@ export class MembershipService {
       const source = await this.repo.findRoleById(sourceRoleId, client);
       if (!source || source.company_id !== companyId) throw new Error('Role not found');
       if (source.is_full_access) throw new AccessPolicyError('Full Access role cannot be cloned', 'ACCESS_FULL_ACCESS_IMMUTABLE');
+      // Cloning produces an ordinary custom role; copy only the source's stored grants so
+      // a versioned target overlay is never materialized into a new role implicitly.
       const sourceCaps = [...(await this.repo.getRoleCapabilities(sourceRoleId, client))].sort();
       const copied = sourceCaps.filter((id) => !isAdministrativeCapability(id));
       const omitted = sourceCaps.filter(isAdministrativeCapability);
@@ -317,6 +326,7 @@ export class MembershipService {
       if (SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(capabilityId)) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
+      if (role.authorization_policy_version >= 1 && role.authorization_policy_key !== 'accountant') throw new AccessPolicyError('Activated standard policy roles are immutable; create a custom role to override', 'ACCESS_POLICY_ROLE_IMMUTABLE');
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([capabilityId], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
@@ -343,6 +353,7 @@ export class MembershipService {
       if ([...grants, ...revokes].some(id => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id))) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
+      if (role.authorization_policy_version >= 1 && role.authorization_policy_key !== 'accountant') throw new AccessPolicyError('Activated standard policy roles are immutable; create a custom role to override', 'ACCESS_POLICY_ROLE_IMMUTABLE');
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([...grants, ...revokes], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
@@ -436,7 +447,7 @@ export class MembershipService {
       this.holdsFullAccessAuthority(actorUserId, target.company_id, client),
       this.repo.isActiveSystemAdmin(actorUserId, client),
       target.user_id === actorUserId ? false : this.repo.isActiveSystemAdmin(target.user_id, client),
-      role && !role.is_full_access ? this.repo.getRoleCapabilities(role.id, client) : Promise.resolve([] as string[]),
+      role && !role.is_full_access ? this.repo.getEffectiveRoleCapabilities(role.id, client) : Promise.resolve([] as string[]),
     ]);
     if (this.targetBlocked(target, actorUserId, hasGrant, actorIsSystemAdmin, targetIsSystemAdmin, role, roleCaps)) {
       throw new AccessPolicyError('Target privilege violation: this member is outside your administrative authority', 'ACCESS_TARGET_PRIVILEGE');
@@ -445,7 +456,9 @@ export class MembershipService {
 
   /** Editing a role that holds administrative capabilities manages its holders (other managers): needs access.full_access.grant. */
   private async assertCanEditRole(roleId: string, companyId: string, actorUserId: string, client: PoolClient): Promise<void> {
-    const caps = await this.repo.getRoleCapabilities(roleId, client);
+    const role = await this.repo.findRoleById(roleId, client);
+    if (role && role.authorization_policy_version >= 1 && role.authorization_policy_key !== 'accountant') throw new AccessPolicyError('Activated standard policy roles are immutable; create a custom role to override', 'ACCESS_POLICY_ROLE_IMMUTABLE');
+    const caps = await this.repo.getEffectiveRoleCapabilities(roleId, client);
     if (caps.some(isAdministrativeCapability) && !(await this.holdsFullAccessAuthority(actorUserId, companyId, client))) {
       throw new AccessPolicyError('Target privilege violation: roles with administrative capabilities need access.full_access.grant to edit', 'ACCESS_TARGET_PRIVILEGE');
     }
@@ -470,7 +483,7 @@ export class MembershipService {
     if (selfAssign && client) await this.lockRoleForDelegation(role.id, role.company_id, client);
     const [granterCaps, roleCaps] = await Promise.all([
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
-      this.repo.getRoleCapabilities(role.id, client),
+      this.repo.getEffectiveRoleCapabilities(role.id, client),
     ]);
     // Ceiling over administrative capabilities for others; over EVERY capability when assigning to oneself, so a manager
     // can staff Accountant/Operations roles for employees but can never give themselves accounting capabilities.
@@ -562,7 +575,7 @@ export class MembershipService {
     // not from any caller-supplied value, to prevent cross-company ceiling bypass.
     const [granterCaps, roleCaps] = await Promise.all([
       this.repo.getActiveCapabilities(granterUserId, membership.company_id),
-      this.repo.getRoleCapabilities(roleId),
+      this.repo.getEffectiveRoleCapabilities(roleId),
     ]);
 
     const granterCapSet = new Set(granterCaps);
