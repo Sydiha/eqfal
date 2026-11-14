@@ -95,7 +95,7 @@ describe('POST /access/roles/:id/capabilities/bulk — router', () => {
 
 describe('MembershipService.changeRoleCapabilities — atomic validation', () => {
   const actual = async () => (await vi.importActual<typeof import('../src/modules/memberships/membership.service')>('../src/modules/memberships/membership.service')).MembershipService;
-  async function setup(opts: { role?: object | null; actor?: string[]; known?: string[] } = {}) {
+  async function setup(opts: { role?: object | null; actor?: string[]; known?: string[]; admin?: boolean; assigned?: boolean } = {}) {
     const Service = await actual();
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }), release: vi.fn() };
     const service = new Service({ query: vi.fn(), connect: vi.fn().mockResolvedValue(client) } as unknown as Pool);
@@ -105,10 +105,12 @@ describe('MembershipService.changeRoleCapabilities — atomic validation', () =>
     vi.spyOn(repo, 'listCapabilities').mockResolvedValue(opts.known ?? ['document.view', 'document.edit', 'vat.view']);
     vi.spyOn(repo, 'findRoleById').mockResolvedValue((opts.role === undefined ? { id: ROLE, company_id: 'company-a', name: 'r', is_full_access: false, created_at: new Date() } : opts.role) as never);
     vi.spyOn(repo, 'getActiveCapabilities').mockResolvedValue(opts.actor ?? ['document.view', 'document.edit']);
+    vi.spyOn(repo, 'isActiveSystemAdmin').mockResolvedValue(opts.admin ?? false);
+    vi.spyOn(repo, 'isUserAssignedRole').mockResolvedValue(opts.assigned ?? false);
     vi.spyOn(repo, 'getRoleCapabilities').mockResolvedValue(['document.view']);
     const add = vi.spyOn(repo, 'addCapabilityToRole').mockResolvedValue();
     const remove = vi.spyOn(repo, 'removeCapabilityFromRole').mockResolvedValue();
-    return { service, client, add, remove, audit };
+    return { service, client, repo, add, remove, audit };
   }
   void MembershipService;
 
@@ -140,5 +142,91 @@ describe('MembershipService.changeRoleCapabilities — atomic validation', () =>
     const full = await setup({ role: { id: ROLE, company_id: 'company-a', name: 'r', is_full_access: true, created_at: new Date() } });
     await expect(full.service.changeRoleCapabilities(ROLE, ['document.view'], [], 'company-a', 'user')).rejects.toThrow(/full access/i);
     expect(other.add).not.toHaveBeenCalled(); expect(full.add).not.toHaveBeenCalled();
+  });
+
+  it('lets only a verified System Administrator delegate the three financial capabilities, with one bulk audit', async () => {
+    const ids=['payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create'];
+    const admin=await setup({actor:[],known:ids,admin:true});
+    await admin.service.changeRoleCapabilities(ROLE,ids,[],'company-a','user');
+    expect(admin.add.mock.calls.map(call=>call[1])).toEqual(ids);
+    expect(admin.audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({company_id:'company-a',actor_user_id:'user',action:'access.role.capability.bulk_change',after_data:{capabilities:['document.view',...ids]}}),admin.client);
+    const ordinary=await setup({actor:[],known:ids});
+    await expect(ordinary.service.changeRoleCapabilities(ROLE,ids,[],'company-a','user')).rejects.toMatchObject({code:'ACCESS_ROLE_CEILING'});
+    expect(ordinary.add).not.toHaveBeenCalled();
+    const other=await setup({actor:[],known:['bank.reconcile'],admin:true});
+    await expect(other.service.changeRoleCapabilities(ROLE,['bank.reconcile'],[],'company-a','user')).rejects.toMatchObject({code:'ACCESS_ROLE_CEILING'});
+    expect(other.add).not.toHaveBeenCalled();
+    const full=await setup({actor:[],known:ids,admin:true,role:{id:ROLE,company_id:'company-a',name:'Full Access',is_full_access:true}});
+    await expect(full.service.changeRoleCapabilities(ROLE,[ids[0]],[],'company-a','user')).rejects.toMatchObject({code:'ACCESS_FULL_ACCESS_IMMUTABLE'});
+    expect(full.add).not.toHaveBeenCalled();
+  });
+
+  it('audits a bulk revocation of delegated financial authority', async () => {
+    const id='payroll.settlement.create';
+    const admin=await setup({actor:[],known:[id],admin:true});
+    vi.spyOn(admin.repo,'getRoleCapabilities').mockResolvedValue([id]);
+    await admin.service.changeRoleCapabilities(ROLE,[],[id],'company-a','user');
+    expect(admin.remove).toHaveBeenCalledWith(ROLE,id,admin.client);
+    expect(admin.audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({action:'access.role.capability.bulk_change',before_data:{capabilities:[id]},after_data:{capabilities:[]}}),admin.client);
+  });
+
+  it('refuses bulk delegation to the actor’s own role before any write', async () => {
+    const id='payroll.accounting.post';
+    const {service,add,audit}=await setup({actor:[],known:[id],admin:true,assigned:true});
+    await expect(service.changeRoleCapabilities(ROLE,[id],[],'company-a','user')).rejects.toMatchObject({code:'ACCESS_SELF_GRANT'});
+    expect(add).not.toHaveBeenCalled();expect(audit.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('audits single grants and revocations and blocks direct self-grants', async () => {
+    const id='payroll.accounting.mapping.manage';
+    const granted=await setup({actor:[],admin:true});
+    await granted.service.changeRoleCapability(ROLE,id,'company-a','user',true);
+    expect(granted.add).toHaveBeenCalledWith(ROLE,id,granted.client);
+    expect(granted.audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({action:'access.role.capability.add',company_id:'company-a',actor_user_id:'user'}),granted.client);
+    const revoked=await setup({actor:[],admin:true});
+    await revoked.service.changeRoleCapability(ROLE,id,'company-a','user',false);
+    expect(revoked.remove).toHaveBeenCalledWith(ROLE,id,revoked.client);
+    expect(revoked.audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({action:'access.role.capability.remove',company_id:'company-a',actor_user_id:'user'}),revoked.client);
+    const own=await setup({actor:[],admin:true,assigned:true});
+    await expect(own.service.changeRoleCapability(ROLE,id,'company-a','user',true)).rejects.toMatchObject({code:'ACCESS_SELF_GRANT'});
+    expect(own.add).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning a newly privileged role to the granting administrator', async () => {
+    const id='payroll.accounting.post';
+    const {service,repo,audit}=await setup({actor:[],admin:true});
+    vi.spyOn(repo,'findMembershipById').mockResolvedValue({id:'m',user_id:'user',company_id:'company-a',role_id:null,is_active:true} as never);
+    vi.spyOn(repo,'getRoleCapabilities').mockResolvedValue([id]);
+    const assign=vi.spyOn(repo,'assignRoleToMembership');
+    vi.spyOn(service as never,'assertCanManageTarget').mockResolvedValue(undefined);
+    await expect(service.assignRoleForCompany('m',ROLE,'company-a','user')).rejects.toMatchObject({code:'ACCESS_ROLE_CEILING'});
+    expect(assign).not.toHaveBeenCalled();expect(audit.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('audits assignment of a delegated financial role to a different member', async () => {
+    const {service,repo,audit}=await setup({actor:[],admin:true});
+    const member={id:'m',user_id:'colleague',company_id:'company-a',role_id:null,is_active:true};
+    vi.spyOn(repo,'findMembershipById').mockResolvedValue(member as never);
+    vi.spyOn(repo,'getRoleCapabilities').mockResolvedValue(['payroll.accounting.post']);
+    vi.spyOn(repo,'assignRoleToMembership').mockResolvedValue({...member,role_id:ROLE} as never);
+    vi.spyOn(service as never,'assertCanManageTarget').mockResolvedValue(undefined);
+    await service.assignRoleForCompany('m',ROLE,'company-a','user');
+    expect(audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({action:'access.membership.role.assign',company_id:'company-a',actor_user_id:'user',after_data:expect.objectContaining({role_id:ROLE})}),expect.anything());
+  });
+
+  it('keeps sensitive capability ceilings when cloning a role', async () => {
+    const id = 'payroll.accounting.post';
+    const ordinary = await setup({ actor: [] });
+    vi.spyOn(ordinary.repo, 'getRoleCapabilities').mockResolvedValue([id]);
+    const create = vi.spyOn(ordinary.repo, 'createRole');
+    await expect(ordinary.service.cloneRole(ROLE, 'copy', 'company-a', 'user')).rejects.toMatchObject({ code: 'ACCESS_ROLE_CEILING' });
+    expect(create).not.toHaveBeenCalled();
+
+    const admin = await setup({ actor: [], admin: true });
+    vi.spyOn(admin.repo, 'getRoleCapabilities').mockResolvedValue([id]);
+    vi.spyOn(admin.repo, 'createRole').mockResolvedValue({ id: 'copy', company_id: 'company-a', name: 'copy', is_full_access: false } as never);
+    await admin.service.cloneRole(ROLE, 'copy', 'company-a', 'user');
+    expect(admin.add).toHaveBeenCalledWith('copy', id, admin.client);
+    expect(admin.audit.logEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'access.role.clone', company_id: 'company-a', actor_user_id: 'user' }), admin.client);
   });
 });

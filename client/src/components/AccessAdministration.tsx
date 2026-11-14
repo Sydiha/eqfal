@@ -224,7 +224,12 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
   const toggleGroup = (group: string) => setOpenGroups((current) => { const next = new Set(current); if (!next.delete(group)) next.add(group); return next; });
   const roleEditable = selectedRole?.editable !== false;
   const fullAccessExplicitCapabilities = ['payroll.approve'];
-  const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') && (can(id) || (fullAccessExplicitCapabilities.includes(id) && can('access.full_access.grant')));
+  const systemAdminDelegableFinancialCapabilities = ['payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create'];
+  const ownRole = members.some(member => member.user_id === currentUserId && member.role_id === selectedRole?.id);
+  const canGrantId = (id: string) => roleEditable && can('access.role.capability.grant') &&
+    !(ownRole && systemAdminDelegableFinancialCapabilities.includes(id)) &&
+    (can(id) || (fullAccessExplicitCapabilities.includes(id) && can('access.full_access.grant')) ||
+      (isSystemAdmin && !ownRole && systemAdminDelegableFinancialCapabilities.includes(id)));
   const canRevokeId = () => roleEditable && can('access.role.capability.revoke');
 
   const errorText = errorKey ? (failure && apiErrorMessage(failure, t)) || t(`access.${errorKey}`) : '';
@@ -283,7 +288,7 @@ export function AccessAdministration({ capabilities, currentUserId, onAccessChan
             <p className="acc-hint">{t('access.fullAccessNote')}</p>
             {fullAccessExplicitCapabilities.filter(id => allCapabilities.includes(id)).map(id => <label key={id} title={id}><input type="checkbox" checked={selectedRole.capabilities.includes(id)} disabled={busy || !(selectedRole.capabilities.includes(id) ? canRevokeId() : canGrantId(id))} onChange={() => void toggleCapability(selectedRole, id, !selectedRole.capabilities.includes(id))} />{capabilityLabel(id, lang)}</label>)}
           </> : <>
-            <p className="acc-hint">{t('access.ceilingNote')}</p>
+            <p className="acc-hint">{t(isSystemAdmin ? 'access.systemAdminDelegationNote' : 'access.ceilingNote')}</p>
             {(() => {
               const grantable = allCapabilities.filter((id) => !selectedRole.capabilities.includes(id) && canGrantId(id));
               const revocable = allCapabilities.filter((id) => selectedRole.capabilities.includes(id) && canRevokeId());

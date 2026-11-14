@@ -316,7 +316,7 @@ const en = {
     },
     cloneRole: 'Clone role', cloneRoleTitle: 'Clone role “{{name}}”', cloneName: 'New role name', cloneNote: 'Creates a new role in this company with the same operational permissions. It is assigned to nobody. Administrative authority and Full Access are never copied; grant them separately if needed.',
     cloneDone: 'Role created. Administrative permissions that were not copied: {{count}}.', renameRole: 'Rename role', renameRoleTitle: 'Rename role “{{name}}”', renameNote: 'Only the name changes. Permissions and members stay the same.', fullAccessProtected: 'The Full Access role is protected: it cannot be renamed or cloned.',
-    ceilingNote: 'You cannot grant a permission you do not hold in this company.', saving: 'Saving…',
+    ceilingNote: 'You cannot grant a permission you do not hold in this company.', systemAdminDelegationNote: 'System Administrators may delegate payroll mapping management, posting, and settlement creation to other ordinary roles without receiving those permissions themselves.', saving: 'Saving…',
     invalidRequest: 'Invalid request. Check the data.', forbidden: 'You are not allowed to perform this action.', notFound: 'Item not found.', conflict: 'This item already exists.', error: 'The operation could not be completed. Try again.',
   },
   accessRisk: {
@@ -459,6 +459,7 @@ const en = {
     COMPANY_SLUG_CONFLICT: 'This short code is already in use. Choose another one.',
     COMPANY_LAST_ACTIVE_CONFLICT: 'This company cannot be disabled because it is your last active company.',
     ACCESS_ROLE_CEILING: 'You cannot grant a role or permissions beyond your own access level in this company.',
+    ACCESS_SELF_GRANT: 'You cannot grant a sensitive financial permission to a role assigned to your own account.',
     ACCESS_FULL_ACCESS_IMMUTABLE: 'The Full Access role has fixed permissions and cannot be modified.',
     ACCESS_TARGET_PRIVILEGE: 'This member is a manager or Full Access user outside your authority, so you cannot change their access.',
     ACCESS_LAST_FULL_ACCESS: 'The last active Full Access member of a company cannot be disabled or demoted.',

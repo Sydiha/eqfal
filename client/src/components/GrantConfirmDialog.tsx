@@ -30,7 +30,7 @@ export function GrantConfirmDialog({ pending, busy, onCancel }: { pending: Pendi
       <p>{t(`accessRisk.consequence.${impact.risk}`, params)}</p>
       {impact.flagged.length > 0 && <ul className="acc-risk-list" aria-label={t('accessRisk.newAuthority')}>
         {impact.flagged.map((item) => <li key={item.id} title={item.id}>
-          <span className={`acc-risk-tag acc-risk-tag--${item.level}`}>{t(`accessRisk.level.${item.level}`)}</span>{capabilityLabel(item.id, lang)}
+          <span className={`acc-risk-tag acc-risk-tag--${item.level}`}>{t(`accessRisk.level.${item.level}`)}</span>{capabilityLabel(item.id, lang)} <code>{item.id}</code>
         </li>)}
       </ul>}
       <p className="acc-risk-note">{t('accessRisk.serverNote')}</p>

@@ -73,6 +73,15 @@ export class MembershipRepository {
     return rows[0] ?? null;
   }
 
+  /** Includes inactive memberships: a later enable must not turn a delegated role grant into a self-grant. */
+  async isUserAssignedRole(userId: string, companyId: string, roleId: string, client: PoolClient): Promise<boolean> {
+    const { rows } = await client.query<{ assigned: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM memberships WHERE user_id=$1 AND company_id=$2 AND role_id=$3) AS assigned',
+      [userId, companyId, roleId],
+    );
+    return rows[0]?.assigned === true;
+  }
+
   /**
    * Authoritative list of tenant memberships available to an authenticated user.
    * Both the membership and company must be active. Ordering is deterministic so

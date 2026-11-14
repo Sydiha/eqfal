@@ -12,6 +12,10 @@ import { generateTemporaryPassword } from '../users/password-policy';
 // Full Access delegation may preserve the established payroll approval exception. Accounting readiness
 // capabilities require the granter to hold the same capability; access.full_access.grant alone is insufficient.
 const FULL_ACCESS_EXPLICIT_CAPABILITIES = new Set(['payroll.approve']);
+/** Global administrators may delegate these in the active company, but do not receive them for execution. */
+export const SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES = new Set([
+  'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create',
+]);
 
 /** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
@@ -235,6 +239,11 @@ export class MembershipService {
       const sourceCaps = [...(await this.repo.getRoleCapabilities(sourceRoleId, client))].sort();
       const copied = sourceCaps.filter((id) => !isAdministrativeCapability(id));
       const omitted = sourceCaps.filter(isAdministrativeCapability);
+      const delegated = copied.filter((id) => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id));
+      if (delegated.length && !(await this.repo.isActiveSystemAdmin(actorUserId, client))) {
+        const actorCaps = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
+        for (const id of delegated) if (!actorCaps.includes(id)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+      }
       const role = await this.repo.createRole({ name, company_id: companyId }, client);
       for (const id of copied) await this.repo.addCapabilityToRole(role.id, id, client);
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.clone', entity_type: 'role', entity_id: role.id,
@@ -305,12 +314,13 @@ export class MembershipService {
 
   async changeRoleCapability(roleId: string, capabilityId: string, companyId: string, actorUserId: string, add: boolean): Promise<void> {
     return this.transaction(async (client) => {
+      if (SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(capabilityId)) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([capabilityId], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-        if (!actorCapabilities.includes(capabilityId) && !(FULL_ACCESS_EXPLICIT_CAPABILITIES.has(capabilityId) && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capabilityId}'`, 'ACCESS_ROLE_CEILING');
+        await this.assertCanChangeRoleCapability(roleId, capabilityId, companyId, actorUserId, add, actorCapabilities, client);
         await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
@@ -330,12 +340,14 @@ export class MembershipService {
     const known = new Set(await this.repo.listCapabilities());
     for (const id of [...grants, ...revokes]) if (!known.has(id)) throw new Error(`Capability not found: '${id}'`);
     return this.transaction(async (client) => {
+      if ([...grants, ...revokes].some(id => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id))) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.is_full_access) await this.assertCanChangeFullAccessCapabilities([...grants, ...revokes], companyId, actorUserId, client);
       else {
         const actorCapabilities = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
-        for (const id of [...grants, ...revokes]) if (!actorCapabilities.includes(id) && !(FULL_ACCESS_EXPLICIT_CAPABILITIES.has(id) && actorCapabilities.includes(FULL_ACCESS_GRANT))) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
+        for (const id of grants) await this.assertCanChangeRoleCapability(roleId, id, companyId, actorUserId, true, actorCapabilities, client);
+        for (const id of revokes) await this.assertCanChangeRoleCapability(roleId, id, companyId, actorUserId, false, actorCapabilities, client);
         await this.assertCanEditRole(roleId, companyId, actorUserId, client);
       }
       const before = await this.repo.getRoleCapabilities(roleId, client);
@@ -344,6 +356,19 @@ export class MembershipService {
       const after = [...new Set([...before, ...grants])].filter((id) => !revokes.includes(id));
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actorUserId, action: 'access.role.capability.bulk_change', entity_type: 'role', entity_id: roleId, before_data: { capabilities: before }, after_data: { capabilities: after } }, client);
     });
+  }
+
+  private async lockRoleForDelegation(roleId: string, companyId: string, client: PoolClient): Promise<void> {
+    await client.query('SELECT id FROM roles WHERE id=$1 AND company_id=$2 FOR UPDATE', [roleId, companyId]);
+  }
+
+  private async assertCanChangeRoleCapability(roleId: string, id: string, companyId: string, actorUserId: string, add: boolean, actorCapabilities: string[], client: PoolClient): Promise<void> {
+    if (add && SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id) && await this.repo.isUserAssignedRole(actorUserId, companyId, roleId, client)) {
+      throw new AccessPolicyError('Cannot grant a sensitive capability to your own role', 'ACCESS_SELF_GRANT');
+    }
+    if (actorCapabilities.includes(id) || (FULL_ACCESS_EXPLICIT_CAPABILITIES.has(id) && actorCapabilities.includes(FULL_ACCESS_GRANT))) return;
+    if (SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id) && await this.repo.isActiveSystemAdmin(actorUserId, client)) return;
+    throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${id}'`, 'ACCESS_ROLE_CEILING');
   }
 
   /** Full Access remains immutable except for explicitly managed payroll approval/accounting permissions. */
@@ -441,13 +466,14 @@ export class MembershipService {
   private async assertCanAssign(membership: Membership, role: Role, actorUserId: string, client?: PoolClient): Promise<void> {
     if (role.company_id !== membership.company_id) throw new Error('Cross-company violation');
     if (role.is_full_access) { await this.assertCanGrantFullAccess(membership, actorUserId, client); return; }
+    const selfAssign = membership.user_id === actorUserId;
+    if (selfAssign && client) await this.lockRoleForDelegation(role.id, role.company_id, client);
     const [granterCaps, roleCaps] = await Promise.all([
       this.repo.getActiveCapabilities(actorUserId, membership.company_id, client),
       this.repo.getRoleCapabilities(role.id, client),
     ]);
     // Ceiling over administrative capabilities for others; over EVERY capability when assigning to oneself, so a manager
     // can staff Accountant/Operations roles for employees but can never give themselves accounting capabilities.
-    const selfAssign = membership.user_id === actorUserId;
     for (const capability of roleCaps) {
       if ((selfAssign || isAdministrativeCapability(capability)) && !granterCaps.includes(capability)) throw new AccessPolicyError(`Ceiling violation: granter lacks capability '${capability}'`, 'ACCESS_ROLE_CEILING');
     }
