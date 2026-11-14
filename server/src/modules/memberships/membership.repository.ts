@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { Membership, MembershipListItem, Role, RoleListItem, CreateMembershipInput, CreateRoleInput } from './membership.types';
-import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES, PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY, targetSystemAdministratorCapabilities } from './authorization-policy';
+import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES, PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY, privilegedPayrollCapabilities, targetSystemAdministratorCapabilities } from './authorization-policy';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -431,6 +431,8 @@ export class MembershipRepository {
            OR (u.is_system_admin AND u.system_admin_policy_version >= 1)
            OR (NOT COALESCE(r.is_full_access, FALSE) AND r.authorization_policy_version >= 1
                AND r.authorization_policy_key IN ('company_manager', 'finance_manager'))
+           OR u.is_system_admin
+           OR (NOT COALESCE(r.is_full_access, FALSE) AND r.authorization_policy_key IN ('company_manager', 'finance_manager'))
         )`,
       [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES]],
     );
@@ -440,6 +442,11 @@ export class MembershipRepository {
       && !(row.role_is_full_access && row.capability_id === PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY)).map((row) => row.capability_id));
     const catalog = rows.map((row) => row.capability_id);
     const first = rows[0]!;
+    const privilegedPayrollRole = first.is_system_admin
+      || (!first.role_is_full_access && (first.role_policy_key === 'company_manager' || first.role_policy_key === 'finance_manager'));
+    if (privilegedPayrollRole) {
+      for (const id of privilegedPayrollCapabilities(catalog)) result.add(id);
+    }
     if (first.is_system_admin && Number(first.system_admin_policy_version) >= 1) {
       for (const id of targetSystemAdministratorCapabilities(catalog)) result.add(id);
     }

@@ -6,6 +6,7 @@ import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
+import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
 
 export const payrollRouter=Router();
 const month=/^\d{4}-(0[1-9]|1[0-2])-01$/;
@@ -89,14 +90,10 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   if(!draft){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}
   if(draft.status==='approved'){await c.query('ROLLBACK');return void error(s,'PAYROLL_ALREADY_APPROVED',409);}
   if(draft.version!==b.version){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
-  // Verify the role in the database; a client-supplied role or display-only session role is not authority.
-  const admin=(await c.query<{ok:boolean}>(`SELECT EXISTS (
-    SELECT 1 FROM memberships m JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
-    WHERE m.user_id=$1 AND m.company_id=$2 AND m.is_active=TRUE
-      AND r.is_full_access=TRUE
-  ) AS ok`,[actor,company(q)])).rows[0]!.ok;
+  // Privileged payroll authority is role-specific; company Full Access is not a bypass.
+  const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
   const contributed=(await c.query<{ok:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) AS ok',[company(q),q.params.id,actor])).rows[0]!.ok;
-  if(contributed&&!admin){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
+  if(contributed&&!privileged){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
   const totals=(await c.query<{count:string;invalid:string}>(`SELECT COUNT(*)::text AS count,
     COUNT(*) FILTER (WHERE salary+allowances+bonus+overtime<deductions
       OR (legacy_allowances IS NOT NULL AND allowances<>legacy_allowances+housing_allowance+transportation_allowance+other_allowance)
@@ -106,7 +103,7 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   if(totals.invalid!=='0'){await c.query('ROLLBACK');return void error(s,'PAYROLL_INVALID',400);}
   await c.query("UPDATE payroll_drafts SET status='approved',approved_by=$3,approved_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1 AND company_id=$2",[q.params.id,company(q),actor]);
   await audit.logEvent({company_id:company(q),actor_user_id:actor,action:'payroll.draft.approve',entity_type:'payroll_draft',entity_id:q.params.id,
-    after_data:{period_month:draft.period_month,version:draft.version+1,self_approval:contributed&&admin,administrator_override:contributed&&admin}},c);
+    after_data:{period_month:draft.period_month,version:draft.version+1,self_approval:contributed&&privileged,privileged_role_override:contributed&&privileged}},c);
   await c.query('COMMIT');await detail(q,s,draft.period_month);
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }));

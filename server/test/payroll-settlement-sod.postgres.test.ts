@@ -33,6 +33,27 @@ db('payroll settlement SoD exceptions (PostgreSQL)',()=>{
    expect(response.status,JSON.stringify(response.json)).toBe(409);expect(response.json.code).toBe('PAYROLL_SETTLEMENT_SOD_REQUIRED');
   }
  });
+ it.each([
+  ['company_manager','company_manager'],
+  ['finance_manager','finance_manager'],
+ ] as const)('allows %s authority to settle its own payroll participant work without an exception',async(label,key)=>{
+  const x=await fixture(`sod-${label}`);
+  let role=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2 LIMIT 1',[x.company,key]))[0];
+  if(!role)role=(await h.q<{id:string}>("UPDATE roles r SET authorization_policy_key=$3 FROM memberships m WHERE m.role_id=r.id AND m.company_id=r.company_id AND m.company_id=$1 AND m.user_id=$2 RETURNING r.id",[x.company,x.contributor.id,key]))[0];
+  expect(role).toBeTruthy();
+  await h.q('UPDATE memberships SET role_id=$3 WHERE company_id=$1 AND user_id=$2',[x.company,x.contributor.id,role!.id]);
+  for(const capability of ['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view'])await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[role!.id,capability]);
+  const response=await x.contributor.client.req('POST','/payroll/settlements',x.body(await x.bank()));
+  expect(response.status,JSON.stringify(response.json)).toBe(201);
+  expect(response.json.allocation.sod_exception_id).toBeNull();
+ });
+ it('allows a global System Administrator participant to settle without an exception',async()=>{
+  const x=await fixture('sod-system-admin');
+  await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[x.contributor.id]);
+  const response=await x.contributor.client.req('POST','/payroll/settlements',x.body(await x.bank()));
+  expect(response.status,JSON.stringify(response.json)).toBe(201);
+  expect(response.json.allocation.sod_exception_id).toBeNull();
+ });
  it('requires an independent explicit approver and permits exactly the approved actor, company, liability and one settlement',async()=>{
   const x=await fixture('sod-approved');
   for(const user of [x.contributor,x.poster]){

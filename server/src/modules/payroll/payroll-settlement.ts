@@ -5,6 +5,7 @@ import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../mo
 import { postJournalInTransaction, FiscalYearClosedError, JournalPostingValidationError, JournalPostingConflictError, LedgerSourceAuthorityBlockedError } from '../accounting/journal-posting';
 import { resolveBankLedgerAccount } from '../accounting/personal-payment-posting';
 import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships/authorization-policy';
+import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
 
 export class PayrollSettlementError extends Error {
   constructor(readonly code:string, readonly status=409) { super(code); }
@@ -102,6 +103,7 @@ export class PayrollSettlementService {
     const c=await this.db.connect();
     try{
       await c.query('BEGIN');
+      if(await hasPrivilegedPayrollSodAuthority(c,company,actor))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_NOT_REQUIRED');
       const evidence=await this.sodEvidence(c,company,lineId);
       if(!evidence.participants.includes(actor))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_NOT_REQUIRED');
       const approved=(await c.query<{id:string;requested_at:string}>(`SELECT id,requested_at::text FROM payroll_settlement_sod_exceptions
@@ -199,6 +201,8 @@ export class PayrollSettlementService {
           AND j.reversal_of_journal_id IS NULL AND r.id IS NULL
       ) yes`,[company,bank.bank_account_id])).rows[0]!.yes;
       if(uncertain) throw conflict('PAYROLL_SETTLEMENT_BANK_ACCOUNT_QUARANTINED');
+      const privileged=await hasPrivilegedPayrollSodAuthority(c,company,actor);
+      if(privileged&&input.sodExceptionId)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
       let sodException:{id:string;intended_actor_id:string;status:string;participant_fingerprint:string;payroll_draft_id:string;liability_line_id:string;payroll_journal_id:string;liability_amount:string;settled_amount:string;decided_by:string|null;approval_expires_at:string|null;database_now:string}|undefined;
       if(input.sodExceptionId){
         sodException=(await c.query(`SELECT id,intended_actor_id,status,participant_fingerprint,payroll_draft_id,liability_line_id,payroll_journal_id,
@@ -212,7 +216,7 @@ export class PayrollSettlementService {
         if(!approvedSodExceptionIsUnexpired(sodException.status,sodException.approval_expires_at,sodException.database_now))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_EXPIRED');
         if(sodException.participant_fingerprint!==evidence.fingerprint||sodException.payroll_journal_id!==evidence.journalId||sodException.liability_amount!==evidence.liabilityAmount||sodException.settled_amount!==evidence.settledAmount)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_STALE');
         if(!sodException.decided_by||sodException.decided_by===actor||evidence.participants.includes(sodException.decided_by))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_CONFLICTED_APPROVER');
-      }else if(conflicted)throw conflict('PAYROLL_SETTLEMENT_SOD_REQUIRED');
+      }else if(conflicted&&!privileged)throw conflict('PAYROLL_SETTLEMENT_SOD_REQUIRED');
       const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,d.period_month::text,d.currency_code FROM journal_lines l
         JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id JOIN payroll_drafts d ON d.id=j.source_id AND d.company_id=j.company_id
         WHERE l.company_id=$1 AND l.id=$2 AND j.source_type='payroll' AND j.status='posted' AND d.status='approved' AND l.debit=0 AND l.credit>0

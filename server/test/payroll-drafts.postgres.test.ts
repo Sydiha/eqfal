@@ -52,6 +52,11 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.approve']);
   await h.member(co,approver.id,['payroll.view','payroll.approve']);
   await h.member(co,manager.id,['payroll.view','payroll.edit','payroll.approve','access.role.capability.grant']);
+  const standardManager=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=\'company_manager\' LIMIT 1',[co]))[0];
+  if(standardManager)await h.q('UPDATE memberships SET role_id=$3 WHERE company_id=$1 AND user_id=$2',[co,manager.id,standardManager.id]);
+  else await h.q("UPDATE roles r SET authorization_policy_key='company_manager' FROM memberships m WHERE m.role_id=r.id AND m.company_id=r.company_id AND m.company_id=$1 AND m.user_id=$2",[co,manager.id]);
+  const companyManagerRole=(await h.q<{role_id:string}>('SELECT role_id FROM memberships WHERE company_id=$1 AND user_id=$2',[co,manager.id]))[0]!.role_id;
+  for(const capability of ['payroll.view','payroll.edit','payroll.approve','access.role.capability.grant'])await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[companyManagerRole,capability]);
   await h.member(co,auditor.id,['audit.view']);
   for(const u of [owner,editor,approver,manager,auditor,outsider])await u.client.login();
   const employee=(await owner.client.req('POST','/employees',{employee_number:'PA1',display_name:'Approval employee',employment_start:'2025-01-01',employment_end:null})).json;
@@ -93,12 +98,14 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   const own=(await manager.client.req('POST','/payroll/drafts',{month:'2026-06-01'})).json.draft;
   const ownLine=`/payroll/drafts/${own.id}/employees/${employee.id}`;
   const ownEdit=await manager.client.req('PUT',ownLine,values(0));expect(ownEdit.status).toBe(200);
-  const self=await manager.client.req('POST',`/payroll/drafts/${own.id}/approve`,{version:ownEdit.json.draft.version});expect(self.json.code).toBe('PAYROLL_SELF_APPROVAL');
+  const self=await manager.client.req('POST',`/payroll/drafts/${own.id}/approve`,{version:ownEdit.json.draft.version});expect(self.status).toBe(200);
   const fullDraft=(await owner.client.req('POST','/payroll/drafts',{month:'2026-09-01'})).json.draft;
   const fullEdit=await owner.client.req('PUT',`/payroll/drafts/${fullDraft.id}/employees/${employee.id}`,values(0));expect(fullEdit.status).toBe(200);
-  const fullApproval=await owner.client.req('POST',`/payroll/drafts/${fullDraft.id}/approve`,{version:fullEdit.json.draft.version});expect(fullApproval.status).toBe(200);
-  const audit=await h.q<{after_data:{self_approval:boolean;administrator_override:boolean};actor_user_id:string}>("SELECT after_data,actor_user_id FROM audit_log WHERE company_id=$1 AND action='payroll.draft.approve' AND entity_id=$2",[co,fullDraft.id]);
-  expect(audit[0]).toMatchObject({actor_user_id:owner.id,after_data:{self_approval:true,administrator_override:true}});
+  const fullApproval=await owner.client.req('POST',`/payroll/drafts/${fullDraft.id}/approve`,{version:fullEdit.json.draft.version});expect(fullApproval.json.code).toBe('PAYROLL_SELF_APPROVAL');
+  const globalAdmin=await h.user('approval-global-admin');await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[globalAdmin.id]);await globalAdmin.client.login();
+  const adminDraft=(await globalAdmin.client.req('POST','/payroll/drafts',{month:'2026-10-01'})).json.draft;
+  const adminLine=(await globalAdmin.client.req('PUT',`/payroll/drafts/${adminDraft.id}/employees/${employee.id}`,values(0))).json.draft;
+  expect((await globalAdmin.client.req('POST',`/payroll/drafts/${adminDraft.id}/approve`,{version:adminLine.version})).status).toBe(200);
   expect((await h.q<{n:string}>("SELECT COUNT(*)::text n FROM payroll_draft_employees WHERE draft_id=$1",[own.id]))[0]?.n).toBe('1');
  });
  it('keeps pre-migration allowances unclassified through reopen and edits',async()=>{

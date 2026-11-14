@@ -53,6 +53,22 @@ db('payroll posting (PostgreSQL)',()=>{
   expect((await x.approver.client.req('POST',`/payroll/drafts/${x.draft.id}/approve`,{version:2})).status).toBe(200);
   expect((await x.approver.client.req('POST',url,{})).json.code).toBe('PAYROLL_POST_SEPARATION_OF_DUTIES');
  });
+ it.each(['company_manager','finance_manager','system_admin'] as const)('allows %s authority to approve and post its own payroll contribution',async(authority)=>{
+  const x=await fixture(`post-${authority}`,false);
+  if(authority==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[x.editor.id]);
+  else {
+   let role=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2 LIMIT 1',[x.co,authority]))[0];
+   if(!role)role=(await h.q<{id:string}>("UPDATE roles r SET authorization_policy_key=$3 FROM memberships m WHERE m.role_id=r.id AND m.company_id=r.company_id AND m.company_id=$1 AND m.user_id=$2 RETURNING r.id",[x.co,x.editor.id,authority]))[0];
+   expect(role).toBeTruthy();
+   await h.q('UPDATE memberships SET role_id=$3 WHERE company_id=$1 AND user_id=$2',[x.co,x.editor.id,role!.id]);
+   for(const capability of ['payroll.view','payroll.edit','payroll.approve','payroll.accounting.post'])await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[role!.id,capability]);
+  }
+  expect((await x.editor.client.req('POST',`/payroll/drafts/${x.draft.id}/approve`,{version:2})).status).toBe(200);
+  const status=await x.editor.client.req('GET',`/payroll/drafts/${x.draft.id}/accounting-post-status`);
+  expect(status.status).toBe(200);expect(status.json.eligible).toBe(true);
+  const result=await x.editor.client.req('POST',`/payroll/drafts/${x.draft.id}/accounting-post`,{});
+  expect(result.status,JSON.stringify(result.json)).toBe(201);
+ });
  it('revalidates mappings, manual journals and periods; failed attempts leave no journal and can be retried',async()=>{
   const x=await fixture('post-block');
   await h.q('DELETE FROM payroll_account_mappings WHERE company_id=$1 AND mapping_key=$2',[x.co,keys[0]]);

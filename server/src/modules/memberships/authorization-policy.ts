@@ -65,6 +65,12 @@ export function targetSystemAdministratorCapabilities(capabilityIds: readonly st
   return [...new Set(capabilityIds)].filter((id) => id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
 }
 
+/** Payroll-only authority expressly approved for privileged payroll roles, independent of v1 activation. */
+export function privilegedPayrollCapabilities(capabilityIds: readonly string[]): string[] {
+  return capabilityIds.filter((id) => (id.startsWith('payroll.') || id === 'bank.view')
+    && id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
+}
+
 /** Canonical current role snapshots used only for projection and impact review. */
 export const DEFAULT_AUTHORIZATION_ROLE_CAPABILITIES: Record<AuthorizationPolicyKey, readonly string[]> = {
   accountant: ACCOUNTANT_CAPABILITIES,

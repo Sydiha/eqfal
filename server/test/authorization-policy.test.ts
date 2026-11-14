@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ACCOUNTANT_CAPABILITIES, COMPANY_MANAGER_CAPABILITIES, FINANCE_MANAGER_DEFAULT_CAPABILITIES } from '../src/modules/memberships/default-role-capabilities';
-import { effectiveRoleCapabilities, targetRoleCapabilities, targetSystemAdministratorCapabilities } from '../src/modules/memberships/authorization-policy';
+import { effectiveRoleCapabilities, privilegedPayrollCapabilities, targetRoleCapabilities, targetSystemAdministratorCapabilities } from '../src/modules/memberships/authorization-policy';
 import { buildAuthorizationPolicyImpactProjection } from '../src/modules/memberships/authorization-policy-impact';
 import { MembershipRepository } from '../src/modules/memberships/membership.repository';
 
@@ -57,6 +57,10 @@ describe('versioned authorization policy', () => {
     expect(targetSystemAdministratorCapabilities(catalog)).toEqual(catalog.filter((id) => id !== 'payroll.settlement.exception.approve'));
   });
 
+  it('grants only payroll workflow capabilities to the approved privileged roles without enabling policy v1', () => {
+    expect(privilegedPayrollCapabilities(catalog)).toEqual(catalog.filter((id) => (id.startsWith('payroll.') || id === 'bank.view') && id !== 'payroll.settlement.exception.approve'));
+  });
+
   it('does not change Full Access semantics when a corrupt role row carries a policy key', async () => {
     const queryRows = [
       { capability_id: 'payroll.accounting.post', currently_authorized: false, is_system_admin: false, system_admin_policy_version: 0, role_policy_key: 'company_manager', role_policy_version: 1, role_is_full_access: true },
@@ -80,13 +84,25 @@ describe('versioned authorization policy', () => {
       { ...base, capability_id: 'payroll.approve', currently_authorized: false },
     ];
     const inactive = await new MembershipRepository({ query: async () => ({ rows: current }) } as never).getActiveCapabilities('u', 'company-a');
-    expect(inactive).toEqual(['company.view']);
+    expect(inactive).toEqual(['company.view', 'payroll.approve']);
 
     const activated = current.map((row) => ({ ...row, role_policy_version: 1 }));
     const authorized = await new MembershipRepository({ query: async () => ({ rows: activated }) } as never).getActiveCapabilities('u', 'company-a');
     expect(authorized).toContain('payroll.approve');
     const foreignCompany = await new MembershipRepository({ query: async () => ({ rows: [] }) } as never).getActiveCapabilities('u', 'company-b');
     expect(foreignCompany).toEqual([]);
+  });
+
+  it('grants v0 System Administrators payroll workflow capabilities but not the settlement exception approval capability', async () => {
+    const rows = [
+      { capability_id: 'payroll.settlement.create', currently_authorized: false, is_system_admin: true, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false },
+      { capability_id: 'payroll.settlement.exception.approve', currently_authorized: true, is_system_admin: true, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false },
+      { capability_id: 'accounting.journal.post', currently_authorized: false, is_system_admin: true, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false },
+    ];
+    const resolved = await new MembershipRepository({ query: async () => ({ rows }) } as never).getActiveCapabilities('admin', 'company-a');
+    expect(resolved).toContain('payroll.settlement.create');
+    expect(resolved).not.toContain('payroll.settlement.exception.approve');
+    expect(resolved).not.toContain('accounting.journal.post');
   });
 
   it('resolves activated System Administrator policy to every registered capability', async () => {
