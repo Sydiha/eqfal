@@ -7,6 +7,7 @@ import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
 import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
+import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 
 export const payrollRouter=Router();
 const month=/^\d{4}-(0[1-9]|1[0-2])-01$/;
@@ -40,13 +41,17 @@ const summary=`SELECT d.id,d.period_month::text,d.currency_code,d.version,d.stat
  LEFT JOIN users u ON u.id=d.approved_by
  WHERE d.company_id=$1 AND d.period_month=$2 GROUP BY d.id,u.email`;
 async function detail(q:Request,s:Response,period:string){
+ const eligibility=(await pool!.query<{eligible:boolean}>(`SELECT
+   (SELECT count(*)=1 AND bool_and(f.status='open') FROM fiscal_years f WHERE f.company_id=$1 AND $2::date BETWEEN f.start_date AND f.end_date)
+   AND NOT EXISTS(SELECT 1 FROM monthly_close_periods m WHERE m.company_id=$1 AND m.status='closed' AND $2::date BETWEEN m.period_start AND m.period_end)
+   AND NOT EXISTS(SELECT 1 FROM ledger_source_authority a WHERE a.company_id=$1 AND a.status='active' AND $2::date BETWEEN a.from_date AND a.to_date) eligible`,[company(q),period])).rows[0]!.eligible;
  const draft=(await pool!.query(summary,[company(q),period])).rows[0]??null;
  const available_employees=(await pool!.query('SELECT id,employee_number,display_name,is_active FROM employees WHERE company_id=$1 ORDER BY employee_number,id',[company(q)])).rows;
- if(!draft){s.json({draft:null,employees:[],available_employees});return;}
+ if(!draft){s.json({draft:null,employees:[],available_employees,period_eligibility:{eligible:eligibility}});return;}
  const employees=(await pool!.query(`SELECT p.id,p.employee_id,e.employee_number,e.display_name,p.version,p.salary::text,p.allowances::text,COALESCE(p.legacy_allowances,p.allowances)::text legacy_allowances,p.housing_allowance::text,p.transportation_allowance::text,p.other_allowance::text,p.bonus::text,p.overtime::text,p.deductions::text,p.employer_contributions::text,
  (p.salary+p.allowances+p.bonus+p.overtime)::text gross_earnings,(p.salary+p.allowances+p.bonus+p.overtime-p.deductions)::text net_payable
  FROM payroll_draft_employees p JOIN employees e ON e.id=p.employee_id AND e.company_id=p.company_id WHERE p.company_id=$1 AND p.draft_id=$2 ORDER BY e.employee_number,e.id`,[company(q),draft.id])).rows;
- s.json({draft,employees,available_employees});
+ s.json({draft,employees,available_employees,period_eligibility:{eligible:eligibility}});
 }
 payrollRouter.get('/payroll/drafts',...read,route(async(q,s)=>{if(!validMonth(q.query.month))return void error(s,'PAYROLL_INVALID');await detail(q,s,q.query.month);}));
 payrollRouter.post('/payroll/drafts',...write,route(async(q,s)=>{
@@ -90,6 +95,11 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   if(!draft){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}
   if(draft.status==='approved'){await c.query('ROLLBACK');return void error(s,'PAYROLL_ALREADY_APPROVED',409);}
   if(draft.version!==b.version){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
+  const years=(await c.query<{id:string;status:string}>(`SELECT id,status FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date ORDER BY start_date FOR SHARE`,[company(q),draft.period_month])).rows;
+  if(years.length!==1||years[0]!.status!=='open'){await c.query('ROLLBACK');return void error(s,'PAYROLL_PERIOD_INELIGIBLE',409);}
+  try{await assertAccountingDateWritable(company(q),draft.period_month,c);}catch(e){if((e as {code?:string}).code==='ACCOUNTING_PERIOD_CLOSED'||(e as {code?:string}).code==='FISCAL_YEAR_CLOSED'){await c.query('ROLLBACK');return void error(s,'PAYROLL_PERIOD_INELIGIBLE',409);}throw e;}
+  const external=(await c.query(`SELECT 1 FROM ledger_source_authority WHERE company_id=$1 AND status='active' AND $2::date BETWEEN from_date AND to_date LIMIT 1`,[company(q),draft.period_month])).rowCount;
+  if(external){await c.query('ROLLBACK');return void error(s,'PAYROLL_PERIOD_INELIGIBLE',409);}
   // Privileged payroll authority is role-specific; company Full Access is not a bypass.
   const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
   const contributed=(await c.query<{ok:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) AS ok',[company(q),q.params.id,actor])).rows[0]!.ok;
