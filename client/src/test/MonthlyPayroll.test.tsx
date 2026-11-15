@@ -155,12 +155,12 @@ it('shows read-only mapped preview, blockers and manual-journal warning in Engli
  const draft={id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T12:00:00.000Z',approved_by_email:'approver@example.test',gross_earnings:'101.00',employee_deductions:'0.50',employer_contributions:'0.60',net_payable:'100.50'};
  const mapping={mapping_key:'earnings_expense',account_id:'a1',account_code:'5000',account_name:'Salaries',account_name_ar:'رواتب',account_type:'expense',account_active:true};
  const preview={totals:{earnings:'101.00',employee_deductions:'0.50',net_payable:'100.50',employer_contributions:'0.60',debit_total:'101.60',credit_total:'101.60'},mappings:[{mapping_key:'earnings_expense',account_id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],lines:[{mapping_key:'earnings_expense',account_id:'a1',debit:'101.00',credit:'0.00'}],blockers:[{code:'ecc_overlap',count:1,details:[{employee_number:'001',display_name:'Ali',category:'salary',amount:'100.00'}]}],warnings:[{code:'manual_journal_review',count:1}],balanced:true,can_preview:false,side_effects:false};
- vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/payroll/account-mappings'?response({mappings:[mapping],accounts:[{id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],requirements:[]}):url.endsWith('/accounting-preview')?response(preview):url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}]}):response({draft,employees:[],available_employees:[]})));
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/payroll/account-mappings'?response({mappings:[mapping],accounts:[{id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],requirements:[]}):url.endsWith('/accounting-preview')?response(preview):url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}],warnings:[{code:'manual_journal_review',count:1}]}):response({draft,employees:[],available_employees:[]})));
  try{
   render(<MonthlyPayroll capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
   expect(await screen.findByText('Read-only journal preview')).toBeInTheDocument();
   expect(screen.getByText(/Approved Employee Cost Center allocations overlap/)).toBeInTheDocument();
-  expect(screen.getByText(/Source-less journals exist in this month/)).toBeInTheDocument();
+  expect(screen.getAllByText(/Source-less journals exist in this month/)).toHaveLength(2);
   expect(screen.getAllByRole('option',{name:/5000.*Salaries/}).length).toBeGreaterThan(0);
   expect(screen.getByText(/Informational preview only; no journal or ledger changes were made/)).toBeInTheDocument();
   await act(async()=>{await i18n.changeLanguage('ar');});
@@ -177,7 +177,7 @@ it('shows read-only mapped preview, blockers and manual-journal warning in Engli
 it('confirms posting and shows the existing journal reference',async()=>{
  const {fireEvent}=await import('@testing-library/react'); let posted=false;
  vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{
-  if(url.endsWith('/accounting-post-status'))return response(posted?{journal:{id:'journal-123',reference:'PAYROLL 2026-03'},eligible:false,blockers:[]}:{journal:null,eligible:true,blockers:[]});
+  if(url.endsWith('/accounting-post-status'))return response(posted?{journal:{id:'journal-123',reference:'PAYROLL 2026-03'},eligible:false,blockers:[],warnings:[]}:{journal:null,eligible:true,blockers:[],warnings:[]});
   if(url.endsWith('/accounting-post')&&options?.method==='POST'){posted=true;return response({journal:{id:'journal-123'},existing:false});}
   return response({draft:{id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'},employees:[],available_employees:[]});
  }));
@@ -191,7 +191,7 @@ it('confirms posting and shows the existing journal reference',async()=>{
 
 it('shows posting blockers to preview readers without a posting action',async()=>{
  const draft={id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'};
- const fetcher=vi.fn(async(url:string)=>url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}]}):url.endsWith('/accounting-preview')?response({totals:{earnings:'100.00',employee_deductions:'0.00',net_payable:'100.00',employer_contributions:'0.00',debit_total:'100.00',credit_total:'100.00'},mappings:[],lines:[],blockers:[],warnings:[],balanced:true,can_preview:true,side_effects:false}):url==='/api/payroll/account-mappings'?response({mappings:[],accounts:[]}):response({draft,employees:[],available_employees:[]}));
+ const fetcher=vi.fn(async(url:string)=>url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}],warnings:[]}):url.endsWith('/accounting-preview')?response({totals:{earnings:'100.00',employee_deductions:'0.00',net_payable:'100.00',employer_contributions:'0.00',debit_total:'100.00',credit_total:'100.00'},mappings:[],lines:[],blockers:[],warnings:[],balanced:true,can_preview:true,side_effects:false}):url==='/api/payroll/account-mappings'?response({mappings:[],accounts:[]}):response({draft,employees:[],available_employees:[]}));
  vi.stubGlobal('fetch',fetcher);
  render(<MonthlyPayroll capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
  expect(await screen.findByText(/لا يمكن لمُعد المسير أو معتمده ترحيله/)).toBeInTheDocument();

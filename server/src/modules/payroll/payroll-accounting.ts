@@ -75,11 +75,11 @@ export class PayrollAccountingService {
       FROM payroll_drafts d LEFT JOIN journal_entries j ON j.company_id=d.company_id AND j.source_type='payroll' AND j.source_id=d.id
       WHERE d.company_id=$1 AND d.id=$2`,[companyId,draftId,actor]);
     const row = result.rows[0]!;
-    const blockers = [...plan.blockers, ...plan.warnings];
+    const blockers = [...plan.blockers];
     if (!row.separated && !privileged) blockers.push({code:'separation_of_duties'});
     if (!row.eligible) blockers.push({code:'period_ineligible'});
     if (row.journal_id && row.journal_status !== 'posted') blockers.push({code:'journal_invalid'});
-    return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, eligible:!row.journal_id && plan.can_preview && (row.separated || privileged) && row.eligible};
+    return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, warnings:plan.warnings, eligible:!row.journal_id && plan.can_preview && (row.separated || privileged) && row.eligible};
   }
 
   async post(companyId: string, draftId: string, actor: string) {
@@ -110,7 +110,7 @@ export class PayrollAccountingService {
          OR (legacy_allowances IS NULL AND (housing_allowance<>0 OR transportation_allowance<>0 OR other_allowance<>0)))`, [companyId,draftId])).rows[0]!.n;
       if (invalid !== '0') throw new PayrollAccountingError('PAYROLL_INVALID', 409);
       const plan = await this.calculateReadiness(companyId, draftId, client);
-      if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, [...plan.blockers, ...plan.warnings]);
+      if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, plan.blockers);
       const journal = (await client.query<{id:string;reference:string}>(`INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,reference,source_type,source_id,entry_type,created_by)
         VALUES($1,$2,$3,$4,$5,'payroll',$6,'standard',$7) RETURNING id,reference`, [companyId,years[0]!.id,draft.period_month,`Payroll ${draft.period_month.slice(0,7)}`,`PAYROLL ${draft.period_month.slice(0,7)}`,draftId,actor])).rows[0]!;
       for (const [i,line] of plan.lines.entries()) await client.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,$4,$5,$6,$7)', [companyId,journal.id,line.account_id,line.debit,line.credit,line.mapping_key,i+1]);
@@ -205,7 +205,7 @@ export class PayrollAccountingService {
       blockers,
       warnings: manualJournalCount ? [{ code: 'manual_journal_review', count: manualJournalCount }] : [],
       balanced: earnings + employer === net + deductions + employer,
-      can_preview: draft.status === 'approved' && lines.length > 0 && earnings + employer > 0n && complete && overlaps.length === 0 && manualJournalCount === 0 && blockers.length === 0,
+      can_preview: draft.status === 'approved' && lines.length > 0 && earnings + employer > 0n && complete && overlaps.length === 0 && blockers.length === 0,
       authority: 'informational_only',
       posting_revalidation_required: true,
       posting_revalidation: 'Posting reloads and revalidates payroll lines, mappings, account status and types, ECC overlaps, manual-journal review conditions, and other blockers inside its transaction.',

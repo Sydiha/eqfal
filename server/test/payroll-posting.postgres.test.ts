@@ -42,6 +42,18 @@ db('payroll posting (PostgreSQL)',()=>{
   expect(await h.count('SELECT COUNT(*)::text n FROM employee_cost_records WHERE company_id=$1',[x.co])).toBe(1);
   expect(await h.count('SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1',[x.co])).toBe(1);
  });
+ it('posts payroll when unrelated source-less journals exist and reports them only as warnings',async()=>{
+  const x=await fixture('post-unrelated-manual');
+  await h.postedJournal(x.co,x.fy,'2026-03-20',x.owner.id,[[x.accounts[0]!, '1.00','0.00'],[x.accounts[2]!, '0.00','1.00']]);
+  const status=await x.poster.client.req('GET',`/payroll/drafts/${x.draft.id}/accounting-post-status`);
+  expect(status.status).toBe(200);
+  expect(status.json.eligible).toBe(true);
+  expect(status.json.blockers).toEqual([]);
+  expect(status.json.warnings).toContainEqual({code:'manual_journal_review',count:1});
+  const posted=await x.post();
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2 AND status='posted'",[x.co,x.draft.id])).toBe(1);
+ });
  it('requires explicit authority, isolates companies, enforces separation and approval',async()=>{
   const x=await fixture('post-auth',false), url=`/payroll/drafts/${x.draft.id}/accounting-post`;
   expect((await x.owner.client.req('POST',url,{})).status).toBe(403);
@@ -81,7 +93,10 @@ db('payroll posting (PostgreSQL)',()=>{
   expect((await x.post()).json.details).toContainEqual(expect.objectContaining({code:'mapping_account_type_invalid'}));
   await h.q('UPDATE payroll_account_mappings SET account_id=$3 WHERE company_id=$1 AND mapping_key=$2',[x.co,keys[0],x.accounts[0]]);
   const manual=(await h.q<{id:string}>("INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,created_by) VALUES($1,$2,'2026-03-20','Review',$3) RETURNING id",[x.co,x.fy,x.owner.id]))[0]!.id;
-  expect((await x.post()).json.details).toContainEqual(expect.objectContaining({code:'manual_journal_review'}));
+  const status=await x.poster.client.req('GET',`/payroll/drafts/${x.draft.id}/accounting-post-status`);
+  expect(status.json.eligible).toBe(true);
+  expect(status.json.blockers).toEqual([]);
+  expect(status.json.warnings).toContainEqual({code:'manual_journal_review',count:1});
   await h.q('DELETE FROM journal_entries WHERE id=$1',[manual]);
   await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1",[x.fy]);
   expect((await x.post()).json.code).toBe('PAYROLL_PERIOD_INELIGIBLE');

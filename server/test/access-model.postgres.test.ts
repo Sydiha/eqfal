@@ -136,7 +136,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     clients.sa = new Client(email('sa'));
   });
 
-  it('migration 122 keeps every role on v0 and resolves exactly the legacy grants', async () => {
+  it('migration 122 keeps roles on v0 and resolves legacy grants plus privileged payroll authority', async () => {
     const { MembershipRepository } = await import('../src/modules/memberships/membership.repository');
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM roles WHERE authorization_policy_version <> 0')).toBe(0);
@@ -151,7 +151,9 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
          LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = $2 AND m.is_active = TRUE
          LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
          WHERE u.id = $1 AND u.is_active = TRUE
-           AND ((u.is_system_admin AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
+           AND (((u.is_system_admin OR (m.is_active AND r.authorization_policy_key IN ('company_manager','finance_manager')))
+                 AND (cap.id LIKE 'payroll.%' OR cap.id = 'bank.view') AND cap.id <> 'payroll.settlement.exception.approve')
+             OR (u.is_system_admin AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
              OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
                OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id))))
        )
@@ -175,7 +177,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(session.allowedCompanies.map((c: { id: string }) => c.id).sort()).toEqual([ids.coA, ids.coB].sort());
     const inB = await clients.sa!.use(ids.coB!);
     expect(inB.activeCompanyId).toBe(ids.coB);
-    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create'].includes(id)));
+    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>id!=='payroll.settlement.exception.approve'));
   });
 
   it('System Admin performs financial operations in a company it is not a member of; business validation still applies', async () => {
@@ -232,9 +234,10 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM role_capabilities WHERE role_id=$1', [roles['Full AccessA']])).toBe(0);
     const caps = (await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).sort();
-    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create'].includes(id)));
+    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create','payroll.settlement.exception.approve'].includes(id)));
     for (const c of ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']) expect(caps).toContain(c);
     for (const c of ['payroll.approve', 'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create']) expect(caps).not.toContain(c);
+    expect(caps).not.toContain('payroll.settlement.exception.approve');
     for (const c of ['invoice.view', 'invoice.approve', 'invoice.adjust_approve', 'invoice.cancel', 'invoice.recurring', 'access.full_access.grant']) expect(caps).toContain(c);
     await q("INSERT INTO capabilities(id) VALUES('zz_future.capability')");
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).toContain('zz_future.capability');
