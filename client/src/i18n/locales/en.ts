@@ -448,6 +448,8 @@ const en = {
     MONTHLY_CLOSE_PERIOD_NOT_CLOSED: 'This period cannot be reopened because it is not currently closed.',
     MONTHLY_CLOSE_PERIOD_OVERLAP: 'This period overlaps an existing monthly close period.',
     MONTHLY_CLOSE_INVALID_PERIOD: 'The close period is invalid. It must be within the fiscal year and represent one calendar month.',
+    MONTHLY_CLOSE_FISCAL_YEAR_CLOSED: 'Monthly periods cannot be changed after the fiscal year is closed.',
+    MONTHLY_CLOSE_PERIOD_CHANGED: 'The fiscal year for this period changed. Reload and try again.',
     DOCUMENT_CHANGE_REASON_REQUIRED: 'This document was reviewed before. Enter a reason (up to 500 characters) to change its data.',
     DOCUMENT_FILE_REPLACE_NOT_ALLOWED: 'The file can only be replaced while the document is uploaded or incomplete. Reopen it first if it is under review.',
     DOCUMENT_FILE_UNCHANGED: 'The selected file is identical to the current file. Choose a different file.',
