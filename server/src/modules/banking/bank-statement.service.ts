@@ -99,7 +99,8 @@ export class BankStatementService {
     return (await this.db.query<LinkRow>(`SELECT ${LINK_COLUMNS} FROM bank_account_ledger_links WHERE company_id=$1 ORDER BY bank_account_id,valid_from DESC`, [companyId])).rows;
   }
 
-  async createLink(companyId: string, actor: string, input: { bankAccountId: string; accountId: string; validFrom: string }): Promise<LinkRow> {
+  async createLink(companyId: string, actor: string, input: { bankAccountId: string; accountId: string; validFrom: string; validTo?: string | null }): Promise<LinkRow> {
+    if (input.validTo !== null && input.validTo !== undefined && input.validTo < input.validFrom) throw invalid('End date precedes the start date', 'BANK_LINK_INVALID_DATE');
     return this.tx(async client => {
       const bank = (await client.query<{ currency_code: string; is_active: boolean }>('SELECT currency_code,is_active FROM bank_accounts WHERE id=$1 AND company_id=$2 FOR SHARE', [input.bankAccountId, companyId])).rows[0];
       if (!bank) throw notFound('Bank account not found', 'BANK_ACCOUNT_NOT_FOUND');
@@ -113,8 +114,9 @@ export class BankStatementService {
       if (!functional) throw conflict('BANK_LINK_CURRENCY_UNVERIFIED', 'No approved accounting profile gives the functional currency for this date');
       if (bank.currency_code.trim() !== functional) throw conflict('BANK_LINK_CURRENCY_MISMATCH', 'The bank account currency differs from the functional currency; foreign-currency reconciliation is not supported');
       const row = (await client.query<LinkRow>(
-        `INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,$4,$5) RETURNING ${LINK_COLUMNS}`,
-        [companyId, input.bankAccountId, input.accountId, input.validFrom, actor],
+        `INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,valid_to,created_by,ended_by,ended_at)
+         VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $5::date IS NULL THEN NULL ELSE $6::uuid END,CASE WHEN $5::date IS NULL THEN NULL ELSE NOW() END) RETURNING ${LINK_COLUMNS}`,
+        [companyId, input.bankAccountId, input.accountId, input.validFrom, input.validTo ?? null, actor],
       )).rows[0]!;
       await this.audit.logEvent({ company_id: companyId, actor_user_id: actor, action: 'bank_ledger_link.create', entity_type: 'bank_ledger_link', entity_id: row.id, before_data: null, after_data: row as never }, client);
       return row;

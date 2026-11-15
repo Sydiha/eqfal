@@ -77,11 +77,13 @@ bankStatementRouter.put('/bank-reconciliation/settings', ...write, requireCapabi
 bankStatementRouter.get('/bank-ledger-links', ...read, run(async (s, q, r) => { r.json(await s.listLinks(ctx(q).activeCompanyId)); }));
 bankStatementRouter.post('/bank-ledger-links', ...write, requireCapability('bank.account.manage'), run(async (s, q, r) => {
   const b = q.body;
-  if (!plain(b) || !only(b, ['bank_account_id', 'account_id', 'valid_from'])) throw bad();
+  if (!plain(b) || !only(b, ['bank_account_id', 'account_id', 'valid_from', 'valid_to'])) throw bad();
   const bankAccountId = uuid(b['bank_account_id']);
   const accountId = uuid(b['account_id']);
   if (!bankAccountId || !accountId || !validDate(b['valid_from'])) throw bad();
-  r.status(201).json(await s.createLink(ctx(q).activeCompanyId, ctx(q).user.id, { bankAccountId, accountId, validFrom: b['valid_from'] }));
+  const validTo = b['valid_to'] ?? null;
+  if (validTo !== null && !validDate(validTo)) throw bad();
+  r.status(201).json(await s.createLink(ctx(q).activeCompanyId, ctx(q).user.id, { bankAccountId, accountId, validFrom: b['valid_from'], validTo }));
 }));
 bankStatementRouter.post('/bank-ledger-links/:id/end', ...write, requireCapability('bank.account.manage'), run(async (s, q, r) => {
   const b = q.body;
