@@ -12,12 +12,13 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
   afterAll(() => h.close());
 
   it('validates explicit account mappings, blocks overlap, warns on manual journals, and never changes reports or ledger', async () => {
-    const owner = await h.user('pr2-owner'), editor = await h.user('pr2-editor'), approver = await h.user('pr2-approver'), viewOnly = await h.user('pr2-view'), outsider = await h.user('pr2-outsider');
+    const owner = await h.user('pr2-owner'), editor = await h.user('pr2-editor'), approver = await h.user('pr2-approver'), poster = await h.user('pr2-poster'), viewOnly = await h.user('pr2-view'), outsider = await h.user('pr2-outsider');
     const co = await h.company('pr2-main', owner.id), other = await h.company('pr2-other', outsider.id);
     await h.member(co, editor.id, ['payroll.view','payroll.edit','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview','accounting.view','employee.view','employee_cost.view','employee_cost.salary.view']);
     await h.member(co, approver.id, ['payroll.view','payroll.approve']);
+    await h.member(co, poster.id, ['payroll.view','payroll.accounting.post']);
     await h.member(co, viewOnly.id, ['payroll.view','payroll.accounting.preview']);
-    for (const u of [owner, editor, approver, viewOnly, outsider]) await u.client.login();
+    for (const u of [owner, editor, approver, poster, viewOnly, outsider]) await u.client.login();
     const fullRole = (await h.q<{ id: string }>('SELECT role_id AS id FROM memberships WHERE company_id=$1 AND user_id=$2',[co,owner.id]))[0]!.id;
     expect((await owner.client.req('GET','/payroll/account-mappings')).status).toBe(200);
     for (const cap of ['payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']) {
@@ -101,7 +102,7 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     expect(unrelatedPreview.can_preview).toBe(true);
     expect(unrelatedPreview.blockers).toEqual([]);
     expect(unrelatedPreview.warnings).toContainEqual({code:'manual_journal_review',count:1});
-    const unrelatedStatus = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-post-status`)).json;
+    const unrelatedStatus = (await poster.client.req('GET',`/payroll/drafts/${draft.id}/accounting-post-status`)).json;
     expect(unrelatedStatus.eligible).toBe(true);
     expect(unrelatedStatus.blockers).toEqual([]);
     expect(unrelatedStatus.warnings).toContainEqual({code:'manual_journal_review',count:1});
