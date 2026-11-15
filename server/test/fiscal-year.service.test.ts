@@ -47,6 +47,7 @@ function makeFiscalYear(overrides: Partial<FiscalYear> = {}): FiscalYear {
     start_date: '2024-01-01',
     end_date:   '2024-12-31',
     status:     'open',
+    monthly_close_policy: 'required',
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
     ...overrides,
@@ -381,7 +382,7 @@ describe('FiscalYearService — audit entry correctness', () => {
     });
   });
 
-  it('closeFiscalYear: audit has before_data {status:open} and after_data {status:closed}', async () => {
+  it('closeFiscalYear: audit records status, policy, and a concise readiness snapshot', async () => {
     const client = makeClient();
     const { service, fyRepo, auditRepo } = makeService(client);
     const openFy = makeFiscalYear({ status: 'open' });
@@ -401,7 +402,11 @@ describe('FiscalYearService — audit entry correctness', () => {
     const [input] = logSpy.mock.calls[0]!;
     expect(input.action).toBe('fiscal_year.status_change');
     expect(input.before_data).toEqual({ status: 'open' });
-    expect(input.after_data).toEqual({ status: 'closed' });
+    expect(input.after_data).toEqual({
+      status: 'closed',
+      monthly_close_policy: 'required',
+      readiness_snapshot: { blockers: [], warnings: [] },
+    });
   });
 
   it('closeFiscalYear: reason is passed through to audit', async () => {
@@ -923,7 +928,11 @@ describe('FiscalYearService — findByIdForUpdate inside transaction', () => {
 
     const [input] = logSpy.mock.calls[0]!;
     expect(input.before_data).toEqual({ status: 'open' });
-    expect(input.after_data).toEqual({ status: 'closed' });
+    expect(input.after_data).toMatchObject({
+      status: 'closed',
+      monthly_close_policy: 'required',
+      readiness_snapshot: { blockers: [], warnings: [] },
+    });
   });
 
   it('closeFiscalYear: second concurrent close sees status=closed from locked row → throws', async () => {

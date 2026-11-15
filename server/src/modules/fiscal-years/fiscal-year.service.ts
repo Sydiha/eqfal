@@ -244,7 +244,14 @@ export class FiscalYearService {
           entity_id:     id,
           // before_data comes from the locked row — always accurate.
           before_data:   { status: existing.status },
-          after_data:    { status: 'closed' },
+          after_data:    {
+            status: 'closed',
+            monthly_close_policy: existing.monthly_close_policy,
+            readiness_snapshot: {
+              blockers: readiness.blockers.map(({ code, count }) => ({ code, count })),
+              warnings: readiness.warnings.map(({ code, count }) => ({ code, count })),
+            },
+          },
           reason:        reason ?? null,
         },
         client,

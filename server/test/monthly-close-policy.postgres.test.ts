@@ -110,6 +110,76 @@ describeDatabase('optional monthly closing policy (PostgreSQL)', () => {
     expect((await status(w)).monthly_close_policy).toBe('optional');
   });
 
+  it('rejects monthly period create, close, and reopen after annual closure without changing rows or adding audit events', async () => {
+    const w = await world(11);
+    const { MonthlyCloseService } = await import('../src/modules/monthly-close/monthly-close.router');
+    const periods = new MonthlyCloseService(h.db);
+    const december = (await h.q<{ id: string }>("SELECT id FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start='2026-12-01'", [w.fy]))[0]!.id;
+    const january = (await h.q<{ id: string }>("SELECT id FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start='2026-01-01'", [w.fy]))[0]!.id;
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [w.fy]);
+    const before = await monthly(w);
+
+    await expect(periods.create(w.company, owner.id, w.fy, '2026-12-01', '2026-12-31'))
+      .rejects.toMatchObject({ code: 'MONTHLY_CLOSE_FISCAL_YEAR_CLOSED' });
+    await expect(periods.close(w.company, owner.id, december))
+      .rejects.toMatchObject({ code: 'MONTHLY_CLOSE_FISCAL_YEAR_CLOSED' });
+    await expect(periods.reopen(w.company, owner.id, january, 'test'))
+      .rejects.toMatchObject({ code: 'MONTHLY_CLOSE_FISCAL_YEAR_CLOSED' });
+
+    expect(await monthly(w)).toEqual(before);
+    expect(await h.count("SELECT COUNT(*) n FROM audit_log WHERE company_id=$1 AND action LIKE 'monthly_close.%'", [w.company])).toBe(0);
+  });
+
+  it('serializes monthly period creation behind annual close and rejects it after the close commits', async () => {
+    const w = await world(12, 'optional');
+    await h.q("DELETE FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start='2026-12-01'", [w.fy]);
+    const { MonthlyCloseService } = await import('../src/modules/monthly-close/monthly-close.router');
+    const periods = new MonthlyCloseService(h.db);
+    const holder = await h.db.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM fiscal_years WHERE id=$1 FOR UPDATE', [w.fy]);
+      const close = service.closeFiscalYear(w.fy, w.company, owner.id);
+      let closeWaiting = false;
+      for (let i = 0; i < 100; i++) {
+        closeWaiting = (await h.count("SELECT COUNT(*) n FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%SELECT * FROM fiscal_years WHERE id = $1 AND company_id = $2 FOR UPDATE%'")) > 0;
+        if (closeWaiting) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(closeWaiting).toBe(true);
+
+      const create = periods.create(w.company, owner.id, w.fy, '2026-12-01', '2026-12-31');
+      let createWaiting = false;
+      for (let i = 0; i < 100; i++) {
+        createWaiting = (await h.count("SELECT COUNT(*) n FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%monthly-close-parent-lock%'")) > 0;
+        if (createWaiting) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(createWaiting).toBe(true);
+      await holder.query('COMMIT');
+
+      await expect(close).resolves.toMatchObject({ status: 'closed' });
+      await expect(create).rejects.toMatchObject({ code: 'MONTHLY_CLOSE_FISCAL_YEAR_CLOSED' });
+      expect((await status(w)).status).toBe('closed');
+      expect(await h.count("SELECT COUNT(*) n FROM monthly_close_periods WHERE fiscal_year_id=$1 AND period_start='2026-12-01'", [w.fy])).toBe(0);
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+  });
+
+  it('records the policy and blocker/warning codes and counts used by annual close', async () => {
+    const w = await world(11, 'optional');
+    expect(await tryClose(w)).toEqual([]);
+    const audit = (await h.q<{ after_data: Record<string, any> }>(
+      "SELECT after_data FROM audit_log WHERE entity_id=$1 AND action='fiscal_year.status_change'", [w.fy],
+    ))[0]!.after_data;
+    expect(audit).toMatchObject({ status: 'closed', monthly_close_policy: 'optional' });
+    expect(audit.readiness_snapshot.blockers).toEqual([]);
+    expect(audit.readiness_snapshot.warnings).toContainEqual({ code: 'monthly_periods_left_open', count: 1 });
+    expect(audit.readiness_snapshot.warnings.every((warning: Record<string, unknown>) => Object.keys(warning).sort().join(',') === 'code,count')).toBe(true);
+  });
+
   describe('HTTP authorization, isolation and audit', () => {
     const labels = ['full', 'viewOnly', 'manageOnly', 'both', 'other'] as const;
     const u: Record<string, Awaited<ReturnType<typeof h.user>>> = {};
