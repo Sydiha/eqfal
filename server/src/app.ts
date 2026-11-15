@@ -16,6 +16,7 @@ import { personalPaymentRouter } from './modules/personal-payments/personal-paym
 import { payrollRouter } from './modules/payroll/payroll.router';
 import { employeeCostRouter } from './modules/employee-costs/employee-cost.router';
 import { employeeCostPaymentRouter } from './modules/employee-costs/employee-cost-payment.router';
+import { employeeSalaryAdvanceRouter } from './modules/employee-advances/employee-salary-advance.router';
 import { obligationRouter } from './modules/obligations/obligation.router';
 import { obligationAgingRouter } from './modules/obligations/obligation-aging';
 import { monthlyCloseRouter } from './modules/monthly-close/monthly-close.router';
@@ -88,6 +89,7 @@ app.use('/api', personalPaymentRouter);
 app.use('/api', employeeCostRouter);
 app.use('/api', payrollRouter);
 app.use('/api', employeeCostPaymentRouter);
+app.use('/api', employeeSalaryAdvanceRouter);
 app.use('/api', obligationAgingRouter);
 app.use('/api', obligationRouter);
 app.use('/api', monthlyCloseRouter);
