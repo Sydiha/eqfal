@@ -31,6 +31,7 @@ const CRITICAL = new Set([
   'employee_cost.salary.view',
   'employee_salary_advance.view',
   'employee_salary_advance.issue',
+  'employee_salary_advance.cancel',
   'payroll.view',
   'payroll.edit',
   'payroll.accounting.mapping.view',

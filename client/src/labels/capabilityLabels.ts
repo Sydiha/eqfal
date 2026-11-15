@@ -124,6 +124,7 @@ const OVERRIDES: Record<string, Pair> = {
   'employee_salary_advance.create': ['Create employee salary advance drafts', 'إنشاء مسودات سلف الموظفين'],
   'employee_salary_advance.approve': ['Approve employee salary advances', 'اعتماد سلف الموظفين'],
   'employee_salary_advance.issue': ['Issue employee salary advances from bank transactions (sensitive)', 'صرف سلف الموظفين من الحركات البنكية (حساس)'],
+  'employee_salary_advance.cancel': ['Cancel a pending employee salary advance issuance (sensitive)', 'إلغاء صرف سلفة موظف قيد المعالجة (حساس)'],
   'employee_salary_advance.mapping.manage': ['Manage the employee advance receivable account mapping', 'إدارة ربط حساب سلف الموظفين المدينة'],
   'document.upload': ['Upload documents', 'رفع المستندات'], 'document.submit': ['Submit documents for review', 'إرسال المستندات للمراجعة'],
   'source_authority.activate': ['Activate ledger source authority', 'تفعيل صلاحية مصدر الدفتر'],

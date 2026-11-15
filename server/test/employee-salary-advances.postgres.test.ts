@@ -9,9 +9,13 @@ describeDatabase('employee salary advances (PostgreSQL)',()=>{
  let h:Harness;let seq=0;
  beforeAll(async()=>{h=await startHarness();});afterAll(()=>h.close());
  async function setup(label:string){
-  const owner=await h.user(`${label}-owner`),approver=await h.user(`${label}-approver`),company=await h.company(`${label}-${++seq}`,owner.id);
-  await h.member(company,approver.id,['employee_salary_advance.approve']);
-  for(const u of [owner,approver])await u.client.login();
+  const owner=await h.user(`${label}-owner`),approver=await h.user(`${label}-approver`),noEmployee=await h.user(`${label}-no-employee`),noAdvance=await h.user(`${label}-no-advance`),noBank=await h.user(`${label}-no-bank`),bankViewer=await h.user(`${label}-bank-viewer`),company=await h.company(`${label}-${++seq}`,owner.id);
+  await h.member(company,approver.id,['employee.view','employee_salary_advance.approve']);
+  await h.member(company,noEmployee.id,['employee_salary_advance.view']);
+  await h.member(company,noAdvance.id,['employee.view','bank.view']);
+  await h.member(company,noBank.id,['employee.view','employee_salary_advance.view','employee_salary_advance.issue','employee_salary_advance.cancel','accounting.journal.create']);
+  await h.member(company,bankViewer.id,['employee.view','employee_salary_advance.view','bank.view']);
+  for(const u of [owner,approver,noEmployee,noAdvance,noBank,bankViewer])await u.client.login();
   const fy=await h.fiscalYear(company,'FY26','2026-01-01','2026-12-31');
   const employee=(await owner.client.req('POST','/employees',{employee_number:`EA${seq}`,display_name:'Advance Employee',employment_start:'2025-01-01',employment_end:null})).json;
   const rec=await h.account(company,`EA-${seq}-AR`,'asset','current_asset'),bankGl=await h.account(company,`EA-${seq}-BANK`,'asset','current_asset');
@@ -21,7 +25,7 @@ describeDatabase('employee salary advances (PostgreSQL)',()=>{
   await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[company,bank,bankGl,owner.id]);
   async function tx(amount='-250.00',date='2026-03-10') {return(await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,$3,$4,'SAR','Salary advance','ea-${seq}-${randomUUID()}',$5,'strong','manual','other',$6) RETURNING id`,[company,bank,date,amount,randomUUID().replaceAll('-',''),owner.id]))[0]!.id;}
   async function draft(amount='250.00') {const r=await owner.client.req('POST','/employee-salary-advances',{employee_id:employee.id,amount,issue_date:'2026-03-10',description:'Approved employee advance'});expect(r.status,JSON.stringify(r.json)).toBe(201);return r.json.advance.id as string;}
-  return{owner,approver,company,fy,employee,rec,bankGl,tx,draft};
+  return{owner,approver,noEmployee,noAdvance,noBank,bankViewer,company,fy,employee,rec,bankGl,tx,draft};
  }
  it('posts exactly once and transitions to issued only after successful atomic journal posting',async()=>{
   const x=await setup('advance-post');const id=await x.draft();
@@ -88,5 +92,44 @@ describeDatabase('employee salary advances (PostgreSQL)',()=>{
   expect((await h.q<{status:string}>('SELECT status FROM journal_entries WHERE id=$1',[journal]))[0]!.status).toBe('draft');
   expect(await h.count("SELECT COUNT(*)::text n FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id WHERE j.company_id=$1 AND j.source_type='employee_advance_funding' AND j.status='posted'",[x.company])).toBe(0);
   await expect(h.q('DELETE FROM bank_transaction_matches WHERE bank_transaction_id=$1',[bank])).rejects.toThrow(/cannot be changed/);
+ });
+ it('requires employee visibility and masks bank details unless bank.view is granted',async()=>{
+  const x=await setup('advance-data-access'),id=await x.draft();await x.approver.client.req('POST',`/employee-salary-advances/${id}/approve`,{version:1});const bank=await x.tx();
+  const queued=await x.owner.client.req('POST',`/employee-salary-advances/${id}/issue`,{version:2,bank_transaction_id:bank});expect(queued.status).toBe(201);
+  expect((await x.owner.client.req('POST',`/journals/${queued.json.journal.id}/post`,{})).status).toBe(200);
+  expect((await x.noEmployee.client.req('GET','/employee-salary-advances')).status).toBe(403);
+  expect((await x.noAdvance.client.req('GET','/employee-salary-advances')).status).toBe(403);
+  const hidden=await x.noBank.client.req('GET','/employee-salary-advances');expect(hidden.status).toBe(200);
+  expect(hidden.json.bank_transactions).toEqual([]);expect(hidden.json.mapping_configured).toBe(true);expect(hidden.json.mapping).toBeNull();expect(hidden.json.accounts).toEqual([]);expect(hidden.json.advances[0]).toMatchObject({employee_number:x.employee.employee_number,bank_transaction_id:null,bank_transaction_date:null,bank_reference:null,reconciliation_status:null,journal_reference:null});
+  expect((await x.noBank.client.req('POST',`/employee-salary-advances/${id}/issue`,{version:5,bank_transaction_id:bank})).status).toBe(403);
+  const visible=await x.bankViewer.client.req('GET','/employee-salary-advances');expect(visible.status).toBe(200);
+  expect(visible.json.advances[0].bank_transaction_id).toBe(bank);expect(visible.json.bank_transactions).toEqual([]);
+ });
+ it('cancels only pending issuance, releases its bank claim atomically, and retains voided journal evidence',async()=>{
+  const x=await setup('advance-cancel'),id=await x.draft(),bank=await x.tx();await x.approver.client.req('POST',`/employee-salary-advances/${id}/approve`,{version:1});
+  const queued=await x.owner.client.req('POST',`/employee-salary-advances/${id}/issue`,{version:2,bank_transaction_id:bank}),journal=queued.json.journal.id as string;expect(queued.status).toBe(201);
+  expect((await x.noBank.client.req('POST',`/employee-salary-advances/${id}/cancel-pending`,{version:3,reason:'Unauthorized cancellation attempt'})).status).toBe(403);
+  const cancelled=await x.owner.client.req('POST',`/employee-salary-advances/${id}/cancel-pending`,{version:3,reason:'Selected an incorrect bank entry'});expect(cancelled.status,JSON.stringify(cancelled.json)).toBe(200);
+  expect((await h.q<{status:string}>('SELECT status FROM employee_salary_advances WHERE id=$1',[id]))[0]!.status).toBe('approved');
+  expect((await h.q<{status:string}>('SELECT reconciliation_status status FROM bank_transactions WHERE id=$1',[bank]))[0]!.status).toBe('unmatched');
+  expect((await h.q<{status:string}>('SELECT status FROM journal_entries WHERE id=$1',[journal]))[0]!.status).toBe('voided');
+  expect(await h.count('SELECT COUNT(*)::text n FROM bank_transaction_matches WHERE id=(SELECT bank_transaction_match_id FROM employee_salary_advances WHERE id=$1)',[id])).toBe(0);
+  expect(await h.count("SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND entity_id=$2 AND action='employee_salary_advance.pending_cancel'",[x.company,id])).toBe(1);
+  const retry=await x.owner.client.req('POST',`/employee-salary-advances/${id}/issue`,{version:4,bank_transaction_id:bank});expect(retry.status,JSON.stringify(retry.json)).toBe(201);
+  expect((await x.owner.client.req('POST',`/journals/${retry.json.journal.id}/post`,{})).status).toBe(200);
+  const forbidden=await x.owner.client.req('POST',`/employee-salary-advances/${id}/cancel-pending`,{version:6,reason:'Cannot cancel posted issuance'});expect(forbidden.status).toBe(409);
+  expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='employee_advance_funding' AND status='voided'",[x.company])).toBe(1);
+  expect((await h.q<{status:string}>('SELECT status FROM employee_salary_advances WHERE id=$1',[id]))[0]!.status).toBe('issued');
+ });
+ it('serializes cancellation against journal posting so only one terminal action succeeds',async()=>{
+  const x=await setup('advance-cancel-post-race'),id=await x.draft();await x.approver.client.req('POST',`/employee-salary-advances/${id}/approve`,{version:1});const bank=await x.tx();
+  const queued=await x.owner.client.req('POST',`/employee-salary-advances/${id}/issue`,{version:2,bank_transaction_id:bank}),journal=queued.json.journal.id as string;
+  const [cancel,post]=await Promise.all([
+   x.owner.client.req('POST',`/employee-salary-advances/${id}/cancel-pending`,{version:3,reason:'Concurrent cancellation test'}),
+   x.owner.client.req('POST',`/journals/${journal}/post`,{}),
+  ]);
+  expect((cancel.status===200&&post.status===409)||(cancel.status===409&&post.status===200)).toBe(true);
+  const state=(await h.q<{status:string;reconciliation_status:string;journal_status:string}>('SELECT a.status,t.reconciliation_status,j.status journal_status FROM employee_salary_advances a JOIN bank_transactions t ON t.id=$2 AND t.company_id=a.company_id JOIN journal_entries j ON j.id=$3 AND j.company_id=a.company_id WHERE a.id=$1',[id,bank,journal]))[0]!;
+  expect(state).toMatchObject(cancel.status===200?{status:'approved',reconciliation_status:'unmatched',journal_status:'voided'}:{status:'issued',reconciliation_status:'matched',journal_status:'posted'});
  });
 });
