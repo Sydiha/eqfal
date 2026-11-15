@@ -30,6 +30,33 @@ const renderIt = (props: Partial<React.ComponentProps<typeof BankStatementReconc
 beforeEach(async () => { await i18n.changeLanguage('en'); vi.restoreAllMocks(); });
 
 describe('BankStatementReconciliation', () => {
+  it('shows adjacent link dates and sends a bounded end date while retaining an open-ended choice', async () => {
+    const links = [
+      { id: 'nov', bank_account_id: BANK.id, account_id: 'gl', valid_from: '2026-11-15', valid_to: null },
+      { id: 'oct', bank_account_id: BANK.id, account_id: 'gl', valid_from: '2026-10-15', valid_to: '2026-11-14' },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const body = url.startsWith('/api/bank-accounts') ? { accounts: [BANK] }
+        : url.startsWith('/api/accounts') ? { accounts: [{ id: 'gl', code: '1120', name: 'Bank', account_type: 'asset', cash_role: 'cash' }] }
+        : url.startsWith('/api/bank-ledger-links') ? links
+        : url.startsWith('/api/bank-reconciliation/settings') ? { mode: 'off', enforce_from: null, version: 0 }
+        : url.startsWith('/api/bank-reconciliation/preview') ? calc() : [];
+      return new Response(JSON.stringify(body), { status: init?.method === 'POST' ? 201 : 200 });
+    }));
+    renderIt({ canManageLinks: true });
+    expect((await screen.findByText(/15\/10\/2026/)).parentElement).toHaveTextContent('14/11/2026');
+    expect(screen.getByText(/15\/11\/2026/).parentElement).toHaveTextContent('Open-ended');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ledger cash/bank account' }), { target: { value: 'gl' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Valid from' }), { target: { value: '2026-09-01' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Open-ended' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Valid to' }), { target: { value: '2026-09-30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => url === '/api/bank-ledger-links' && (init as RequestInit | undefined)?.method === 'POST')).toBe(true));
+    const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/bank-ledger-links' && (init as RequestInit | undefined)?.method === 'POST')![1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({ valid_from: '2026-09-01', valid_to: '2026-09-30' });
+  });
+
   it('does not request data without bank.view', () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
     renderIt({ canView: false });

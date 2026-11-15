@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { DateTextInput } from './DateInput';
-import { Alert, Badge, Button, Card, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Checkbox, Group, Modal, NativeSelect, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { readQueryParameter } from '../navigation/queryState';
 import { formatMoney, parseMoneyInput } from '../money-format';
@@ -35,7 +35,7 @@ const copy = {
     draft: 'Draft', confirmed: 'Confirmed', superseded: 'Superseded', warning: 'Warning', blocker: 'Blocker', ok: 'Reconciled', noPermission: 'You can view this page but not change it.',
     statements: 'Statement balances', ref: 'Statement reference', period: 'Period', from: 'Period start', to: 'Period end', opening: 'Opening balance', closing: 'Closing balance', note: 'Note',
     add: 'Save draft', confirm: 'Confirm', replace: 'Replace', remove: 'Delete draft', reason: 'Reason for replacement', status: 'Status', actions: 'Actions',
-    links: 'Ledger account link', ledger: 'Ledger cash/bank account', validFrom: 'Valid from', link: 'Link', endLink: 'End link', validTo: 'Valid to', unlinked: 'No ledger account is linked for this date.',
+    links: 'Ledger account link', ledger: 'Ledger cash/bank account', validFrom: 'Valid from', link: 'Link', endLink: 'End link', validTo: 'Valid to', openEnded: 'Open-ended', unlinked: 'No ledger account is linked for this date.',
     calc: 'Reconciliation', stmt: 'Statement closing balance', dit: 'Deposits in transit', op: 'Outstanding payments', adjBank: 'Adjusted bank balance', gl: 'Ledger balance (all posted lines)',
     diff: 'Unexplained difference', items: 'Evidence-backed outstanding items', kind: 'Type', amount: 'Amount', glDate: 'Ledger date', bankDate: 'Bank date', aged: 'Older than 10 days',
     deposit_in_transit: 'Deposit in transit', outstanding_payment: 'Outstanding payment', none: 'None', rejected: 'Evidence rejected (amount or direction differs from the bank row)',
@@ -69,7 +69,7 @@ const copy = {
     draft: 'مسودة', confirmed: 'معتمد', superseded: 'مستبدل', warning: 'تحذير', blocker: 'مانع إقفال', ok: 'مطابق', noPermission: 'يمكنك عرض هذه الصفحة دون تعديلها.',
     statements: 'أرصدة الكشوف', ref: 'مرجع الكشف', period: 'الفترة', from: 'بداية الفترة', to: 'نهاية الفترة', opening: 'الرصيد الافتتاحي', closing: 'الرصيد الختامي', note: 'ملاحظة',
     add: 'حفظ كمسودة', confirm: 'اعتماد', replace: 'استبدال', remove: 'حذف المسودة', reason: 'سبب الاستبدال', status: 'الحالة', actions: 'الإجراءات',
-    links: 'ربط حساب الدفتر', ledger: 'حساب النقد/البنك في الدفتر', validFrom: 'يسري من', link: 'ربط', endLink: 'إنهاء الربط', validTo: 'ينتهي في', unlinked: 'لا يوجد حساب دفتر مربوط لهذا التاريخ.',
+    links: 'ربط حساب الدفتر', ledger: 'حساب النقد/البنك في الدفتر', validFrom: 'يسري من', link: 'ربط', endLink: 'إنهاء الربط', validTo: 'ينتهي في', openEnded: 'مفتوح النهاية', unlinked: 'لا يوجد حساب دفتر مربوط لهذا التاريخ.',
     calc: 'المطابقة', stmt: 'الرصيد الختامي للكشف', dit: 'إيداعات في الطريق', op: 'مدفوعات معلقة', adjBank: 'رصيد البنك المعدّل', gl: 'رصيد الدفتر (كل القيود المرحّلة)',
     diff: 'الفرق غير المفسَّر', items: 'بنود معلقة مثبتة بدليل', kind: 'النوع', amount: 'المبلغ', glDate: 'تاريخ القيد', bankDate: 'تاريخ البنك', aged: 'أقدم من 10 أيام',
     deposit_in_transit: 'إيداع في الطريق', outstanding_payment: 'دفعة معلقة', none: 'لا يوجد', rejected: 'أدلة مرفوضة (المبلغ أو الاتجاه يخالف حركة البنك)',
@@ -133,6 +133,8 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
   const [replacing, setReplacing] = useState<Statement | null>(null);
   const [ledgerId, setLedgerId] = useState('');
   const [validFrom, setValidFrom] = useState('');
+  const [validTo, setValidTo] = useState('');
+  const [openEnded, setOpenEnded] = useState(true);
   const [pending, setPending] = useState<Pending | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -183,8 +185,11 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     const errors: Record<string, string> = {};
     if (!ledgerId) errors['ledgerId'] = s.required;
     if (!validFrom) errors['validFrom'] = s.required; else if (!DATE.test(validFrom)) errors['validFrom'] = s.badDate;
+    if (!openEnded && !validTo) errors['validTo'] = s.required;
+    else if (!openEnded && !DATE.test(validTo)) errors['validTo'] = s.badDate;
+    else if (!openEnded && validTo < validFrom) errors['validTo'] = s.errors.BANK_LINK_INVALID_DATE;
     setFieldErrors(errors); if (Object.keys(errors).length) return;
-    void guard(async () => { await api('/api/bank-ledger-links', json('POST', { bank_account_id: bankId, account_id: ledgerId, valid_from: validFrom }), onUnauthorized); await load(); await calculate(); }); };
+    void guard(async () => { await api('/api/bank-ledger-links', json('POST', { bank_account_id: bankId, account_id: ledgerId, valid_from: validFrom, valid_to: openEnded ? null : validTo }), onUnauthorized); await load(); await calculate(); }); };
   const endLink = (link: Link) => void guard(async () => { await api(`/api/bank-ledger-links/${link.id}/end`, json('POST', { valid_to: periodEnd }), onUnauthorized); await load(); await calculate(); });
   const addStatement = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const form = e.currentTarget; const data = new FormData(form); const field = (k: string) => String(data.get(k) ?? '').trim();
@@ -265,11 +270,14 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     </Stack></Card>; })()}
 
     <Card withBorder id="bsr-links" tabIndex={-1}><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
-      {activeLink ? <Group><Text><bdi dir="auto">{ledgerName(activeLink.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(activeLink.valid_from, i18n.language)}</span></Text>
-        {canManageLinks && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link: activeLink })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group> : <Text c="dimmed">{s.unlinked}</Text>}
-      {canManageLinks && !activeLink && <form onSubmit={addLink} noValidate><Group align="end">
+      {!activeLink && <Text c="dimmed">{s.unlinked}</Text>}
+      {links.filter(x => x.bank_account_id === bankId).map(link => <Group key={link.id}><Text><bdi dir="auto">{ledgerName(link.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(link.valid_from, i18n.language)}</span> · {s.validTo} {link.valid_to ? <span dir="ltr">{formatDisplayDateLtr(link.valid_to, i18n.language)}</span> : s.openEnded}</Text>
+        {canManageLinks && link.id === activeLink?.id && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group>)}
+      {canManageLinks && <form onSubmit={addLink} noValidate><Group align="end">
         <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
         <DateTextInput label={s.validFrom} value={validFrom} onChange={setValidFrom} error={fieldErrors['validFrom']} required/>
+        <Checkbox label={s.openEnded} checked={openEnded} onChange={e => setOpenEnded(e.currentTarget.checked)}/>
+        {!openEnded && <DateTextInput label={s.validTo} value={validTo} onChange={setValidTo} error={fieldErrors['validTo']} required/>}
         <Button type="submit">{s.link}</Button></Group></form>}
     </Stack></Card>
 

@@ -128,6 +128,32 @@ describeDatabase('bank statement reconciliation (PostgreSQL)', () => {
     expect(mismatch.json.code).toBe('BANK_LINK_CURRENCY_MISMATCH');
   });
 
+  it('creates a bounded historical link adjacent to an unchanged open November link', async () => {
+    const co = await setup('historical-links');
+    const body = (from: string, to?: unknown) => ({ bank_account_id: co.bank, account_id: co.bankGl, valid_from: from, ...(to === undefined ? {} : { valid_to: to }) });
+    const november = await co.owner.client.req('POST', '/bank-ledger-links', body('2026-11-15'));
+    expect(november.status).toBe(201);
+    const october = await co.owner.client.req('POST', '/bank-ledger-links', body('2026-10-15', '2026-11-14'));
+    expect(october.status).toBe(201);
+    expect(october.json).toMatchObject({ valid_from: '2026-10-15', valid_to: '2026-11-14', ended_by: co.owner.id });
+    expect(october.json.ended_at).toBeTruthy();
+    const rows = (await co.owner.client.req('GET', '/bank-ledger-links')).json;
+    expect(rows.find((row: { id: string }) => row.id === november.json.id)).toMatchObject({ valid_from: '2026-11-15', valid_to: null });
+    expect(rows.find((row: { id: string }) => row.id === october.json.id)).toMatchObject({ valid_from: '2026-10-15', valid_to: '2026-11-14' });
+    for (const [from, to] of [['2026-10-15', '2026-11-15'], ['2026-11-15', '2026-11-15']]) {
+      const overlap = await co.owner.client.req('POST', '/bank-ledger-links', body(from, to));
+      expect(overlap.status).toBe(409);
+      expect(overlap.json.code).toBe('BANK_LINK_OVERLAP');
+    }
+    const backward = await co.owner.client.req('POST', '/bank-ledger-links', body('2026-10-14', '2026-10-13'));
+    expect(backward.status).toBe(400);
+    expect(backward.json.code).toBe('BANK_LINK_INVALID_DATE');
+    expect((await co.owner.client.req('POST', '/bank-ledger-links', body('2026-10-14', '2026-02-30'))).status).toBe(400);
+    expect((await co.viewer.client.req('POST', '/bank-ledger-links', body('2026-09-01', '2026-09-30'))).status).toBe(403);
+    const audit = await h.q<{ after_data: { valid_to: string } }>("SELECT after_data FROM audit_log WHERE company_id=$1 AND action='bank_ledger_link.create' AND entity_id=$2", [co.id, october.json.id]);
+    expect(audit[0]?.after_data.valid_to).toBe('2026-11-14');
+  });
+
   /* ---------------------------------------------------------------- authorization, isolation, workflow */
   it('enforces capabilities and company isolation', async () => {
     const a = await setup('isoa');
