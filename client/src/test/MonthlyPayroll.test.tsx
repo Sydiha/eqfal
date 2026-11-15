@@ -24,6 +24,12 @@ describe('Monthly Payroll draft visibility',()=>{
  });
 });
 
+it('shows authoritative fiscal-year dates and period eligibility without inventing an unavailable reason',async()=>{
+ const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/fiscal-years'?response({fiscalYears:[{id:'fy-2026',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'}]}):response({draft:null,employees:[],available_employees:[],period_eligibility:{eligible:false}})));
+ try{render(<MonthlyPayroll capabilities={['payroll.view','fiscal_year.view']} onUnauthorized={()=>{}}/>);expect(await screen.findByText(/FY 2026/)).toBeInTheDocument();expect(screen.getByText(/2026-01-01 – 2026-12-31/)).toBeInTheDocument();expect(screen.getByText(/Not eligible for payroll approval or posting/)).toBeInTheDocument();expect(screen.getByText(/did not provide a more specific reason/)).toBeInTheDocument();await act(async()=>{await i18n.changeLanguage('ar');});expect(screen.getByText(/السياق المالي/)).toBeInTheDocument();expect(screen.getByText(/لا توفر واجهة الرواتب سبباً أكثر تحديداً/)).toBeInTheDocument();}finally{await i18n.changeLanguage(original);}
+});
+
 it('ignores an older month response after rapid period switching',async()=>{
  const pending=new Map<string,(x:unknown)=>void>();
  vi.stubGlobal('fetch',vi.fn((url:string)=>new Promise(resolve=>pending.set(url,resolve))));
