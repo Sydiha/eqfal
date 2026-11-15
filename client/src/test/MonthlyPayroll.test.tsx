@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MonthlyPayroll, normalizeAmount } from '../components/MonthlyPayroll';
 import '../i18n';
 import { readFileSync } from 'node:fs';
@@ -84,7 +84,7 @@ it('keeps confirmation focus inside one dialog and restores focus on discard',as
  trigger.focus();fireEvent.click(trigger);
  const salary=screen.getByLabelText(/الراتب الأساسي|Base salary/);
  fireEvent.change(salary,{target:{value:'101.00'}});
- fireEvent.click(screen.getByRole('button',{name:/إلغاء|Cancel/}));
+ fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:/^(إلغاء|Cancel)$/}));
  expect(screen.getAllByRole('dialog')).toHaveLength(1);
  const confirm=screen.getByRole('dialog');
  fireEvent.keyDown(document,{key:'Tab'});
@@ -92,7 +92,7 @@ it('keeps confirmation focus inside one dialog and restores focus on discard',as
  fireEvent.keyDown(document,{key:'Escape'});
  expect(screen.getAllByRole('dialog')).toHaveLength(1);
  expect(screen.getByLabelText(/الراتب الأساسي|Base salary/)).toHaveValue('101.00');
- fireEvent.click(screen.getByRole('button',{name:/إلغاء|Cancel/}));
+ fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:/^(إلغاء|Cancel)$/}));
  fireEvent.click(screen.getByRole('button',{name:/تجاهل التغييرات|Discard changes/}));
  expect(screen.queryByRole('dialog')).toBeNull();
  expect(document.activeElement).toBe(trigger);
@@ -216,4 +216,16 @@ it('shows posting blockers to preview readers without a posting action',async()=
  expect(screen.getByText(/ترحيل القيد يتطلب صلاحية/)).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:/ترحيل القيد|Post journal/})).toBeNull();
  expect(fetcher.mock.calls.some(([url])=>url.endsWith('/accounting-post-status'))).toBe(true);
+});
+
+it('shows posted advance balances and saves a linked recovery separately from generic deductions',async()=>{
+ const {default:i18n}=await import('../i18n');await i18n.changeLanguage('en');
+ const line={id:'line1',employee_id:'e1',employee_number:'E1',display_name:'Employee',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'5.00',employer_contributions:'0.00',gross_earnings:'100.00',net_payable:'95.00',recovery_total:'0.00'};
+ const draft={id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'5.00',employer_contributions:'0.00',net_payable:'95.00'};
+ const requests:Array<{url:string;method:string;body:any}> = [];
+ vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,options?:RequestInit)=>{const url=String(input),method=options?.method??'GET',body=options?.body?JSON.parse(String(options.body)):null;requests.push({url,method,body});if(url==='/api/payroll/drafts?month=2026-11-01')return response({draft,employees:[line],available_employees:[{id:'e1',employee_number:'E1',display_name:'Employee',is_active:true}]});if(url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries')return response({advances:[{advance_id:'a1',original_amount:'50.00',issue_date:'2026-01-10',description:'Emergency advance',recovered_amount:'10.00',reversed_amount:'0.00',recognized_balance:'10.00',reserved_balance:'0.00',available_balance:'40.00',current_recovery_id:null,current_amount:null,current_status:null,reservation_expires_at:null}]});if(url==='/api/payroll/drafts/d1/employees/e1'&&method==='PUT')return response({draft,employees:[{...line,version:2}],available_employees:[]});if(url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries'&&method==='PUT')return response({recoveries:body.recoveries});if(url==='/api/payroll/advance-recoveries')return response({recoveries:[]});if(url==='/api/payroll/recovery-corrections')return response({corrections:[]});if(url==='/api/payroll/recovery-settings')return response({lease_days:30,correction_approval_days:30});if(url==='/api/payroll/settlements/liabilities')return response({liabilities:[]});return response({});}));
+ render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']} onUnauthorized={()=>{}}/>);
+ await screen.findAllByText('100.00');fireEvent.click(screen.getAllByRole('button',{name:'Edit'})[0]!);expect(await screen.findByText(/Available:/)).toBeInTheDocument();expect(screen.getByText(/Recovered \(posted\):/)).toBeInTheDocument();fireEvent.change(screen.getByLabelText('Recovery amount (partial or full)'),{target:{value:'10.00'}});fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
+ await waitFor(()=>expect(requests.some(r=>r.url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries'&&r.method==='PUT')).toBe(true));
+ expect(requests.find(r=>r.url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries'&&r.method==='PUT')?.body).toEqual({version:2,recoveries:[{advance_id:'a1',amount:'10.00'}]});expect(requests.find(r=>r.url==='/api/payroll/drafts/d1/employees/e1'&&r.method==='PUT')?.body.deductions).toBe('5.00');
 });
