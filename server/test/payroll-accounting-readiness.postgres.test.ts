@@ -106,8 +106,6 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     expect(unrelatedStatus.eligible).toBe(true);
     expect(unrelatedStatus.blockers).toEqual([]);
     expect(unrelatedStatus.warnings).toContainEqual({code:'manual_journal_review',count:1});
-    await h.q('DELETE FROM journal_entries WHERE id=$1',[unrelatedJournal]);
-
     const deductionCost = (await h.q<{id:string}>(
       `INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by)
        VALUES($1,$2,'employee_deduction','employee_deduction','SAR','0.50','2026-03-01','2026-03-31','Existing ECC deduction',$3) RETURNING id`,[co,employee.id,owner.id]))[0]!.id;
@@ -117,7 +115,7 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     expect(deductionPreview.can_preview).toBe(false);
     expect(deductionPreview.blockers).toContainEqual(expect.objectContaining({code:'ecc_employee_deduction_overlap',count:1,details:[expect.objectContaining({employee_number:'PR2-1',category:'employee_deduction',amount:'0.50'})]}));
 
-    const manualId = await h.postedJournal(co,fy,'2026-03-20',owner.id,[[accountIds[0]!, '1.00','0.00'],[accountIds[2]!, '0.00','1.00']]);
+    const manualId = unrelatedJournal;
     const manualOnlyPreview = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).json;
     expect(manualOnlyPreview.can_preview).toBe(false);
     expect(manualOnlyPreview.blockers).toContainEqual(expect.objectContaining({code:'ecc_employee_deduction_overlap',count:1}));
