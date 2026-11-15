@@ -24,24 +24,33 @@ export class PayrollSettlementService {
   private audit=new AuditLogRepository();
   constructor(private db:Pool) {}
   async liabilities(company:string) {
-    return (await this.db.query(`SELECT l.id liability_line_id,j.id payroll_journal_id,j.source_id payroll_draft_id,d.period_month::text,
+    return (await this.db.query(`SELECT l.id liability_line_id,j.id payroll_journal_id,COALESCE(d.id,od.id) payroll_draft_id,COALESCE(d.period_month,od.period_month)::text period_month,
       l.memo category,l.account_id,l.credit::text original_amount,COALESCE(sum(p.amount),0)::text settled_amount,
       (l.credit-COALESCE(sum(p.amount),0))::text remaining_amount
       FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
-      JOIN payroll_drafts d ON d.id=j.source_id AND d.company_id=j.company_id
+      LEFT JOIN payroll_drafts d ON j.source_type='payroll' AND d.id=j.source_id AND d.company_id=j.company_id
+      LEFT JOIN payroll_recovery_corrections c ON j.source_type='payroll_recovery_correction' AND c.journal_entry_id=j.id AND c.company_id=j.company_id AND c.status='posted'
+      LEFT JOIN payroll_employee_advance_recoveries r ON r.id=c.recovery_id AND r.company_id=c.company_id
+      LEFT JOIN payroll_drafts od ON od.id=r.draft_id AND od.company_id=r.company_id
       LEFT JOIN payroll_settlement_allocations p ON p.company_id=l.company_id AND p.liability_line_id=l.id
-      WHERE l.company_id=$1 AND j.source_type='payroll' AND j.status='posted' AND d.status='approved'
-        AND l.debit=0 AND l.credit>0 AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability')
-      GROUP BY l.id,j.id,d.id ORDER BY d.period_month,l.sequence`,[company])).rows;
+      WHERE l.company_id=$1 AND j.status='posted' AND (
+        (j.source_type='payroll' AND d.status='approved' AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability')) OR
+        (j.source_type='payroll_recovery_correction' AND c.status='posted' AND od.status='approved' AND l.memo='employee_salary_advance_payroll_liability_reversal'))
+        AND l.debit=0 AND l.credit>0
+      GROUP BY l.id,j.id,d.id,od.id,l.sequence ORDER BY COALESCE(d.period_month,od.period_month),l.sequence`,[company])).rows;
   }
   async history(company:string) {
     return (await this.db.query(`SELECT p.id,p.bank_transaction_id,p.liability_line_id,p.journal_entry_id,p.amount::text,p.created_at::text,
-      l.memo category,j.source_id payroll_draft_id,t.transaction_date::text,t.bank_reference,
+      l.memo category,COALESCE(d.id,od.id) payroll_draft_id,t.transaction_date::text,t.bank_reference,
       t.reconciliation_status,t.amount::text bank_amount,
       (SELECT COALESCE(SUM(x.amount),0)::text FROM payroll_settlement_allocations x WHERE x.company_id=p.company_id AND x.bank_transaction_id=p.bank_transaction_id) bank_allocated_amount,
       settlement_journal.reference journal_reference
       FROM payroll_settlement_allocations p JOIN journal_lines l ON l.id=p.liability_line_id AND l.company_id=p.company_id
       JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+      LEFT JOIN payroll_drafts d ON j.source_type='payroll' AND d.id=j.source_id AND d.company_id=j.company_id
+      LEFT JOIN payroll_recovery_corrections c ON j.source_type='payroll_recovery_correction' AND c.journal_entry_id=j.id AND c.company_id=j.company_id AND c.status='posted'
+      LEFT JOIN payroll_employee_advance_recoveries r ON r.id=c.recovery_id AND r.company_id=c.company_id
+      LEFT JOIN payroll_drafts od ON od.id=r.draft_id AND od.company_id=r.company_id
       JOIN bank_transactions t ON t.id=p.bank_transaction_id AND t.company_id=p.company_id
       JOIN journal_entries settlement_journal ON settlement_journal.id=p.journal_entry_id AND settlement_journal.company_id=p.company_id AND settlement_journal.status='posted'
       WHERE p.company_id=$1 ORDER BY p.created_at DESC,p.id`,[company])).rows;
@@ -73,26 +82,28 @@ export class PayrollSettlementService {
 
   /** Lock and validate the persisted payroll chain before relying on it for SoD. */
   private async sodEvidence(c:import('pg').PoolClient,company:string,lineId:string):Promise<PayrollSodEvidence>{
-    const draft=(await c.query<{id:string;created_by:string;approved_by:string|null;status:string;version:number}>(`SELECT d.id,d.created_by,d.approved_by,d.status,d.version
-      FROM payroll_drafts d JOIN journal_lines l ON l.id=$2 AND l.company_id=d.company_id
-      JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.source_type='payroll' AND j.source_id=d.id
+    const draft=(await c.query<{id:string;created_by:string;approved_by:string|null;status:string;version:number;source_type:string;correction_id:string|null}>(`SELECT d.id,d.created_by,d.approved_by,d.status,d.version,j.source_type,c.id correction_id
+      FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+      LEFT JOIN payroll_recovery_corrections c ON j.source_type='payroll_recovery_correction' AND c.journal_entry_id=j.id AND c.company_id=j.company_id AND c.status='posted'
+      LEFT JOIN payroll_employee_advance_recoveries r ON r.id=c.recovery_id AND r.company_id=c.company_id
+      JOIN payroll_drafts d ON d.company_id=j.company_id AND ((j.source_type='payroll' AND d.id=j.source_id) OR (j.source_type='payroll_recovery_correction' AND d.id=r.draft_id))
       WHERE d.company_id=$1 AND l.id=$2 FOR UPDATE OF d`,[company,lineId])).rows[0];
     const approvedBy=draft?.approved_by;
     if(!draft||draft.status!=='approved'||!approvedBy)throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
-    const journals=(await c.query<{id:string;status:string;posted_by:string|null}>(`SELECT id,status,posted_by FROM journal_entries
-      WHERE company_id=$1 AND source_type='payroll' AND source_id=$2 FOR UPDATE`,[company,draft.id])).rows;
-    if(journals.length!==1||journals[0]!.status!=='posted')throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
-    const journal=journals[0]!;
+    const journal=(await c.query<{id:string;status:string;posted_by:string|null}>(`SELECT j.id,j.status,j.posted_by FROM journal_entries j JOIN journal_lines l ON l.journal_entry_id=j.id AND l.company_id=j.company_id
+      WHERE j.company_id=$1 AND l.id=$2 AND ((j.source_type='payroll' AND j.source_id=$3) OR (j.source_type='payroll_recovery_correction' AND EXISTS(SELECT 1 FROM payroll_recovery_corrections c WHERE c.company_id=j.company_id AND c.journal_entry_id=j.id AND c.id=$4 AND c.status='posted'))) FOR UPDATE OF j`,[company,lineId,draft.id,draft.correction_id])).rows[0];
+    if(!journal||journal.status!=='posted')throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
     const postedBy=journal.posted_by;
     if(!postedBy)throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
     const liability=(await c.query<{credit:string;debit:string;memo:string|null}>(`SELECT credit::text,debit::text,memo FROM journal_lines
       WHERE id=$1 AND company_id=$2 AND journal_entry_id=$3 FOR UPDATE`,[lineId,company,journal.id])).rows[0];
-    if(!liability||liability.debit!=='0.00'||Number(liability.credit)<=0||!['net_payroll_liability','employee_deduction_liability','employer_contribution_liability'].includes(liability.memo??''))throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
+    if(!liability||liability.debit!=='0.00'||Number(liability.credit)<=0||!(['net_payroll_liability','employee_deduction_liability','employer_contribution_liability'].includes(liability.memo??'')||(draft.source_type==='payroll_recovery_correction'&&liability.memo==='employee_salary_advance_payroll_liability_reversal')))throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
     const contributors=(await c.query<{user_id:string}>('SELECT user_id FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 ORDER BY user_id FOR SHARE',[company,draft.id])).rows.map(row=>row.user_id);
     if(!contributors.length||!contributors.includes(draft.created_by))throw conflict('PAYROLL_SETTLEMENT_SOD_EVIDENCE_INVALID');
     const settled=(await c.query<{amount:string}>('SELECT COALESCE(SUM(amount),0)::numeric(18,2)::text amount FROM payroll_settlement_allocations WHERE company_id=$1 AND liability_line_id=$2',[company,lineId])).rows[0]!.amount;
-    const participants=[...new Set([...contributors,approvedBy,postedBy])].sort();
-    const snapshot={company,draft:draft.id,draftVersion:draft.version,journal:journal.id,approvedBy,postedBy,
+    const correctionPeople=draft.correction_id?(await c.query<{requested_by:string;approved_by:string|null;posted_by:string|null}>(`SELECT requested_by,approved_by,posted_by FROM payroll_recovery_corrections WHERE id=$1 AND company_id=$2 AND status='posted'`,[draft.correction_id,company])).rows[0]:undefined;
+    const participants=[...new Set([...contributors,approvedBy,postedBy,...(correctionPeople?[correctionPeople.requested_by,correctionPeople.approved_by,correctionPeople.posted_by].filter((x):x is string=>!!x):[])])].sort();
+    const snapshot={company,draft:draft.id,draftVersion:draft.version,journal:journal.id,approvedBy,postedBy,sourceType:draft.source_type,correctionId:draft.correction_id,
       contributors:[...contributors].sort(),liabilityLine:lineId,liabilityAmount:liability.credit,settledAmount:settled};
     const fingerprint=createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
     return {draftId:draft.id,createdBy:draft.created_by,approvedBy,draftVersion:draft.version,journalId:journal.id,postedBy,
@@ -217,10 +228,15 @@ export class PayrollSettlementService {
         if(sodException.participant_fingerprint!==evidence.fingerprint||sodException.payroll_journal_id!==evidence.journalId||sodException.liability_amount!==evidence.liabilityAmount||sodException.settled_amount!==evidence.settledAmount)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_STALE');
         if(!sodException.decided_by||sodException.decided_by===actor||evidence.participants.includes(sodException.decided_by))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_CONFLICTED_APPROVER');
       }else if(conflicted&&!privileged)throw conflict('PAYROLL_SETTLEMENT_SOD_REQUIRED');
-      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,d.period_month::text,d.currency_code FROM journal_lines l
-        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id JOIN payroll_drafts d ON d.id=j.source_id AND d.company_id=j.company_id
-        WHERE l.company_id=$1 AND l.id=$2 AND j.source_type='payroll' AND j.status='posted' AND d.status='approved' AND l.debit=0 AND l.credit>0
-          AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability') FOR UPDATE OF l`,[company,input.liabilityLineId])).rows[0];
+      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,COALESCE(d.period_month,od.period_month)::text period_month,COALESCE(d.currency_code,od.currency_code) currency_code FROM journal_lines l
+        JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+        LEFT JOIN payroll_drafts d ON j.source_type='payroll' AND d.id=j.source_id AND d.company_id=j.company_id
+        LEFT JOIN payroll_recovery_corrections rc ON j.source_type='payroll_recovery_correction' AND rc.journal_entry_id=j.id AND rc.company_id=j.company_id AND rc.status='posted'
+        LEFT JOIN payroll_employee_advance_recoveries r ON r.id=rc.recovery_id AND r.company_id=rc.company_id
+        LEFT JOIN payroll_drafts od ON od.id=r.draft_id AND od.company_id=r.company_id
+        WHERE l.company_id=$1 AND l.id=$2 AND j.status='posted' AND l.debit=0 AND l.credit>0 AND (
+          (j.source_type='payroll' AND d.status='approved' AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability')) OR
+          (j.source_type='payroll_recovery_correction' AND rc.status='posted' AND od.status='approved' AND l.memo='employee_salary_advance_payroll_liability_reversal')) FOR UPDATE OF l`,[company,input.liabilityLineId])).rows[0];
       if(!liability) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
       if(bank.transaction_date<liability.period_month||bank.currency_code.trim()!==liability.currency_code.trim()) throw conflict('PAYROLL_SETTLEMENT_BANK_INELIGIBLE');
       const account=await resolveBankLedgerAccount(c,company,bank.bank_account_id,bank.transaction_date,true);

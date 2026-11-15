@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
 
@@ -11,8 +12,8 @@ db('payroll posting (PostgreSQL)',()=>{
  async function fixture(label:string, approve=true) {
   const owner=await h.user(`${label}-owner`), editor=await h.user(`${label}-editor`), approver=await h.user(`${label}-approver`), poster=await h.user(`${label}-poster`), outsider=await h.user(`${label}-outsider`);
   const co=await h.company(label,owner.id), other=await h.company(`${label}-other`,outsider.id);
-  await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.accounting.post']);
-  await h.member(co,approver.id,['payroll.view','payroll.approve','payroll.accounting.post']);
+  await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.accounting.post','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']);
+  await h.member(co,approver.id,['payroll.view','payroll.approve','payroll.accounting.post','employee.view','employee_salary_advance.approve']);
   await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view']);
   for(const u of [owner,editor,approver,poster,outsider]) await u.client.login();
   const fy=await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
@@ -25,6 +26,251 @@ db('payroll posting (PostgreSQL)',()=>{
   const post=()=>poster.client.req('POST',`/payroll/drafts/${draft.id}/accounting-post`,{});
   return {owner,editor,approver,poster,outsider,co,other,fy,employee,accounts,draft,post};
  }
+ async function issueAdvance(x:Awaited<ReturnType<typeof fixture>>, amount='25.25'){
+  const tag=randomUUID().slice(0,8);
+  const receivable=await h.account(x.co,`AR-${tag}`,'asset','current_asset');
+  const bankGl=await h.account(x.co,`BK-${tag}`,'asset','current_asset');
+  await h.q("INSERT INTO employee_salary_advance_account_mappings(company_id,account_id,updated_by) VALUES($1,$2,$3)",[x.co,receivable,x.owner.id]);
+  const bank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Advance funding','SAR',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[bankGl]);
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank,bankGl,x.owner.id]);
+  const bankTx=(await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+    VALUES($1,$2,'2026-03-10',$3,'SAR','Salary advance funding',$4,$5,'strong','manual','other',$6) RETURNING id`,[x.co,bank,`-${amount}`,`recovery-${randomUUID()}`,randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  const created=await x.owner.client.req('POST','/employee-salary-advances',{employee_id:x.employee,amount,issue_date:'2026-03-10',description:'Payroll recovery test'});
+  expect(created.status,JSON.stringify(created.json)).toBe(201);
+  const advanceId=created.json.advance.id as string;
+  const approved=await x.approver.client.req('POST',`/employee-salary-advances/${advanceId}/approve`,{version:1});expect(approved.status,JSON.stringify(approved.json)).toBe(200);
+  const queued=await x.owner.client.req('POST',`/employee-salary-advances/${advanceId}/issue`,{version:2,bank_transaction_id:bankTx});expect(queued.status,JSON.stringify(queued.json)).toBe(201);
+  const fundingJournal=queued.json.journal.id as string;
+  const posted=await x.owner.client.req('POST',`/journals/${fundingJournal}/post`,{});expect(posted.status,JSON.stringify(posted.json)).toBe(200);
+  return {advanceId,receivable,fundingJournal};
+ }
+ async function selectRecovery(x:Awaited<ReturnType<typeof fixture>>,advanceId:string,amount:string,draftId=x.draft.id,employeeId=x.employee){
+  const version=(await h.q<{version:number}>("SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3",[x.co,draftId,employeeId]))[0]!.version;
+  return x.editor.client.req('PUT',`/payroll/drafts/${draftId}/employees/${employeeId}/advance-recoveries`,{version,recoveries:[{advance_id:advanceId,amount}]});
+ }
+ async function approveDraft(x:Awaited<ReturnType<typeof fixture>>,draftId=x.draft.id){
+  const version=(await h.q<{version:number}>('SELECT version FROM payroll_drafts WHERE company_id=$1 AND id=$2',[x.co,draftId]))[0]!.version;
+  return x.approver.client.req('POST',`/payroll/drafts/${draftId}/approve`,{version});
+ }
+ async function makeSecondDraft(x:Awaited<ReturnType<typeof fixture>>,month='2026-04-01'){
+  const draft=(await x.editor.client.req('POST','/payroll/drafts',{month})).json.draft;
+  const saved=await x.editor.client.req('PUT',`/payroll/drafts/${draft.id}/employees/${x.employee}`,{...values,version:0});expect(saved.status,JSON.stringify(saved.json)).toBe(200);
+  return draft.id as string;
+ }
+ async function correctionActors(x:Awaited<ReturnType<typeof fixture>>,label:string){
+  const requester=await h.user(`${label}-requester`),approver=await h.user(`${label}-approver`),poster=await h.user(`${label}-poster`);
+  await h.member(x.co,requester.id,['payroll.view','payroll.employee_advance_recovery.correct']);
+  await h.member(x.co,approver.id,['payroll.view','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.correct.approve']);
+  await h.member(x.co,poster.id,['payroll.view','payroll.employee_advance_recovery.correct','payroll.accounting.post']);
+  for(const u of [requester,approver,poster])await u.client.login();
+  return{requester,approver,poster};
+ }
+ async function correction(actors:Awaited<ReturnType<typeof correctionActors>>,recoveryId:string,amount:string){
+  const body={recovery_id:recoveryId,amount,reason:'Correct a verified payroll recovery amount',accounting_date:'2026-03-15',idempotency_key:randomUUID()};
+  const req=await actors.requester.client.req('POST','/payroll/recovery-corrections',body);
+  expect(req.status,JSON.stringify(req.json)).toBe(201);
+  const retry=await actors.requester.client.req('POST','/payroll/recovery-corrections',body);expect(retry.status).toBe(200);expect(retry.json.id).toBe(req.json.id);
+  const decision=await actors.approver.client.req('POST',`/payroll/recovery-corrections/${req.json.id}/decision`,{decision:'approve',reason:'Evidence confirms this correction is required'});
+  expect(decision.status,JSON.stringify(decision.json)).toBe(200);
+  return req.json.id as string;
+ }
+ it('posts a partial recovery atomically with exact receivable credit and immutable balance evidence',async()=>{
+  const x=await fixture('recovery-partial',false),advance=await issueAdvance(x,'25.25');
+  const selected=await selectRecovery(x,advance.advanceId,'10.25');expect(selected.status,JSON.stringify(selected.json)).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  const posted=await x.post();expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  const journal=posted.json.journal.id as string;
+  const lines=await h.q<{account_id:string;debit:string;credit:string;memo:string}>('SELECT account_id,debit::text,credit::text,memo FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2 ORDER BY sequence',[x.co,journal]);
+  expect(lines).toContainEqual({account_id:advance.receivable,debit:'0.00',credit:'10.25',memo:'employee_salary_advance_receivable'});
+  expect(lines).toContainEqual({account_id:x.accounts[2],debit:'0.00',credit:'90.25',memo:'net_payroll_liability'});
+  expect(lines).toContainEqual({account_id:x.accounts[3],debit:'0.00',credit:'0.50',memo:'employee_deduction_liability'});
+  const evidence=(await h.q<{status:string;amount:string;journal_entry_id:string;journal_line_id:string}>('SELECT status,amount::text,journal_entry_id,journal_line_id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2',[x.co,x.draft.id]))[0]!;
+  expect(evidence).toMatchObject({status:'posted',amount:'10.25',journal_entry_id:journal});expect(lines.some(l=>l.memo==='employee_salary_advance_receivable'&&l.credit==='10.25')).toBe(true);
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE id=$1 AND status='posted' AND journal_line_id=$2",[(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE draft_id=$1',[x.draft.id]))[0]!.id,evidence.journal_line_id])).toBe(1);
+  expect(await h.q<{balance:string}>(`SELECT (a.amount-COALESCE(sum(r.amount) FILTER(WHERE r.status='posted'),0))::text balance FROM employee_salary_advances a LEFT JOIN payroll_employee_advance_recoveries r ON r.company_id=a.company_id AND r.advance_id=a.id WHERE a.id=$1 GROUP BY a.id`,[advance.advanceId])).toEqual([{balance:'15.00'}]);
+  await expect(h.q("UPDATE payroll_employee_advance_recoveries SET amount=11 WHERE company_id=$1 AND draft_id=$2",[x.co,x.draft.id])).rejects.toThrow(/immutable/);
+  expect(await h.count('SELECT COUNT(*)::text n FROM payroll_settlement_allocations WHERE company_id=$1',[x.co])).toBe(0);
+ });
+
+ it('rejects over-recovery and allows a full recovery without changing generic deductions',async()=>{
+  const x=await fixture('recovery-full',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'25.26')).json.code).toBe('PAYROLL_ADVANCE_BALANCE_EXCEEDED');
+  expect((await selectRecovery(x,advance.advanceId,'25.25')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);
+  const result=await x.post();expect(result.status,JSON.stringify(result.json)).toBe(201);
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='posted' AND amount=25.25",[x.co,advance.advanceId])).toBe(1);
+  expect(await h.count("SELECT COUNT(*)::text n FROM journal_lines WHERE journal_entry_id=$1 AND memo='employee_deduction_liability' AND credit=0.50",[result.json.journal.id])).toBe(1);
+ });
+ it('keeps linked recoveries within edited payroll net pay',async()=>{
+  const x=await fixture('recovery-net-bound',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'10.00')).status).toBe(200);
+  const line=(await h.q<{version:number}>('SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,x.draft.id,x.employee]))[0]!;
+  const edit=await x.editor.client.req('PUT',`/payroll/drafts/${x.draft.id}/employees/${x.employee}`,{...values,salary:'1.00',version:line.version});
+  expect(edit.status).toBe(409);expect(edit.json.code).toBe('PAYROLL_RECOVERY_EXCEEDS_NET');
+  expect((await approveDraft(x)).status).toBe(200);
+ });
+ it('does not let payroll recovery viewers edit selected recovery amounts without the dedicated select capability',async()=>{
+  const x=await fixture('recovery-select-permission',false),advance=await issueAdvance(x);
+  const viewer=await h.user('recovery-view-only');await h.member(x.co,viewer.id,['payroll.view','payroll.edit','payroll.employee_advance_recovery.view']);await viewer.client.login();
+  const version=(await h.q<{version:number}>('SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,x.draft.id,x.employee]))[0]!.version;
+  const denied=await viewer.client.req('PUT',`/payroll/drafts/${x.draft.id}/employees/${x.employee}/advance-recoveries`,{version,recoveries:[{advance_id:advance.advanceId,amount:'1.00'}]});
+  expect(denied.status).toBe(403);expect(await h.count("SELECT count(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2",[x.co,x.draft.id])).toBe(0);
+ });
+ it('rolls back reservation conversion and journal together when canonical posting fails',async()=>{
+  const x=await fixture('recovery-rollback',false),advance=await issueAdvance(x),selected=await selectRecovery(x,advance.advanceId,'10.00');expect(selected.status).toBe(200);expect((await approveDraft(x)).status).toBe(200);
+  await h.q(`CREATE FUNCTION recovery_test_fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='payroll.accounting.post' THEN RAISE EXCEPTION 'test recovery rollback'; END IF; RETURN NEW; END $$`);
+  await h.q('CREATE TRIGGER recovery_test_fail_audit BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION recovery_test_fail_audit()');
+  try{expect((await x.post()).status).toBe(500);}finally{await h.q('DROP TRIGGER recovery_test_fail_audit ON audit_log');await h.q('DROP FUNCTION recovery_test_fail_audit()');}
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status='reserved'",[x.co,x.draft.id])).toBe(1);
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status='posted'",[x.co,x.draft.id])).toBe(0);
+  expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2",[x.co,x.draft.id])).toBe(0);
+ });
+ it('releases an approved draft reservation through an audited return-to-draft transition without cancelling the issued advance',async()=>{
+  const x=await fixture('recovery-lifecycle',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'10.00')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);
+  expect(await h.count("SELECT count(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='reserved'",[x.co,advance.advanceId])).toBe(1);
+  const lifecycle=await h.user('recovery-lifecycle-independent');await h.member(x.co,lifecycle.id,['payroll.view','payroll.edit','payroll.approve']);await lifecycle.client.login();
+  const returned=await lifecycle.client.req('POST',`/payroll/drafts/${x.draft.id}/lifecycle`,{action:'return_to_draft',reason:'Correct the payroll before posting'});
+  expect(returned.status,JSON.stringify(returned.json)).toBe(200);expect(returned.json.status).toBe('draft');
+  expect(await h.count("SELECT count(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='released' AND ended_at IS NOT NULL",[x.co,advance.advanceId])).toBe(1);
+  expect(await h.count("SELECT count(*)::text n FROM employee_salary_advances WHERE company_id=$1 AND id=$2 AND status='issued' AND journal_entry_id IS NOT NULL",[x.co,advance.advanceId])).toBe(1);
+  expect(await h.count("SELECT count(*)::text n FROM audit_log WHERE company_id=$1 AND action='payroll.draft.return_to_draft' AND entity_id=$2",[x.co,x.draft.id])).toBe(1);
+  const version=(await h.q<{version:number}>('SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,x.draft.id,x.employee]))[0]!.version;
+  const reselected=await x.editor.client.req('PUT',`/payroll/drafts/${x.draft.id}/employees/${x.employee}/advance-recoveries`,{version,recoveries:[{advance_id:advance.advanceId,amount:'10.00'}]});expect(reselected.status,JSON.stringify(reselected.json)).toBe(200);
+ });
+ it('serializes competing reservations across payroll periods and allows only the remaining balance to post',async()=>{
+  const x=await fixture('recovery-concurrency',false),advance=await issueAdvance(x,'25.25'),april=await makeSecondDraft(x,'2026-04-01');
+  expect((await selectRecovery(x,advance.advanceId,'15.00')).status).toBe(200);expect((await selectRecovery(x,advance.advanceId,'15.00',april)).status).toBe(200);
+  const approvals=await Promise.all([approveDraft(x),approveDraft(x,april)]);expect(approvals.map(r=>r.status).sort()).toEqual([200,409]);
+  const winner=approvals[0]!.status===200?x.draft.id:april,loser=winner===x.draft.id?april:x.draft.id;
+  const posted=await x.poster.client.req('POST',`/payroll/drafts/${winner}/accounting-post`,{});
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  const consumed=(await h.q<{amount:string}>('SELECT sum(amount)::text amount FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.amount;expect(consumed).toBe('15.00');
+  expect((await h.q<{available:string}>(`SELECT (a.amount-COALESCE(sum(r.amount) FILTER(WHERE r.status='posted' OR r.status='reserved' AND r.expires_at>clock_timestamp()),0))::text available FROM employee_salary_advances a LEFT JOIN payroll_employee_advance_recoveries r ON r.company_id=a.company_id AND r.advance_id=a.id WHERE a.id=$1 GROUP BY a.id`,[advance.advanceId]))[0]!.available).toBe('10.25');
+  const lineVersion=(await h.q<{version:number}>('SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,loser,x.employee]))[0]!.version;
+  const rebalance=await x.editor.client.req('PUT',`/payroll/drafts/${loser}/employees/${x.employee}/advance-recoveries`,{version:lineVersion,recoveries:[{advance_id:advance.advanceId,amount:'10.25'}]});expect(rebalance.status,JSON.stringify(rebalance.json)).toBe(200);
+  expect((await approveDraft(x,loser)).status).toBe(200);
+  const loserPost=await x.poster.client.req('POST',`/payroll/drafts/${loser}/accounting-post`,{});expect(loserPost.status,JSON.stringify(loserPost.json)).toBe(201);
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='posted'",[x.co,advance.advanceId])).toBe(2);
+  expect((await h.q<{recovered:string}>("SELECT sum(amount)::text recovered FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='posted'",[x.co,advance.advanceId]))[0]!.recovered).toBe('25.25');
+ });
+ it('rejects posting after a reservation lease expires',async()=>{
+  const x=await fixture('recovery-expired',false),advance=await issueAdvance(x),april=await makeSecondDraft(x,'2026-04-01');
+  expect((await approveDraft(x,april)).status).toBe(200);
+  await h.q(`INSERT INTO payroll_employee_advance_recoveries(company_id,draft_id,employee_id,advance_id,amount,status,expires_at,reserved_at,created_by)
+   VALUES($1,$2,$3,$4,10,'reserved',clock_timestamp()+interval '1 second',clock_timestamp(),$5)`,[x.co,april,x.employee,advance.advanceId,x.approver.id]);
+  await new Promise(resolve=>setTimeout(resolve,1200));
+  const reserved=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status=\'reserved\'',[x.co,april]))[0]!,fundingLine=(await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 LIMIT 1',[advance.fundingJournal]))[0]!;
+  await expect(h.q("UPDATE payroll_employee_advance_recoveries SET status='posted',expires_at=NULL,journal_entry_id=$2,journal_line_id=$3 WHERE id=$1",[reserved.id,advance.fundingJournal,fundingLine.id])).rejects.toThrow(/expired payroll recovery reservation cannot post/);
+  const result=await x.poster.client.req('POST',`/payroll/drafts/${april}/accounting-post`,{});
+  expect(result.status).toBe(409);expect(result.json.code).toBe('PAYROLL_ADVANCE_RESERVATION_EXPIRED');
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status='reserved'",[x.co,april])).toBe(1);
+  expect(await h.count("SELECT COUNT(*)::text n FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2",[x.co,april])).toBe(0);
+ });
+ it('database rejects forged posted records, wrong employee ownership, and mismatched journal evidence',async()=>{
+  const x=await fixture('recovery-db-guards',false),advance=await issueAdvance(x,'25.25');
+  await expect(h.q(`INSERT INTO payroll_employee_advance_recoveries(company_id,draft_id,employee_id,advance_id,amount,status,created_by,journal_entry_id,journal_line_id) VALUES($1,$2,$3,$4,1,'posted',$5,$6,$7)`,[x.co,x.draft.id,x.employee,advance.advanceId,x.owner.id,advance.fundingJournal,(await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 LIMIT 1',[advance.fundingJournal]))[0]!.id])).rejects.toThrow(/only post from an approved reservation/);
+  const foreignEmployee=(await h.q<{id:string}>('INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,$2,\'Wrong owner\',$3) RETURNING id',[x.co,`X${randomUUID().slice(0,6)}`,x.owner.id]))[0]!.id;
+  await expect(h.q("INSERT INTO payroll_employee_advance_recoveries(company_id,draft_id,employee_id,advance_id,amount,status,created_by) VALUES($1,$2,$3,$4,1,'selected',$5)",[x.co,x.draft.id,foreignEmployee,advance.advanceId,x.owner.id])).rejects.toThrow(/ownership or lifecycle invalid/);
+  expect((await selectRecovery(x,advance.advanceId,'10.00')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status=\'reserved\'',[x.co,x.draft.id]))[0]!, fundingLine=(await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 LIMIT 1',[advance.fundingJournal]))[0]!;
+  const c=await h.db.connect();try{await c.query('BEGIN');await c.query("UPDATE payroll_employee_advance_recoveries SET status='posted',expires_at=NULL,journal_entry_id=$3,journal_line_id=$4 WHERE company_id=$1 AND id=$2",[x.co,recovery.id,advance.fundingJournal,fundingLine.id]);await expect(c.query('SET CONSTRAINTS ALL IMMEDIATE')).rejects.toThrow(/does not match immutable journal evidence/);await c.query('ROLLBACK');}finally{c.release();}
+ });
+ it('posts partial and full correction reversals immutably and settles correction liability separately',async()=>{
+  const x=await fixture('recovery-correction-settle',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'25.25')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);
+  const payroll=await x.post();expect(payroll.status,JSON.stringify(payroll.json)).toBe(201);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.id;
+  const actors=await correctionActors(x,'correction-settle');
+  const partial=await correction(actors,recovery,'10.00');
+  expect((await actors.poster.client.req('POST',`/payroll/recovery-corrections/${partial}/post`,{})).status).toBe(201);
+  const full=await correction(actors,recovery,'15.25');
+  const postedFull=await actors.poster.client.req('POST',`/payroll/recovery-corrections/${full}/post`,{});expect(postedFull.status,JSON.stringify(postedFull.json)).toBe(201);
+  const cjournals=await h.q<{id:string;account_id:string;debit:string;credit:string;memo:string}>('SELECT j.id,l.account_id,l.debit::text,l.credit::text,l.memo FROM journal_entries j JOIN journal_lines l ON l.journal_entry_id=j.id WHERE j.company_id=$1 AND j.source_type=\'payroll_recovery_correction\' ORDER BY j.created_at,l.sequence',[x.co]);
+  expect(cjournals).toHaveLength(4);
+  expect(cjournals.slice(0,2)).toEqual([{id:cjournals[0]!.id,account_id:advance.receivable,debit:'10.00',credit:'0.00',memo:'employee_salary_advance_recovery_reversal'},{id:cjournals[0]!.id,account_id:x.accounts[2]!,debit:'0.00',credit:'10.00',memo:'employee_salary_advance_payroll_liability_reversal'}]);
+  await expect(h.q("UPDATE journal_lines SET debit=debit WHERE journal_entry_id=$1",[cjournals[0]!.id])).rejects.toThrow(/immutable/);
+  await expect(h.q("UPDATE payroll_recovery_corrections SET reason='change posted correction' WHERE id=$1",[partial])).rejects.toThrow(/immutable/);
+  expect((await actors.requester.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'0.01',reason:'Over the remaining correction amount',accounting_date:'2026-03-15',idempotency_key:randomUUID()})).status).toBe(409);
+  expect((await h.q<{remaining:string}>(`SELECT (a.amount-COALESCE(sum(r.amount) FILTER(WHERE r.status='posted'),0)+COALESCE((SELECT sum(c.amount) FROM payroll_recovery_corrections c WHERE c.recovery_id=r.id AND c.status='posted'),0))::text remaining FROM employee_salary_advances a JOIN payroll_employee_advance_recoveries r ON r.advance_id=a.id WHERE a.id=$1 GROUP BY a.amount,r.id`,[advance.advanceId]))[0]!.remaining).toBe('25.25');
+  const april=await makeSecondDraft(x,'2026-04-01');expect((await selectRecovery(x,advance.advanceId,'25.25',april)).status).toBe(200);expect((await approveDraft(x,april)).status).toBe(200);
+  expect(await h.count("SELECT count(*)::text n FROM journal_entries WHERE id=$1 AND status='posted'",[payroll.json.journal.id])).toBe(1);
+  await expect(h.q("UPDATE journal_entries SET description='rewrite' WHERE id=$1",[payroll.json.journal.id])).rejects.toThrow(/immutable/);
+  await expect(h.q("UPDATE payroll_employee_advance_recoveries SET amount=1 WHERE id=$1",[recovery])).rejects.toThrow(/immutable/);
+  const correctionLine=(await h.q<{id:string}>(`SELECT l.id FROM payroll_recovery_corrections c JOIN journal_lines l ON l.journal_entry_id=c.journal_entry_id AND l.memo='employee_salary_advance_payroll_liability_reversal' WHERE c.id=$1`,[partial]))[0]!.id;
+  const settlementActor=await h.user('correction-settlement-actor');await h.member(x.co,settlementActor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view']);await settlementActor.client.login();
+  const liabilities=await settlementActor.client.req('GET','/payroll/settlements/liabilities');
+  expect(liabilities.json.liabilities,JSON.stringify(liabilities)).toEqual(expect.arrayContaining([expect.objectContaining({liability_line_id:correctionLine,category:'employee_salary_advance_payroll_liability_reversal',remaining_amount:'10.00'})]));
+  const cash=await h.account(x.co,'CORR-CASH','asset','current_asset');await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[cash]);
+  const bank=(await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Correction settlement','SAR',$2) RETURNING id",[x.co,x.owner.id]))[0]!.id;
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank,cash,x.owner.id]);
+  const tx=(await h.q<{id:string}>("INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id) VALUES($1,$2,'2026-03-20',-10,'SAR','Correction settlement',$3,$4,'strong','manual','other',$5) RETURNING id",[x.co,bank,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  const settled=await settlementActor.client.req('POST','/payroll/settlements',{bank_transaction_id:tx,liability_line_id:correctionLine,amount:'4.00',idempotency_key:randomUUID()});expect(settled.status,JSON.stringify(settled.json)).toBe(201);
+  expect((await settlementActor.client.req('GET','/payroll/settlements/liabilities')).json.liabilities.find((line:{liability_line_id:string})=>line.liability_line_id===correctionLine).remaining_amount).toBe('6.00');
+  expect(await h.count('SELECT count(*)::text n FROM payroll_settlement_allocations WHERE company_id=$1 AND liability_line_id=$2',[x.co,correctionLine])).toBe(1);
+ });
+ it('serializes competing approved corrections and rolls back posting failures',async()=>{
+  const x=await fixture('recovery-correction-race',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'25.25')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);expect((await x.post()).status).toBe(201);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.id;
+  const actors=await correctionActors(x,'correction-race');
+  const first=await correction(actors,recovery,'10.00'),second=await correction(actors,recovery,'10.00');
+  const [a,b]=await Promise.all([actors.poster.client.req('POST',`/payroll/recovery-corrections/${first}/post`,{}),actors.poster.client.req('POST',`/payroll/recovery-corrections/${second}/post`,{})]);
+  expect(a.status).toBe(201);expect(b.status,JSON.stringify(b.json)).toBe(201);
+  expect((await h.q<{sum:string}>("SELECT COALESCE(sum(amount),0)::text sum FROM payroll_recovery_corrections WHERE recovery_id=$1 AND status='posted'",[recovery]))[0]!.sum).toBe('20.00');
+  const failed=await correction(actors,recovery,'5.25');
+  await h.q(`CREATE FUNCTION recovery_correction_test_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='payroll.advance_recovery.correction.post' THEN RAISE EXCEPTION 'test correction audit failure'; END IF; RETURN NEW; END $$`);
+  await h.q('CREATE TRIGGER recovery_correction_test_audit_failure BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION recovery_correction_test_audit_failure()');
+  try{expect((await actors.poster.client.req('POST',`/payroll/recovery-corrections/${failed}/post`,{})).status).toBe(500);}finally{await h.q('DROP TRIGGER recovery_correction_test_audit_failure ON audit_log');await h.q('DROP FUNCTION recovery_correction_test_audit_failure()');}
+  expect(await h.count("SELECT count(*)::text n FROM payroll_recovery_corrections WHERE id=$1 AND status='approved' AND journal_entry_id IS NULL",[failed])).toBe(1);
+  expect(await h.count("SELECT count(*)::text n FROM journal_entries WHERE source_type='payroll_recovery_correction' AND source_id=$1",[failed])).toBe(0);
+ });
+ it('allows the correction requester to withdraw an unposted approval with immutable audit evidence and restored capacity',async()=>{
+  const x=await fixture('recovery-correction-withdraw',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'25.25')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);expect((await x.post()).status).toBe(201);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.id;
+  const actors=await correctionActors(x,'correction-withdraw'),first=await correction(actors,recovery,'15.00');
+  const withdrawn=await actors.requester.client.req('POST',`/payroll/recovery-corrections/${first}/withdraw`,{reason:'The approved correction is no longer required'});
+  expect(withdrawn.status,JSON.stringify(withdrawn.json)).toBe(200);
+  expect(await h.count("SELECT count(*)::text n FROM payroll_recovery_corrections WHERE id=$1 AND status='withdrawn' AND ended_by=$2 AND char_length(end_reason)>=10",[first,actors.requester.id])).toBe(1);
+  expect(await h.count("SELECT count(*)::text n FROM audit_log WHERE company_id=$1 AND action='payroll.advance_recovery.correction.withdraw' AND entity_id=$2",[x.co,first])).toBe(1);
+  const replacement=await correction(actors,recovery,'15.00');expect((await h.q<{status:string}>('SELECT status FROM payroll_recovery_corrections WHERE id=$1',[replacement]))[0]!.status).toBe('approved');
+ });
+ it('expires stale correction approvals with an audit record and blocks posting until a fresh request and approval',async()=>{
+  const x=await fixture('recovery-correction-expiry',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'25.25')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);expect((await x.post()).status).toBe(201);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.id;
+  const actors=await correctionActors(x,'correction-expiry'),id=await correction(actors,recovery,'10.00');
+  await h.q('ALTER TABLE payroll_recovery_corrections DISABLE TRIGGER payroll_recovery_correction');
+  try{await h.q("UPDATE payroll_recovery_corrections SET approved_at=clock_timestamp()-interval '2 days',approval_expires_at=clock_timestamp()-interval '1 day' WHERE id=$1",[id]);}
+  finally{await h.q('ALTER TABLE payroll_recovery_corrections ENABLE TRIGGER payroll_recovery_correction');}
+  const expired=await actors.poster.client.req('POST',`/payroll/recovery-corrections/${id}/expire`,{});expect(expired.status,JSON.stringify(expired.json)).toBe(200);
+  expect(await h.count("SELECT count(*)::text n FROM payroll_recovery_corrections WHERE id=$1 AND status='expired' AND ended_by=$2 AND char_length(end_reason)>=10",[id,actors.poster.id])).toBe(1);
+  expect(await h.count("SELECT count(*)::text n FROM audit_log WHERE company_id=$1 AND action='payroll.advance_recovery.correction.expire' AND entity_id=$2",[x.co,id])).toBe(1);
+  expect((await actors.poster.client.req('POST',`/payroll/recovery-corrections/${id}/post`,{})).status).toBe(409);
+  const fresh=await correction(actors,recovery,'10.00');expect((await h.q<{status:string}>('SELECT status FROM payroll_recovery_corrections WHERE id=$1',[fresh]))[0]!.status).toBe('approved');
+  await h.q('ALTER TABLE payroll_recovery_corrections DISABLE TRIGGER payroll_recovery_correction');
+  try{await h.q("UPDATE payroll_recovery_corrections SET approved_at=clock_timestamp()-interval '2 days',approval_expires_at=clock_timestamp()-interval '1 day' WHERE id=$1",[fresh]);}
+  finally{await h.q('ALTER TABLE payroll_recovery_corrections ENABLE TRIGGER payroll_recovery_correction');}
+  const stalePost=await actors.poster.client.req('POST',`/payroll/recovery-corrections/${fresh}/post`,{});expect(stalePost.status).toBe(409);expect(stalePost.json.code).toBe('PAYROLL_RECOVERY_CORRECTION_EXPIRED');
+  expect(await h.count("SELECT count(*)::text n FROM payroll_recovery_corrections WHERE id=$1 AND status='expired' AND journal_entry_id IS NULL",[fresh])).toBe(1);
+ });
+ it('requires correction permissions and independent approval apart from payroll participants',async()=>{
+  const x=await fixture('recovery-correction-sod',false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'10.00')).status).toBe(200);expect((await approveDraft(x)).status).toBe(200);expect((await x.post()).status).toBe(201);
+  const recovery=(await h.q<{id:string}>('SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status=\'posted\'',[x.co,advance.advanceId]))[0]!.id;
+  const actors=await correctionActors(x,'correction-sod');
+  expect((await x.editor.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'1.00',reason:'No correction capability assigned',accounting_date:'2026-03-15',idempotency_key:randomUUID()})).status).toBe(403);
+  const requested=await actors.requester.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'5.00',reason:'Correct an evidence-backed payroll recovery',accounting_date:'2026-03-15',idempotency_key:randomUUID()});expect(requested.status).toBe(201);
+  const inbox=await actors.approver.client.req('GET','/payroll/recovery-corrections');expect(inbox.status).toBe(200);expect(inbox.json.corrections.some((row:{id:string;status:string})=>row.id===requested.json.id&&row.status==='pending')).toBe(true);
+  await h.q("INSERT INTO role_capabilities(role_id,capability_id) SELECT role_id,'payroll.employee_advance_recovery.correct.approve' FROM memberships WHERE company_id=$1 AND user_id=$2 ON CONFLICT DO NOTHING",[x.co,actors.requester.id]);
+  expect((await actors.requester.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/decision`,{decision:'approve',reason:'I requested this correction myself'})).json.code).toBe('PAYROLL_RECOVERY_CORRECTION_SELF_APPROVAL');
+  await h.q("INSERT INTO role_capabilities(role_id,capability_id) SELECT role_id,'payroll.employee_advance_recovery.correct.approve' FROM memberships WHERE company_id=$1 AND user_id=$2 ON CONFLICT DO NOTHING",[x.co,x.approver.id]);
+  expect((await x.approver.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/decision`,{decision:'approve',reason:'I approved the original payroll'})).json.code).toBe('PAYROLL_RECOVERY_CORRECTION_CONFLICTED_APPROVER');
+  expect((await actors.approver.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/decision`,{decision:'approve',reason:'Independent review confirms correction'})).status).toBe(200);
+  expect((await actors.approver.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/post`,{})).status).toBe(403);
+  expect((await actors.poster.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/post`,{})).status).toBe(201);
+ });
  it('posts exact balanced amounts once under concurrency and includes the journal in reports',async()=>{
   const x=await fixture('post-success');
   const ecc=(await h.q<{id:string}>(`INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by) VALUES($1,$2,'other','employer_cost','SAR',7,'2026-03-01','2026-03-31','Operational allocation',$3) RETURNING id`,[x.co,x.employee,x.owner.id]))[0]!.id;

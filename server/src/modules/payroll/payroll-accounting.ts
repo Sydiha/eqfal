@@ -98,6 +98,12 @@ export class PayrollAccountingService {
         await client.query('COMMIT'); return {journal:existing, existing:true};
       }
       if (draft.status !== 'approved') throw new PayrollAccountingError('PAYROLL_NOT_APPROVED', 409);
+      const reservations=(await client.query<{advance_id:string;amount:string;employee_id:string;active:boolean}>(`SELECT advance_id,amount::text,employee_id,(expires_at>clock_timestamp()) active FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND draft_id=$2 AND status='reserved' ORDER BY advance_id FOR UPDATE`,[companyId,draftId])).rows;
+      for(const r of reservations){await client.query('SELECT id FROM employee_salary_advances WHERE company_id=$1 AND id=$2 FOR UPDATE',[companyId,r.advance_id]);if(!r.active)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_EXPIRED',409);const balance=(await client.query<{ok:boolean}>(`SELECT a.employee_id=$3 AND a.status='issued' AND a.amount >=
+        COALESCE((SELECT sum(x.amount) FROM payroll_employee_advance_recoveries x WHERE x.company_id=$1 AND x.advance_id=$2 AND x.status='posted'),0)
+        -COALESCE((SELECT sum(c.amount) FROM payroll_recovery_corrections c JOIN payroll_employee_advance_recoveries x ON x.id=c.recovery_id WHERE x.company_id=$1 AND x.advance_id=$2 AND c.status='posted'),0)
+        +COALESCE((SELECT sum(x.amount) FROM payroll_employee_advance_recoveries x WHERE x.company_id=$1 AND x.advance_id=$2 AND x.status='reserved' AND x.expires_at>clock_timestamp()),0) ok
+        FROM employee_salary_advances a WHERE a.company_id=$1 AND a.id=$2 FOR UPDATE`,[companyId,r.advance_id,r.employee_id])).rows[0]?.ok;if(!balance)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_INVALID',409);}
       const years = (await client.query<{id:string;status:string}>(
         'SELECT id,status FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date ORDER BY start_date FOR SHARE', [companyId,draft.period_month])).rows;
       if (years.length !== 1 || years[0]!.status !== 'open') throw new PayrollAccountingError('PAYROLL_PERIOD_INELIGIBLE', 409);
@@ -105,6 +111,7 @@ export class PayrollAccountingService {
       await assertAccountingDateWritable(companyId, draft.period_month, client);
       await lockPayrollEccMonths(client, companyId, [draft.period_month]);
       await client.query('SELECT m.id FROM payroll_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1 FOR SHARE OF m,a', [companyId]);
+      await client.query('SELECT m.company_id FROM employee_salary_advance_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1 FOR SHARE OF m,a',[companyId]);
       const invalid = (await client.query<{n:string}>(`SELECT COUNT(*)::text n FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND
         (salary+allowances+bonus+overtime<deductions OR (legacy_allowances IS NOT NULL AND allowances<>legacy_allowances+housing_allowance+transportation_allowance+other_allowance)
          OR (legacy_allowances IS NULL AND (housing_allowance<>0 OR transportation_allowance<>0 OR other_allowance<>0)))`, [companyId,draftId])).rows[0]!.n;
@@ -114,6 +121,8 @@ export class PayrollAccountingService {
       const journal = (await client.query<{id:string;reference:string}>(`INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,reference,source_type,source_id,entry_type,created_by)
         VALUES($1,$2,$3,$4,$5,'payroll',$6,'standard',$7) RETURNING id,reference`, [companyId,years[0]!.id,draft.period_month,`Payroll ${draft.period_month.slice(0,7)}`,`PAYROLL ${draft.period_month.slice(0,7)}`,draftId,actor])).rows[0]!;
       for (const [i,line] of plan.lines.entries()) await client.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,$4,$5,$6,$7)', [companyId,journal.id,line.account_id,line.debit,line.credit,line.mapping_key,i+1]);
+      const recoveryLine=(await client.query<{id:string}>('SELECT id FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2 AND memo=\'employee_salary_advance_receivable\' AND credit>0',[companyId,journal.id])).rows[0];
+      if(reservations.length){if(!recoveryLine)throw new PayrollAccountingError('PAYROLL_ADVANCE_JOURNAL_INVALID',409);const changed=await client.query("UPDATE payroll_employee_advance_recoveries SET status='posted',expires_at=NULL,journal_entry_id=$3,journal_line_id=$4 WHERE company_id=$1 AND draft_id=$2 AND status='reserved' AND expires_at>clock_timestamp()",[companyId,draftId,journal.id,recoveryLine.id]);if(changed.rowCount!==reservations.length)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_EXPIRED',409);}
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'journal.create',entity_type:'journal_entry',entity_id:journal.id,after_data:{source_type:'payroll',source_id:draftId,lines:plan.lines}},client);
       const posted = await postJournalInTransaction(client,companyId,actor,journal.id,{payrollDraftId:draftId});
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'payroll.accounting.post',entity_type:'payroll_draft',entity_id:draftId,after_data:{journal_entry_id:journal.id,totals:plan.totals}},client);
@@ -147,8 +156,11 @@ export class PayrollAccountingService {
       deductions += cents(line.deductions);
       employer += cents(line.employer_contributions);
     }
+    const recoveryRows=(await db.query<{amount:string}>(`SELECT COALESCE(sum(amount),0)::text amount FROM payroll_employee_advance_recoveries
+      WHERE company_id=$1 AND draft_id=$2 AND status IN('reserved','posted') AND (status='posted' OR expires_at>clock_timestamp())`,[companyId,draftId])).rows[0]!;
+    const recoveries=cents(recoveryRows.amount);
     if (!lines.length) blockers.push({ code: 'payroll_empty' });
-    const net = earnings - deductions;
+    const net = earnings - deductions - recoveries;
     if (lines.length && earnings + employer === 0n) blockers.push({ code: 'payroll_no_postable_amount' });
     if ([earnings, deductions, employer, net].some(x => x < 0n || x > 999999999999999999n)) blockers.push({ code: 'payroll_amount_out_of_range' });
 
@@ -189,22 +201,25 @@ export class PayrollAccountingService {
       return { mapping_key: required.key, account_id: row?.account_id ?? null, code: row?.code ?? null, name: row?.name ?? null, name_ar: row?.name_ar ?? null, account_type: row?.account_type ?? null, is_active: row?.is_active ?? null };
     });
     const complete = PAYROLL_ACCOUNT_MAPPINGS.every(x => byKey.get(x.key)?.is_active && byKey.get(x.key)?.account_type === x.type);
+    const recoveryAccount=(await db.query<{account_id:string;is_active:boolean;account_type:string}>(`SELECT a.id account_id,a.is_active,a.account_type FROM employee_salary_advance_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1`,[companyId])).rows[0];
+    if(recoveries>0n&&(!recoveryAccount?.is_active||recoveryAccount.account_type!=='asset'))blockers.push({code:'advance_mapping_invalid'});
     const proposedLines = complete ? [
       { mapping_key: 'earnings_expense', account_id: byKey.get('earnings_expense')!.account_id, debit: money(earnings), credit: '0.00' },
       { mapping_key: 'employer_contribution_expense', account_id: byKey.get('employer_contribution_expense')!.account_id, debit: money(employer), credit: '0.00' },
       { mapping_key: 'net_payroll_liability', account_id: byKey.get('net_payroll_liability')!.account_id, debit: '0.00', credit: money(net) },
       { mapping_key: 'employee_deduction_liability', account_id: byKey.get('employee_deduction_liability')!.account_id, debit: '0.00', credit: money(deductions) },
+      ...(recoveries>0n&&recoveryAccount?[{mapping_key:'employee_salary_advance_receivable',account_id:recoveryAccount.account_id,debit:'0.00',credit:money(recoveries)}]:[]),
       { mapping_key: 'employer_contribution_liability', account_id: byKey.get('employer_contribution_liability')!.account_id, debit: '0.00', credit: money(employer) },
     ] : [];
     const journalLines = proposedLines.filter(line => cents(line.debit) > 0n || cents(line.credit) > 0n);
     return {
       draft: { id: draft.id, period_month: draft.period_month, status: draft.status, currency_code: draft.currency_code },
-      totals: { earnings: money(earnings), employee_deductions: money(deductions), net_payable: money(net), employer_contributions: money(employer), debit_total: money(earnings + employer), credit_total: money(net + deductions + employer) },
+      totals: { earnings: money(earnings), employee_deductions: money(deductions), advance_recoveries:money(recoveries), net_payable: money(net), employer_contributions: money(employer), debit_total: money(earnings + employer), credit_total: money(net + deductions + recoveries + employer) },
       mappings: mappingDetails,
       lines: journalLines,
       blockers,
       warnings: manualJournalCount ? [{ code: 'manual_journal_review', count: manualJournalCount }] : [],
-      balanced: earnings + employer === net + deductions + employer,
+      balanced: earnings + employer === net + deductions + recoveries + employer,
       can_preview: draft.status === 'approved' && lines.length > 0 && earnings + employer > 0n && complete && overlaps.length === 0 && blockers.length === 0,
       authority: 'informational_only',
       posting_revalidation_required: true,

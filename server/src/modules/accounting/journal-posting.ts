@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { payrollJournalIsExact } from '../payroll/payroll-journal-verification';
+import { payrollRecoveryCorrectionJournalIsExact } from '../payroll/payroll-recovery-correction-verification';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { assertCustodyJournalControls } from './custody-posting';
@@ -52,7 +53,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string; payrollSettlementId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string; payrollSettlementId?: string; payrollRecoveryCorrectionId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -202,6 +203,10 @@ export async function postJournalInTransaction(
         AND EXISTS(SELECT 1 FROM journal_lines l WHERE l.company_id=$1 AND l.journal_entry_id=$2 AND l.account_id=b.account_id AND l.credit=p.amount AND l.debit=0)
     ) valid`,[companyId,id,internal.payrollSettlementId,journal.accounting_date])).rows[0]?.valid;
     if (!valid) throw new JournalPostingValidationError('Payroll settlement journal does not match its allocation');
+  } else if (journal.source_type === 'payroll_recovery_correction') {
+    if(!internal.payrollRecoveryCorrectionId||internal.payrollRecoveryCorrectionId!==journal.source_id||journal.entry_type!=='standard'||!(await payrollRecoveryCorrectionJournalIsExact(client,companyId,id,internal.payrollRecoveryCorrectionId))){
+      throw new JournalPostingValidationError('Payroll recovery correction journals can only be posted by the correction workflow');
+    }
   } else if (journal.source_type && journal.source_id) {
     const operationalSource = await source(companyId, journal.source_type, journal.source_id, client);
     if (journal.accounting_date !== operationalSource.accounting_date) {

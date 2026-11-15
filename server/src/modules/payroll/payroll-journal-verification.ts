@@ -8,23 +8,27 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
       WHERE d.company_id=$1 AND d.id=$3 AND d.status='approved' AND j.id=$2 AND j.source_type='payroll' AND j.accounting_date=d.period_month
     ), totals AS (
       SELECT COUNT(*) n,COALESCE(SUM(p.salary+p.allowances+p.bonus+p.overtime),0) earnings,
-        COALESCE(SUM(p.deductions),0) deductions,COALESCE(SUM(p.employer_contributions),0) employer
+        COALESCE(SUM(p.deductions),0) deductions,COALESCE(SUM(p.employer_contributions),0) employer,
+        COALESCE((SELECT sum(r.amount) FROM payroll_employee_advance_recoveries r WHERE r.company_id=$1 AND r.draft_id=$3 AND r.status='posted'),0) recoveries
       FROM payroll_draft_employees p JOIN draft d ON p.draft_id=d.id WHERE p.company_id=$1
     ), expected_raw AS (
       SELECT v.key,v.debit,v.credit FROM totals t CROSS JOIN LATERAL (VALUES
         ('earnings_expense',t.earnings,0::numeric),('employer_contribution_expense',t.employer,0::numeric),
-        ('net_payroll_liability',0::numeric,t.earnings-t.deductions),('employee_deduction_liability',0::numeric,t.deductions),
+        ('net_payroll_liability',0::numeric,t.earnings-t.deductions-t.recoveries),('employee_deduction_liability',0::numeric,t.deductions),
         ('employer_contribution_liability',0::numeric,t.employer)) v(key,debit,credit)
+      UNION ALL SELECT 'employee_salary_advance_receivable',0::numeric,t.recoveries FROM totals t WHERE t.recoveries>0
     ), expected AS (
-      SELECT m.account_id,e.debit,e.credit,e.key memo FROM expected_raw e
-      JOIN payroll_account_mappings m ON m.company_id=$1 AND m.mapping_key=e.key
-      JOIN accounts a ON a.company_id=m.company_id AND a.id=m.account_id AND a.is_active
-        AND a.account_type=CASE WHEN e.key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' ELSE 'liability' END
+      SELECT CASE WHEN e.key='employee_salary_advance_receivable' THEN am.account_id ELSE m.account_id END account_id,e.debit,e.credit,e.key memo FROM expected_raw e
+      LEFT JOIN payroll_account_mappings m ON m.company_id=$1 AND m.mapping_key=e.key
+      LEFT JOIN employee_salary_advance_account_mappings am ON am.company_id=$1
+      JOIN accounts a ON a.company_id=$1 AND a.id=CASE WHEN e.key='employee_salary_advance_receivable' THEN am.account_id ELSE m.account_id END AND a.is_active
+        AND a.account_type=CASE WHEN e.key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' WHEN e.key='employee_salary_advance_receivable' THEN 'asset' ELSE 'liability' END
+        AND (e.key<>'employee_salary_advance_receivable' OR (a.statement_category='current_asset' AND NOT EXISTS(SELECT 1 FROM bank_account_ledger_links b WHERE b.company_id=a.company_id AND b.account_id=a.id)))
       WHERE e.debit>0 OR e.credit>0
     ), actual AS (
       SELECT account_id,debit,credit,memo FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2
     )
-    SELECT EXISTS(SELECT 1 FROM draft) AND (SELECT n>0 AND earnings>=deductions AND earnings+employer>0 FROM totals)
+    SELECT EXISTS(SELECT 1 FROM draft) AND (SELECT n>0 AND earnings>=deductions+recoveries AND earnings+employer>0 FROM totals)
       AND (SELECT count(*)=5 FROM payroll_account_mappings m JOIN accounts a ON a.company_id=m.company_id AND a.id=m.account_id
         WHERE m.company_id=$1 AND a.is_active AND a.account_type=CASE WHEN m.mapping_key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' ELSE 'liability' END)
       AND NOT EXISTS((SELECT * FROM expected EXCEPT ALL SELECT * FROM actual) UNION ALL (SELECT * FROM actual EXCEPT ALL SELECT * FROM expected)) valid
