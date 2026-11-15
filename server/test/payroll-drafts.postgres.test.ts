@@ -48,7 +48,7 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
  });
  it('requires explicit approval, separates contributors, locks approved data, and records admin self approval',async()=>{
   const owner=await h.user('approval-owner'),editor=await h.user('approval-editor'),approver=await h.user('approval-approver'),manager=await h.user('approval-manager'),auditor=await h.user('approval-auditor'),outsider=await h.user('approval-outsider');
-  const co=await h.company('approval-main',owner.id);await h.company('approval-other',outsider.id);
+  const co=await h.company('approval-main',owner.id);await h.company('approval-other',outsider.id);await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
   await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.approve']);
   await h.member(co,approver.id,['payroll.view','payroll.approve']);
   await h.member(co,manager.id,['payroll.view','payroll.edit','payroll.approve','access.role.capability.grant']);
@@ -110,7 +110,7 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   expect((await h.q<{n:string}>("SELECT COUNT(*)::text n FROM payroll_draft_employees WHERE draft_id=$1",[own.id]))[0]?.n).toBe('1');
  });
  it('keeps pre-migration allowances unclassified through reopen and edits',async()=>{
-  const owner=await h.user('payroll-legacy'),approver=await h.user('payroll-legacy-approver');const co=await h.company('payroll-legacy',owner.id);await h.member(co,approver.id,['payroll.view','payroll.approve']);await owner.client.login();await approver.client.login();
+  const owner=await h.user('payroll-legacy'),approver=await h.user('payroll-legacy-approver');const co=await h.company('payroll-legacy',owner.id);await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');await h.member(co,approver.id,['payroll.view','payroll.approve']);await owner.client.login();await approver.client.login();
   const employee=(await owner.client.req('POST','/employees',{employee_number:'LEG1',display_name:'Legacy employee',employment_start:'2025-01-01',employment_end:null})).json;
   const draft=(await owner.client.req('POST','/payroll/drafts',{month:'2026-04-01'})).json.draft;
   await h.q('INSERT INTO payroll_draft_employees(company_id,draft_id,employee_id,salary,allowances,bonus,overtime,deductions,employer_contributions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[co,draft.id,employee.id,'1000.01','123.45','0.01','0.00','0.02','0.03']);
@@ -131,5 +131,34 @@ describeDatabase('PAYROLL-01A PostgreSQL',()=>{
   expect(approved.status).toBe(200);
   expect(approved.json.draft).toMatchObject({status:'approved',gross_earnings:'1123.53',net_payable:'1123.51'});
   expect(approved.json.employees[0]).toMatchObject({allowances:'123.51',legacy_allowances:'123.45'});
+ });
+ it('allows closed-period draft preparation but rejects approval without changing status; open periods still approve',async()=>{
+  const owner=await h.user('period-guard-owner'),editor=await h.user('period-guard-editor'),approver=await h.user('period-guard-approver');
+  const co=await h.company('period-guard',owner.id);await h.member(co,editor.id,['payroll.view','payroll.edit']);await h.member(co,approver.id,['payroll.view','payroll.approve']);
+  for(const u of [owner,editor,approver])await u.client.login();
+  const fy=await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
+  const employee=(await owner.client.req('POST','/employees',{employee_number:'PG1',display_name:'Period guard',employment_start:'2025-01-01',employment_end:null})).json;
+  const draftFor=async(month:string)=>{
+   const draft=(await editor.client.req('POST','/payroll/drafts',{month:`${month}-01`})).json.draft;
+   const edit=await editor.client.req('PUT',`/payroll/drafts/${draft.id}/employees/${employee.id}`,values(0));expect(edit.status).toBe(200);return edit.json.draft;
+  };
+  const closedMonth=await draftFor('2026-11');
+  await h.q("INSERT INTO monthly_close_periods(company_id,fiscal_year_id,period_start,period_end,status) VALUES($1,$2,'2026-11-01','2026-11-30','closed')",[co,fy]);
+  const closedMonthRead=(await editor.client.req('GET','/payroll/drafts?month=2026-11-01')).json;
+  expect(closedMonthRead.period_eligibility).toEqual({eligible:false});expect(closedMonthRead.draft.status).toBe('draft');
+  const monthApproval=await approver.client.req('POST',`/payroll/drafts/${closedMonth.id}/approve`,{version:closedMonth.version});
+  expect(monthApproval).toMatchObject({status:409,json:{code:'PAYROLL_PERIOD_INELIGIBLE'}});
+  expect((await editor.client.req('GET','/payroll/drafts?month=2026-11-01')).json.draft.status).toBe('draft');
+  const openMonth=await draftFor('2026-03');
+  expect((await approver.client.req('POST',`/payroll/drafts/${openMonth.id}/approve`,{version:openMonth.version})).status).toBe(200);
+  await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1",[fy]);
+  const closedYear=await draftFor('2026-12');
+  const closedYearRead=(await editor.client.req('GET','/payroll/drafts?month=2026-12-01')).json;
+  expect(closedYearRead.period_eligibility).toEqual({eligible:false});
+  const yearApproval=await approver.client.req('POST',`/payroll/drafts/${closedYear.id}/approve`,{version:closedYear.version});
+  expect(yearApproval).toMatchObject({status:409,json:{code:'PAYROLL_PERIOD_INELIGIBLE'}});
+  expect((await editor.client.req('GET','/payroll/drafts?month=2026-12-01')).json.draft.status).toBe('draft');
+  const edited=await editor.client.req('PUT',`/payroll/drafts/${closedYear.id}/employees/${employee.id}`,values(1,'200.00'));
+  expect(edited.status).toBe(200);expect(edited.json.draft.status).toBe('draft');
  });
 });

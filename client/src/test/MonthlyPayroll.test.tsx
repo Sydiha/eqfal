@@ -10,6 +10,18 @@ describe('Monthly Payroll draft visibility',()=>{
  beforeEach(()=>{vi.stubGlobal('fetch',vi.fn(async()=>response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'},employees:[{id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'10.00',employer_contributions:'5.00',gross_earnings:'100.00',net_payable:'90.00'}],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]})));});
  afterEach(()=>vi.unstubAllGlobals());
  it('shows accounting readiness and explains restricted reads for payroll viewers',async()=>{render(<MonthlyPayroll capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);await waitFor(()=>expect(screen.getAllByText(/90\.00/).length).toBeGreaterThan(0));expect(screen.getByText('جاهزية المحاسبة')).toBeInTheDocument();expect(screen.getByText(/عرض ربط الحسابات يتطلب/)).toBeInTheDocument();expect(screen.getByText(/معاينة قيد الرواتب وحالة ترحيله/)).toBeInTheDocument();expect(screen.queryByRole('button',{name:/تعديل|Edit|ترحيل القيد|Post journal/})).toBeNull();});
+ it('warns in English and Arabic when the period is ineligible while leaving draft creation available',async()=>{
+  const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+  vi.stubGlobal('fetch',vi.fn(async()=>response({draft:null,employees:[],available_employees:[],period_eligibility:{eligible:false}})));
+  try{
+   render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit']} onUnauthorized={()=>{}}/>);
+   expect(await screen.findByText(/This month is closed.*you can still prepare and edit a draft/)).toBeInTheDocument();
+   expect(screen.getByRole('button',{name:'Create draft'})).toBeEnabled();
+   await act(async()=>{await i18n.changeLanguage('ar');});
+   expect(screen.getByText(/هذا الشهر مغلق.*يمكنك إعداد المسودة وتعديلها/)).toBeInTheDocument();
+   expect(screen.getByRole('button',{name:'إنشاء مسودة'})).toBeEnabled();
+  }finally{await i18n.changeLanguage(original);}
+ });
 });
 
 it('ignores an older month response after rapid period switching',async()=>{
