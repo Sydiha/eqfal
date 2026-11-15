@@ -1,0 +1,26 @@
+import {NextFunction,Request,RequestHandler,Response,Router} from 'express';
+import pool from '../../db/pool';
+import {getAuthenticatedContext,requireActiveCompany,requireAuth,requireCapability} from '../auth/auth.middleware';
+import {requireSameOrigin} from '../auth/origin.middleware';
+import {EmployeeSalaryAdvanceError,EmployeeSalaryAdvanceService} from './employee-salary-advance.service';
+
+export const employeeSalaryAdvanceRouter=Router();
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MONEY=/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
+const guards=[requireAuth,requireActiveCompany],write=[requireSameOrigin,...guards];
+const ctx=(q:Request)=>getAuthenticatedContext(q)!;
+const service=(res:Response)=>pool?new EmployeeSalaryAdvanceService(pool):(res.status(503).json({error:'Database unavailable',code:'DB_UNAVAILABLE'}),null);
+const route=(fn:(q:Request,res:Response)=>Promise<void>):RequestHandler=>(q,res,next:NextFunction)=>void fn(q,res).catch(next);
+function fail(e:unknown,res:Response){if(e instanceof EmployeeSalaryAdvanceError){res.status(e.status).json({error:e.message,code:e.code});return true;}return false;}
+function validBody(body:unknown,keys:string[]){return !!body&&typeof body==='object'&&!Array.isArray(body)&&Object.keys(body).sort().join(',')===keys.sort().join(',');}
+function id(value:unknown){return typeof value==='string'&&UUID.test(value)?value:null;}
+function version(value:unknown){return Number.isInteger(value)&&Number(value)>0?Number(value):null;}
+function amount(value:unknown){const v=typeof value==='number'?String(value):value;return typeof v==='string'&&MONEY.test(v)&&Number(v)>0?v:null;}
+function date(value:unknown){if(typeof value!=='string'||!DATE.test(value))return false;const parsed=new Date(`${value}T00:00:00.000Z`);return !Number.isNaN(parsed.valueOf())&&parsed.toISOString().slice(0,10)===value;}
+
+employeeSalaryAdvanceRouter.get('/employee-salary-advances',...guards,requireCapability('employee_salary_advance.view'),route(async(_q,res)=>{try{const s=service(res);if(s)res.json(await s.list(ctx(_q).activeCompanyId!));}catch(e){if(!fail(e,res))throw e;}}));
+employeeSalaryAdvanceRouter.put('/employee-salary-advances/account-mapping',...write,requireCapability('employee_salary_advance.mapping.manage'),route(async(q,res)=>{try{if(!validBody(q.body,['account_id'])||!id(q.body.account_id)){res.status(400).json({error:'Invalid account mapping',code:'EMPLOYEE_SALARY_ADVANCE_INVALID'});return;}const s=service(res);if(s)res.json(await s.setMapping(ctx(q).activeCompanyId!,ctx(q).user.id,id(q.body.account_id)!));}catch(e){if(!fail(e,res))throw e;}}));
+employeeSalaryAdvanceRouter.post('/employee-salary-advances',...write,requireCapability('employee.view'),requireCapability('employee_salary_advance.create'),route(async(q,res)=>{try{const b=q.body;if(!validBody(b,['employee_id','amount','issue_date','description'])||!id(b.employee_id)||!amount(b.amount)||!date(b.issue_date)||typeof b.description!=='string'||!b.description.trim()||b.description.trim().length>500){res.status(400).json({error:'Invalid employee salary advance',code:'EMPLOYEE_SALARY_ADVANCE_INVALID'});return;}const s=service(res);if(s)res.status(201).json(await s.create(ctx(q).activeCompanyId!,ctx(q).user.id,{employeeId:id(b.employee_id)!,amount:amount(b.amount)!,issueDate:b.issue_date as string,description:b.description.trim()}));}catch(e){if(!fail(e,res))throw e;}}));
+employeeSalaryAdvanceRouter.post('/employee-salary-advances/:id/approve',...write,requireCapability('employee_salary_advance.approve'),route(async(q,res)=>{try{const v=version(q.body?.version);if(!id(q.params.id)||!validBody(q.body,['version'])||v===null){res.status(400).json({error:'Invalid approval request',code:'EMPLOYEE_SALARY_ADVANCE_INVALID'});return;}const s=service(res);if(s)res.json(await s.approve(ctx(q).activeCompanyId!,ctx(q).user.id,id(q.params.id)!,v));}catch(e){if(!fail(e,res))throw e;}}));
+employeeSalaryAdvanceRouter.post('/employee-salary-advances/:id/issue',...write,requireCapability('employee_salary_advance.issue'),requireCapability('accounting.journal.create'),route(async(q,res)=>{try{const v=version(q.body?.version),bank=id(q.body?.bank_transaction_id);if(!id(q.params.id)||!validBody(q.body,['version','bank_transaction_id'])||v===null||!bank){res.status(400).json({error:'Invalid issuance request',code:'EMPLOYEE_SALARY_ADVANCE_INVALID'});return;}const s=service(res);if(s)res.status(201).json(await s.issue(ctx(q).activeCompanyId!,ctx(q).user.id,id(q.params.id)!,v,bank));}catch(e){if(!fail(e,res))throw e;}}));

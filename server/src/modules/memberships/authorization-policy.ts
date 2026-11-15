@@ -18,7 +18,7 @@ export const LEGACY_WILDCARD_READ_CAPABILITIES = [
 /** Financial domains are centrally defined here so each route continues using the same capability guard. */
 const FINANCIAL_DOMAINS = new Set([
   'accounting', 'annual_close', 'asset', 'audit', 'bank', 'company_accounting_profile',
-  'counterparty', 'custody', 'document', 'employee', 'employee_cost', 'fiscal_year',
+  'counterparty', 'custody', 'document', 'employee', 'employee_cost', 'employee_salary_advance', 'fiscal_year',
   'historical', 'invoice', 'monthly_close', 'obligation', 'opening_balance', 'partner', 'payroll',
   'payment', 'personal_payment', 'periodic_adjustment', 'report', 'source_authority',
   'tax_workpaper', 'vat', 'wht_review',

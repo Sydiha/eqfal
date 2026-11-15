@@ -30,6 +30,7 @@ export const AGED_OUTSTANDING_DAYS = 10;
 export const UNRESOLVED_BANK_TRANSACTION_SQL = `NOT (
         EXISTS(SELECT 1 FROM obligation_settlements s WHERE s.company_id=t.company_id AND s.bank_transaction_id=t.id)
         OR EXISTS(SELECT 1 FROM bank_transaction_matches m WHERE m.company_id=t.company_id AND m.bank_transaction_id=t.id AND m.match_type IN ('custody_funding','custody_return'))
+        OR EXISTS(SELECT 1 FROM journal_entries j JOIN bank_transaction_matches m ON m.id=j.source_id AND m.company_id=j.company_id JOIN employee_salary_advances a ON a.id=m.employee_salary_advance_id AND a.company_id=m.company_id WHERE j.company_id=t.company_id AND j.source_type='employee_advance_funding' AND j.status='posted' AND m.bank_transaction_id=t.id AND a.status='issued')
         OR EXISTS(SELECT 1 FROM partner_transactions pt WHERE pt.company_id=t.company_id AND pt.bank_transaction_id=t.id AND pt.status='posted')
         OR EXISTS(SELECT 1 FROM personal_payment_reimbursements pr WHERE pr.company_id=t.company_id AND pr.bank_transaction_id=t.id AND pr.journal_entry_id IS NOT NULL)
         OR COALESCE((SELECT SUM(p.amount) FROM payroll_settlement_allocations p JOIN journal_entries j ON j.id=p.journal_entry_id AND j.company_id=p.company_id AND j.status='posted' WHERE p.company_id=t.company_id AND p.bank_transaction_id=t.id),0)=ABS(t.amount) AND t.amount<>0
@@ -103,6 +104,11 @@ const EVIDENCE_SQL = `WITH src AS (
   SELECT j.id, m.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN bank_transaction_matches m ON m.id=j.source_id AND m.company_id=j.company_id AND m.match_type=j.source_type
    WHERE j.company_id=$1 AND j.source_type IN ('custody_funding','custody_return')
+  UNION ALL
+  SELECT j.id,m.bank_transaction_id,NULL::text
+    FROM journal_entries j JOIN bank_transaction_matches m ON m.id=j.source_id AND m.company_id=j.company_id AND m.match_type='employee_advance_funding'
+    JOIN employee_salary_advances a ON a.id=m.employee_salary_advance_id AND a.company_id=m.company_id AND a.status='issued'
+   WHERE j.company_id=$1 AND j.source_type='employee_advance_funding'
   UNION ALL
   SELECT j.id, p.bank_transaction_id, NULL::text
     FROM journal_entries j JOIN partner_transactions p ON p.id=j.source_id AND p.company_id=j.company_id

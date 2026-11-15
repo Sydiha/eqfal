@@ -3,6 +3,7 @@ import { payrollJournalIsExact } from '../payroll/payroll-journal-verification';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { assertCustodyJournalControls } from './custody-posting';
+import { assertEmployeeAdvanceJournal } from './employee-advance-posting';
 import { SettlementJournalBlockedError, verifyObligationSettlementJournal } from './obligation-settlement-posting';
 import { isOperationalSourceType, operationalSourceQuery, OperationalSource, JournalOperationalSourceType } from './operational-sources';
 import { enforceVatRecognition } from './vat-recognition';
@@ -300,6 +301,7 @@ export async function postJournalInTransaction(
     }
 
     await assertCustodyJournalControls(client, companyId, id, operationalSource);
+    await assertEmployeeAdvanceJournal(client, companyId, id, operationalSource);
 
     if (journal.source_type === 'partner_transaction' && !(await partnerJournalIsExact(client, companyId, id, operationalSource.context, operationalSource.amount))) {
       throw new JournalPostingValidationError('Partner transaction journal must use the configured partner and cash/bank accounts');
@@ -327,6 +329,14 @@ export async function postJournalInTransaction(
     )
   ).rows[0];
   if (!after) throw new JournalPostingConflictError('Journal is already posted');
+
+  if (journal.source_type === 'employee_advance_funding' && journal.source_id) {
+    const issued=(await client.query(`UPDATE employee_salary_advances a SET status='issued',journal_entry_id=$3,version=version+1
+      FROM bank_transaction_matches m WHERE a.company_id=$1 AND a.bank_transaction_match_id=m.id AND m.id=$2
+      AND a.status='pending_posting' AND m.match_type='employee_advance_funding' RETURNING a.id,a.amount::text,a.employee_id`,[companyId,journal.source_id,id])).rows[0];
+    if(!issued)throw new JournalPostingConflictError('Employee salary advance is no longer pending posting');
+    await audit.logEvent({company_id:companyId,actor_user_id:actor,action:'employee_salary_advance.issue_posted',entity_type:'employee_salary_advance',entity_id:issued.id,before_data:{status:'pending_posting'},after_data:{status:'issued',journal_entry_id:id,amount:issued.amount,employee_id:issued.employee_id}},client);
+  }
 
   if (journal.source_type === 'asset_depreciation' && journal.source_id) {
     const linked = (
