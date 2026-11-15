@@ -138,6 +138,13 @@ db('payroll posting (PostgreSQL)',()=>{
   const version=(await h.q<{version:number}>('SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,x.draft.id,x.employee]))[0]!.version;
   const reselected=await x.editor.client.req('PUT',`/payroll/drafts/${x.draft.id}/employees/${x.employee}/advance-recoveries`,{version,recoveries:[{advance_id:advance.advanceId,amount:'10.00'}]});expect(reselected.status,JSON.stringify(reselected.json)).toBe(200);
  });
+ it('denies draft cancellation without payroll.edit and leaves the draft unchanged',async()=>{
+  const x=await fixture('recovery-cancel-permission',false),viewer=await h.user('recovery-cancel-viewer');
+  await h.member(x.co,viewer.id,['payroll.view']);await viewer.client.login();
+  const denied=await viewer.client.req('POST',`/payroll/drafts/${x.draft.id}/lifecycle`,{action:'cancel',reason:'Cancel this unused payroll draft'});
+  expect(denied.status).toBe(403);
+  expect((await h.q<{status:string}>('SELECT status FROM payroll_drafts WHERE id=$1 AND company_id=$2',[x.draft.id,x.co]))[0]!.status).toBe('draft');
+ });
  it('serializes competing reservations across payroll periods and allows only the remaining balance to post',async()=>{
   const x=await fixture('recovery-concurrency',false),advance=await issueAdvance(x,'25.25'),april=await makeSecondDraft(x,'2026-04-01');
   expect((await selectRecovery(x,advance.advanceId,'15.00')).status).toBe(200);expect((await selectRecovery(x,advance.advanceId,'15.00',april)).status).toBe(200);

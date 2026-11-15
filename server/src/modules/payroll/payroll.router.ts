@@ -161,10 +161,10 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }));
 
-payrollRouter.post('/payroll/drafts/:id/lifecycle',...write,route(async(q,s)=>{
+payrollRouter.post('/payroll/drafts/:id/lifecycle',requireSameOrigin,...read,route(async(q,s)=>{
  const b=q.body;if(!uuid.test(q.params.id)||!b||!['return_to_draft','cancel','invalidate'].includes(b.action)||typeof b.reason!=='string'||b.reason.trim().length<10||b.reason.trim().length>1000)return void error(s,'PAYROLL_INVALID');
  const actor=getAuthenticatedContext(q)!.user.id,capabilities=getAuthenticatedContext(q)!.capabilities;
- if(b.action!=='cancel'&&!capabilities.includes('payroll.approve'))return void error(s,'FORBIDDEN',403);
+ if(!capabilities.includes('payroll.edit')||(b.action!=='cancel'&&!capabilities.includes('payroll.approve')))return void error(s,'FORBIDDEN',403);
  const c=await pool!.connect();try{await c.query('BEGIN');const d=(await c.query<{status:string;version:number;approved_by:string|null}>('SELECT status,version,approved_by FROM payroll_drafts WHERE id=$1 AND company_id=$2 FOR UPDATE',[q.params.id,company(q)])).rows[0];if(!d){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}if(d.status!=='approved'&&d.status!=='draft'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}if(await c.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2 AND status='posted'",[company(q),q.params.id]).then(x=>x.rowCount)){await c.query('ROLLBACK');return void error(s,'PAYROLL_ALREADY_POSTED',409);}if(b.action==='return_to_draft'&&d.status!=='approved'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}if(b.action==='cancel'&&d.status!=='draft'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
   if(b.action!=='cancel'){
    const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
