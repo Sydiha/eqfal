@@ -96,6 +96,16 @@ describeDatabase('PAYROLL-02 accounting readiness (PostgreSQL)', () => {
     const clearPreview = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).json;
     expect(clearPreview.can_preview).toBe(true);
     expect(clearPreview.blockers).toEqual([]);
+    const unrelatedJournal = await h.postedJournal(co,fy,'2026-03-20',owner.id,[[accountIds[0]!, '1.00','0.00'],[accountIds[2]!, '0.00','1.00']]);
+    const unrelatedPreview = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-preview`)).json;
+    expect(unrelatedPreview.can_preview).toBe(true);
+    expect(unrelatedPreview.blockers).toEqual([]);
+    expect(unrelatedPreview.warnings).toContainEqual({code:'manual_journal_review',count:1});
+    const unrelatedStatus = (await editor.client.req('GET',`/payroll/drafts/${draft.id}/accounting-post-status`)).json;
+    expect(unrelatedStatus.eligible).toBe(true);
+    expect(unrelatedStatus.blockers).toEqual([]);
+    expect(unrelatedStatus.warnings).toContainEqual({code:'manual_journal_review',count:1});
+    await h.q('DELETE FROM journal_entries WHERE id=$1',[unrelatedJournal]);
 
     const deductionCost = (await h.q<{id:string}>(
       `INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by)
