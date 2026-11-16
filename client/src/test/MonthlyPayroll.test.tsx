@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const response=(data:unknown)=>({ok:true,status:200,json:async()=>data});
+beforeEach(()=>sessionStorage.removeItem('eqfal.payroll.selectedMonth'));
 describe('Monthly Payroll draft visibility',()=>{
  beforeEach(()=>{sessionStorage.removeItem('eqfal.payroll.selectedMonth');vi.stubGlobal('fetch',vi.fn(async()=>response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'},employees:[{id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'10.00',employer_contributions:'5.00',gross_earnings:'100.00',net_payable:'90.00'}],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]})));});
  afterEach(()=>vi.unstubAllGlobals());
