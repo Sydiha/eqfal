@@ -134,6 +134,7 @@ export class PayrollSettlementService {
   }
 
   private async hasExplicitExceptionApproval(c:import('pg').PoolClient,company:string,actor:string):Promise<boolean>{
+    if(await hasPrivilegedFinancialAuthority(c,company,actor))return true;
     return (await c.query<{allowed:boolean}>(`SELECT EXISTS(SELECT 1 FROM users u JOIN memberships m ON m.user_id=u.id AND m.company_id=$1 AND m.is_active
       JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id AND NOT r.is_full_access
       JOIN role_capabilities rc ON rc.role_id=r.id AND rc.capability_id=$3
