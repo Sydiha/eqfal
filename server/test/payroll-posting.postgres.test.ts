@@ -26,7 +26,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const post=()=>poster.client.req('POST',`/payroll/drafts/${draft.id}/accounting-post`,{});
   return {owner,editor,approver,poster,outsider,co,other,fy,employee,accounts,draft,post};
  }
- async function issueAdvance(x:Awaited<ReturnType<typeof fixture>>, amount='25.25'){
+ async function issueAdvance(x:Awaited<ReturnType<typeof fixture>>, amount='25.25', issueDate='2026-03-10'){
   const tag=randomUUID().slice(0,8);
   const receivable=await h.account(x.co,`AR-${tag}`,'asset','current_asset');
   const bankGl=await h.account(x.co,`BK-${tag}`,'asset','current_asset');
@@ -35,8 +35,8 @@ db('payroll posting (PostgreSQL)',()=>{
   await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[bankGl]);
   await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank,bankGl,x.owner.id]);
   const bankTx=(await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
-    VALUES($1,$2,'2026-03-10',$3,'SAR','Salary advance funding',$4,$5,'strong','manual','other',$6) RETURNING id`,[x.co,bank,`-${amount}`,`recovery-${randomUUID()}`,randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
-  const created=await x.owner.client.req('POST','/employee-salary-advances',{employee_id:x.employee,amount,issue_date:'2026-03-10',description:'Payroll recovery test'});
+    VALUES($1,$2,$3,$4,'SAR','Salary advance funding',$5,$6,'strong','manual','other',$7) RETURNING id`,[x.co,bank,issueDate,`-${amount}`,`recovery-${randomUUID()}`,randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  const created=await x.owner.client.req('POST','/employee-salary-advances',{employee_id:x.employee,amount,issue_date:issueDate,description:'Payroll recovery test'});
   expect(created.status,JSON.stringify(created.json)).toBe(201);
   const advanceId=created.json.advance.id as string;
   const approved=await x.approver.client.req('POST',`/employee-salary-advances/${advanceId}/approve`,{version:1});expect(approved.status,JSON.stringify(approved.json)).toBe(200);
@@ -45,6 +45,14 @@ db('payroll posting (PostgreSQL)',()=>{
   const posted=await x.owner.client.req('POST',`/journals/${fundingJournal}/post`,{});expect(posted.status,JSON.stringify(posted.json)).toBe(200);
   return {advanceId,receivable,fundingJournal};
  }
+ it('loads a November issued advance while adding an employee to a December draft',async()=>{
+  const x=await fixture('recovery-december-add-employee',false),advance=await issueAdvance(x,'1000.00','2026-11-16');
+  const draft=(await x.editor.client.req('POST','/payroll/drafts',{month:'2026-12-01'})).json.draft;
+  const result=await x.editor.client.req('GET',`/payroll/drafts/${draft.id}/employees/${x.employee}/advance-recoveries`);
+  expect(result.status,JSON.stringify(result.json)).toBe(200);
+  expect(result.json.advances).toEqual([expect.objectContaining({advance_id:advance.advanceId,original_amount:'1000.00',issue_date:'2026-11-16',available_balance:'1000.00'})]);
+  expect(await h.count('SELECT count(*)::text n FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3',[x.co,draft.id,x.employee])).toBe(0);
+ });
  async function selectRecovery(x:Awaited<ReturnType<typeof fixture>>,advanceId:string,amount:string,draftId=x.draft.id,employeeId=x.employee){
   const version=(await h.q<{version:number}>("SELECT version FROM payroll_draft_employees WHERE company_id=$1 AND draft_id=$2 AND employee_id=$3",[x.co,draftId,employeeId]))[0]!.version;
   return x.editor.client.req('PUT',`/payroll/drafts/${draftId}/employees/${employeeId}/advance-recoveries`,{version,recoveries:[{advance_id:advanceId,amount}]});

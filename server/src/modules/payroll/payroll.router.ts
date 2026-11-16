@@ -110,7 +110,10 @@ payrollRouter.put('/payroll/drafts/:id/employees/:employeeId/advance-recoveries'
 }));
 payrollRouter.get('/payroll/drafts/:id/employees/:employeeId/advance-recoveries',...read,requireCapability('payroll.employee_advance_recovery.view'),route(async(q,s)=>{
  if(!uuid.test(q.params.id)||!uuid.test(q.params.employeeId))return void error(s,'PAYROLL_INVALID');
- const exists=(await pool!.query('SELECT 1 FROM payroll_drafts d JOIN payroll_draft_employees p ON p.company_id=d.company_id AND p.draft_id=d.id WHERE d.company_id=$1 AND d.id=$2 AND p.employee_id=$3',[company(q),q.params.id,q.params.employeeId])).rowCount;
+ // The editor loads recovery options before a newly selected employee has a
+ // payroll_draft_employees row. Validate draft and employee in the active
+ // tenant independently of that row; selection still requires the line.
+ const exists=(await pool!.query('SELECT 1 FROM payroll_drafts d JOIN employees e ON e.company_id=d.company_id WHERE d.company_id=$1 AND d.id=$2 AND e.id=$3',[company(q),q.params.id,q.params.employeeId])).rowCount;
  if(!exists)return void error(s,'PAYROLL_NOT_FOUND',404);
  const advances=(await pool!.query(`SELECT a.id advance_id,a.amount::text original_amount,a.issue_date::text,a.description,
    COALESCE(b.posted,0)::text recovered_amount,COALESCE(c.reversed,0)::text reversed_amount,(COALESCE(b.posted,0)-COALESCE(c.reversed,0))::text recognized_balance,
