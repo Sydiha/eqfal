@@ -117,7 +117,8 @@ db('payroll settlement SoD exceptions (PostgreSQL)',()=>{
   expect((await y.owner.client.req('POST',`/payroll/settlements/sod-exceptions/${request.json.id}/decision`,{decision:'approve',reason:'Full Access is not independent approval'})).status).toBe(403);
   const systemAdmin=await h.user('sod-global-admin');
   await h.q('UPDATE users SET is_system_admin=TRUE,system_admin_policy_version=1 WHERE id=$1',[systemAdmin.id]);await systemAdmin.client.login();
-  expect((await systemAdmin.client.req('POST',`/payroll/settlements/sod-exceptions/${request.json.id}/decision`,{decision:'approve',reason:'Global authority alone is not approval'})).status).toBe(403);
+  expect((await systemAdmin.client.req('POST','/auth/switch-company',{companyId:y.company})).status).toBe(200);
+  expect((await systemAdmin.client.req('POST',`/payroll/settlements/sod-exceptions/${request.json.id}/decision`,{decision:'approve',reason:'Global administrator reviewed this request'})).status).toBe(200);
  });
 });
 import { createHash, randomUUID } from 'node:crypto';

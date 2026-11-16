@@ -34,13 +34,10 @@ export function targetRoleCapabilities(key: AuthorizationPolicyKey, capabilityId
   if (key === 'accountant') return [];
   if (key === 'finance_manager') {
     return capabilityIds.filter((id) => (FINANCIAL_DOMAINS.has(id.split('.')[0] ?? '') || id === 'company.view')
-      && id !== 'company.create' && id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
+      && id !== 'company.create').sort();
   }
-  // Company Manager receives company functional capabilities. Existing, explicit
-  // access.* grants remain in place, while global access delegation and company lifecycle
-  // actions stay outside the role; Full Access remains a distinct company role.
-  return capabilityIds.filter((id) => !id.startsWith('access.') && id !== 'company.create' && id !== 'company.status.edit'
-    && id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
+  // Company creation is global; every other catalog capability is scoped to an active company.
+  return capabilityIds.filter((id) => id !== 'company.create').sort();
 }
 
 export function effectiveRoleCapabilities(
@@ -50,9 +47,7 @@ export function effectiveRoleCapabilities(
   capabilityIds: readonly string[],
 ): string[] {
   const result = new Set(explicit);
-  if (key && version >= TARGET_AUTHORIZATION_POLICY_VERSION) {
-    for (const capability of targetRoleCapabilities(key, capabilityIds)) result.add(capability);
-  }
+  if (key === 'finance_manager' || key === 'company_manager') return targetRoleCapabilities(key, capabilityIds);
   return [...result].sort();
 }
 
@@ -61,8 +56,7 @@ export function isAuthorizationPolicyKey(value: unknown): value is Authorization
 }
 
 export function targetSystemAdministratorCapabilities(capabilityIds: readonly string[]): string[] {
-  // Independent settlement SoD approval is explicitly delegated to a company reviewer; global authority must not auto-approve it.
-  return [...new Set(capabilityIds)].filter((id) => id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY).sort();
+  return [...new Set(capabilityIds)].sort();
 }
 
 /** Payroll-only authority expressly approved for privileged payroll roles, independent of v1 activation. */

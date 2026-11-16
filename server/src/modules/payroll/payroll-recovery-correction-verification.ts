@@ -8,7 +8,7 @@ export async function payrollRecoveryCorrectionJournalIsExact(client:PoolClient,
    FROM payroll_recovery_corrections c
    JOIN payroll_employee_advance_recoveries r ON r.id=c.recovery_id AND r.company_id=c.company_id
    JOIN payroll_drafts d ON d.id=r.draft_id AND d.company_id=r.company_id
-   WHERE c.company_id=$1 AND c.id=$3 AND c.status='approved' AND c.approved_by IS NOT NULL AND c.requested_by<>c.approved_by
+   WHERE c.company_id=$1 AND c.id=$3 AND c.status='approved' AND c.approved_by IS NOT NULL AND (c.requested_by<>c.approved_by OR has_privileged_financial_authority(c.company_id,c.approved_by))
      AND r.status='posted' AND d.status='approved'
  ), journal AS (
    SELECT j.id,j.accounting_date FROM journal_entries j JOIN source s ON j.company_id=$1 AND j.source_type='payroll_recovery_correction' AND j.source_id=s.id

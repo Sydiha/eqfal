@@ -1,3 +1,4 @@
+import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import { Pool, PoolClient } from 'pg';
 import pool from '../../db/pool';
@@ -146,7 +147,7 @@ accountingRouter.post('/accounting/bank-journal-uncertainties/:lineId/clear',req
   await client.query('SELECT id FROM bank_accounts WHERE id=$1 AND company_id=$2 FOR UPDATE',[body.bank_account_id,companyId]);
   const uncertainty=(await client.query(`SELECT * FROM (${MANUAL_BANK_UNCERTAINTY_SQL}) u WHERE u.journal_line_id=$3`,[companyId,body.bank_account_id,req.params.lineId])).rows[0];
   if(!uncertainty){await client.query('ROLLBACK');return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_NOT_OPEN'});}
-  if(uncertainty.posted_by===actor||uncertainty.created_by===actor){await client.query('ROLLBACK');return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_SELF_REVIEW'});}
+  if((uncertainty.posted_by===actor||uncertainty.created_by===actor)&&!await hasPrivilegedFinancialAuthority(client,companyId,actor)){await client.query('ROLLBACK');return void res.status(409).json({code:'ACCOUNTING_UNCERTAINTY_SELF_REVIEW'});}
   const review=(await client.query(`INSERT INTO manual_bank_journal_uncertainty_reviews
     (company_id,journal_line_id,journal_entry_id,bank_account_id,bank_ledger_account_id,reviewed_by,evidence_reference,rationale)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,reviewed_at::text`,
