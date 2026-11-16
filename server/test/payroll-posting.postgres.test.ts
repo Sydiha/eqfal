@@ -277,7 +277,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const actors=await correctionActors(x,'correction-sod');
   expect((await x.editor.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'1.00',reason:'No correction capability assigned',accounting_date:'2026-03-15',idempotency_key:randomUUID()})).status).toBe(403);
   const requested=await actors.requester.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'5.00',reason:'Correct an evidence-backed payroll recovery',accounting_date:'2026-03-15',idempotency_key:randomUUID()});expect(requested.status).toBe(201);
-  const inbox=await actors.approver.client.req('GET','/payroll/recovery-corrections');expect(inbox.status).toBe(200);expect(inbox.json.corrections.some((row:{id:string;status:string})=>row.id===requested.json.id&&row.status==='pending')).toBe(true);
+  const inbox=await actors.approver.client.req('GET','/payroll/recovery-corrections');expect(inbox.status).toBe(200);expect(inbox.json.corrections.some((row:{id:string;status:string;privileged_financial_authority_current_user:boolean})=>row.id===requested.json.id&&row.status==='pending'&&!row.privileged_financial_authority_current_user)).toBe(true);
   await h.q("INSERT INTO role_capabilities(role_id,capability_id) SELECT role_id,'payroll.employee_advance_recovery.correct.approve' FROM memberships WHERE company_id=$1 AND user_id=$2 ON CONFLICT DO NOTHING",[x.co,actors.requester.id]);
   expect((await actors.requester.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/decision`,{decision:'approve',reason:'I requested this correction myself'})).json.code).toBe('PAYROLL_RECOVERY_CORRECTION_SELF_APPROVAL');
   await h.q("INSERT INTO role_capabilities(role_id,capability_id) SELECT role_id,'payroll.employee_advance_recovery.correct.approve' FROM memberships WHERE company_id=$1 AND user_id=$2 ON CONFLICT DO NOTHING",[x.co,x.approver.id]);
@@ -304,6 +304,9 @@ db('payroll posting (PostgreSQL)',()=>{
   const requested=await actor.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'5.00',reason:'Correct verified recovery',accounting_date:'2026-03-15',idempotency_key:randomUUID()});
   expect(requested.status,JSON.stringify(requested.json)).toBe(201);
   const id=requested.json.id;
+  const inbox=await actor.client.req('GET','/payroll/recovery-corrections');
+  expect(inbox.status).toBe(200);
+  expect(inbox.json.corrections.find((row:{id:string})=>row.id===id)?.privileged_financial_authority_current_user).toBe(true);
   const approved=await actor.client.req('POST',`/payroll/recovery-corrections/${id}/decision`,{decision:'approve',reason:'Verified correction evidence'});
   expect(approved.status,JSON.stringify(approved.json)).toBe(200);
   const posted=await actor.client.req('POST',`/payroll/recovery-corrections/${id}/post`,{});
