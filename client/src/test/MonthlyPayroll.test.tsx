@@ -24,6 +24,25 @@ describe('Monthly Payroll draft visibility',()=>{
  });
 });
 
+it('explains recovery load 404, 403, and server errors distinctly',async()=>{
+ const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ const status=vi.fn(()=>404);
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/payroll/drafts?month=2026-11-01'?response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'},employees:[],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]}):({ok:false,status:status(),json:async()=>({code:'ERROR'})})));
+ try{
+  let rendered=render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']} onUnauthorized={()=>{}}/>);
+  fireEvent.change(await screen.findByLabelText('Add employee to draft'),{target:{value:'e1'}});
+  expect(await screen.findByText('The payroll draft or employee could not be found in this company.')).toBeInTheDocument();
+  rendered.unmount();status.mockReturnValue(403);
+  rendered=render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']} onUnauthorized={()=>{}}/>);
+  fireEvent.change(await screen.findByLabelText('Add employee to draft'),{target:{value:'e1'}});
+  expect(await screen.findByText('You do not have permission to view salary advance recoveries.')).toBeInTheDocument();
+  rendered.unmount();status.mockReturnValue(500);
+  rendered=render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']} onUnauthorized={()=>{}}/>);
+  fireEvent.change(await screen.findByLabelText('Add employee to draft'),{target:{value:'e1'}});
+  expect(await screen.findByText('The server could not load salary advance recoveries. Try again later.')).toBeInTheDocument();
+ }finally{await i18n.changeLanguage(original);}
+});
+
 it('shows authoritative fiscal-year dates and period eligibility without inventing an unavailable reason',async()=>{
  const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/fiscal-years'?response({fiscalYears:[{id:'fy-2026',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'}]}):response({draft:null,employees:[],available_employees:[],period_eligibility:{eligible:false}})));
