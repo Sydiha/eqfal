@@ -289,7 +289,7 @@ db('payroll posting (PostgreSQL)',()=>{
   else {
    const policyRole=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2',[x.co,role]))[0]!;
    await h.q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)',[actor.id,x.co,policyRole.id]);
-   for(const capability of ['payroll.view','payroll.employee_advance_recovery.correct','payroll.employee_advance_recovery.correct.approve','payroll.accounting.post'])await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[policyRole.id,capability]);
+
   }
   await actor.client.login();
       if (role === 'system_admin') expect((await actor.client.req('POST', '/auth/switch-company', { companyId: x.co })).status).toBe(200);

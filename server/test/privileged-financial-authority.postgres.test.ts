@@ -21,14 +21,24 @@ database('privileged financial authority (PostgreSQL)', () => {
         const policyRole = (await h.q<{id:string}>(
           'SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2', [company, role]))[0]!;
         await h.q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)', [actor.id, company, policyRole.id]);
-        for (const cap of ['employee.view', 'employee_salary_advance.view', 'employee_salary_advance.create', 'employee_salary_advance.approve']) {
-          await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [policyRole.id, cap]);
-        }
+        expect((await h.q<{authorization_policy_version:number}>('SELECT authorization_policy_version FROM roles WHERE id=$1', [policyRole.id]))[0]!.authorization_policy_version).toBe(0);
+        expect(await h.count('SELECT COUNT(*)::text n FROM role_capabilities WHERE role_id=$1 AND capability_id=$2', [policyRole.id, 'employee_salary_advance.approve'])).toBe(0);
+
       }
       expect(await hasPrivilegedFinancialAuthority(h.db, company, actor.id)).toBe(true);
+      const { MembershipRepository } = await import('../src/modules/memberships/membership.repository');
+      const capabilities = await new MembershipRepository(h.db).getActiveCapabilities(actor.id, company);
+      expect(capabilities).toContain('employee_salary_advance.approve');
+      expect(capabilities).toContain('payroll.employee_advance_recovery.correct.approve');
+      if (role === 'finance_manager') {
+        expect(capabilities).not.toContain('access.full_access.grant');
+        expect(capabilities).not.toContain('company.create');
+      }
+      if (role === 'company_manager') expect(capabilities).toContain('access.full_access.grant');
       expect(await hasPrivilegedFinancialAuthority(h.db, foreign, actor.id)).toBe(role === 'system_admin');
       await owner.client.login();
       await actor.client.login();
+      if (role === 'finance_manager') expect((await actor.client.req('GET', '/access/memberships')).status).toBe(403);
       if (role === 'system_admin') expect((await actor.client.req('POST', '/auth/switch-company', { companyId: company })).status).toBe(200);
       const employee = await owner.client.req('POST', '/employees', { employee_number: `PF${role}`, display_name: 'Privilege Test', employment_start: '2026-01-01', employment_end: null });
       expect(employee.status).toBe(201);
@@ -36,6 +46,7 @@ database('privileged financial authority (PostgreSQL)', () => {
       expect(created.status, JSON.stringify(created.json)).toBe(201);
       const approved = await actor.client.req('POST', `/employee-salary-advances/${created.json.advance.id}/approve`, { version: 1 });
       expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+      if (role !== 'system_admin') expect((await actor.client.req('POST', '/auth/switch-company', { companyId: foreign })).status).toBe(403);
       expect(await h.count('SELECT COUNT(*)::text n FROM audit_log WHERE company_id=$1 AND entity_id=$2 AND actor_user_id=$3 AND action=$4', [company, created.json.advance.id, actor.id, 'employee_salary_advance.approve'])).toBe(1);
     },
   );

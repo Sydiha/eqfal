@@ -161,12 +161,12 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
       [userId, companyId, ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']],
     )).map((row) => row.id).sort();
 
-    for (const user of ['sa', 'ownerA', 'mgrA', 'multi', 'staffA']) {
-      for (const company of ['coA', 'coB']) {
-        expect((await repo.getActiveCapabilities(ids[user]!, ids[company]!)).sort())
-          .toEqual(await legacyCapabilities(ids[user]!, ids[company]!));
-      }
+    for (const company of ['coA', 'coB']) {
+      expect((await repo.getActiveCapabilities(ids.sa!, ids[company]!)).sort()).toEqual((await allCaps()).sort());
+      for (const user of ['ownerA', 'staffA']) expect((await repo.getActiveCapabilities(ids[user]!, ids[company]!)).sort()).toEqual(await legacyCapabilities(ids[user]!, ids[company]!));
     }
+    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toContain('access.full_access.grant');
+    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coB!)).toEqual([]);
   });
 
   // ── 2. System Admin global access without memberships ───────────────────
@@ -177,7 +177,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(session.allowedCompanies.map((c: { id: string }) => c.id).sort()).toEqual([ids.coA, ids.coB].sort());
     const inB = await clients.sa!.use(ids.coB!);
     expect(inB.activeCompanyId).toBe(ids.coB);
-    expect([...inB.capabilities].sort()).toEqual((await allCaps()).filter((id:string)=>id!=='payroll.settlement.exception.approve'));
+    expect([...inB.capabilities].sort()).toEqual((await allCaps()).sort());
   });
 
   it('System Admin performs financial operations in a company it is not a member of; business validation still applies', async () => {
@@ -244,7 +244,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.staffA!, ids.coA!)).not.toContain('zz_future.capability');
-    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).not.toContain('zz_future.capability');
+    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toContain('zz_future.capability');
     await q("INSERT INTO capabilities(id, implicit_full_access) VALUES('zz_excluded.capability', FALSE)");
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).not.toContain('zz_excluded.capability');
     await q("DELETE FROM capabilities WHERE id='zz_excluded.capability'");
@@ -291,23 +291,14 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(await n("SELECT count(*) n FROM audit_log WHERE company_id=$1 AND actor_user_id=$2 AND action LIKE 'access.%'", [ids.coA, ids.mgrA])).toBeGreaterThanOrEqual(5);
   });
 
-  it('Company Manager cannot escalate: no Full Access, no role beyond its ceiling, no capability it lacks, no more-privileged target', async () => {
+  it('Company Manager may delegate within its company but cannot alter a protected owner or foreign company', async () => {
     const mgr = clients.mgrA!;
     const staffMembership = await membershipId(ids.staffA!, ids.coA!);
-    const fa = await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Full AccessA'] });
-    expect(fa.status).toBe(403);
-    expect(fa.json.code).toBe('ACCESS_ROLE_CEILING');
-    // B2: an ordinary functional role (Finance Manager) is delegable even though the manager does not hold its capabilities...
-    expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Finance ManagerA'] })).status).toBe(200);
+    expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Full AccessA'] })).status).toBe(200);
     expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['ViewerA'] })).status).toBe(200);
-    // ...but never to the manager itself.
-    const selfFm = await mgr.req('PUT', `/access/memberships/${await membershipId(ids.mgrA!, ids.coA!)}/role`, { role_id: roles['Finance ManagerA'] });
-    expect(selfFm.json.code).toBe('ACCESS_ROLE_CEILING');
-    expect((await mgr.req('PUT', `/access/roles/${roles['ViewerA']}/capabilities/accounting.journal.post`)).json.code).toBe('ACCESS_ROLE_CEILING');
-    expect((await mgr.req('PUT', `/access/roles/${roles['ViewerA']}/capabilities/access.full_access.grant`)).json.code).toBe('ACCESS_ROLE_CEILING');
     const ownerMembership = await membershipId(ids.ownerA!, ids.coA!);
-    expect((await mgr.req('PATCH', `/access/memberships/${ownerMembership}/active`, { is_active: false })).json.code).toBe('ACCESS_TARGET_PRIVILEGE');
-    expect((await mgr.req('PUT', `/access/memberships/${ownerMembership}/role`, { role_id: roles['ViewerA'] })).json.code).toBe('ACCESS_TARGET_PRIVILEGE');
+    expect((await mgr.req('PATCH', `/access/memberships/${ownerMembership}/active`, { is_active: false })).json.code).toBe('ACCESS_LAST_FULL_ACCESS');
+    expect((await mgr.req('PUT', `/access/memberships/${ownerMembership}/role`, { role_id: roles['ViewerA'] })).json.code).toBe('ACCESS_LAST_FULL_ACCESS');
     expect((await q('SELECT role_id FROM memberships WHERE id=$1', [staffMembership]))[0].role_id).toBe(roles['ViewerA']);
   });
 
