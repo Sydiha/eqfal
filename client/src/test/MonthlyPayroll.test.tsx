@@ -67,6 +67,17 @@ it('ignores an older month response after rapid period switching',async()=>{
  ui.unmount();
 });
 
+it('persists the selected payroll month after navigation and remount',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
+ const ui=render(<MonthlyPayroll capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);
+ const input=document.querySelector('input[type="month"]') as HTMLInputElement;
+ fireEvent.change(input,{target:{value:'2027-01'}});
+ await screen.findByText(/No draft exists|لا توجد مسودة/);
+ ui.unmount();
+ render(<MonthlyPayroll capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);
+ await waitFor(()=>expect((document.querySelector('input[type="month"]') as HTMLInputElement).value).toBe('2027-01'));
+});
+
 it('ignores an accounting preview response after switching approved payroll drafts',async()=>{
  const {fireEvent}=await import('@testing-library/react');
  const pending=new Map<string,(value:unknown)=>void>();
@@ -168,7 +179,7 @@ it('shows approval confirmation, then locks the approved payroll in English and 
  const original=i18n.language;
  await i18n.changeLanguage('en');
  const draft={id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:2,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'};
- const approved={...draft,version:3,status:'approved',approved_at:'2026-11-11T12:00:00.000Z',approved_by_email:'approver@example.test'};
+  const approved={...draft,version:3,status:'approved',approved_at:'2026-11-11T12:00:00.000Z',approved_by_email:'approver@example.test'};
  const line={id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'10.00',employer_contributions:'5.00',gross_earnings:'100.00',net_payable:'90.00'};
  const sent:unknown[]=[];
  vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST'){sent.push(JSON.parse(String(options.body)));return response({draft:approved,employees:[line],available_employees:[]});}return response({draft,employees:[line],available_employees:[]});}));
@@ -176,6 +187,8 @@ it('shows approval confirmation, then locks the approved payroll in English and 
   render(<MonthlyPayroll capabilities={['payroll.view','payroll.edit','payroll.approve']} onUnauthorized={()=>{}}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Approve payroll'}));
   expect(screen.getByRole('dialog')).toHaveTextContent('lock');
+  expect(screen.getByRole('dialog')).toHaveTextContent('2026-11');
+  expect(screen.getByRole('dialog')).toHaveTextContent('d1');
   expect(sent).toHaveLength(0);
   fireEvent.click(screen.getByRole('dialog').querySelector('button.primary')!);
   await screen.findByText(/Approved · Read only/);
@@ -185,6 +198,29 @@ it('shows approval confirmation, then locks the approved payroll in English and 
   await i18n.changeLanguage('ar');
   expect(screen.getByText(/معتمد · للقراءة فقط/)).toBeInTheDocument();
  }finally{await i18n.changeLanguage(original);}
+});
+
+it('closes approval confirmation when the selected period changes and does not submit another draft',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
+ const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ const sent:string[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string,options?:RequestInit)=>{
+  if(url==='/api/fiscal-years')return response({fiscalYears:[{id:'fy27',name:'FY 2027',start_date:'2027-01-01',end_date:'2027-12-31',status:'open'}]});
+  if(options?.method==='POST'){sent.push(url);return response({});}
+  const month=new URL(url,'http://local').searchParams.get('month')!;
+  const draft={id:month.startsWith('2027')?'january-draft':'november-draft',period_month:month,currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'};
+  return response({draft,employees:[{id:'line',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'0.00',employer_contributions:'0.00',gross_earnings:'100.00',net_payable:'100.00'}],available_employees:[]});
+ }));
+ render(<MonthlyPayroll capabilities={['payroll.view','payroll.approve','fiscal_year.view']} onUnauthorized={()=>{}}/>);
+ const input=document.querySelector('input[type="month"]') as HTMLInputElement;
+ await waitFor(()=>expect(input).toBeInTheDocument());
+ fireEvent.change(input,{target:{value:'2027-01'}});
+ fireEvent.click(await screen.findByRole('button',{name:'Approve payroll'}));
+ expect(screen.getByRole('dialog')).toHaveTextContent('january-draft');
+ fireEvent.change(input,{target:{value:'2026-11'}});
+ expect(screen.queryByRole('dialog')).toBeNull();
+ expect(sent).toHaveLength(0);
+ await i18n.changeLanguage(original);
 });
 
 it('shows read-only mapped preview, blockers and manual-journal warning in English and Arabic with responsive RTL styles',async()=>{
