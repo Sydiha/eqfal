@@ -3,7 +3,7 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import { postJournalInTransaction, FiscalYearClosedError, LedgerSourceAuthorityBlockedError, JournalPostingConflictError, JournalPostingValidationError } from '../accounting/journal-posting';
 import { lockPayrollEccMonths, PAYROLL_ECC_CATEGORIES } from './payroll-ecc-lock';
-import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
+import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 
 export const PAYROLL_ACCOUNT_MAPPINGS = [
   { key: 'earnings_expense', type: 'expense', label: 'Earnings expense' },
@@ -65,7 +65,7 @@ export class PayrollAccountingService {
 
   async postingStatus(companyId: string, draftId: string, actor: string) {
     const plan = await this.preview(companyId, draftId);
-    const privileged = await hasPrivilegedPayrollSodAuthority(this.db, companyId, actor);
+    const privileged = await hasPrivilegedFinancialAuthority(this.db, companyId, actor);
     const result = await this.db.query<{journal_id:string|null;reference:string|null;journal_status:string|null;separated:boolean;eligible:boolean}>(`
       SELECT j.id journal_id,j.reference,j.status journal_status,
         (d.approved_by IS DISTINCT FROM $3::uuid AND NOT EXISTS (SELECT 1 FROM payroll_draft_contributors c WHERE c.company_id=d.company_id AND c.draft_id=d.id AND c.user_id=$3)) separated,
@@ -89,7 +89,7 @@ export class PayrollAccountingService {
       const draft = (await client.query<{period_month:string; status:string; approved_by:string}>(
         'SELECT period_month::text,status,approved_by FROM payroll_drafts WHERE id=$1 AND company_id=$2 FOR UPDATE', [draftId, companyId])).rows[0];
       if (!draft) throw new PayrollAccountingError('PAYROLL_NOT_FOUND', 404);
-      const privileged = await hasPrivilegedPayrollSodAuthority(client, companyId, actor);
+      const privileged = await hasPrivilegedFinancialAuthority(client, companyId, actor);
       const contributor = (await client.query<{yes:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) yes', [companyId,draftId,actor])).rows[0]!.yes;
       if ((contributor || draft.approved_by === actor) && !privileged) throw new PayrollAccountingError('PAYROLL_POST_SEPARATION_OF_DUTIES', 403);
       const existing = (await client.query<{id:string; reference:string; status:string}>("SELECT id,reference,status FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2", [companyId,draftId])).rows[0];

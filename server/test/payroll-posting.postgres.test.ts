@@ -278,6 +278,30 @@ db('payroll posting (PostgreSQL)',()=>{
   expect((await actors.approver.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/post`,{})).status).toBe(403);
   expect((await actors.poster.client.req('POST',`/payroll/recovery-corrections/${requested.json.id}/post`,{})).status).toBe(201);
  });
+ it.each(['system_admin','company_manager','finance_manager'] as const)('%s may request, approve and post its own recovery correction',async role=>{
+  const x=await fixture(`correction-privileged-${role}`,false),advance=await issueAdvance(x,'25.25');
+  expect((await selectRecovery(x,advance.advanceId,'10.00')).status).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  expect((await x.post()).status).toBe(201);
+  const recovery=(await h.q<{id:string}>("SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='posted'",[x.co,advance.advanceId]))[0]!.id;
+  const actor=await h.user(`correction-privileged-${role}-actor`);
+  if(role==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[actor.id]);
+  else {
+   const policyRole=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2',[x.co,role]))[0]!;
+   await h.q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)',[actor.id,x.co,policyRole.id]);
+   for(const capability of ['payroll.view','payroll.employee_advance_recovery.correct','payroll.employee_advance_recovery.correct.approve','payroll.accounting.post'])await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[policyRole.id,capability]);
+  }
+  await actor.client.login();
+      if (role === 'system_admin') expect((await actor.client.req('POST', '/auth/switch-company', { companyId: x.co })).status).toBe(200);
+  const requested=await actor.client.req('POST','/payroll/recovery-corrections',{recovery_id:recovery,amount:'5.00',reason:'Correct verified recovery',accounting_date:'2026-03-15',idempotency_key:randomUUID()});
+  expect(requested.status,JSON.stringify(requested.json)).toBe(201);
+  const id=requested.json.id;
+  const approved=await actor.client.req('POST',`/payroll/recovery-corrections/${id}/decision`,{decision:'approve',reason:'Verified correction evidence'});
+  expect(approved.status,JSON.stringify(approved.json)).toBe(200);
+  const posted=await actor.client.req('POST',`/payroll/recovery-corrections/${id}/post`,{});
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  expect(await h.count("SELECT COUNT(*)::text n FROM payroll_recovery_corrections WHERE id=$1 AND company_id=$2 AND status='posted' AND requested_by=$3 AND approved_by=$3 AND posted_by=$3",[id,x.co,actor.id])).toBe(1);
+ });
  it('posts exact balanced amounts once under concurrency and includes the journal in reports',async()=>{
   const x=await fixture('post-success');
   const ecc=(await h.q<{id:string}>(`INSERT INTO employee_cost_records(company_id,employee_id,category,nature,currency_code,total_amount,service_period_start,service_period_end,description,created_by) VALUES($1,$2,'other','employer_cost','SAR',7,'2026-03-01','2026-03-31','Operational allocation',$3) RETURNING id`,[x.co,x.employee,x.owner.id]))[0]!.id;

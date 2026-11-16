@@ -6,7 +6,7 @@ import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships
 import { requireSameOrigin } from '../auth/origin.middleware';
 import { PayrollAccountingError, PayrollAccountingService, PAYROLL_ACCOUNT_MAPPINGS, PayrollMappingKey } from './payroll-accounting';
 import { PayrollSettlementError, PayrollSettlementService } from './payroll-settlement';
-import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
+import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 import { assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
 import { PayrollRecoveryCorrectionError,PayrollRecoveryCorrectionService } from './payroll-recovery-correction';
 
@@ -140,7 +140,7 @@ payrollRouter.post('/payroll/drafts/:id/approve',...approve,route(async(q,s)=>{
   const external=(await c.query(`SELECT 1 FROM ledger_source_authority WHERE company_id=$1 AND status='active' AND $2::date BETWEEN from_date AND to_date LIMIT 1`,[company(q),draft.period_month])).rowCount;
   if(external){await c.query('ROLLBACK');return void error(s,'PAYROLL_PERIOD_INELIGIBLE',409);}
   // Privileged payroll authority is role-specific; company Full Access is not a bypass.
-  const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
+  const privileged=await hasPrivilegedFinancialAuthority(c,company(q),actor);
   const contributed=(await c.query<{ok:boolean}>('SELECT EXISTS(SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3) AS ok',[company(q),q.params.id,actor])).rows[0]!.ok;
   if(contributed&&!privileged){await c.query('ROLLBACK');return void error(s,'PAYROLL_SELF_APPROVAL',403);}
   const totals=(await c.query<{count:string;invalid:string}>(`SELECT COUNT(*)::text AS count,
@@ -167,7 +167,7 @@ payrollRouter.post('/payroll/drafts/:id/lifecycle',requireSameOrigin,...read,rou
  if(!capabilities.includes('payroll.edit')||(b.action!=='cancel'&&!capabilities.includes('payroll.approve')))return void error(s,'FORBIDDEN',403);
  const c=await pool!.connect();try{await c.query('BEGIN');const d=(await c.query<{status:string;version:number;approved_by:string|null}>('SELECT status,version,approved_by FROM payroll_drafts WHERE id=$1 AND company_id=$2 FOR UPDATE',[q.params.id,company(q)])).rows[0];if(!d){await c.query('ROLLBACK');return void error(s,'PAYROLL_NOT_FOUND',404);}if(d.status!=='approved'&&d.status!=='draft'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}if(await c.query("SELECT 1 FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2 AND status='posted'",[company(q),q.params.id]).then(x=>x.rowCount)){await c.query('ROLLBACK');return void error(s,'PAYROLL_ALREADY_POSTED',409);}if(b.action==='return_to_draft'&&d.status!=='approved'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}if(b.action==='cancel'&&d.status!=='draft'){await c.query('ROLLBACK');return void error(s,'PAYROLL_CONFLICT',409);}
   if(b.action!=='cancel'){
-   const privileged=await hasPrivilegedPayrollSodAuthority(c,company(q),actor);
+   const privileged=await hasPrivilegedFinancialAuthority(c,company(q),actor);
    const approverId=d?.approved_by??null;const participant=(approverId!==null&&actor===approverId)||((await c.query('SELECT 1 FROM payroll_draft_contributors WHERE company_id=$1 AND draft_id=$2 AND user_id=$3',[company(q),q.params.id,actor])).rowCount??0)>0;
    if(participant&&!privileged){await c.query('ROLLBACK');return void error(s,'PAYROLL_LIFECYCLE_SEPARATION_OF_DUTIES',403);}
   }

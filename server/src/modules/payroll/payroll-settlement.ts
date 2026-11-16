@@ -5,7 +5,7 @@ import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../mo
 import { postJournalInTransaction, FiscalYearClosedError, JournalPostingValidationError, JournalPostingConflictError, LedgerSourceAuthorityBlockedError } from '../accounting/journal-posting';
 import { resolveBankLedgerAccount } from '../accounting/personal-payment-posting';
 import { PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY } from '../memberships/authorization-policy';
-import { hasPrivilegedPayrollSodAuthority } from './payroll-sod-authority';
+import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 
 export class PayrollSettlementError extends Error {
   constructor(readonly code:string, readonly status=409) { super(code); }
@@ -114,7 +114,7 @@ export class PayrollSettlementService {
     const c=await this.db.connect();
     try{
       await c.query('BEGIN');
-      if(await hasPrivilegedPayrollSodAuthority(c,company,actor))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_NOT_REQUIRED');
+      if(await hasPrivilegedFinancialAuthority(c,company,actor))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_NOT_REQUIRED');
       const evidence=await this.sodEvidence(c,company,lineId);
       if(!evidence.participants.includes(actor))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_NOT_REQUIRED');
       const approved=(await c.query<{id:string;requested_at:string}>(`SELECT id,requested_at::text FROM payroll_settlement_sod_exceptions
@@ -212,7 +212,7 @@ export class PayrollSettlementService {
           AND j.reversal_of_journal_id IS NULL AND r.id IS NULL
       ) yes`,[company,bank.bank_account_id])).rows[0]!.yes;
       if(uncertain) throw conflict('PAYROLL_SETTLEMENT_BANK_ACCOUNT_QUARANTINED');
-      const privileged=await hasPrivilegedPayrollSodAuthority(c,company,actor);
+      const privileged=await hasPrivilegedFinancialAuthority(c,company,actor);
       if(privileged&&input.sodExceptionId)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
       let sodException:{id:string;intended_actor_id:string;status:string;participant_fingerprint:string;payroll_draft_id:string;liability_line_id:string;payroll_journal_id:string;liability_amount:string;settled_amount:string;decided_by:string|null;approval_expires_at:string|null;database_now:string}|undefined;
       if(input.sodExceptionId){
