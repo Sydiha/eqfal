@@ -15,6 +15,7 @@ export class PayrollRecoveryCorrectionService {
   return (await this.db.query(`SELECT c.id,c.recovery_id,c.amount::text,c.reason,c.status,c.requested_by,c.approved_by,c.posted_by,
     c.accounting_date::text,c.journal_entry_id,c.journal_line_id,c.created_at::text,c.approved_at::text,c.approval_expires_at::text,c.posted_at::text,
     c.ended_at::text,c.end_reason,(c.status='approved' AND c.approval_expires_at<=clock_timestamp()) approval_expired,
+    has_privileged_financial_authority($1,$2) privileged_financial_authority_current_user,
     c.requested_by=$2 requested_by_current_user,c.approved_by=$2 approved_by_current_user,
     EXISTS(SELECT 1 FROM payroll_draft_contributors pc WHERE pc.company_id=d.company_id AND pc.draft_id=d.id AND pc.user_id=$2)
       OR d.created_by=$2 OR d.approved_by=$2 OR EXISTS(SELECT 1 FROM journal_entries pj WHERE pj.company_id=d.company_id AND pj.source_type='payroll' AND pj.source_id=d.id AND pj.status='posted' AND pj.posted_by=$2) payroll_participant_current_user,
