@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ObligationsAging, type AgingReport } from '../components/ObligationsAging';
 import { Obligations } from '../components/Obligations';
@@ -27,7 +27,7 @@ describe('AR/AP aging report view', () => {
     render(<ObligationsAging onUnauthorized={vi.fn()} />);
     expect(await screen.findByText('Customer A')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/obligations/aging', expect.anything());
-    expect(screen.getByLabelText('As of')).toHaveValue('2026-06-30');
+    await waitFor(() => expect(screen.getByLabelText('As of')).toHaveValue('2026-06-30'));
     const buckets = screen.getByLabelText('Receivables (AR)');
     expect(within(buckets).getByText('31–60 days').nextSibling).toHaveTextContent('180.00');
     expect(within(buckets).getByText('Total outstanding').nextSibling).toHaveTextContent('1,400.00');
