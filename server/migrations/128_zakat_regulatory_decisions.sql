@@ -41,7 +41,13 @@ CREATE UNIQUE INDEX zakat_regulatory_decisions_active_idx
 
 CREATE FUNCTION guard_zakat_regulatory_decision() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'DELETE' OR TG_OP = 'TRUNCATE' THEN
+  IF TG_OP = 'TRUNCATE' THEN
+    IF EXISTS (SELECT 1 FROM zakat_regulatory_decisions) THEN
+      RAISE EXCEPTION 'Zakat regulatory decision history is immutable' USING ERRCODE = '23514';
+    END IF;
+    RETURN NULL;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'Zakat regulatory decision history is immutable' USING ERRCODE = '23514';
   END IF;
   IF TG_OP = 'INSERT' THEN

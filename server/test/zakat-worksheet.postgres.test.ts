@@ -300,6 +300,7 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect((await get(t)).regulatory_decisions[0]).toMatchObject({ status: 'verified', submitted_by: t.owner.id });
     expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(1);
     await expect(h.q('DELETE FROM zakat_regulatory_decisions WHERE id=$1', [decision.id])).rejects.toThrow(/immutable/);
+    await expect(h.q('TRUNCATE zakat_regulatory_decisions')).rejects.toThrow(/immutable/);
     expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
   });
 
