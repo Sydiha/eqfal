@@ -13,9 +13,15 @@ const payload = (over: object = {}, amountCents = '1234500') => ({
   ownership_live: { qualified: false, blockers: ['no_confirmed_ownership'], as_of_date: '2026-12-31', total_ownership_bps4: '0', partners: [] },
   gates,
   readiness: { preparation_blockers: ['unclassified_balance'], gate_blockers: ['B0_amendment_1248'], unclassified_account_count: 1, can_submit: false, can_approve: false },
+  preview: { status: 'BLOCKED', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: null, lines: [], blockers: [{ code: 'FINALIZED_BOOK_RESULT_REQUIRED', path: 'finalizedBookResult' }], missing_requirements: ['finalized_book_result', 'regulatory_gates'], worksheet_blockers: ['no_confirmed_ownership'] },
   ...over,
 });
-const mockFetch = (amountCents?: string) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (u) => String(u).includes('/api/documents') ? new Response(JSON.stringify({ documents: [] })) : new Response(JSON.stringify(payload({}, amountCents))));
+const mockFetch = (amountCents?: string) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (u) => {
+  const url = String(u);
+  if (url.includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
+  if (url.includes('/preview')) return new Response(JSON.stringify(payload({}, amountCents).preview));
+  return new Response(JSON.stringify(payload({}, amountCents)));
+});
 
 describe('Zakat worksheet', () => {
   beforeEach(async () => { vi.restoreAllMocks(); await i18n.changeLanguage('en'); });
@@ -31,12 +37,30 @@ describe('Zakat worksheet', () => {
     expect((screen.getByRole('button', { name: 'Submit for review' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/payable amount:/i)).toBeNull();
     expect(screen.getByText('B9 – Accountant approval of reference cases')).toBeTruthy();
+    expect(screen.getByText(/BLOCKED — required, validated inputs are missing/)).toBeTruthy();
+    expect(screen.getByText('A finalized book result with evidence and actually recorded Zakat/tax charges is required.')).toBeTruthy();
+    expect(screen.queryByText(/Equity component/)).toBeNull();
     expect(screen.getByLabelText('Professional review required')).toBeTruthy();
+  });
+  it('renders a component breakdown only when the preview explicitly returns validated components', async () => {
+    const f = mockFetch();
+    f.mockImplementation(async (u) => {
+      if (String(u).includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
+      if (String(u).includes('/preview')) return new Response(JSON.stringify({ status: 'COMPONENTS_ONLY', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: { equityAdditionsHalalas: '123456', equityReductionsHalalas: '0', equityNetHalalas: '123456', verifiedDeductibleAssetCandidatesHalalas: '0', article23ProfitDifferenceHalalas: '0' }, lines: [{ id: 'account-capital', component: 'equity', direction: 'addition', amountHalalas: '123456', includedInComponentTotals: true }], blockers: [], missing_requirements: [], worksheet_blockers: [] }));
+      return new Response(JSON.stringify(payload()));
+    });
+    render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByText(/Validated components only/)).toBeTruthy();
+    expect(screen.getByText('Equity component')).toBeTruthy();
+    expect(screen.getByText('1,234.56')).toBeTruthy();
+    expect(screen.queryByText(/payable amount:/i)).toBeNull();
   });
   it('renders Arabic labels in Arabic UI', async () => {
     await i18n.changeLanguage('ar'); mockFetch(); render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'عرض' }));
     await waitFor(() => expect(screen.getByText(/مبلغ الزكاة المستحق محجوب/)).toBeTruthy());
     expect(screen.getByText('B3 – قواعد التقريب')).toBeTruthy(); expect(screen.getByText('B9 – اعتماد المحاسب للحالات المرجعية')).toBeTruthy(); expect(screen.getByText('النقدية', { exact: false })).toBeTruthy();
+    expect(screen.getByText(/محظور — توجد مدخلات مطلوبة أو متحققة مفقودة/)).toBeTruthy();
+    expect(screen.getByText('يلزم نتيجة دفترية نهائية مع أدلتها والرسوم الزكوية/الضريبية المسجلة فعلياً.')).toBeTruthy();
   });
   it('renders the stored English account name in English UI and falls back for legacy snapshots', async () => {
     mockFetch(); const first = render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
@@ -45,7 +69,7 @@ describe('Zakat worksheet', () => {
     first.unmount();
     const legacy = payload();
     legacy.worksheet!.balances_snapshot!.accounts[0] = { account_id: 'a1', code: '1100', name: 'Legacy cash', name_ar: '' as string, name_en: '' as string, statement_category: 'current_asset', amount_cents: '100' };
-    vi.stubGlobal('fetch', vi.fn(async (url) => String(url).includes('/api/documents') ? new Response(JSON.stringify({ documents: [] })) : new Response(JSON.stringify(legacy))));
+    vi.stubGlobal('fetch', vi.fn(async (url) => String(url).includes('/api/documents') ? new Response(JSON.stringify({ documents: [] })) : String(url).includes('/preview') ? new Response(JSON.stringify(legacy.preview)) : new Response(JSON.stringify(legacy))));
     render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     expect(await screen.findByText(/Legacy cash/)).toBeTruthy();
   });
