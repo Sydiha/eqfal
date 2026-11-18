@@ -155,19 +155,24 @@ export function calculateZakatBase(
   return runBaseEngine(input, options, 'review');
 }
 
-/** Finalization verifies the worksheet and all five decisions inside the caller's database transaction. */
+/** Reconstructs final inputs from persisted company records in the active transaction. */
 export async function calculateApprovedZakatBase(
   client: PoolClient, company: string, year: string, worksheet: string, actor: string | null,
-  fingerprint: string, input: ZakatCalculationInputV1, options: CalculationOptions, currentEarningsHalalas: bigint,
 ): Promise<BaseEngineResult> {
   const scope = (await client.query<{ status: string; approved_by_user_id: string | null; prepared_by_user_id: string; reviewed_by_user_id: string | null }>(
     `SELECT w.status,w.approved_by_user_id,w.prepared_by_user_id,w.reviewed_by_user_id FROM zakat_worksheets w
      WHERE w.id=$1 AND w.company_id=$2 AND w.fiscal_year_id=$3 FOR SHARE`, [worksheet, company, year])).rows[0];
-  if (!scope || !(scope.status === 'approved' || scope.status === 'reviewed' && actor)
-    || scope.status === 'approved' && scope.approved_by_user_id !== actor && actor !== null
-    || scope.status === 'reviewed' && (actor === scope.prepared_by_user_id || actor === scope.reviewed_by_user_id)) {
+  if (!scope || scope.status !== 'approved' || !scope.approved_by_user_id
+    || actor !== null && scope.approved_by_user_id !== actor) {
     return blocked([{ code: 'WORKSHEET_APPROVAL_REQUIRED', path: 'worksheet', message: 'A trusted worksheet approval context is required.', disposition: 'blocked' }]);
   }
+  const isolation = (await client.query<{ transaction_isolation: string }>('SHOW transaction_isolation')).rows[0]?.transaction_isolation;
+  if (isolation !== 'repeatable read' && isolation !== 'serializable') {
+    return blocked([{ code: 'CONSISTENT_TRANSACTION_REQUIRED', path: 'transaction', message: 'Finalization requires a consistent database transaction.', disposition: 'blocked' }]);
+  }
+  const { ZakatWorksheetService } = await import('../zakat-worksheets/zakat-worksheet.service');
+  const service = new ZakatWorksheetService(client as never);
+  const trusted = await service.trustedCalculationInput(company, year, worksheet, client, actor);
   const decisions = (await client.query<{ gate: string; id: string; submitted_by: string }>(
     `SELECT d.gate,d.id,d.submitted_by FROM zakat_regulatory_decisions d
      JOIN documents e ON e.id=d.evidence_document_id AND e.company_id=d.company_id AND e.status='approved' AND e.sha256=d.evidence_sha256
@@ -175,16 +180,15 @@ export async function calculateApprovedZakatBase(
      JOIN users u ON u.id=d.reviewed_by AND u.is_active
      WHERE d.company_id=$1 AND d.fiscal_year_id=$2 AND d.worksheet_id=$3 AND d.source_fingerprint=$4
        AND d.approved_at IS NOT NULL AND d.ended_at IS NULL FOR SHARE OF d,e`,
-    [company, year, worksheet, fingerprint])).rows;
+    [company, year, worksheet, trusted.fingerprint])).rows;
   const required = ['B0', 'B3', 'B4', 'B7', 'B9'];
   const actual = new Map(decisions.map((row) => [row.gate, row]));
   if (actual.size !== required.length || required.some((gate) => !actual.has(gate))
-    || scope.status === 'reviewed' && decisions.some((row) => row.submitted_by === actor)
-    || input.regulatoryDecisionReferences.length !== required.length
-    || input.regulatoryDecisionReferences.some((row) => actual.get(row.gate)?.id !== row.referenceId)) {
+    || trusted.input.regulatoryDecisionReferences.length !== required.length
+    || trusted.input.regulatoryDecisionReferences.some((row) => actual.get(row.gate)?.id !== row.referenceId)) {
     return blocked([{ code: 'REGULATORY_GATE_AUTHENTICATION_REQUIRED', path: 'regulatoryDecisionReferences', message: 'Current persisted decisions are required.', disposition: 'blocked' }]);
   }
-  return runBaseEngine(input, options, 'approved', currentEarningsHalalas);
+  return runBaseEngine(trusted.input, trusted.options, 'approved', trusted.currentEarningsHalalas);
 }
 
 function runBaseEngine(

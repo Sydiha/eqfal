@@ -293,7 +293,7 @@ describe('direct finalization boundary', () => {
     const data = input();
     zeroLiabilities(data);
     const fakeClient = { query: async () => ({ rows: [] }) };
-    const result = await calculateApprovedZakatBase(fakeClient as never, 'company', 'year', 'worksheet', 'actor', 'fingerprint', data, { finalRounding: 'HALF_UP' }, 0n);
+    const result = await calculateApprovedZakatBase(fakeClient as never, 'company', 'year', 'worksheet', 'actor', ...[data, { finalRounding: 'HALF_UP' }, 0n] as []);
     expect(result).toMatchObject({ status: 'BLOCKED', inputAssertionsAuthenticated: false, finalZakatBaseHalalas: null, payableAmountHalalas: null, exemptionCode: null });
   });
 });

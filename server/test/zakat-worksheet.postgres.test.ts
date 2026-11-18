@@ -202,6 +202,17 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
       await act(t, 'submit'); await act(t, 'review');
       const approve = await attest(t);
       expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+      const { calculateApprovedZakatBase: directBeforeApproval } = await import('../src/modules/zakat-calculation/zakat-base-engine');
+      const beforeApprovalClient = await h.db.connect();
+      try {
+        await beforeApprovalClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        const reviewed = (await get(t)).worksheet;
+        expect(await directBeforeApproval(beforeApprovalClient, t.co, t.fy, reviewed.id, t.owner.id)).toMatchObject({
+          status: 'BLOCKED', payableAmountHalalas: null, exemptionCode: null,
+        });
+      } finally {
+        await beforeApprovalClient.query('ROLLBACK'); beforeApprovalClient.release();
+      }
       expect((await act(t, 'approve')).status).toBe(403);
       const approved = await approve();
       expect(approved.status).toBe(200);
@@ -209,6 +220,26 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
       expect(a1).toMatchObject({ status: 'approved', revision_no: 1 });
       expect(a1.approved_snapshot).toMatchObject({ calculation_performed: true, payable_amount: null, revision_no: 1 });
       expect(approved.json.finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1031' });
+      // A direct server-module call cannot replace persisted amounts or decisions with caller values.
+      const { calculateApprovedZakatBase } = await import('../src/modules/zakat-calculation/zakat-base-engine');
+      const direct = calculateApprovedZakatBase as unknown as (...args: unknown[]) => Promise<{ status: string; payableAmountHalalas: string | null }>;
+      const client = await h.db.connect();
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        for (const forged of [
+          { sourceBalances: [{ amountSar: '999999999.00' }] },
+          { currentEarningsHalalas: 999999999n },
+          { classifications: [{ zakat_type: 'equity_capital' }] },
+          { fiscalPeriod: { endDate: '2025-06-30', activityPeriod: 'cessation' } },
+          { finalRounding: 'DOWN' },
+          { regulatoryDecisionReferences: [{ gate: 'B9', disposition: 'decision_recorded' }] },
+        ]) {
+          const result = await direct(client, t.co, t.fy, a1.id, null, forged);
+          expect(result).toMatchObject({ status: 'READY', payableAmountHalalas: '1031' });
+        }
+      } finally {
+        await client.query('ROLLBACK'); client.release();
+      }
       expect(a1.approved_snapshot_fingerprint).toMatch(/^[0-9a-f]{64}$/);
       await expect(h.q("UPDATE zakat_worksheets SET notes_never=1 WHERE id=$1", [a1.id])).rejects.toThrow();
       await expect(h.q("UPDATE zakat_worksheets SET non_financing_confirmed=false WHERE id=$1", [a1.id])).rejects.toThrow(/immutable/);

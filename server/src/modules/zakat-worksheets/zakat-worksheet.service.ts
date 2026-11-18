@@ -130,7 +130,7 @@ export class ZakatWorksheetService {
        WHERE a.company_id=$1 ORDER BY u.id`, [company])).rows;
   }
 
-  private async finalization(company: string, year: string, ws: Worksheet, r: Runner, approvalActor?: string) {
+  private async finalization(company: string, year: string, ws: Worksheet, r: Runner, approvalActor?: string, buildOnly = false) {
     const own = await this.liveOwnership(company, year, r);
     const live = await this.captureBalances(company, year, r).catch((e: unknown) => {
       if (e instanceof ZakatValidationError || e instanceof FinancialStatementUnmappedError) return null;
@@ -165,11 +165,20 @@ export class ZakatWorksheetService {
       return { ...closed, ...await calculateWorksheetFinalization({
         year, worksheet: ws.id, start: own.fy.start_date, end: own.fy.end_date, snapshot: live.snapshot, ledgerAccounts: live.ledgerAccounts,
         ...children,
-      }, decisions, fingerprint, ws.status === 'approved' || approvalActor ? { client: r as PoolClient, company, actor: approvalActor ?? null } : null) };
+      }, decisions, fingerprint, buildOnly ? null : ws.status === 'approved' || approvalActor ? { client: r as PoolClient, company, actor: approvalActor ?? null } : null, buildOnly) };
     } catch (e) {
       if (e instanceof ZakatInputError) return { ...closed, blockers: ['REGULATORY_FINANCIAL_FACTS_INVALID'], result: null };
       throw e;
     }
+  }
+
+  /** Reconstructs final input from the current company ledger and decision registry in the active transaction. */
+  async trustedCalculationInput(company: string, year: string, worksheet: string, r: PoolClient, actor: string | null) {
+    const ws = (await r.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.id=$1 AND w.company_id=$2 AND w.fiscal_year_id=$3 FOR SHARE`, [worksheet, company, year])).rows[0];
+    if (!ws || !['reviewed', 'approved'].includes(ws.status)) throw new ZakatForbiddenError();
+    const state = await this.finalization(company, year, ws, r, actor ?? undefined, true);
+    if (state.blockers.length || !('input' in state) || !state.input || !state.options || state.currentEarningsHalalas === undefined) throw new ZakatConflictError('Finalization is blocked', 'ZAKAT_NOT_READY');
+    return { input: state.input, options: state.options, currentEarningsHalalas: state.currentEarningsHalalas, fingerprint: state.fingerprint };
   }
 
   async changeDecision(company: string, year: string, actor: string, action:
@@ -254,7 +263,7 @@ export class ZakatWorksheetService {
       const result = state?.result;
       const finalizationFingerprint = ws?.status === 'approved' && state && this.finalizationFingerprint(state);
       const released = ws?.status === 'approved' && finalizationFingerprint && ws.approved_snapshot?.finalization_fingerprint === finalizationFingerprint;
-      const canApprove = Boolean(ws?.status === 'reviewed' && state?.result && state.result.status !== 'BLOCKED' && actor &&
+      const canApprove = Boolean(ws?.status === 'reviewed' && state?.result && state.blockers.every((code) => code === 'REGULATORY_GATE_AUTHENTICATION_REQUIRED' || code === 'ARTICLE15_CESSATION_EVIDENCE_NOT_AUTHENTICATED') && actor &&
         this.independentFinalApprover(ws, state.history, actor));
       return {
         scope: { fiscal_year: own.fy, unsupported_reason: worksheetPeriodReason(own.fy.start_date, own.fy.end_date) },
@@ -287,10 +296,10 @@ export class ZakatWorksheetService {
   }
 
   private finalizationFingerprint(state: Awaited<ReturnType<ZakatWorksheetService['finalization']>>) {
-    if (!state.result || state.result.status === 'BLOCKED' || state.blockers.length) return null;
+    if (!state.result || state.blockers.some((code) =>
+      code !== 'REGULATORY_GATE_AUTHENTICATION_REQUIRED' && code !== 'ARTICLE15_CESSATION_EVIDENCE_NOT_AUTHENTICATED')) return null;
     return fingerprintOf({
       source: state.fingerprint, decisions: state.history.filter((row) => row.status === 'verified').map((row) => row.id),
-      result: state.result,
     });
   }
 
@@ -496,8 +505,9 @@ export class ZakatWorksheetService {
       if (readiness.preparation_blockers.length) throw new ZakatValidationError(`Worksheet is not ready: ${readiness.preparation_blockers.join(', ')}`, 'ZAKAT_NOT_READY');
       if (action === 'approve') {
         if (await this.packageFinalized(company, year, c)) throw new ZakatConflictError('The annual package is finalized', 'ZAKAT_PACKAGE_FINALIZED');
-        const state = await this.finalization(company, year, ws, c, actor);
+        const state = await this.finalization(company, year, ws, c);
         if (state.readiness.gate_blockers.length) throw new ZakatConflictError(`Approval is blocked by unverified regulatory gates: ${state.readiness.gate_blockers.join(', ')}`, 'ZAKAT_REGULATORY_GATES_UNVERIFIED');
+        if (!this.independentFinalApprover(ws, state.history, actor)) throw new ZakatForbiddenError();
         const finalizationFingerprint = this.finalizationFingerprint(state);
         if (!finalizationFingerprint) throw new ZakatConflictError('Financial validation is incomplete', 'ZAKAT_NOT_READY');
         const { classifications, adjustments } = state.children;
@@ -514,6 +524,8 @@ export class ZakatWorksheetService {
         await c.query(
           `UPDATE zakat_worksheets SET status='approved', approved_snapshot=$3, approved_snapshot_fingerprint=$4, approved_by_user_id=$5, approved_at=NOW(), version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2`,
           [ws.id, company, JSON.stringify(snapshot), fingerprintOf(snapshot), actor]);
+        const finalState = await this.finalization(company, year, { ...ws, status: 'approved', version: ws.version + 1, approved_snapshot: snapshot }, c);
+        if (!finalState.result || finalState.result.status === 'BLOCKED' || finalState.blockers.length) throw new ZakatConflictError('Financial validation is incomplete', 'ZAKAT_NOT_READY');
       } else if (action === 'review') {
         await c.query(`UPDATE zakat_worksheets SET status='reviewed', reviewed_by_user_id=$3, reviewed_at=NOW(), version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2`, [ws.id, company, actor]);
       } else {
@@ -623,7 +635,7 @@ export class ZakatWorksheetService {
     if (!ws) return null;
     let drift = false;
     if (checkDrift) {
-      const state = await this.finalization(company, year, ws, r);
+      const state = await this.tx((c) => this.finalization(company, year, ws, c));
       const fingerprint = this.finalizationFingerprint(state);
       drift = !fingerprint || ws.approved_snapshot?.finalization_fingerprint !== fingerprint;
     }
