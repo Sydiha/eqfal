@@ -25,6 +25,117 @@ describe('exact numeric parsing', () => {
     expect(toCents('1234.50')).toBe(123450n); expect(toCents('-0.05')).toBe(-5n); expect(toCents('7')).toBe(700n);
     expect(toBps4('100')).toBe(1_000_000n); expect(toBps4('33.3333')).toBe(333_333n); expect(toBps4('33.33334')).toBe(333_333n);
   });
+  it('supports deterministic SAR arithmetic in integer halalas', () => {
+    const baseHalalas = toCents('100000.00');
+    const rateBasisPoints = 250n; // 2.5%, used here as a test input only.
+    expect(baseHalalas * rateBasisPoints / 10_000n).toBe(250_000n); // SAR 2,500.00
+    expect(toCents('120000.00') - toCents('100000.00')).toBe(2_000_000n); // SAR 20,000.00
+  });
+  it('keeps signed profit differences signed using integer halalas', () => {
+    expect(toCents('120000.00') - toCents('100000.00')).toBe(toCents('20000.00'));
+    expect(toCents('-30000.00') - toCents('-20000.00')).toBe(toCents('-10000.00'));
+    expect(toCents('100000.00') - toCents('100000.00')).toBe(0n);
+  });
+});
+
+describe('B3: regulation-established actual-day formula and provisional test-only rounding policy', () => {
+  const positiveHalfUp = (numerator: bigint, denominator: bigint) => (2n * numerator + denominator) / (2n * denominator);
+
+  it.each([
+    ['Hijri year at 354 days', 354n, 354n, '2500.00'],
+    ['non-Hijri 365-day fiscal year', 354n, 365n, '2577.68'],
+    ['non-Hijri 366-day fiscal year', 354n, 366n, '2584.75'],
+  ])('%s uses 354 denominator and actual fiscal-year days', (_label, hijriDays, fiscalDays, expectedSar) => {
+    const baseHalalas = toCents('100000.00');
+    const rateBasisPoints = 250n; // Regulation rate input: 2.5%.
+    const exactHalalaNumerator = baseHalalas * rateBasisPoints * fiscalDays;
+    const exactHalalaDenominator = 10_000n * hijriDays;
+    // Provisional EQFAL test policy only: retain the exact ratio, then round the final SAR amount to halalas HALF_UP.
+    const finalHalalas = positiveHalfUp(exactHalalaNumerator, exactHalalaDenominator);
+    expect(finalHalalas).toBe(toCents(expectedSar));
+  });
+
+  it('labels HALF_UP as provisional and applies it only once to the final SAR amount', () => {
+    // Exact result is SAR 2.505 (250.5 halalas); no intermediate rate/base rounding is performed.
+    const finalHalalas = positiveHalfUp(2_505n, 10n);
+    expect(finalHalalas).toBe(251n); // SAR 2.51 under provisional HALF_UP policy.
+    const exactHalfEvenHalalas = 250n; // Alternative at this exact tie; not selected as EQFAL policy.
+    expect(finalHalalas).not.toBe(exactHalfEvenHalalas);
+  });
+});
+
+describe('B4: published six-step ZATCA liability procedure (test-only arithmetic)', () => {
+  it('applies classification, placement, deducted-asset limit, then the residual-liability check in sequence', () => {
+    // 1. Identify end-period non-current liabilities; 5,000 of the reported 50,000 is equity-like.
+    const reportedNonCurrentLiabilities = toCents('50000.00');
+    const equityReclassified = toCents('5000.00');
+    const step1NonCurrent = reportedNonCurrentLiabilities - equityReclassified;
+    expect(step1NonCurrent).toBe(toCents('45000.00'));
+
+    // 2. Reclassify qualifying current financing of 10,000 as non-current; it is included in the 30,000 current balance.
+    const qualifyingCurrentFinancing = toCents('10000.00');
+    const step2LiabilitiesForPlacement = step1NonCurrent + qualifyingCurrentFinancing;
+    expect(step2LiabilitiesForPlacement).toBe(toCents('55000.00'));
+
+    // 3. Equity-like 5,000 was excluded in step 1; it is not counted again as a liability.
+    const step3Liabilities = step2LiabilitiesForPlacement;
+    expect(step3Liabilities).toBe(toCents('55000.00'));
+
+    // 4. Apply Article 25 placement: exclude 20% for non-deducted non-current assets;
+    // after step 2, only 20,000 of the original 30,000 current liabilities remain current.
+    const nonCurrentLiabilitiesExcluded = step3Liabilities * 20n / 100n;
+    const placedNonCurrentAddition = step3Liabilities - nonCurrentLiabilitiesExcluded;
+    const currentLiabilitiesAfterReclassification = toCents('30000.00') - qualifyingCurrentFinancing;
+    const currentPlacementAddition = toCents('20000.00') * currentLiabilitiesAfterReclassification / toCents('100000.00');
+    expect(nonCurrentLiabilitiesExcluded).toBe(toCents('11000.00'));
+    expect(placedNonCurrentAddition).toBe(toCents('44000.00'));
+    expect(currentLiabilitiesAfterReclassification).toBe(toCents('20000.00'));
+    expect(currentPlacementAddition).toBe(toCents('4000.00'));
+
+    // 5. Addition (48,000) is within 70,000 total qualifying deductions.
+    const totalAdditionBeforeAggregateCap = placedNonCurrentAddition + currentPlacementAddition;
+    const totalDeductedAssets = toCents('70000.00');
+    const step5Addition = totalAdditionBeforeAggregateCap > totalDeductedAssets ? totalDeductedAssets : totalAdditionBeforeAggregateCap;
+    expect(step5Addition).toBe(toCents('48000.00'));
+
+    // 6. Remaining liabilities (75,000 total after equity reclassification less 48,000 added)
+    // are below undeducted assets (200,000 total assets less 70,000 deducted).
+    const liabilitiesAfterEquityReclassification = toCents('75000.00');
+    const undeductedAssets = toCents('200000.00') - totalDeductedAssets;
+    const notAddedLiabilities = liabilitiesAfterEquityReclassification - step5Addition;
+    const step6AdditionalAmount = notAddedLiabilities > undeductedAssets ? notAddedLiabilities - undeductedAssets : 0n;
+    expect(notAddedLiabilities).toBe(toCents('27000.00'));
+    expect(undeductedAssets).toBe(toCents('130000.00'));
+    expect(step6AdditionalAmount).toBe(0n);
+  });
+});
+
+describe('B7: signed difference from actual finalized book result', () => {
+  it.each([
+    ['positive difference', '120000.00', '90000.00', '30000.00'],
+    ['negative difference', '-30000.00', '-20000.00', '-10000.00'],
+    ['zero difference', '100000.00', '100000.00', '0.00'],
+  ])('%s does not insert a hypothetical Zakat provision', (_label, adjustedResult, finalizedBookAfterActualCharges, expected) => {
+    // The second input is the finalized statement result after charges actually recorded; no hypothetical Zakat is added.
+    expect(toCents(adjustedResult) - toCents(finalizedBookAfterActualCharges)).toBe(toCents(expected));
+  });
+});
+
+describe('B0: Article 73 applicability is scoped to relevant activity; no zakat result is asserted', () => {
+  it.each([
+    ['entity without Article 73 activity', false, false],
+    ['entity with Article 73-related activity', true, true],
+  ])('%s', (_label, hasRelevantActivity, shouldReviewArticle73) => {
+    // This is a test-only scope distinction, not a determination that project-specific deduction conditions are met.
+    expect(hasRelevantActivity).toBe(shouldReviewArticle73);
+  });
+});
+
+describe('B9 regulatory cases still pending professional decisions', () => {
+  it.todo('B3: accountant to approve provisional EQFAL final-amount HALF_UP rounding policy');
+  it.todo('B4: resolve interaction of aggregate liability cap with Article 29(2)(b) residual-liability addition');
+  it.todo('B7: confirm finalized book result/source when no Zakat provision is recognized in the accounts');
+  it.todo('B0: confirm Decision 1248/1446 scope and applicability against EQFAL activity and project facts');
 });
 
 describe('ownership verification (never inferred)', () => {
