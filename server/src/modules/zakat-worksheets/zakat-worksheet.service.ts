@@ -5,6 +5,7 @@ import {
   BalanceAccount, BalancesSnapshot, CLASSIFIABLE_CATEGORIES, ENTITY_CLASSES, GateRow, OWNERSHIP_CLASSES, OwnershipVerification, ZAKAT_TYPES,
   evaluateReadiness, fingerprintOf, toCents, unsupportedPeriodReason, verifyOwnership,
 } from './zakat-worksheet.rules';
+import { previewZakatWorksheet } from './zakat-worksheet.preview';
 
 export class ZakatNotFoundError extends Error {}
 export class ZakatValidationError extends Error { constructor(message: string, readonly code = 'ZAKAT_VALIDATION') { super(message); } }
@@ -130,6 +131,30 @@ export class ZakatWorksheetService {
       classifications: children.classifications, adjustments: children.adjustments, eligibility,
       ownership_live: own.verification, gates, readiness,
     };
+  }
+
+  /** Read-only preview through the isolated component composer; it never calculates payable Zakat. */
+  async preview(company: string, year: string) {
+    const data = await this.get(company, year);
+    const profileCurrency = (await this.db.query<{ functional_currency: string }>(
+      `SELECT functional_currency FROM company_accounting_profiles WHERE company_id=$1 AND workflow_status='approved' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>=$3) AND (tax_effective_from IS NULL OR tax_effective_from<=$2) ORDER BY effective_from DESC, version_no DESC LIMIT 1`,
+      [company, data.scope.fiscal_year.start_date, data.scope.fiscal_year.end_date],
+    )).rows[0]?.functional_currency ?? null;
+    return previewZakatWorksheet({
+      worksheet: data.worksheet,
+      fiscalYear: data.scope.fiscal_year,
+      functionalCurrency: profileCurrency,
+      classifications: data.classifications as unknown as { account_id: string; zakat_type: string; evidence_document_id: string | null }[],
+      adjustments: data.adjustments as unknown as { id: string; description: string; direction: 'add' | 'deduct'; amount: string; evidence_document_id: string | null }[],
+      gates: data.gates,
+      ownershipQualified: data.ownership_live.qualified,
+      ownershipBlockers: data.ownership_live.blockers,
+      readinessBlockers: [
+        ...data.readiness.preparation_blockers,
+        ...data.readiness.gate_blockers,
+        ...(data.scope.unsupported_reason ? [data.scope.unsupported_reason] : []),
+      ],
+    });
   }
 
   // ---------- worksheet lifecycle ----------

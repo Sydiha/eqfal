@@ -6,6 +6,7 @@ const router = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-works
 const migration = readFileSync(new URL('../migrations/105_zakat_worksheets.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '');
 const service = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.service.ts', import.meta.url), 'utf8');
 const rules = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.rules.ts', import.meta.url), 'utf8');
+const preview = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.preview.ts', import.meta.url), 'utf8');
 const cap = (needle: string) => router.split('\n').find((l) => l.includes(needle)) ?? '';
 
 describe('Zakat worksheet route contract', () => {
@@ -15,6 +16,7 @@ describe('Zakat worksheet route contract', () => {
   });
   it.each([
     ["get('/zakat-worksheets/:fiscalYearId'", 'tax_workpaper.view'],
+    ["get('/zakat-worksheets/:fiscalYearId/preview'", 'tax_workpaper.view'],
     ["post('/zakat-worksheets/:fiscalYearId',", 'tax_workpaper.create'],
     ["patch('/zakat-worksheets/:fiscalYearId/declarations'", 'tax_workpaper.edit'],
     ["post('/zakat-worksheets/:fiscalYearId/refresh'", 'tax_workpaper.edit'],
@@ -38,7 +40,13 @@ describe('Zakat worksheet route contract', () => {
   });
   it('requires same-origin protection on every write and never exposes a gate-verification route', () => {
     expect(router).not.toMatch(/regulatory-gates/);
+    expect(cap("get('/zakat-worksheets/:fiscalYearId/preview'")).not.toContain('...write');
     for (const line of router.split('\n').filter((l) => /zakatWorksheetRouter\.(post|put|patch|delete)\(/.test(l))) expect(line).toContain('...write');
+  });
+  it('keeps calculation preview read-only and excludes the final amount engine', () => {
+    expect(preview).toContain('composeZakatBaseComponents');
+    expect(preview).not.toMatch(/calculateZakatBase|payableAmount\s*=/);
+    expect(preview).not.toMatch(/\b(?:INSERT|UPDATE|DELETE)\b/i);
   });
 });
 

@@ -12,6 +12,17 @@ type Classification = { id: string; account_id: string; zakat_type: string; reg_
 type Adjustment = { id: string; description: string; direction: 'add' | 'deduct'; professional_review_required?: boolean; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number };
 type Eligibility = { id: string; partner_id: string; partner_name: string; ownership_class: string; effective_from: string; effective_to: string | null; evidence_document_id: string; verification_status: string; entity_ultimate_ownership_note: string | null; version: number };
 type Gate = { code: string; title: string; blocks_approval: boolean; status: string; article_ref: string };
+type Preview = {
+  status: 'BLOCKED' | 'COMPONENTS_ONLY';
+  calculation_performed: false;
+  final_zakat_base_halalas: null;
+  payable_amount_halalas: null;
+  totals: null | { equityAdditionsHalalas: string; equityReductionsHalalas: string; equityNetHalalas: string; verifiedDeductibleAssetCandidatesHalalas: string; article23ProfitDifferenceHalalas: string };
+  lines: { id: string; component: string; direction: string; amountHalalas: string; includedInComponentTotals: boolean }[];
+  blockers: { code: string; path: string }[];
+  missing_requirements: string[];
+  worksheet_blockers: string[];
+};
 type OwnershipPartner = { partner_id: string; name: string; ownership_bps4: string; eligibility: null | { ownership_class: string; evidence_document_id: string } };
 type Data = {
   scope: { unsupported_reason: string | null; fiscal_year: { start_date: string; end_date: string } };
@@ -20,6 +31,7 @@ type Data = {
   classifications: Classification[]; adjustments: Adjustment[]; eligibility: Eligibility[];
   ownership_live: { qualified: boolean; blockers: string[]; as_of_date: string; total_ownership_bps4: string; partners: OwnershipPartner[] };
   gates: Gate[];
+  preview: Preview;
   readiness: { preparation_blockers: string[]; gate_blockers: string[]; unclassified_account_count: number; can_submit: boolean; can_approve: boolean };
 };
 export type ZakatWorksheetProps = {
@@ -54,10 +66,11 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const blockerLabel = (code: string) => t(`zakatWorksheet.blockers.${code}`, { defaultValue: code });
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/zakat-worksheets/${encodeURIComponent(p.yearId)}`);
-    if (r.status === 401) { p.onUnauthorized(); return; }
-    if (!r.ok) throw new Error();
-    setData((await r.json()) as Data);
+    const base = `/api/zakat-worksheets/${encodeURIComponent(p.yearId)}`;
+    const [r, previewResponse] = await Promise.all([fetch(base), fetch(`${base}/preview`)]);
+    if (r.status === 401 || previewResponse.status === 401) { p.onUnauthorized(); return; }
+    if (!r.ok || !previewResponse.ok) throw new Error();
+    setData({ ...(await r.json() as Omit<Data, 'preview'>), preview: await previewResponse.json() as Preview });
   }, [p.yearId]);
   useEffect(() => {
     if (!open || !p.yearId) return;
@@ -98,6 +111,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const classByAccount = new Map(data.classifications.map((c) => [c.account_id, c]));
   const accounts = (w?.balances_snapshot?.accounts ?? []).filter((a) => CLASSIFIABLE.includes(a.statement_category));
   const r = data.readiness;
+  const previewRequirementLabel = (key: string) => t(`zakatWorksheet.previewRequirements.${key}`, { defaultValue: t('zakatWorksheet.previewRequirements.unknown') });
 
   const addEligibility = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
@@ -136,6 +150,24 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         {r.preparation_blockers.length === 0 ? <p>{t('zakatWorksheet.noPrepBlockers')}</p> : <><p>{t('zakatWorksheet.prepBlockers')}</p><ul>{r.preparation_blockers.map((c) => <li key={c}>{blockerLabel(c)}</li>)}</ul></>}
         <div className="table-wrap"><table className="ac-table"><caption className="zw-caption">{t('zakatWorksheet.gatesTitle')}</caption><thead><tr><th>{t('zakatWorksheet.gate')}</th><th>{t('zakatWorksheet.reference')}</th><th>{t('zakatWorksheet.statusLabel')}</th><th>{t('zakatWorksheet.blocksApproval')}</th></tr></thead>
           <tbody>{data.gates.map((g) => <tr key={g.code}><td>{t(`zakatWorksheet.gates.${g.code}`, { defaultValue: g.title })}</td><td>{g.article_ref}</td><td><span className={`ac-badge ${g.status === 'verified' ? 'ac-badge--ok' : 'ac-badge--warn'}`}>{t(`zakatWorksheet.gateStatus.${g.status}`)}</span></td><td>{g.blocks_approval ? t('zakatWorksheet.yes') : t('zakatWorksheet.no')}</td></tr>)}</tbody></table></div>
+      </div>
+
+      <div className="zw-card zw-preview" dir={ar ? 'rtl' : 'ltr'} aria-labelledby="zw-preview-title">
+        <h4 id="zw-preview-title">{t('zakatWorksheet.previewTitle')}</h4>
+        <p className="zw-muted">{t('zakatWorksheet.previewIntro')}</p>
+        {data.preview.status === 'BLOCKED' ? <>
+          <p className="zw-preview-status" role="status">{t('zakatWorksheet.previewBlocked')}</p>
+          {data.preview.missing_requirements.length > 0 && <ul className="zw-preview-requirements">{data.preview.missing_requirements.map((key) => <li key={key}>{previewRequirementLabel(key)}</li>)}</ul>}
+          {data.preview.worksheet_blockers.length > 0 && <><p>{t('zakatWorksheet.prepBlockers')}</p><ul className="zw-preview-requirements">{data.preview.worksheet_blockers.map((code) => <li key={code}>{blockerLabel(code)}</li>)}</ul></>}
+          {data.preview.blockers.length > 0 && <details><summary>{t('zakatWorksheet.previewValidationDetails')}</summary><ul>{data.preview.blockers.map((item, index) => <li key={`${item.code}-${item.path}-${index}`}><bdi>{item.code}</bdi> — <bdi>{item.path}</bdi></li>)}</ul></details>}
+        </> : <>
+          <p className="zw-preview-status">{t('zakatWorksheet.previewComponentsOnly')}</p>
+          <div className="zw-preview-lines">{data.preview.lines.map((line) => <div className="zw-preview-line" key={line.id}>
+            <span>{t(`zakatWorksheet.previewComponents.${line.component}`, { defaultValue: line.component })}</span>
+            <bdi className="zw-num">{money(line.amountHalalas)}</bdi>
+          </div>)}</div>
+        </>}
+        <p className="zw-muted">{t('zakatWorksheet.previewNoPayable')}</p>
       </div>
 
       <div className="zw-card">

@@ -39,6 +39,7 @@ const guard = (check: (b: Record<string, unknown>) => boolean, fn: Handler, stat
 const fy = (req: Request) => String(req.params['fiscalYearId']);
 
 zakatWorksheetRouter.get('/zakat-worksheets/:fiscalYearId', ...base, requireCapability('tax_workpaper.view'), run(200, (s, req, c) => s.get(c, fy(req))));
+zakatWorksheetRouter.get('/zakat-worksheets/:fiscalYearId/preview', ...base, requireCapability('tax_workpaper.view'), run(200, (s, req, c) => s.preview(c, fy(req))));
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId', ...write, requireCapability('tax_workpaper.create'), run(201, (s, req, c, u) => s.create(c, fy(req), u)));
 zakatWorksheetRouter.patch('/zakat-worksheets/:fiscalYearId/declarations', ...write, requireCapability('tax_workpaper.edit'),
   guard((b) => only(b, ['non_financing_confirmed', 'accounting_records_confirmed', 'version']) && typeof b['non_financing_confirmed'] === 'boolean' && typeof b['accounting_records_confirmed'] === 'boolean' && versionOf(b) !== null,
