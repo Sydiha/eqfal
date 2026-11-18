@@ -22,6 +22,7 @@ type Preview = {
   blockers: { code: string; path: string }[];
   missing_requirements: string[];
   worksheet_blockers: string[];
+  blocker_groups: { user_data: string[]; mapping: string[]; regulatory_review: string[] };
 };
 type OwnershipPartner = { partner_id: string; name: string; ownership_bps4: string; eligibility: null | { ownership_class: string; evidence_document_id: string } };
 type Data = {
@@ -111,7 +112,22 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const classByAccount = new Map(data.classifications.map((c) => [c.account_id, c]));
   const accounts = (w?.balances_snapshot?.accounts ?? []).filter((a) => CLASSIFIABLE.includes(a.statement_category));
   const r = data.readiness;
-  const previewRequirementLabel = (key: string) => t(`zakatWorksheet.previewRequirements.${key}`, { defaultValue: t('zakatWorksheet.previewRequirements.unknown') });
+  const previewGateRows: Gate[] = data.preview.blocker_groups.regulatory_review
+    .filter((code) => code.startsWith('B'))
+    .map((code) => data.gates.find((gate) => gate.code === code) ?? { code, title: code, article_ref: '—', blocks_approval: true, status: 'unverified' });
+  const previewBlockerLabel = (key: string) => t(`zakatWorksheet.previewRequirements.${key}`, { defaultValue: blockerLabel(key) });
+  const previewAction = (key: string): { href: string; label: string } | null => {
+    const targets: Record<string, string> = {
+      worksheet: 'worksheet', balances_not_captured: 'worksheet',
+      scope_declaration_missing: 'declarations', account_classifications: 'classification', classification_mapping: 'classification',
+      categorized_adjustments: 'adjustments', ownership_eligibility: 'ownership',
+      balances_source_drift: 'worksheet', ownership_source_drift: 'worksheet',
+    };
+    const target = targets[key];
+    if (!target) return null;
+    const action = key === 'balances_source_drift' || key === 'ownership_source_drift' ? 'refresh' : key === 'classification_mapping' ? 'correctMapping' : target;
+    return { href: `#zakat-${target}`, label: t(`zakatWorksheet.previewActions.${action}`) };
+  };
 
   const addEligibility = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
@@ -146,10 +162,6 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
       <div className="zw-card" role="status">
         <h4>{t('zakatWorksheet.readinessTitle')}</h4>
         <p><strong>{t('zakatWorksheet.payableWithheld')}</strong></p>
-        {data.scope.unsupported_reason && <p className="zw-error">{blockerLabel(data.scope.unsupported_reason)}</p>}
-        {r.preparation_blockers.length === 0 ? <p>{t('zakatWorksheet.noPrepBlockers')}</p> : <><p>{t('zakatWorksheet.prepBlockers')}</p><ul>{r.preparation_blockers.map((c) => <li key={c}>{blockerLabel(c)}</li>)}</ul></>}
-        <div className="table-wrap"><table className="ac-table"><caption className="zw-caption">{t('zakatWorksheet.gatesTitle')}</caption><thead><tr><th>{t('zakatWorksheet.gate')}</th><th>{t('zakatWorksheet.reference')}</th><th>{t('zakatWorksheet.statusLabel')}</th><th>{t('zakatWorksheet.blocksApproval')}</th></tr></thead>
-          <tbody>{data.gates.map((g) => <tr key={g.code}><td>{t(`zakatWorksheet.gates.${g.code}`, { defaultValue: g.title })}</td><td>{g.article_ref}</td><td><span className={`ac-badge ${g.status === 'verified' ? 'ac-badge--ok' : 'ac-badge--warn'}`}>{t(`zakatWorksheet.gateStatus.${g.status}`)}</span></td><td>{g.blocks_approval ? t('zakatWorksheet.yes') : t('zakatWorksheet.no')}</td></tr>)}</tbody></table></div>
       </div>
 
       <div className="zw-card zw-preview" dir={ar ? 'rtl' : 'ltr'} aria-labelledby="zw-preview-title">
@@ -157,9 +169,14 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <p className="zw-muted">{t('zakatWorksheet.previewIntro')}</p>
         {data.preview.status === 'BLOCKED' ? <>
           <p className="zw-preview-status" role="status">{t('zakatWorksheet.previewBlocked')}</p>
-          {data.preview.missing_requirements.length > 0 && <ul className="zw-preview-requirements">{data.preview.missing_requirements.map((key) => <li key={key}>{previewRequirementLabel(key)}</li>)}</ul>}
-          {data.preview.worksheet_blockers.length > 0 && <><p>{t('zakatWorksheet.prepBlockers')}</p><ul className="zw-preview-requirements">{data.preview.worksheet_blockers.map((code) => <li key={code}>{blockerLabel(code)}</li>)}</ul></>}
-          {data.preview.blockers.length > 0 && <details><summary>{t('zakatWorksheet.previewValidationDetails')}</summary><ul>{data.preview.blockers.map((item, index) => <li key={`${item.code}-${item.path}-${index}`}><bdi>{item.code}</bdi> — <bdi>{item.path}</bdi></li>)}</ul></details>}
+          {data.preview.blocker_groups.user_data.length > 0 && <section aria-labelledby="zw-user-data-title"><h5 id="zw-user-data-title">{t('zakatWorksheet.blockerSections.userData')}</h5><ul className="zw-preview-requirements">{data.preview.blocker_groups.user_data.map((key) => <li key={key}>{previewBlockerLabel(key)} {previewAction(key) && <>— <a href={previewAction(key)!.href}>{previewAction(key)!.label}</a></>}</li>)}</ul>{data.preview.blocker_groups.user_data.some((key) => !previewAction(key)) && <p className="zw-muted">{t('zakatWorksheet.previewNoAction')}</p>}</section>}
+          {data.preview.blocker_groups.mapping.length > 0 && <section aria-labelledby="zw-mapping-title"><h5 id="zw-mapping-title">{t('zakatWorksheet.blockerSections.mapping')}</h5><ul className="zw-preview-requirements">{data.preview.blocker_groups.mapping.map((key) => <li key={key}>{previewBlockerLabel(key)} {previewAction(key) && <>— <a href={previewAction(key)!.href}>{previewAction(key)!.label}</a></>}</li>)}</ul></section>}
+          {data.preview.blocker_groups.regulatory_review.length > 0 && <section aria-labelledby="zw-regulatory-title"><h5 id="zw-regulatory-title">{t('zakatWorksheet.blockerSections.regulatory')}</h5>
+            <p className="zw-muted">{t('zakatWorksheet.previewAuthorizedReview')}</p>
+            {data.preview.blocker_groups.regulatory_review.includes('regulatory_decision_evidence') && <p>{previewBlockerLabel('regulatory_decision_evidence')}</p>}
+            <div className="table-wrap"><table className="ac-table"><caption className="zw-caption">{t('zakatWorksheet.gatesTitle')}</caption><thead><tr><th>{t('zakatWorksheet.gate')}</th><th>{t('zakatWorksheet.reference')}</th><th>{t('zakatWorksheet.statusLabel')}</th><th>{t('zakatWorksheet.blocksApproval')}</th></tr></thead>
+              <tbody>{previewGateRows.map((g) => <tr key={g.code}><td>{t(`zakatWorksheet.gates.${g.code}`, { defaultValue: g.title })}</td><td><bdi>{g.article_ref}</bdi></td><td><span className={`ac-badge ${g.status === 'verified' ? 'ac-badge--ok' : 'ac-badge--warn'}`}>{t(`zakatWorksheet.gateStatus.${g.status}`)}</span></td><td>{g.blocks_approval ? t('zakatWorksheet.yes') : t('zakatWorksheet.no')}</td></tr>)}</tbody></table></div>
+          </section>}
         </> : <>
           <p className="zw-preview-status">{t('zakatWorksheet.previewComponentsOnly')}</p>
           <div className="zw-preview-lines">{data.preview.lines.map((line) => <div className="zw-preview-line" key={line.id}>
@@ -170,10 +187,9 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <p className="zw-muted">{t('zakatWorksheet.previewNoPayable')}</p>
       </div>
 
-      <div className="zw-card">
+      <div className="zw-card" id="zakat-ownership">
         <h4>{t('zakatWorksheet.ownershipTitle')}</h4>
         <p>{t('zakatWorksheet.asOf')}: <bdi>{data.ownership_live.as_of_date}</bdi> · <span className={`ac-badge ${data.ownership_live.qualified ? 'ac-badge--ok' : 'ac-badge--bad'}`}>{data.ownership_live.qualified ? t('zakatWorksheet.qualified') : t('zakatWorksheet.notQualified')}</span></p>
-        {data.ownership_live.blockers.length > 0 && <ul>{data.ownership_live.blockers.map((c) => <li key={c}>{blockerLabel(c)}</li>)}</ul>}
         {data.ownership_live.partners.length > 0 && <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.partner')}</th><th>{t('zakatWorksheet.percent')}</th><th>{t('zakatWorksheet.ownershipClass')}</th></tr></thead>
           <tbody>{data.ownership_live.partners.map((o) => <tr key={o.partner_id}><td>{o.name}</td><td>{pct(o.ownership_bps4)}%</td><td>{o.eligibility ? t(`zakatWorksheet.classes.${o.eligibility.ownership_class}`) : t('zakatWorksheet.noEligibility')}</td></tr>)}</tbody></table></div>}
         <h5>{t('zakatWorksheet.eligibilityTitle')}</h5>
@@ -196,12 +212,12 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         </form>}
       </div>
 
-      <div className="zw-card">
+      <div className="zw-card" id="zakat-worksheet">
         <h4>{t('zakatWorksheet.worksheetTitle')}</h4>
         {!w ? <>{p.canCreate && !data.scope.unsupported_reason && <button type="button" className="ac-btn ac-btn--primary" disabled={busy} onClick={() => void ws('', 'POST', {})}>{t('zakatWorksheet.create')}</button>}{!p.canCreate && <p className="zw-muted">{t('zakatWorksheet.notStarted')}</p>}</> : <>
           <p>{t('zakatWorksheet.revision')} <bdi>{w.revision_no}</bdi> · <span className="ac-badge">{t(`zakatWorksheet.statuses.${w.status}`)}</span>{w.revision_reason && <> · {t('zakatWorksheet.revisionReason')}: {w.revision_reason}</>}</p>
           {w.snapshot_captured_at && <p className="zw-muted">{t('zakatWorksheet.capturedAt')}: <bdi>{w.snapshot_captured_at}</bdi></p>}
-          <fieldset disabled={!draft || !p.canEdit || busy}><legend>{t('zakatWorksheet.declarations')}</legend>
+          <fieldset id="zakat-declarations" disabled={!draft || !p.canEdit || busy}><legend>{t('zakatWorksheet.declarations')}</legend>
             <label><input type="checkbox" checked={w.non_financing_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: e.target.checked, accounting_records_confirmed: w.accounting_records_confirmed, version: w.version })} /> {t('zakatWorksheet.nonFinancing')}</label>
             <label><input type="checkbox" checked={w.accounting_records_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: w.non_financing_confirmed, accounting_records_confirmed: e.target.checked, version: w.version })} /> {t('zakatWorksheet.accountingRecords')}</label>
           </fieldset>
@@ -209,7 +225,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         </>}
       </div>
 
-      {w && <div className="zw-card">
+      {w && <div className="zw-card" id="zakat-classification">
         <h4>{t('zakatWorksheet.classTitle')}</h4>
         <p className="zw-muted">{t('zakatWorksheet.classHelp')}</p>
         <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
@@ -224,7 +240,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
               </form> : c ? <span>{t(`zakatWorksheet.types.${c.zakat_type}`)} — <bdi>{c.reg_article}</bdi></span> : <span className="ac-badge ac-badge--warn">{t('zakatWorksheet.unclassified')}</span>}</td></tr>); })}</tbody></table></div>
       </div>}
 
-      {w && <div className="zw-card">
+      {w && <div className="zw-card" id="zakat-adjustments">
         <h4>{t('zakatWorksheet.adjTitle')}</h4>
         {data.adjustments.length === 0 ? <p className="zw-muted">{t('zakatWorksheet.noAdjustments')}</p> :
           <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.description')}</th><th>{t('zakatWorksheet.direction')}</th><th>{t('zakatWorksheet.amount')}</th><th>{t('zakatWorksheet.article')}</th><th>{t('zakatWorksheet.evidence')}</th><th /></tr></thead>

@@ -117,7 +117,9 @@ export type BalancesSnapshot = { as_of_date: string; accounts: BalanceAccount[];
 
 export function unclassifiedAccounts(balances: BalancesSnapshot | null, classified: Set<string>) {
   if (!balances) return [];
-  return balances.accounts.filter((a) => CLASSIFIABLE_CATEGORIES.includes(a.statement_category) && BigInt(a.amount_cents) !== 0n && !classified.has(a.account_id));
+  // Classification is a review decision about the account, not a treatment of its
+  // current balance. Zero balances stay in scope and must follow the same validated rules.
+  return balances.accounts.filter((a) => CLASSIFIABLE_CATEGORIES.includes(a.statement_category) && !classified.has(a.account_id));
 }
 
 export type GateRow = { code: string; title: string; article_ref: string; blocks_approval: boolean; status: string; verified_by_name: string | null; verified_on: string | null; verification_reference: string | null };

@@ -13,7 +13,7 @@ const payload = (over: object = {}, amountCents = '1234500') => ({
   ownership_live: { qualified: false, blockers: ['no_confirmed_ownership'], as_of_date: '2026-12-31', total_ownership_bps4: '0', partners: [] },
   gates,
   readiness: { preparation_blockers: ['unclassified_balance'], gate_blockers: ['B0_amendment_1248'], unclassified_account_count: 1, can_submit: false, can_approve: false },
-  preview: { status: 'BLOCKED', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: null, lines: [], blockers: [{ code: 'FINALIZED_BOOK_RESULT_REQUIRED', path: 'finalizedBookResult' }], missing_requirements: ['finalized_book_result', 'regulatory_gates'], worksheet_blockers: ['no_confirmed_ownership'] },
+  preview: { status: 'BLOCKED', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: null, lines: [], blockers: [{ code: 'FINALIZED_BOOK_RESULT_REQUIRED', path: 'finalizedBookResult' }], missing_requirements: ['finalized_book_result', 'regulatory_gates'], worksheet_blockers: ['no_confirmed_ownership'], blocker_groups: { user_data: ['account_classifications', 'ownership_eligibility', 'finalized_book_result'], mapping: ['balances_source_drift', 'classification_mapping'], regulatory_review: ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval', 'regulatory_decision_evidence'] } },
   ...over,
 });
 const mockFetch = (amountCents?: string) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (u) => {
@@ -32,7 +32,9 @@ describe('Zakat worksheet', () => {
   it('shows blockers and gates, withholds any payable amount, and disables submit/approve', async () => {
     mockFetch(); render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     await waitFor(() => expect(screen.getByText(/Zakat payable is withheld/)).toBeTruthy());
-    expect(screen.getByText('Some balances are unclassified')).toBeTruthy();
+    expect(screen.getByText(/Classify every in-scope account, including zero-balance accounts/)).toBeTruthy();
+    expect(screen.getAllByText(/Classify every in-scope account, including zero-balance accounts/)).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Review account classifications' }).getAttribute('href')).toBe('#zakat-classification');
     expect(screen.getByText('B3 – Rounding rules')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Submit for review' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/payable amount:/i)).toBeNull();
@@ -41,12 +43,18 @@ describe('Zakat worksheet', () => {
     expect(screen.getByText('A finalized book result with evidence and actually recorded Zakat/tax charges is required.')).toBeTruthy();
     expect(screen.queryByText(/Equity component/)).toBeNull();
     expect(screen.getByLabelText('Professional review required')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Missing user-provided data' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Data mapping issues' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Refresh worksheet snapshots' }).getAttribute('href')).toBe('#zakat-worksheet');
+    expect(screen.getByRole('link', { name: 'Correct unsupported mapping' }).getAttribute('href')).toBe('#zakat-classification');
+    expect(screen.getByRole('heading', { name: 'Authorized regulatory review' })).toBeTruthy();
+    expect(screen.getByText('Only the authorized accountant may resolve regulatory decisions.')).toBeTruthy();
   });
   it('renders a component breakdown only when the preview explicitly returns validated components', async () => {
     const f = mockFetch();
     f.mockImplementation(async (u) => {
       if (String(u).includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
-      if (String(u).includes('/preview')) return new Response(JSON.stringify({ status: 'COMPONENTS_ONLY', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: { equityAdditionsHalalas: '123456', equityReductionsHalalas: '0', equityNetHalalas: '123456', verifiedDeductibleAssetCandidatesHalalas: '0', article23ProfitDifferenceHalalas: '0' }, lines: [{ id: 'account-capital', component: 'equity', direction: 'addition', amountHalalas: '123456', includedInComponentTotals: true }], blockers: [], missing_requirements: [], worksheet_blockers: [] }));
+      if (String(u).includes('/preview')) return new Response(JSON.stringify({ status: 'COMPONENTS_ONLY', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: { equityAdditionsHalalas: '123456', equityReductionsHalalas: '0', equityNetHalalas: '123456', verifiedDeductibleAssetCandidatesHalalas: '0', article23ProfitDifferenceHalalas: '0' }, lines: [{ id: 'account-capital', component: 'equity', direction: 'addition', amountHalalas: '123456', includedInComponentTotals: true }], blockers: [], missing_requirements: [], worksheet_blockers: [], blocker_groups: { user_data: [], mapping: [], regulatory_review: [] } }));
       return new Response(JSON.stringify(payload()));
     });
     render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
@@ -60,6 +68,8 @@ describe('Zakat worksheet', () => {
     await waitFor(() => expect(screen.getByText(/مبلغ الزكاة المستحق محجوب/)).toBeTruthy());
     expect(screen.getByText('B3 – قواعد التقريب')).toBeTruthy(); expect(screen.getByText('B9 – اعتماد المحاسب للحالات المرجعية')).toBeTruthy(); expect(screen.getByText('النقدية', { exact: false })).toBeTruthy();
     expect(screen.getByText(/محظور — توجد مدخلات مطلوبة أو متحققة مفقودة/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'بيانات مطلوبة من المستخدم' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'مراجعة تصنيفات الحسابات' }).getAttribute('href')).toBe('#zakat-classification');
     expect(screen.getByText('يلزم نتيجة دفترية نهائية مع أدلتها والرسوم الزكوية/الضريبية المسجلة فعلياً.')).toBeTruthy();
   });
   it('renders the stored English account name in English UI and falls back for legacy snapshots', async () => {

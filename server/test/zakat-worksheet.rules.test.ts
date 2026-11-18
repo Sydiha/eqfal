@@ -187,7 +187,7 @@ describe('readiness', () => {
     { account_id: 'x2', code: '2', name: 'Zero', name_ar: null, statement_category: 'current_asset', account_type: 'asset', is_contra: false, amount_cents: '0' },
     { account_id: 'x3', code: '3', name: 'Rev', name_ar: null, statement_category: 'revenue', account_type: 'revenue', is_contra: false, amount_cents: '50' },
   ] };
-  const input = (over = {}) => ({ ownership: verifyOwnership(base()), periodReason: null, declarationsOk: true, balances, classifiedAccountIds: new Set(['x1']), balancesDrift: false, ownershipDrift: false, gates: [...REQUIRED_BLOCKING_GATES.map((c) => gate(c, true)), gate('B1', false)], ...over });
+  const input = (over = {}) => ({ ownership: verifyOwnership(base()), periodReason: null, declarationsOk: true, balances, classifiedAccountIds: new Set(['x1', 'x2']), balancesDrift: false, ownershipDrift: false, gates: [...REQUIRED_BLOCKING_GATES.map((c) => gate(c, true)), gate('B1', false)], ...over });
   it('never reports an amount and keeps approval blocked while a blocking gate is unverified', () => {
     const r = evaluateReadiness(input());
     expect(r).toMatchObject({ preparation_blockers: [], gate_blockers: [...REQUIRED_BLOCKING_GATES].sort(), can_submit: true, can_approve: false, calculation_performed: false, payable_amount: null, payable_amount_status: 'withheld_regulatory_gates' });
@@ -206,8 +206,12 @@ describe('readiness', () => {
   it('blocks submission while an investment deduction classification exists', () => {
     expect(evaluateReadiness(input({ investmentClassifications: 1 })).preparation_blockers).toEqual(['unsupported_investment_deduction']);
   });
-  it('requires classification only for non-zero balance-sheet accounts and reports each preparation blocker', () => {
-    expect(evaluateReadiness(input({ classifiedAccountIds: new Set() })).preparation_blockers).toEqual(['unclassified_balance']);
+  it('requires a validated classification for every in-scope account, including zero-balance accounts', () => {
+    const result = evaluateReadiness(input({ classifiedAccountIds: new Set(['x1']) }));
+    expect(result.preparation_blockers).toEqual(['unclassified_balance']);
+    expect(result.unclassified_account_count).toBe(1);
+  });
+  it('reports each preparation blocker', () => {
     const r = evaluateReadiness(input({ declarationsOk: false, balances: null, periodReason: 'fiscal_year_not_12_months', balancesDrift: true, ownershipDrift: true }));
     expect(r.preparation_blockers).toEqual(['balances_not_captured', 'balances_source_drift', 'fiscal_year_not_12_months', 'ownership_source_drift', 'scope_declaration_missing']);
     expect(r.can_submit).toBe(false);

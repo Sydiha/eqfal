@@ -31,6 +31,38 @@ describe('read-only Zakat worksheet preview', () => {
       expect.objectContaining({ code: 'FINALIZED_BOOK_RESULT_REQUIRED' }),
       expect.objectContaining({ code: 'ARTICLE_73_ASSESSMENT_REQUIRED' }),
     ]));
+    expect(result.blocker_groups.user_data).toContain('finalized_book_result');
+    expect(result.blocker_groups.regulatory_review).toEqual(expect.arrayContaining([
+      'B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval',
+    ]));
+    expect(result.blocker_groups.regulatory_review).toContain('regulatory_decision_evidence');
+  });
+
+  it('keeps an unclassified zero-balance account blocked under the worksheet classification rules', () => {
+    const result = previewZakatWorksheet({
+      worksheet: { id: 'synthetic-fy27-worksheet', balances_snapshot: { accounts: [account('zero-cash', 'current_asset', '0')] } },
+      fiscalYear: { start_date: '2027-01-01', end_date: '2027-12-31' }, functionalCurrency: 'SAR',
+      classifications: [], adjustments: [], gates: [], ownershipQualified: true, ownershipBlockers: [], readinessBlockers: [],
+    });
+    expect(result.status).toBe('BLOCKED');
+    expect(result.missing_requirements).toContain('account_classifications');
+    expect(result.blocker_groups.user_data).toEqual(expect.arrayContaining(['account_classifications']));
+    expect(result.blocker_groups.user_data).not.toContain('unclassified_balance');
+    expect(result.final_zakat_base_halalas).toBeNull();
+    expect(result.payable_amount_halalas).toBeNull();
+  });
+
+  it('does not map negative retained earnings to a verified carried-forward loss', () => {
+    const result = previewZakatWorksheet({
+      worksheet: { id: 'synthetic-fy27-worksheet', balances_snapshot: { accounts: [account('loss', 'equity', '-10000')] } },
+      fiscalYear: { start_date: '2027-01-01', end_date: '2027-12-31' }, functionalCurrency: 'SAR',
+      classifications: [{ account_id: 'loss', zakat_type: 'retained_earnings', evidence_document_id: null }],
+      adjustments: [], gates: [], ownershipQualified: true, ownershipBlockers: [], readinessBlockers: [],
+    });
+    expect(result.blockers).toContainEqual(expect.objectContaining({ code: 'CARRIED_FORWARD_LOSS_NOT_RECONCILED' }));
+    expect(result.blocker_groups.user_data).toContain('loss_reconciliation');
+    expect(result.status).toBe('BLOCKED');
+    expect(result.payable_amount_halalas).toBeNull();
   });
 
   it('does not infer the required SAR source from a non-SAR functional currency', () => {

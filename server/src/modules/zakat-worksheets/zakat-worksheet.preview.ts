@@ -1,6 +1,6 @@
 import { composeZakatBaseComponents, type CompositionLine, type CompositionTotals } from '../zakat-calculation/zakat-base-composition';
 import { ZAKAT_CALCULATION_INPUT_VERSION } from '../zakat-calculation/calculation-input';
-import type { BalanceAccount } from './zakat-worksheet.rules';
+import { REQUIRED_BLOCKING_GATES, type BalanceAccount } from './zakat-worksheet.rules';
 
 type WorksheetClassification = {
   account_id: string;
@@ -36,6 +36,7 @@ export type ZakatWorksheetPreview = {
   blockers: { code: string; path: string }[];
   missing_requirements: string[];
   worksheet_blockers: string[];
+  blocker_groups: { user_data: string[]; mapping: string[]; regulatory_review: string[] };
 };
 
 const CATEGORIES = ['current_asset', 'non_current_asset', 'current_liability', 'non_current_liability', 'equity'] as const;
@@ -106,19 +107,51 @@ export function previewZakatWorksheet(input: PreviewInput): ZakatWorksheetPrevie
   if (!worksheet) missing.add('worksheet');
   if (input.functionalCurrency !== 'SAR') missing.add('functional_currency_sar');
   missing.add('activity_period');
-  if (input.gates.some((gate) => gate.status !== 'verified')) missing.add('regulatory_gates');
+  const gateByCode = new Map(input.gates.map((gate) => [gate.code, gate]));
+  if (REQUIRED_BLOCKING_GATES.some((code) => gateByCode.get(code)?.status !== 'verified') || input.gates.some((gate) => gate.status !== 'verified')) missing.add('regulatory_gates');
   if (!input.ownershipQualified) missing.add('ownership_eligibility');
-  if ((snapshot?.accounts ?? []).some((account) => !classifications.has(account.account_id) && BigInt(account.amount_cents) !== 0n)) missing.add('account_classifications');
+  if ((snapshot?.accounts ?? []).some((account) => !classifications.has(account.account_id))) missing.add('account_classifications');
   if (input.adjustments.length > 0) missing.add('categorized_adjustments');
   for (const blocker of result.blockers) {
     if (blocker.code === 'ACCOUNT_DECISION_REFERENCE_REQUIRED' || blocker.code === 'INVALID_ACCOUNT_DECISION_REFERENCE' || blocker.code === 'REGULATORY_DECISION_REFERENCE_REQUIRED') missing.add('regulatory_decision_evidence');
     if (blocker.code.includes('EVIDENCE_REQUIRED')) missing.add('supporting_evidence');
     if (blocker.code === 'ARTICLE15_ACTIVITY_PERIOD_REQUIRED') missing.add('activity_period');
     if (blocker.code === 'UNSUPPORTED_CLASSIFICATION_COMPONENT' || blocker.code === 'UNRESOLVED_CLASSIFICATION_COMPONENT') missing.add('classification_mapping');
+    if (blocker.code === 'CARRIED_FORWARD_LOSS_NOT_RECONCILED') missing.add('loss_reconciliation');
   }
   // More source inputs are not represented in this worksheet's current contract.
   for (const requirement of ['finalized_book_result', 'adjusted_profit', 'liability_reclassifications', 'asset_allocations', 'article73_assessment', 'regulatory_decision_evidence']) missing.add(requirement);
   const worksheetBlockers = [...new Set([...input.ownershipBlockers, ...input.readinessBlockers])].sort();
+  const userData = new Set<string>();
+  const mapping = new Set<string>();
+  const regulatoryReview = new Set<string>();
+  const regulatoryKeys = new Set(['regulatory_gates', 'regulatory_decision_evidence']);
+  const mappingKeys = new Set(['classification_mapping']);
+  for (const requirement of missing) {
+    if (regulatoryKeys.has(requirement)) regulatoryReview.add(requirement);
+    else if (mappingKeys.has(requirement)) mapping.add(requirement);
+    else userData.add(requirement);
+  }
+  for (const code of REQUIRED_BLOCKING_GATES) if (gateByCode.get(code)?.status !== 'verified') regulatoryReview.add(code);
+  for (const gate of input.gates) if (gate.status !== 'verified') regulatoryReview.add(gate.code);
+  for (const blocker of result.blockers) {
+    if (['UNSUPPORTED_CLASSIFICATION', 'UNRESOLVED_CLASSIFICATION_COMPONENT', 'CLASSIFICATION_CATEGORY_MISMATCH', 'BALANCE_SIGN_MISMATCH', 'STATEMENT_TOTAL_MISMATCH'].includes(blocker.code)) {
+      mapping.add('classification_mapping');
+    }
+    if (blocker.code.includes('DECISION_REFERENCE') || blocker.code === 'REGULATORY_DECISION_REFERENCE_REQUIRED') regulatoryReview.add('regulatory_decision_evidence');
+  }
+  for (const blocker of worksheetBlockers) {
+    if (blocker === 'balances_source_drift' || blocker === 'ownership_source_drift') mapping.add(blocker);
+    else if (blocker.startsWith('B')) regulatoryReview.add(blocker);
+    else if (blocker === 'unclassified_balance') userData.add('account_classifications');
+    else if (blocker === 'balances_not_captured') userData.add('worksheet');
+    else if (blocker.startsWith('partner_') || blocker.startsWith('ownership_') || blocker === 'no_confirmed_ownership' || blocker === 'zakat_path_not_approved' || blocker === 'profile_ownership_context_not_saudi_gcc') userData.add('ownership_eligibility');
+    else userData.add(blocker);
+  }
+  // A worksheet-level blocker and preview requirement may describe the same action.
+  const normalizedUserData = [...userData].filter((key) =>
+    !(key === 'unclassified_balance' && userData.has('account_classifications')) &&
+    !(key === 'balances_not_captured' && userData.has('worksheet')));
   const componentsReady = result.status === 'COMPONENTS_ONLY' && input.functionalCurrency === 'SAR' && missing.size === 0 && worksheetBlockers.length === 0;
   const status = componentsReady ? 'COMPONENTS_ONLY' : 'BLOCKED';
   return {
@@ -131,5 +164,10 @@ export function previewZakatWorksheet(input: PreviewInput): ZakatWorksheetPrevie
     blockers: result.blockers.map(({ code, path }) => ({ code, path })),
     missing_requirements: [...missing].sort(),
     worksheet_blockers: worksheetBlockers,
+    blocker_groups: {
+      user_data: normalizedUserData.sort(),
+      mapping: [...mapping].sort(),
+      regulatory_review: [...regulatoryReview].sort(),
+    },
   };
 }
