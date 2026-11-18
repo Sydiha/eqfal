@@ -286,3 +286,14 @@ describe('isolated end-to-end Zakat base engine', () => {
     expect(codes(calculateZakatBase(missingArticle73))).toContain('ARTICLE_73_ASSESSMENT_REQUIRED');
   });
 });
+
+describe('direct finalization boundary', () => {
+  it('rejects a fabricated reviewed input without a persisted worksheet approval context', async () => {
+    const { calculateApprovedZakatBase } = await import('../src/modules/zakat-calculation/zakat-base-engine');
+    const data = input();
+    zeroLiabilities(data);
+    const fakeClient = { query: async () => ({ rows: [] }) };
+    const result = await calculateApprovedZakatBase(fakeClient as never, 'company', 'year', 'worksheet', 'actor', ...[data, { finalRounding: 'HALF_UP' }, 0n] as []);
+    expect(result).toMatchObject({ status: 'BLOCKED', inputAssertionsAuthenticated: false, finalZakatBaseHalalas: null, payableAmountHalalas: null, exemptionCode: null });
+  });
+});

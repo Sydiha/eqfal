@@ -40,13 +40,13 @@ export type ZakatWorksheetPreview = {
 };
 
 const CATEGORIES = ['current_asset', 'non_current_asset', 'current_liability', 'non_current_liability', 'equity'] as const;
-const toSar = (cents: string) => {
+export const toSar = (cents: string) => {
   const amount = BigInt(cents);
   const sign = amount < 0n ? '-' : '';
   const absolute = amount < 0n ? -amount : amount;
   return `${sign}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
 };
-const actualDays = (start: string, end: string) => {
+export const actualDays = (start: string, end: string) => {
   const first = Date.parse(`${start}T00:00:00Z`);
   const last = Date.parse(`${end}T00:00:00Z`);
   return Number.isFinite(first) && Number.isFinite(last) && last >= first ? Math.floor((last - first) / 86_400_000) + 1 : undefined;

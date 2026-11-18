@@ -3,10 +3,9 @@ import { useTranslation } from 'react-i18next';
 import './ZakatWorksheet.css';
 import { formatMinorUnits } from '../money-format';
 import { localizedAccountName } from './accounting-contracts';
+import { ZakatRegulatoryReview, type RegulatoryState } from './ZakatRegulatoryReview';
 import { Dialog } from './Dialog';
 
-// G6-1 preparation workflow inside the existing TaxWorkpaper page. It never shows a Zakat payable amount: the calculation is withheld
-// until the regulatory gates are verified by the company's qualified accountant.
 type Account = { account_id: string; code: string; name: string; name_ar: string | null; name_en?: string | null; statement_category: string; amount_cents: string };
 type Classification = { id: string; account_id: string; zakat_type: string; reg_article: string; evidence_document_id: string | null; note: string | null };
 type Adjustment = { id: string; description: string; direction: 'add' | 'deduct'; professional_review_required?: boolean; amount: string; reg_article: string; evidence_document_id: string | null; evidence_note: string | null; version: number };
@@ -25,7 +24,7 @@ type Preview = {
   blocker_groups: { user_data: string[]; mapping: string[]; regulatory_review: string[] };
 };
 type OwnershipPartner = { partner_id: string; name: string; ownership_bps4: string; eligibility: null | { ownership_class: string; evidence_document_id: string } };
-type Data = {
+type Data = RegulatoryState & {
   scope: { unsupported_reason: string | null; fiscal_year: { start_date: string; end_date: string } };
   worksheet: null | { id: string; revision_no: number; status: string; version: number; revision_reason: string | null; non_financing_confirmed: boolean; accounting_records_confirmed: boolean; snapshot_captured_at: string | null; balances_snapshot: { as_of_date: string; accounts: Account[] } | null };
   revisions: { id: string; revision_no: number; status: string; revision_reason: string | null; approved_at: string | null }[];
@@ -51,7 +50,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
   const ar = i18n.language === 'ar';
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Data | null>(null);
-  const [documents, setDocuments] = useState<{ id: string; original_filename: string }[]>([]);
+  const [documents, setDocuments] = useState<{ id: string; original_filename: string; status?: string }[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
@@ -77,7 +76,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
     if (!open || !p.yearId) return;
     void load().catch(() => setError(t('zakatWorksheet.error')));
     if (p.canViewDocuments) {
-      void fetch('/api/documents').then(async (r) => { if (r.ok) setDocuments(((await r.json()) as { documents: { id: string; original_filename: string }[] }).documents); }).catch(() => undefined);
+      void fetch('/api/documents').then(async (r) => { if (r.ok) setDocuments(((await r.json()) as { documents: { id: string; original_filename: string; status?: string }[] }).documents); }).catch(() => undefined);
     }
   }, [open, p.yearId, p.canViewDocuments]);
 
@@ -159,12 +158,16 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
       <h3 id="zw-title">{t('zakatWorksheet.title')}</h3>{toggle}
       {error && <p role="alert" className="zw-error">{error}</p>}
 
-      <div className="zw-card" role="status">
+      {data.finalization ? <ZakatRegulatoryReview data={data} ar={ar} busy={busy} reviewed={w?.status === 'reviewed'}
+        canSubmit={p.canEdit} canApprove={p.canApprove} canViewDocuments={Boolean(p.canViewDocuments)}
+        version={w?.version} documents={documents} write={ws}
+        blockerLabel={(code) => t(`zakatWorksheet.finalizationBlockers.${code}`, { defaultValue: t(`zakatWorksheet.blockers.${code}`, { defaultValue: `${t('zakatWorksheet.finalizationBlockerAction')} (${code})` }) })}
+      /> : <div className="zw-card" role="status">
         <h4>{t('zakatWorksheet.readinessTitle')}</h4>
         <p><strong>{t('zakatWorksheet.payableWithheld')}</strong></p>
-      </div>
+      </div>}
 
-      <div className="zw-card zw-preview" dir={ar ? 'rtl' : 'ltr'} aria-labelledby="zw-preview-title">
+      {(!data.finalization || !w || !['reviewed', 'approved'].includes(w.status)) && <div className="zw-card zw-preview" dir={ar ? 'rtl' : 'ltr'} aria-labelledby="zw-preview-title">
         <h4 id="zw-preview-title">{t('zakatWorksheet.previewTitle')}</h4>
         <p className="zw-muted">{t('zakatWorksheet.previewIntro')}</p>
         {data.preview.status === 'BLOCKED' ? <>
@@ -185,7 +188,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           </div>)}</div>
         </>}
         <p className="zw-muted">{t('zakatWorksheet.previewNoPayable')}</p>
-      </div>
+      </div>}
 
       <div className="zw-card" id="zakat-ownership">
         <h4>{t('zakatWorksheet.ownershipTitle')}</h4>

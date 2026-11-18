@@ -1,7 +1,8 @@
 {
   "git": {
     "deploymentEnabled": {
-      "codex/fin-payroll-03": false
+      "codex/fin-payroll-03": false,
+      "codex/zakat-trusted-finalization": false
     }
   }
 }

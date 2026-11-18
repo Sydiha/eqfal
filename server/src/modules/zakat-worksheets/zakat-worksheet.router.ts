@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction, Router } from 'express';
 import pool from '../../db/pool';
 import { getAuthenticatedContext, requireActiveCompany, requireAuth, requireCapability } from '../auth/auth.middleware';
+import { record, regulatoryGates, validGateFacts } from './zakat-finalization';
+import type { RegulatoryGate } from '../zakat-calculation/calculation-input';
 import { requireSameOrigin } from '../auth/origin.middleware';
-import { ZakatConflictError, ZakatNotFoundError, ZakatValidationError, ZakatWorksheetService } from './zakat-worksheet.service';
+import { ZakatConflictError, ZakatForbiddenError, ZakatNotFoundError, ZakatValidationError, ZakatWorksheetService } from './zakat-worksheet.service';
 
 // G6-1 routes. They reuse the existing tax_workpaper.* and partner.ownership.* capabilities (no new capability is introduced).
 export const zakatWorksheetRouter = Router();
@@ -14,6 +16,7 @@ const ctx = (r: Request) => getAuthenticatedContext(r)! as NonNullable<ReturnTyp
 const service = (res: Response) => { if (!pool) { res.status(503).json({ error: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return null; } return new ZakatWorksheetService(pool); };
 const handle = (e: unknown, res: Response, next: NextFunction) => {
   if (e instanceof ZakatNotFoundError) res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+  else if (e instanceof ZakatForbiddenError) res.status(403).json({ error: 'Independent authorized approval is required', code: 'ZAKAT_INDEPENDENT_REVIEW_REQUIRED' });
   else if (e instanceof ZakatValidationError) res.status(400).json({ error: e.message, code: e.code });
   else if (e instanceof ZakatConflictError) res.status(409).json({ error: e.message, code: e.code });
   else next(e);
@@ -38,7 +41,7 @@ const guard = (check: (b: Record<string, unknown>) => boolean, fn: Handler, stat
 };
 const fy = (req: Request) => String(req.params['fiscalYearId']);
 
-zakatWorksheetRouter.get('/zakat-worksheets/:fiscalYearId', ...base, requireCapability('tax_workpaper.view'), run(200, (s, req, c) => s.get(c, fy(req))));
+zakatWorksheetRouter.get('/zakat-worksheets/:fiscalYearId', ...base, requireCapability('tax_workpaper.view'), run(200, (s, req, c, u) => s.get(c, fy(req), u, ctx(req).capabilities.includes('document.view'))));
 zakatWorksheetRouter.get('/zakat-worksheets/:fiscalYearId/preview', ...base, requireCapability('tax_workpaper.view'), run(200, (s, req, c) => s.preview(c, fy(req))));
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId', ...write, requireCapability('tax_workpaper.create'), run(201, (s, req, c, u) => s.create(c, fy(req), u)));
 zakatWorksheetRouter.patch('/zakat-worksheets/:fiscalYearId/declarations', ...write, requireCapability('tax_workpaper.edit'),
@@ -65,6 +68,29 @@ zakatWorksheetRouter.patch('/zakat-worksheets/:fiscalYearId/adjustments/:id', ..
     (s, req, c, u) => { if (!UUID.test(String(req.params['id']))) throw new ZakatValidationError('Invalid adjustment', 'ZAKAT_VALIDATION'); return s.changeAdjustment(c, fy(req), String(req.params['id']), u, { ...adjustmentArgs(req.body), adjustment_version: versionOf(req.body, 'adjustment_version')! }); }));
 zakatWorksheetRouter.delete('/zakat-worksheets/:fiscalYearId/adjustments/:id', ...write, requireCapability('tax_workpaper.adjustment.delete'),
   guard((b) => only(b, ['version']) && versionOf(b) !== null, (s, req, c, u) => { if (!UUID.test(String(req.params['id']))) throw new ZakatValidationError('Invalid adjustment', 'ZAKAT_VALIDATION'); return s.removeAdjustment(c, fy(req), String(req.params['id']), u, versionOf(req.body)!); }));
+
+const decisionPath = '/zakat-worksheets/:fiscalYearId/regulatory-decisions';
+zakatWorksheetRouter.post(decisionPath, ...write, requireCapability('tax_workpaper.edit'), requireCapability('document.view'),
+  guard((b) => only(b, ['gate', 'version', 'evidence_document_id', 'authority_reference', 'facts'])
+    && regulatoryGates.includes(b['gate'] as RegulatoryGate) && versionOf(b) !== null
+    && typeof b['evidence_document_id'] === 'string' && UUID.test(b['evidence_document_id'])
+    && typeof textOf(b['authority_reference'], 2000, false) === 'string' && validGateFacts(b['gate'] as RegulatoryGate, b['facts']),
+  (s, req, c, u) => s.changeDecision(c, fy(req), u, {
+    type: 'submit', gate: req.body.gate, version: versionOf(req.body)!, document: req.body.evidence_document_id,
+    reference: req.body.authority_reference.trim(), facts: req.body.facts,
+  }), 204));
+
+zakatWorksheetRouter.post(`${decisionPath}/:decisionId/approve`, ...write, requireCapability('tax_workpaper.approve'), requireCapability('document.view'),
+  (req, res, next) => {
+    if (!UUID.test(req.params['decisionId'] ?? '') || !record(req.body) || !only(req.body, [])) { bad(res); return; }
+    run(204, (s, r, c, u) => s.changeDecision(c, fy(r), u, { type: 'approve', id: r.params['decisionId']! }))(req, res, next);
+  });
+zakatWorksheetRouter.post(`${decisionPath}/:decisionId/end`, ...write, requireCapability('tax_workpaper.view'),
+  (req, res, next) => {
+    if (!UUID.test(req.params['decisionId'] ?? '') || !record(req.body) || !only(req.body, ['reason'])
+      || typeof textOf(req.body['reason'], 2000, false) !== 'string') { bad(res); return; }
+    run(204, (s, r, c, u) => s.changeDecision(c, fy(r), u, { type: 'end', id: r.params['decisionId']!, reason: r.body.reason.trim() }))(req, res, next);
+  });
 
 const versionOnly = (b: Record<string, unknown>) => only(b, ['version']) && versionOf(b) !== null;
 const reasonBody = (b: Record<string, unknown>) => only(b, ['version', 'reason']) && versionOf(b) !== null && textOf(b['reason'], 2000, false) !== undefined && b['reason'] !== null;

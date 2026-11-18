@@ -19,3 +19,10 @@
 .zw-preview details ul{overflow-wrap:anywhere}
 .zw .table-wrap{overflow-x:auto}
 @media (max-width:640px){.zw-card{padding:8px}.zw-form{grid-template-columns:1fr}}
+
+.zw .zw-decision-facts {
+  overflow: auto;
+  max-block-size: 16rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
