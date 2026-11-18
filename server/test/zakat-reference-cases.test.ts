@@ -135,6 +135,22 @@ describe('B9 synthetic reference suite — verified arithmetic/accounting invari
     expect(result.finalZakatBaseHalalas).toBeNull();
     expect(result.payableAmountHalalas).toBeNull();
   });
+
+  it('withholds a final amount even when synthetic decision and reviewer assertions claim every gate is resolved', () => {
+    const data = referenceInput();
+    for (const account of data.sourceBalances.filter((row) => row.statementCategory.endsWith('liability'))) {
+      account.amountSar = '0.00';
+      account.sign = 'zero';
+    }
+    data.declaredStatementTotals.current_liability = '0.00';
+    data.declaredStatementTotals.non_current_liability = '0.00';
+    const result = calculateZakatBase(data);
+    expect(result.status).toBe('BLOCKED');
+    expect(result.blockers.map((blocker) => blocker.code)).toContain('REGULATORY_GATE_AUTHENTICATION_REQUIRED');
+    expect(result.finalZakatBaseHalalas).toBeNull();
+    expect(result.payableAmountHalalas).toBeNull();
+    expect(result.traceLines.some((line) => line.id === 'zakat:period-amount')).toBe(false);
+  });
 });
 
 describe('B9 reference outcomes pending professional approval', () => {
