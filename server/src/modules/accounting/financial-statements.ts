@@ -79,8 +79,8 @@ export class FinancialStatementsService{
     });
   }
 
-  async financialPosition(companyId:string,fiscalYearId:string,asOf?:string){
-    const report=await this.movements(companyId,fiscalYearId,undefined,asOf);
+  async financialPosition(companyId:string,fiscalYearId:string,asOf?:string,db:QueryRunner=this.db){
+    const report=await this.movements(companyId,fiscalYearId,undefined,asOf,db);
     const sections=this.sections(report.accounts,financialPositionCategories);
     const total=(categories:StatementCategory[])=>sections.filter(section=>categories.includes(section.category)).reduce((sum,section)=>sum+cents(section.total),0n);
     const currentPeriodEarnings=this.earnings(report.accounts);

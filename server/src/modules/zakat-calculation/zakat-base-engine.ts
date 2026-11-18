@@ -95,13 +95,13 @@ export type Article73ProjectEvaluation = {
   evidence: EvidenceReference[];
 };
 export type BaseEngineResult = {
-  status: 'BLOCKED';
-  /** Caller supplied review/gate assertions are structurally checked but never authenticated here. */
-  inputAssertionsAuthenticated: false;
+  status: 'BLOCKED' | 'READY' | 'EXEMPT';
+  /** True only for the server workflow using approved registry evidence. */
+  inputAssertionsAuthenticated: boolean;
   exemptionCode: string | null;
-  finalZakatBaseHalalas: null;
-  payableAmountHalalas: null;
-  payableRounding: null;
+  finalZakatBaseHalalas: ExactHalalas | null;
+  payableAmountHalalas: string | null;
+  payableRounding: CalculationOptions['finalRounding'] | null;
   ordinaryBaseBeforeLimitsHalalas: ExactHalalas | null;
   article27MinimumAppliedHalalas: ExactHalalas | null;
   article28MaximumHalalas: ExactHalalas | null;
@@ -151,10 +151,25 @@ export function calculateZakatBase(
   input: unknown,
   options: CalculationOptions = PROVISIONAL_DEFAULT_CALCULATION_OPTIONS,
 ): BaseEngineResult {
+  return runBaseEngine(input, options, 'review');
+}
+
+/** Internal finalization entry point. The worksheet service supplies validated ledger and registry data. */
+export function calculateApprovedZakatBase(
+  input: ZakatCalculationInputV1, options: CalculationOptions, releasePayable: boolean, currentEarningsHalalas: bigint,
+): BaseEngineResult {
+  return runBaseEngine(input, options, releasePayable ? 'approved' : 'validate', currentEarningsHalalas);
+}
+
+function runBaseEngine(
+  input: unknown, options: CalculationOptions, mode: 'review' | 'validate' | 'approved', currentEarningsHalalas = 0n,
+): BaseEngineResult {
+  const authenticated = mode !== 'review';
   const validation = validateCalculationInput(input);
   if (!validation.valid) return blocked(validation.issues.map(({ code, path, message, disposition }) => ({ code, path, message, disposition })));
   const data = input as ZakatCalculationInputV1;
-  if (data.fiscalPeriod.actualDays < 354 && data.fiscalPeriod.activityPeriod === 'cessation') return exemptArticle15Period();
+  const cessation = data.fiscalPeriod.actualDays < 354 && data.fiscalPeriod.activityPeriod === 'cessation';
+  if (cessation && !authenticated) return exemptArticle15Period();
   const composed = composeZakatBaseComponents(data);
   const compositionBlockers = composed.blockers.filter((blocker) => blocker.code !== 'LIABILITY_CAPS_UNRESOLVED');
   if (!composed.totals || compositionBlockers.length > 0) {
@@ -312,13 +327,14 @@ export function calculateZakatBase(
 
   if (blockers.length > 0) return blocked(blockers);
 
-  let closingEquityForArticle28 = ZERO;
+  const currentEarnings = rat(currentEarningsHalalas);
+  let closingEquityForArticle28 = currentEarnings;
   for (const row of mapped) {
     if (row.component === 'equity_component') {
       closingEquityForArticle28 = add(closingEquityForArticle28, rat(BigInt(row.amountHalalas)));
     }
   }
-  let equityForBase = rat(BigInt(composed.totals.equityNetHalalas));
+  const equityForBase = add(rat(BigInt(composed.totals.equityNetHalalas)), currentEarnings);
   for (const adjustment of data.adjustments) {
     if (adjustment.category === 'equity') {
       const amount = fromSar(adjustment.amountSar, `adjustments.${adjustment.adjustmentId}.amountSar`);
@@ -351,9 +367,13 @@ export function calculateZakatBase(
   }
   let finalBase = min(baseAfterMinimum, article28Maximum);
   if (finalBase.n < 0n) finalBase = ZERO;
-  const period = calculatePeriodZakatFromExactHalalas(serialize(finalBase), data.fiscalPeriod.actualDays, options, data.fiscalPeriod.activityPeriod);
-  if (period.disposition === 'exempt' || period.finalAmountHalalas === null) return exemptArticle15Period();
+  const period = mode !== 'approved' || cessation ? null : calculatePeriodZakatFromExactHalalas(serialize(finalBase), data.fiscalPeriod.actualDays, options, data.fiscalPeriod.activityPeriod);
   const traceLines: BaseEngineTraceLine[] = [
+    ...(currentEarningsHalalas === 0n ? [] : [{
+      id: 'ledger:current_period_earnings', component: 'current_period_earnings',
+      amountHalalas: serialize(currentEarnings), sourceReferences: [data.finalizedBookResult.sourceReference],
+      evidence: data.finalizedBookResult.evidence, regulatoryDecisionReferenceIds: [data.adjustedProfit.regulatoryDecisionReferenceId],
+    }]),
     ...data.sourceBalances.map((row) => ({
       id: `balance:${row.accountId}`, component: row.classification,
       amountHalalas: serialize(fromSar(row.amountSar, `sourceBalances.${row.accountId}.amountSar`)),
@@ -472,12 +492,15 @@ export function calculateZakatBase(
     };
   });
   return {
-    status: 'BLOCKED', inputAssertionsAuthenticated: false, exemptionCode: null, finalZakatBaseHalalas: null, payableAmountHalalas: null,
-    payableRounding: null, ordinaryBaseBeforeLimitsHalalas: serialize(normalBase),
+    status: authenticated ? (cessation ? 'EXEMPT' : 'READY') : 'BLOCKED',
+    inputAssertionsAuthenticated: authenticated, exemptionCode: authenticated && cessation ? 'ARTICLE15_CESSATION_SHORT_PERIOD' : null,
+    finalZakatBaseHalalas: period ? serialize(finalBase) : null,
+    payableAmountHalalas: period?.finalAmountHalalas ?? null,
+    payableRounding: period?.roundingMode ?? null, ordinaryBaseBeforeLimitsHalalas: serialize(normalBase),
     article27MinimumAppliedHalalas: article27Minimum === null ? null : serialize(article27Minimum),
     article28MaximumHalalas: serialize(article28Maximum), liabilityProcedure, article73ProjectEvaluations, traceLines,
     sourceReferences: traceLines.flatMap((line) => line.sourceReferences),
-    blockers: [{
+    blockers: authenticated ? [] : [{
       code: 'REGULATORY_GATE_AUTHENTICATION_REQUIRED', path: 'regulatoryDecisionReferences',
       message: 'Caller-supplied decision references cannot authenticate B0, B3, B4, B7, or B9; no final base or payable amount is released.',
       disposition: 'blocked',

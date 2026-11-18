@@ -11,3 +11,26 @@ Official source: ZATCA, [Implementing Regulations for Zakat Collection, 1445 H (
 | B9 | Articles above support deterministic arithmetic examples, but the official text does not approve EQFAL's case set or its caller-supplied reviewer records. | Authorized accountant approval of the complete numerical reference suite remains pending. |
 
 The isolated engine's reference inputs and review attestations are supplied by its caller. No trusted company data or authenticated reviewer identity is established by that input contract. Therefore its interim trace may support review, but it must not release a final base or payable amount. Worksheet approval remains blocked by the persisted regulatory gates and evidence requirements. No gate status, company data, worksheet revision or audit record is changed by this evidence note.
+
+## Company and period approval
+
+The worksheet uses a separate decision registry. The legacy gate descriptions remain available. Each required gate starts blocked for each worksheet revision.
+
+1. Close the fiscal year, reconcile the posted statements, and submit and review the classified worksheet. Prepare the authoritative source and company-specific reconciliation for each gate as an approved company document. Identify the issuing authority, instrument, and page or section in the evidence reference. Include the signed reference-case suite for B9.
+2. A trusted operator verifies the reviewer’s credentials and appointment and provisions the company-scoped reviewer record through the approved administrative process. The registry stores `company_id`, `user_id`, and the `appointment_reference` in `zakat_regulatory_reviewers`. The reviewer also needs the company’s tax workpaper approval and document view capabilities. The submitter, document uploader, and worksheet preparer cannot approve the decision.
+3. Submit each decision in the worksheet’s regulatory review section. The reviewer opens the document and reconciles the submitted facts against the cited authority, company accounts, and period before approving. The registry records the document hash, reviewer account, appointment, approval time, and end history.
+4. Once all five decisions and accounting checks pass, an authorized approver independent of worksheet preparation, worksheet review, and decision submission can approve the worksheet. Release checks current source and evidence on each read. Ending a decision, changing the evidence or ledger source, or starting a revision with no approvals withholds the amount.
+
+### Reconciliation facts
+
+The worksheet accepts JSON for specialized accounting facts. Monetary fields use decimal SAR strings. Cite the exact documents and accounting records behind every row in the approved evidence document. An empty list affirms that the reviewer verified the absence of applicable rows.
+
+| Gate | Facts to enter |
+| --- | --- |
+| B0 | `projects` contains the applicable Article 73 project facts from the calculation contract, including account ID, treatment, project flags, category, and rollforward amounts. `deductibleAssets` and `undeductedAssets` contain `accountId` and `amountSar`. Together the allocations must reconcile to the classified ledger balances. |
+| B3 | Select the evidence-supported rounding mode and period type. For a commencement or cessation period shorter than 354 days, enter the evidenced date. It must match the fiscal-year start or end respectively. A cessation exemption returns a separate status. |
+| B4 | `liabilityReclassifications` contains the calculation contract’s reclassification ID, account ID, amount, treatment, and applicable `currentDebtFacts` or `partnerLoanFacts`. `lossReconciliations` contains the reconciliation ID, account ID, and opening, current-period, movement, and closing amounts. Cases hitting the unresolved Article 25(4)/29(2)(b) interaction still require an authoritative, implementable rule. |
+| B7 | `charges` contains `accountId`, `kind`, and `amountSar` for actually posted dedicated expense accounts. `adjustments` maps each existing `adjustmentId` to its `category` and, where applicable, `article63ExpenseCategory` or `includedInArticle28ClosingEquity`. EQFAL pulls amounts and directions from the worksheet and computes the adjusted result from the posted book result. Where charges are absent, the approved evidence must explain the treatment. For nonzero current earnings, the supported `currentEarningsTreatment` value is `include_in_equity`. Use it only when the B7 evidence establishes that treatment for both equity computations. The workflow blocks other or unresolved treatments. |
+| B9 | The signed accountant evidence must identify the complete numerical case set and the engine version reviewed. The form records the evidence and reference. |
+
+The registry has no default approvals or reviewer appointments. The isolated calculation entry point continues to withhold final amounts from unauthenticated input. Revalidate affected decisions when the finalization rules or reference suite change.

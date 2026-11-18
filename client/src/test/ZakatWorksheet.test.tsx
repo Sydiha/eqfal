@@ -88,6 +88,33 @@ describe('Zakat worksheet', () => {
     expect(screen.getByRole('link', { name: 'مراجعة تصنيفات الحسابات' }).getAttribute('href')).toBe('#zakat-classification');
     expect(screen.getByText('يلزم نتيجة دفترية نهائية مع أدلتها والرسوم الزكوية/الضريبية المسجلة فعلياً.')).toBeTruthy();
   });
+  it('shows Arabic RTL decision evidence, reviewer and next action without releasing a blocked amount', async () => {
+    await i18n.changeLanguage('ar');
+    const reviewed = payload({
+      worksheet: { ...payload().worksheet, status: 'reviewed' },
+      regulatory_reviewers: [{ id: 'reviewer', name: 'المحاسب المعتمد' }],
+      regulatory_decisions: [{
+        id: 'decision', gate: 'B3', status: 'pending', can_approve: true,
+        evidence_document_id: 'doc', authority_reference: 'دليل إثبات الفترة', facts: {},
+      }],
+      finalization: { status: 'BLOCKED', blockers: ['ARTICLE15_PERIOD_EVIDENCE_MISMATCH'], payable_amount_halalas: null },
+    });
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+      if (options?.method === 'POST') return new Response(null, { status: 204 });
+      if (String(url).includes('/documents')) return new Response(JSON.stringify({ documents: [] }));
+      return new Response(JSON.stringify(String(url).endsWith('/preview') ? reviewed.preview : reviewed));
+    });
+    render(<ZakatWorksheet {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'عرض' }));
+    expect(await screen.findByRole('region', { name: 'المراجعة النظامية واعتماد الزكاة' })).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText(/المحاسب المعتمد/)).toBeInTheDocument();
+    expect(screen.getByText(/راجع تاريخ بداية النشاط أو توقفه/)).toBeInTheDocument();
+    expect(screen.getByText(/دليل إثبات الفترة/)).toBeInTheDocument();
+    expect(screen.queryByText('الزكاة المستحقة')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'اعتماد الأدلة بعد التحقق' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/zakat-worksheets/fy/regulatory-decisions/decision/approve', expect.objectContaining({ method: 'POST', body: '{}' })));
+  });
+
   it('renders the stored English account name in English UI and falls back for legacy snapshots', async () => {
     mockFetch(); const first = render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     expect(await screen.findByText(/Cash/)).toBeTruthy();

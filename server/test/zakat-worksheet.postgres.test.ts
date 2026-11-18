@@ -71,6 +71,39 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
   const act = async (t: T, name: string, extra: object = {}) => post(t, `/${name}`, { version: (await get(t)).worksheet.version, ...extra });
   const audit = (co: string, action: string) => h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1 AND action=$2', [co, action]);
 
+  const decisionsPath = '/regulatory-decisions';
+  const gateFacts = (t: T, period: Record<string, string> = { activityPeriod: 'regular' }) => ({
+    B0: { projects: [], deductibleAssets: [{ accountId: t.fa, amountSar: '600.00' }], undeductedAssets: [{ accountId: t.cash, amountSar: '400.00' }] },
+    B3: { ...period, rounding: 'HALF_UP' },
+    B4: { liabilityReclassifications: [], lossReconciliations: [] },
+    B7: { charges: [], adjustments: [] },
+    B9: {},
+  });
+  const reviewerFor = async (t: T) => {
+    const reviewer = await h.user(`zakat-review-${++seq}`);
+    await h.member(t.co, reviewer.id, ['tax_workpaper.view', 'tax_workpaper.approve', 'document.view']);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, reviewer.id, 'disposable integration fixture appointment']);
+    await reviewer.client.login();
+    return (path: string, body: unknown) => reviewer.client.req('POST', `/zakat-worksheets/${t.fy}${path}`, body);
+  };
+  const submitDecision = async (t: T, gate: string, facts: object, extra: object = {}) => {
+    return post(t, decisionsPath, {
+      version: (await get(t)).worksheet.version, gate, evidence_document_id: t.doc,
+      authority_reference: 'disposable integration fixture', facts, ...extra,
+    });
+  };
+  const attest = async (t: T, facts: Record<string, object> = gateFacts(t), review?: Awaited<ReturnType<typeof reviewerFor>>) => {
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [t.fy]);
+    await h.q("UPDATE documents SET status='approved' WHERE id=$1", [t.doc]);
+    const reviewer = review ?? await reviewerFor(t);
+    for (const [gate, details] of Object.entries(facts)) {
+      expect(await submitDecision(t, gate, details)).toMatchObject({ status: 204 });
+      const decision = (await get(t)).regulatory_decisions.find((d: { gate: string }) => d.gate === gate);
+      expect(await reviewer(`${decisionsPath}/${decision.id}/approve`, {})).toMatchObject({ status: 204 });
+    }
+    return () => get(t).then((d) => reviewer('/approve', { version: d.worksheet.version }));
+  };
+
   it('never infers eligibility: missing, unconfirmed, non-qualifying and non-100% ownership are specific blockers', async () => {
     const t = await setup('own');
     let g = await get(t);
@@ -125,7 +158,7 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     const r = await post(pre, '', {});
     expect(r.status).toBe(400); expect(r.json.code).toBe('ZAKAT_UNSUPPORTED_SCOPE');
     const short = await setup('short', { start: '2025-01-01', end: '2025-06-30' });
-    expect((await post(short, '', {})).json.code).toBe('ZAKAT_UNSUPPORTED_SCOPE');
+    expect((await post(short, '', {})).status).toBe(201);
 
     const t = await setup('bal');
     expect((await post(t, '', {})).status).toBe(201);
@@ -145,7 +178,9 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect(g.readiness.gate_blockers).toEqual([...BLOCKING_GATES].sort());
     expect((await act(t, 'submit')).status).toBe(200);
     expect((await act(t, 'review')).status).toBe(200);
+    await verifyGates();
     const blocked = await act(t, 'approve');
+    await resetGates();
     expect(blocked.status).toBe(409); expect(blocked.json.code).toBe('ZAKAT_REGULATORY_GATES_UNVERIFIED');
     expect((await get(t)).worksheet.status).toBe('reviewed');
     // edits are rejected outside draft, at the API and at the database
@@ -159,17 +194,21 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect(await audit(t.co, 'zakat_worksheet.return_to_draft')).toBe(1);
   });
 
-  it('approves once gates are verified, freezes an amount-free snapshot, and preserves approved revisions across a mandatory-reason revision', async () => {
+  it('releases an exact payable only after independent approval, and requires fresh decisions on revision', async () => {
     await verifyGates();
     try {
       const t = await setup('rev');
       await prepare(t);
       await act(t, 'submit'); await act(t, 'review');
-      const approved = await act(t, 'approve');
+      const approve = await attest(t);
+      expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+      expect((await act(t, 'approve')).status).toBe(403);
+      const approved = await approve();
       expect(approved.status).toBe(200);
       const a1 = approved.json.worksheet;
       expect(a1).toMatchObject({ status: 'approved', revision_no: 1 });
-      expect(a1.approved_snapshot).toMatchObject({ calculation_performed: false, payable_amount: null, revision_no: 1 });
+      expect(a1.approved_snapshot).toMatchObject({ calculation_performed: true, payable_amount: null, revision_no: 1 });
+      expect(approved.json.finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1031' });
       expect(a1.approved_snapshot_fingerprint).toMatch(/^[0-9a-f]{64}$/);
       await expect(h.q("UPDATE zakat_worksheets SET notes_never=1 WHERE id=$1", [a1.id])).rejects.toThrow();
       await expect(h.q("UPDATE zakat_worksheets SET non_financing_confirmed=false WHERE id=$1", [a1.id])).rejects.toThrow(/immutable/);
@@ -186,7 +225,9 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
       expect((await h.q<{ status: string }>('SELECT status FROM zakat_worksheets WHERE id=$1', [a1.id]))[0]!.status).toBe('approved');
 
       await act(t, 'submit'); await act(t, 'review');
-      const a2 = await act(t, 'approve');
+      expect((await act(t, 'approve')).status).toBe(409);
+      const approveRevision = await attest(t);
+      const a2 = await approveRevision();
       expect(a2.status).toBe(200); expect(a2.json.worksheet.revision_no).toBe(2);
       const rows = await h.q<{ revision_no: number; status: string }>('SELECT revision_no,status FROM zakat_worksheets WHERE company_id=$1 AND fiscal_year_id=$2 ORDER BY revision_no', [t.co, t.fy]);
       expect(rows).toEqual([{ revision_no: 1, status: 'superseded' }, { revision_no: 2, status: 'approved' }]);
@@ -200,11 +241,14 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     try {
       const t = await setup('drift');
       await prepare(t);
-      await act(t, 'submit'); await act(t, 'review'); await act(t, 'approve');
+      await act(t, 'submit'); await act(t, 'review');
+      const approve = await attest(t);
+      expect(await approve()).toMatchObject({ status: 200 });
       const s = new Svc.ZakatWorksheetService(h.db);
       expect(await s.packageSummary(t.co, t.fy, h.db, true)).toMatchObject({ revision_no: 1, source_drift: false });
       await h.postedJournal(t.co, t.fy, '2025-03-01', t.owner.id, [[t.cash, '10.00', '0'], [t.cap, '0', '10.00']]);
       expect(await s.packageSummary(t.co, t.fy, h.db, true)).toMatchObject({ source_drift: true });
+      expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
       expect((await s.packageSummary(t.co, t.fy, h.db, false))!.source_drift).toBe(false);
       // a revision picks up the new balance; the changed account must be (re)confirmed only if it was dropped
       const w = (await get(t)).worksheet;
@@ -218,6 +262,87 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
       expect(g.readiness.preparation_blockers).toEqual(expect.arrayContaining(['ownership_source_drift', 'unconfirmed_ownership_period']));
       expect((await act(t, 'submit')).status).toBe(400);
     } finally { await resetGates(); }
+  });
+
+  it('rejects fabricated approval, self-review, foreign evidence, and unappointed or unauthenticated reviewers', async () => {
+    const t = await setup('trust');
+    const other = await setup('foreign');
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [t.fy]);
+    await h.q("UPDATE documents SET status='approved' WHERE id=ANY($1::uuid[])", [[t.doc, other.doc]]);
+    expect((await submitDecision(t, 'B9', {}, { evidence_document_id: other.doc })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', {}, { reviewed_by: other.owner.id })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', { reviewAttestation: { reviewerReference: other.owner.id } })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', {})).status).toBe(204);
+    const decision = (await get(t)).regulatory_decisions[0];
+    const path = `${decisionsPath}/${decision.id}/approve`;
+    const unappointed = await h.user('zakat-unappointed');
+    await h.member(t.co, unappointed.id, ['tax_workpaper.view', 'tax_workpaper.approve', 'document.view']);
+    const url = `/zakat-worksheets/${t.fy}${path}`;
+    expect((await unappointed.client.req('POST', url, {})).status).toBe(401);
+    await unappointed.client.login();
+    expect((await unappointed.client.req('POST', url, {})).status).toBe(403);
+    await prepare(other);
+    await act(other, 'submit'); await act(other, 'review');
+    expect((await post(other, path, {})).status).toBe(404);
+    const viewOnly = await h.user('zakat-appointed-view-only');
+    await h.member(t.co, viewOnly.id, ['tax_workpaper.view', 'document.view']);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, viewOnly.id, 'fixture without approval capability']);
+    await viewOnly.client.login();
+    expect((await viewOnly.client.req('POST', url, {})).status).toBe(403);
+    expect((await unappointed.client.req('POST', url, {}, { origin: 'https://example.test' })).status).toBe(403);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, t.owner.id, 'fixture self-review attempt']);
+    expect((await post(t, path, {})).status).toBe(403);
+    const reviewer = await reviewerFor(t);
+    expect((await reviewer(path, { reviewed_by: t.owner.id })).status).toBe(400);
+    expect((await reviewer(path, {})).status).toBe(204);
+    expect((await get(t)).regulatory_decisions[0]).toMatchObject({ status: 'verified', submitted_by: t.owner.id });
+    expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(1);
+    await expect(h.q('DELETE FROM zakat_regulatory_decisions WHERE id=$1', [decision.id])).rejects.toThrow(/immutable/);
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+  });
+
+  it('reconciles B7 charges to posted expense accounts before releasing payable', async () => {
+    const t = await setup('recorded-charge');
+    const revenue = await h.account(t.co, 'Z-REVENUE', 'revenue', 'revenue');
+    const expense = await h.account(t.co, 'Z-CHARGE', 'expense', 'other_expense');
+    await h.postedJournal(t.co, t.fy, t.start, t.owner.id,
+      [[t.cash, '25.00', '0'], [revenue, '0', '25.00'], [expense, '15.00', '0'], [t.cash, '0', '15.00']]);
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    const facts = gateFacts(t);
+    facts.B0.undeductedAssets[0]!.amountSar = '410.00';
+    const charges = (amountSar: string) => ({
+      charges: [{ accountId: expense, kind: 'zakat_provision', amountSar }], adjustments: [],
+      currentEarningsTreatment: 'include_in_equity',
+    });
+    const approve = await attest(t, { ...facts, B7: charges('14.99') }, reviewer);
+    expect((await approve()).status).toBe(409);
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', blockers: ['RECORDED_CHARGE_LEDGER_MISMATCH'], payable_amount_halalas: null });
+    const b7 = () => get(t).then((d) => d.regulatory_decisions.find((item: { gate: string; status: string }) => item.gate === 'B7' && item.status !== 'ended'));
+    expect((await reviewer(`${decisionsPath}/${(await b7()).id}/end`, { reason: 'Correct the recorded charge amount' })).status).toBe(204);
+    expect((await submitDecision(t, 'B7', charges('15.00'))).status).toBe(204);
+    expect((await reviewer(`${decisionsPath}/${(await b7()).id}/approve`, {})).status).toBe(204);
+    expect((await approve()).json.finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1057' });
+  });
+
+  it('keeps a short period blocked without confirmed cessation and withdraws an exemption after revocation', async () => {
+    const t = await setup('cessation', { end: '2025-06-30' });
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    const approve = await attest(t, gateFacts(t, { activityPeriod: 'cessation', activityDate: '2025-06-29' }), reviewer);
+    expect((await approve()).status).toBe(409);
+    expect((await get(t)).finalization.blockers).toContain('ARTICLE15_PERIOD_EVIDENCE_MISMATCH');
+    const b3 = () => get(t).then((d) => d.regulatory_decisions.find((item: { gate: string; status: string }) => item.gate === 'B3' && item.status !== 'ended'));
+    expect((await reviewer(`${decisionsPath}/${(await b3()).id}/end`, { reason: 'Date mismatch' })).status).toBe(204);
+    expect((await submitDecision(t, 'B3', { activityPeriod: 'cessation', activityDate: '2025-06-30', rounding: 'HALF_UP' })).status).toBe(204);
+    expect((await reviewer(`${decisionsPath}/${(await b3()).id}/approve`, {})).status).toBe(204);
+    expect((await approve()).json.finalization).toMatchObject({ status: 'EXEMPT', payable_amount_halalas: null });
+    expect((await reviewer(`${decisionsPath}/${(await b3()).id}/end`, { reason: 'Cessation evidence withdrawn' })).status).toBe(204);
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
   });
 
   it('refuses incomplete worksheets: scope declarations, unclassified balances and category-inconsistent or evidence-less classifications', async () => {

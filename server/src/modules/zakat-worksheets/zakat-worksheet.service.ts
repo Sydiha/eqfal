@@ -3,15 +3,25 @@ import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { FinancialStatementNotFoundError, FinancialStatementsService, FinancialStatementUnmappedError } from '../accounting/financial-statements';
 import {
   BalanceAccount, BalancesSnapshot, CLASSIFIABLE_CATEGORIES, ENTITY_CLASSES, GateRow, OWNERSHIP_CLASSES, OwnershipVerification, ZAKAT_TYPES,
-  evaluateReadiness, fingerprintOf, toCents, unsupportedPeriodReason, verifyOwnership,
+  REQUIRED_BLOCKING_GATES, evaluateReadiness, fingerprintOf, toCents, unsupportedPeriodReason, verifyOwnership,
 } from './zakat-worksheet.rules';
-import { previewZakatWorksheet } from './zakat-worksheet.preview';
+import { actualDays, previewZakatWorksheet } from './zakat-worksheet.preview';
 
+import { calculateWorksheetFinalization, decisionStatus, regulatoryGates, validGateFacts, type GateDecision } from './zakat-finalization';
+import type { RegulatoryGate } from '../zakat-calculation/calculation-input';
+import { ZakatInputError } from '../zakat-calculation/zakat-calculation';
+
+export class ZakatForbiddenError extends Error {}
 export class ZakatNotFoundError extends Error {}
 export class ZakatValidationError extends Error { constructor(message: string, readonly code = 'ZAKAT_VALIDATION') { super(message); } }
 export class ZakatConflictError extends Error { constructor(message: string, readonly code = 'ZAKAT_CONFLICT') { super(message); } }
 
 type Runner = Pick<Pool | PoolClient, 'query'>;
+function worksheetPeriodReason(start: string, end: string) {
+  const reason = unsupportedPeriodReason(start, end);
+  const days = actualDays(start, end);
+  return reason === 'fiscal_year_not_12_months' && days && days < 354 ? null : reason;
+}
 const OPEN = ['draft', 'in_review', 'reviewed'];
 const WS = `w.*, w.prepared_at::text, w.reviewed_at::text, w.approved_at::text, w.snapshot_captured_at::text, w.created_at::text, w.updated_at::text`;
 
@@ -30,12 +40,13 @@ export class ZakatWorksheetService {
 
   private async tx<T>(fn: (c: PoolClient) => Promise<T>) {
     const c = await this.db.connect();
-    try { await c.query('BEGIN'); const result = await fn(c); await c.query('COMMIT'); return result; }
+    try { await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ'); const result = await fn(c); await c.query('COMMIT'); return result; }
     catch (e) { await c.query('ROLLBACK'); throw this.mapDb(e); }
     finally { c.release(); }
   }
   private mapDb(e: unknown) {
     const code = (e as { code?: string }).code;
+    if (code === '40001') return new ZakatConflictError('The source changed. Reload and retry.', 'ZAKAT_STALE_SOURCE');
     if (code === '23505') return new ZakatConflictError('A conflicting record already exists', 'ZAKAT_DUPLICATE');
     if (code === '23503') return new ZakatValidationError('A referenced record (document, partner or account) was not found in this company', 'ZAKAT_REFERENCE_NOT_FOUND');
     if (code === '23514') return new ZakatConflictError((e as Error).message, 'ZAKAT_LOCKED');
@@ -59,9 +70,9 @@ export class ZakatWorksheetService {
     const verification = verifyOwnership({ asOf: fy.end_date, profile, partners, periods, eligibility });
     return { fy, verification, fingerprint: fingerprintOf(verification) };
   }
-  private async captureBalances(company: string, year: string) {
+  private async captureBalances(company: string, year: string, r: Runner = this.db) {
     let report;
-    try { report = await new FinancialStatementsService(this.db).financialPosition(company, year); }
+    try { report = await new FinancialStatementsService(this.db).financialPosition(company, year, undefined, r); }
     catch (e) {
       if (e instanceof FinancialStatementNotFoundError) throw new ZakatNotFoundError();
       if (e instanceof FinancialStatementUnmappedError) throw new ZakatValidationError('Posted activity exists on unmapped accounts', 'ZAKAT_UNMAPPED_ACCOUNTS');
@@ -87,10 +98,122 @@ export class ZakatWorksheetService {
         equity: toCents(String(report.total_equity)).toString(),
       },
     };
-    return { snapshot, fingerprint: fingerprintOf(snapshot) };
+    return { snapshot, fingerprint: fingerprintOf(snapshot), ledgerAccounts: report.accounts, balanced: report.accounting_equation.balanced };
   }
-  private async gates(r: Runner) {
-    return (await r.query<GateRow>('SELECT code, title, article_ref, blocks_approval, status, verified_by_name, verified_on::text, verification_reference FROM zakat_regulatory_gates ORDER BY code')).rows;
+  private async gates(r: Runner, verified: Set<string> = new Set()) {
+    const rows = (await r.query<GateRow>('SELECT code, title, article_ref, blocks_approval FROM zakat_regulatory_gates ORDER BY code')).rows;
+    return rows.map((row) => ({
+      ...row, status: verified.has(row.code) ? 'verified' : 'unverified',
+      verified_by_name: null, verified_on: null, verification_reference: null,
+    }));
+  }
+
+  private async decisions(company: string, year: string, worksheet: string, r: Runner, lock = false) {
+    return (await r.query<Omit<GateDecision, 'submitted_at' | 'approved_at' | 'ended_at'> & { submitted_at: Date; approved_at: Date | null; ended_at: Date | null }>(
+      `SELECT d.*, e.uploaded_by_user_id evidence_uploader, COALESCE(e.status='approved' AND e.sha256=d.evidence_sha256,false) evidence_current,
+              COALESCE(u.is_active AND a.appointment_reference=d.reviewer_appointment,false) reviewer_active
+       FROM zakat_regulatory_decisions d
+       JOIN documents e ON e.id=d.evidence_document_id AND e.company_id=d.company_id
+       LEFT JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by
+       LEFT JOIN users u ON u.id=d.reviewed_by
+       WHERE d.company_id=$1 AND d.fiscal_year_id=$2 AND d.worksheet_id=$3 ORDER BY d.submitted_at, d.id ${lock ? 'FOR SHARE OF d,e' : ''}`,
+      [company, year, worksheet])).rows.map((row) => ({
+      ...row, submitted_at: row.submitted_at.toISOString(),
+      approved_at: row.approved_at?.toISOString() ?? null, ended_at: row.ended_at?.toISOString() ?? null,
+    }));
+  }
+
+  private async reviewers(company: string, r: Runner) {
+    return (await r.query<{ id: string; name: string; appointment_reference: string }>(
+      `SELECT u.id, COALESCE(u.display_name,u.email) name, a.appointment_reference
+       FROM zakat_regulatory_reviewers a JOIN users u ON u.id=a.user_id AND u.is_active
+       WHERE a.company_id=$1 ORDER BY u.id`, [company])).rows;
+  }
+
+  private async finalization(company: string, year: string, ws: Worksheet, r: Runner, approvalActor?: string) {
+    const own = await this.liveOwnership(company, year, r);
+    const live = await this.captureBalances(company, year, r).catch((e: unknown) => {
+      if (e instanceof ZakatValidationError || e instanceof FinancialStatementUnmappedError) return null;
+      throw e;
+    });
+    const currency = (await r.query<{ functional_currency: string }>(
+      'SELECT functional_currency FROM company_accounting_profiles WHERE id=$1 AND company_id=$2',
+      [own.verification.profile?.id ?? null, company])).rows[0]?.functional_currency ?? null;
+    const children = await this.children(company, ws.id, r);
+    const sourceVersion = ws.status === 'approved' ? ws.version - 1 : ws.version;
+    const fingerprint = fingerprintOf({
+      policy: 'zakat-finalization-v1', company, year, worksheet: ws.id, sourceVersion, fy: own.fy, currency,
+      ownership: own.fingerprint, balances: live?.fingerprint, ledger: live?.ledgerAccounts,
+      classifications: children.classifications, adjustments: children.adjustments,
+    });
+    const decisions = await this.decisions(company, year, ws.id, r, Boolean(approvalActor));
+    const history = decisions.map((d) => ({ ...d, status: decisionStatus(d, fingerprint) }));
+    const verified = new Set(regulatoryGates.flatMap((gate, i) =>
+      history.some((d) => d.gate === gate && d.status === 'verified') ? [REQUIRED_BLOCKING_GATES[i]!] : []));
+    const gates = await this.gates(r, verified);
+    const readiness = this.readiness(ws, own, live?.fingerprint ?? null, new Set(children.classifications.map((c) => c.account_id)), gates,
+      children.classifications.filter((c) => c.zakat_type === 'deductible_investment').length);
+    const blockers = [...readiness.preparation_blockers, ...readiness.gate_blockers];
+    if (!live?.balanced) blockers.push('ACCOUNTING_EQUATION_NOT_VERIFIED');
+    if (own.fy.status !== 'closed') blockers.push('FISCAL_YEAR_NOT_CLOSED');
+    if (currency !== 'SAR') blockers.push('FUNCTIONAL_CURRENCY_NOT_SAR');
+    const closed = { own, live, children, fingerprint, history, readiness, gates };
+    if (blockers.length || !live) return { ...closed, blockers, result: null };
+    if (approvalActor && !this.independentFinalApprover(ws, history, approvalActor)) throw new ZakatForbiddenError();
+
+    try {
+      return { ...closed, ...calculateWorksheetFinalization({
+        year, start: own.fy.start_date, end: own.fy.end_date, snapshot: live.snapshot, ledgerAccounts: live.ledgerAccounts,
+        ...children,
+      }, decisions, fingerprint, ws.status === 'approved' || Boolean(approvalActor)) };
+    } catch (e) {
+      if (e instanceof ZakatInputError) return { ...closed, blockers: ['REGULATORY_FINANCIAL_FACTS_INVALID'], result: null };
+      throw e;
+    }
+  }
+
+  async changeDecision(company: string, year: string, actor: string, action:
+    | { type: 'submit'; gate: RegulatoryGate; version: number; document: string; reference: string; facts: Record<string, unknown> }
+    | { type: 'approve' | 'end'; id: string; reason?: string }) {
+    await this.tx(async (c) => {
+      const ws = (await c.query<Worksheet>(
+        `SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2
+         AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM zakat_regulatory_decisions d
+              WHERE d.id=$3 AND d.company_id=w.company_id AND d.fiscal_year_id=w.fiscal_year_id AND d.worksheet_id=w.id))
+         ORDER BY revision_no DESC LIMIT 1 FOR UPDATE`, [company, year, action.type === 'end' ? action.id : null])).rows[0];
+      if (!ws) throw new ZakatNotFoundError();
+      if (action.type !== 'end' && ws.status !== 'reviewed') throw new ZakatConflictError('The worksheet must be reviewed');
+      const state = await this.finalization(company, year, ws, c);
+      if (action.type === 'submit') {
+        this.checkVersion(ws, action.version);
+        if (!validGateFacts(action.gate, action.facts)) throw new ZakatValidationError('Invalid regulatory facts');
+        if (state.own.fy.status !== 'closed' || !state.live?.balanced || state.readiness.preparation_blockers.length) {
+          throw new ZakatConflictError('Close and reconcile the fiscal year and worksheet before submitting evidence', 'ZAKAT_NOT_READY');
+        }
+        const document = (await c.query<{ sha256: string }>(
+          "SELECT sha256 FROM documents WHERE id=$1 AND company_id=$2 AND status='approved'", [action.document, company])).rows[0];
+        if (!document) throw new ZakatValidationError('An approved evidence document for this company is required', 'ZAKAT_REFERENCE_NOT_FOUND');
+        const id = (await c.query<{ id: string }>(
+          `INSERT INTO zakat_regulatory_decisions(company_id,fiscal_year_id,worksheet_id,gate,source_fingerprint,evidence_document_id,evidence_sha256,authority_reference,facts,submitted_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [company, year, ws.id, action.gate, state.fingerprint, action.document, document.sha256, action.reference, action.facts, actor])).rows[0]!.id;
+        await this.log(c, company, actor, 'zakat_regulatory_decision.submit', 'zakat_regulatory_decision', id, null, { gate: action.gate, worksheet_id: ws.id });
+        return;
+      }
+
+      const decision = state.history.find((d) => d.id === action.id && !d.ended_at);
+      if (!decision) throw new ZakatNotFoundError();
+      const appointment = (await this.reviewers(company, c)).find((r) => r.id === actor);
+      if (action.type === 'end') {
+        if (!appointment && !(decision.submitted_by === actor && !decision.reviewed_by)) throw new ZakatForbiddenError();
+        await c.query('UPDATE zakat_regulatory_decisions SET ended_by=$2,ended_at=now(),end_reason=$3 WHERE id=$1', [decision.id, actor, action.reason]);
+      } else {
+        if (!appointment || !this.independentReviewer(ws, decision, actor)) throw new ZakatForbiddenError();
+        if (decision.status !== 'pending') throw new ZakatConflictError('Only current, pending evidence can be approved', 'ZAKAT_STALE_SOURCE');
+        await c.query('UPDATE zakat_regulatory_decisions SET reviewed_by=$2,approved_at=now(),reviewer_appointment=$3 WHERE id=$1', [decision.id, actor, appointment.appointment_reference]);
+      }
+      await this.log(c, company, actor, `zakat_regulatory_decision.${action.type}`, 'zakat_regulatory_decision', decision.id, { status: decision.status }, null, action.reason);
+    });
   }
   private async packageFinalized(company: string, year: string, r: Runner) {
     return Boolean((await r.query(`SELECT 1 FROM annual_closing_packages WHERE company_id=$1 AND fiscal_year_id=$2 AND status IN ('finalized','handed_off')`, [company, year])).rowCount);
@@ -105,7 +228,7 @@ export class ZakatWorksheetService {
   private readiness(ws: Worksheet | null, own: { verification: OwnershipVerification; fingerprint: string; fy: { start_date: string; end_date: string } }, liveBalancesFp: string | null, classifiedIds: Set<string>, gates: GateRow[], investmentClassifications = 0) {
     return evaluateReadiness({
       ownership: own.verification,
-      periodReason: unsupportedPeriodReason(own.fy.start_date, own.fy.end_date),
+      periodReason: worksheetPeriodReason(own.fy.start_date, own.fy.end_date),
       declarationsOk: Boolean(ws?.non_financing_confirmed && ws?.accounting_records_confirmed),
       balances: ws?.balances_snapshot ?? null, classifiedAccountIds: classifiedIds,
       balancesDrift: Boolean(ws && liveBalancesFp !== null && ws.balances_fingerprint !== liveBalancesFp),
@@ -113,24 +236,67 @@ export class ZakatWorksheetService {
     });
   }
 
-  async get(company: string, year: string) {
-    const own = await this.liveOwnership(company, year, this.db);
-    const revisions = (await this.db.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2 ORDER BY w.revision_no DESC`, [company, year])).rows;
-    const gates = await this.gates(this.db);
-    const eligibility = (await this.db.query(`SELECT e.*, e.effective_from::text, e.effective_to::text, e.confirmed_at::text, e.created_at::text, p.name partner_name FROM zakat_ownership_eligibility e JOIN partners p ON p.id=e.partner_id AND p.company_id=e.company_id WHERE e.company_id=$1 ORDER BY p.name, e.effective_from`, [company])).rows;
-    const ws = revisions[0] ?? null;
-    let liveFp: string | null = null; let children: { classifications: { account_id: string }[]; adjustments: unknown[] } = { classifications: [], adjustments: [] };
-    if (ws) {
-      if (OPEN.includes(ws.status) || ws.status === 'approved') liveFp = (await this.captureBalances(company, year).catch(() => null))?.fingerprint ?? null;
-      children = (await this.children(company, ws.id, this.db)) as typeof children;
-    }
-    const readiness = this.readiness(ws, own, liveFp, new Set(children.classifications.map((c) => c.account_id)), gates, (children.classifications as unknown as { zakat_type: string }[]).filter((c) => c.zakat_type === 'deductible_investment').length);
-    return {
-      scope: { fiscal_year: own.fy, unsupported_reason: unsupportedPeriodReason(own.fy.start_date, own.fy.end_date) },
-      worksheet: ws, revisions: revisions.map((r) => ({ id: r.id, revision_no: r.revision_no, status: r.status, revision_reason: r.revision_reason, approved_at: r.approved_at })),
-      classifications: children.classifications, adjustments: children.adjustments, eligibility,
-      ownership_live: own.verification, gates, readiness,
-    };
+  private independentReviewer(ws: Worksheet, decision: GateDecision, actor: string) {
+    return actor !== decision.submitted_by && actor !== decision.evidence_uploader && actor !== ws.prepared_by_user_id;
+  }
+
+  async get(company: string, year: string, actor?: string, viewDocuments = false) {
+    return this.tx(async (c) => {
+      const own = await this.liveOwnership(company, year, c);
+      const revisions = (await c.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2 ORDER BY w.revision_no DESC`, [company, year])).rows;
+      const eligibility = (await c.query(`SELECT e.*, e.effective_from::text, e.effective_to::text, e.confirmed_at::text, e.created_at::text, p.name partner_name FROM zakat_ownership_eligibility e JOIN partners p ON p.id=e.partner_id AND p.company_id=e.company_id WHERE e.company_id=$1 ORDER BY p.name, e.effective_from`, [company])).rows;
+      const ws = revisions[0] ?? null;
+      const state = ws && await this.finalization(company, year, ws, c);
+      const gates = state?.gates ?? await this.gates(c);
+      const readiness = state?.readiness ?? this.readiness(null, own, null, new Set(), gates);
+      const reviewers = await this.reviewers(company, c);
+      const appointed = reviewers.some((r) => r.id === actor);
+      const result = state?.result;
+      const finalizationFingerprint = ws?.status === 'approved' && state && this.finalizationFingerprint(state);
+      const released = ws?.status === 'approved' && finalizationFingerprint && ws.approved_snapshot?.finalization_fingerprint === finalizationFingerprint;
+      const canApprove = Boolean(ws?.status === 'reviewed' && state?.result && state.result.status !== 'BLOCKED' && actor &&
+        this.independentFinalApprover(ws, state.history, actor));
+      return {
+        scope: { fiscal_year: own.fy, unsupported_reason: worksheetPeriodReason(own.fy.start_date, own.fy.end_date) },
+        worksheet: ws, revisions: revisions.map((r) => ({ id: r.id, revision_no: r.revision_no, status: r.status, revision_reason: r.revision_reason, approved_at: r.approved_at })),
+        classifications: state?.children.classifications ?? [], adjustments: state?.children.adjustments ?? [], eligibility,
+        ownership_live: own.verification, gates,
+        readiness: { ...readiness, can_approve: canApprove },
+        regulatory_reviewers: reviewers.map(({ id, name }) => ({ id, name })),
+        regulatory_decisions: ws && state ? state.history.map((d) => ({
+          id: d.id, gate: d.gate, status: d.status, submitted_by: d.submitted_by, submitted_at: d.submitted_at,
+          reviewed_by: d.reviewed_by, approved_at: d.approved_at, ended_by: d.ended_by, ended_at: d.ended_at,
+          end_reason: d.end_reason, reviewer_appointment: viewDocuments ? d.reviewer_appointment : null,
+          ...(viewDocuments ? {
+            evidence_document_id: d.evidence_document_id, evidence_sha256: d.evidence_sha256,
+            authority_reference: d.authority_reference, facts: d.facts,
+          } : {}),
+          can_approve: Boolean(actor && appointed && ws.status === 'reviewed' && d.status === 'pending' && this.independentReviewer(ws, d, actor)),
+          can_end: Boolean(actor && !d.ended_at && (appointed || (actor === d.submitted_by && !d.reviewed_by))),
+        })) : [],
+        finalization: {
+          status: released ? result!.status : 'BLOCKED',
+          blockers: !state ? ['WORKSHEET_REQUIRED', ...readiness.gate_blockers]
+            : state.blockers.length ? state.blockers : released ? [] : ['WORKSHEET_APPROVAL_REQUIRED'],
+          payable_amount_halalas: released ? result!.payableAmountHalalas : null,
+          final_zakat_base_halalas: released ? result!.finalZakatBaseHalalas : null,
+          exemption_code: released ? result!.exemptionCode : null,
+        },
+      };
+    });
+  }
+
+  private finalizationFingerprint(state: Awaited<ReturnType<ZakatWorksheetService['finalization']>>) {
+    if (!state.result || state.result.status === 'BLOCKED' || state.blockers.length) return null;
+    return fingerprintOf({
+      source: state.fingerprint, decisions: state.history.filter((row) => row.status === 'verified').map((row) => row.id),
+      result: state.result,
+    });
+  }
+
+  private independentFinalApprover(ws: Worksheet, history: (GateDecision & { status: string })[], actor: string) {
+    return actor !== ws.prepared_by_user_id && actor !== ws.reviewed_by_user_id
+      && !history.some((d) => d.status === 'verified' && d.submitted_by === actor);
   }
 
   /** Read-only preview through the isolated component composer; it never calculates payable Zakat. */
@@ -182,7 +348,7 @@ export class ZakatWorksheetService {
 
   async create(company: string, year: string, actor: string) {
     const fy = await this.fiscalYear(company, year, this.db);
-    const reason = unsupportedPeriodReason(fy.start_date, fy.end_date);
+    const reason = worksheetPeriodReason(fy.start_date, fy.end_date);
     if (reason) throw new ZakatValidationError(`Unsupported fiscal year for the Zakat worksheet (${reason})`, 'ZAKAT_UNSUPPORTED_SCOPE');
     const balances = await this.captureBalances(company, year);
     return this.tx(async (c) => {
@@ -320,25 +486,29 @@ export class ZakatWorksheetService {
   }
 
   async transition(company: string, year: string, actor: string, action: 'submit' | 'review' | 'approve', version: number) {
-    const live = await this.captureBalances(company, year);
     await this.tx(async (c) => {
       const ws = await this.lockOpen(company, year, c);
+      const live = await this.captureBalances(company, year, c);
       const from = { submit: 'draft', review: 'in_review', approve: 'reviewed' }[action];
       if (ws.status !== from) throw new ZakatConflictError('Invalid workflow transition', 'ZAKAT_INVALID_TRANSITION');
       this.checkVersion(ws, version);
-      const { gates, readiness } = await this.liveReadiness(company, year, ws, c, live.fingerprint);
+      const { readiness } = await this.liveReadiness(company, year, ws, c, live.fingerprint);
       if (readiness.preparation_blockers.length) throw new ZakatValidationError(`Worksheet is not ready: ${readiness.preparation_blockers.join(', ')}`, 'ZAKAT_NOT_READY');
       if (action === 'approve') {
-        if (readiness.gate_blockers.length) throw new ZakatConflictError(`Approval is blocked by unverified regulatory gates: ${readiness.gate_blockers.join(', ')}`, 'ZAKAT_REGULATORY_GATES_UNVERIFIED');
         if (await this.packageFinalized(company, year, c)) throw new ZakatConflictError('The annual package is finalized', 'ZAKAT_PACKAGE_FINALIZED');
-        const { classifications, adjustments } = await this.children(company, ws.id, c);
+        const state = await this.finalization(company, year, ws, c, actor);
+        if (state.readiness.gate_blockers.length) throw new ZakatConflictError(`Approval is blocked by unverified regulatory gates: ${state.readiness.gate_blockers.join(', ')}`, 'ZAKAT_REGULATORY_GATES_UNVERIFIED');
+        const finalizationFingerprint = this.finalizationFingerprint(state);
+        if (!finalizationFingerprint) throw new ZakatConflictError('Financial validation is incomplete', 'ZAKAT_NOT_READY');
+        const { classifications, adjustments } = state.children;
         const snapshot = {
           schema: 'zakat-worksheet-approved-v1', fiscal_year_id: year, revision_no: ws.revision_no, as_of_date: ws.balances_snapshot?.as_of_date,
           ownership: ws.ownership_snapshot, balances: ws.balances_snapshot,
           classifications: classifications.map((r: Record<string, unknown>) => ({ account_id: r['account_id'], zakat_type: r['zakat_type'], reg_article: r['reg_article'], evidence_document_id: r['evidence_document_id'], confirmed_by_user_id: r['confirmed_by_user_id'] })),
           adjustments: adjustments.map((r: Record<string, unknown>) => ({ id: r['id'], description: r['description'], direction: r['direction'], amount: r['amount'], reg_article: r['reg_article'], evidence_document_id: r['evidence_document_id'], evidence_note: r['evidence_note'] })),
-          gates: gates.map((g) => ({ code: g.code, status: g.status, blocks_approval: g.blocks_approval })),
-          calculation_performed: false, payable_amount: null,
+          gates: state.gates.map((g) => ({ code: g.code, status: g.status, blocks_approval: g.blocks_approval })),
+          regulatory_decisions: state.history.filter((d) => d.status === 'verified').map((d) => ({ id: d.id, gate: d.gate })),
+          source_fingerprint: state.fingerprint, calculation_performed: true, payable_amount: null, finalization_fingerprint: finalizationFingerprint,
         };
         await c.query(`UPDATE zakat_worksheets SET status='superseded', version=version+1, updated_at=NOW() WHERE company_id=$1 AND fiscal_year_id=$2 AND status='approved'`, [company, year]);
         await c.query(
@@ -453,9 +623,9 @@ export class ZakatWorksheetService {
     if (!ws) return null;
     let drift = false;
     if (checkDrift) {
-      const own = await this.liveOwnership(company, year, r);
-      const live = await this.captureBalances(company, year).catch(() => null);
-      drift = ws.ownership_fingerprint !== own.fingerprint || live === null || ws.balances_fingerprint !== live.fingerprint;
+      const state = await this.finalization(company, year, ws, r);
+      const fingerprint = this.finalizationFingerprint(state);
+      drift = !fingerprint || ws.approved_snapshot?.finalization_fingerprint !== fingerprint;
     }
     return { revision_no: ws.revision_no, approved_snapshot_fingerprint: ws.approved_snapshot_fingerprint!, source_drift: drift };
   }
