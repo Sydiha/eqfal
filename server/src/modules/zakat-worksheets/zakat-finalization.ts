@@ -1,4 +1,4 @@
-import { calculateApprovedZakatBase } from '../zakat-calculation/zakat-base-engine';
+import { calculateApprovedZakatBase, calculateZakatBase } from '../zakat-calculation/zakat-base-engine';
 import {
   STATEMENT_CATEGORIES, ZAKAT_CALCULATION_INPUT_VERSION, type RegulatoryGate, type ZakatCalculationInputV1,
 } from '../zakat-calculation/calculation-input';
@@ -69,6 +69,7 @@ export function validGateFacts(gate: RegulatoryGate, facts: unknown): facts is R
 
 type Accounting = {
   year: string;
+  worksheet: string;
   start: string;
   end: string;
   snapshot: BalancesSnapshot;
@@ -88,7 +89,7 @@ export function decisionStatus(d: GateDecision, fingerprint: string) {
   return d.reviewed_by && d.approved_at ? 'verified' : 'pending';
 }
 
-export function calculateWorksheetFinalization(accounting: Accounting, decisions: GateDecision[], fingerprint: string, releasePayable: boolean) {
+export async function calculateWorksheetFinalization(accounting: Accounting, decisions: GateDecision[], fingerprint: string, approved: { client: import('pg').PoolClient; company: string; actor: string | null } | null) {
   const chosen = new Map(decisions.filter((d) => decisionStatus(d, fingerprint) === 'verified' && validGateFacts(d.gate, d.facts)).map((d) => [d.gate, d]));
   const missing = regulatoryGates.filter((gate) => !chosen.has(gate));
   if (missing.length) return { result: null, blockers: missing };
@@ -204,8 +205,7 @@ export function calculateWorksheetFinalization(accounting: Accounting, decisions
       ...decisionFields(gate), gate, referenceId: chosen.get(gate)!.id, disposition: 'decision_recorded',
     })),
   } as unknown as ZakatCalculationInputV1;
-  const result = calculateApprovedZakatBase(
-    data, { finalRounding: p.rounding as 'HALF_UP' | 'HALF_EVEN' | 'DOWN' }, releasePayable, bookProfit,
-  );
+  const options = { finalRounding: p.rounding as 'HALF_UP' | 'HALF_EVEN' | 'DOWN' };
+  const result = approved ? await calculateApprovedZakatBase(approved.client, approved.company, year, accounting.worksheet, approved.actor, fingerprint, data, options, bookProfit) : calculateZakatBase(data, options);
   return { result, blockers: result.blockers.map((blocker) => blocker.code) };
 }

@@ -162,10 +162,10 @@ export class ZakatWorksheetService {
     if (approvalActor && !this.independentFinalApprover(ws, history, approvalActor)) throw new ZakatForbiddenError();
 
     try {
-      return { ...closed, ...calculateWorksheetFinalization({
-        year, start: own.fy.start_date, end: own.fy.end_date, snapshot: live.snapshot, ledgerAccounts: live.ledgerAccounts,
+      return { ...closed, ...await calculateWorksheetFinalization({
+        year, worksheet: ws.id, start: own.fy.start_date, end: own.fy.end_date, snapshot: live.snapshot, ledgerAccounts: live.ledgerAccounts,
         ...children,
-      }, decisions, fingerprint, ws.status === 'approved' || Boolean(approvalActor)) };
+      }, decisions, fingerprint, ws.status === 'approved' || approvalActor ? { client: r as PoolClient, company, actor: approvalActor ?? null } : null) };
     } catch (e) {
       if (e instanceof ZakatInputError) return { ...closed, blockers: ['REGULATORY_FINANCIAL_FACTS_INVALID'], result: null };
       throw e;
