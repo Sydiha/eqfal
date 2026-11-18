@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { formatMinorUnits } from '../money-format';
 
 const gates = ['B0', 'B3', 'B4', 'B7', 'B9'] as const;
@@ -29,6 +29,7 @@ type Props = {
   canSubmit: boolean;
   canApprove: boolean;
   canViewDocuments: boolean;
+  canManageReviewers?: boolean;
   version: number | undefined;
   documents: { id: string; original_filename: string; status?: string }[];
   write: (path: string, method: string, body?: object) => Promise<boolean>;
@@ -79,6 +80,7 @@ export function ZakatRegulatoryReview(p: Props) {
 
   return <section className="zw-card" id="zakat-regulatory-review" dir={p.ar ? 'rtl' : 'ltr'} aria-labelledby="zakat-regulatory-title">
     <h4 id="zakat-regulatory-title">{label('المراجعة النظامية واعتماد الزكاة', 'Regulatory review and Zakat approval')}</h4>
+    {p.canManageReviewers && <ReviewerAdministration ar={p.ar} />}
     <div role="status">
       {finalization.status === 'READY' && finalization.payable_amount_halalas !== null
         ? <p>{label('الزكاة المستحقة', 'Zakat payable')} <strong><bdi>{formatMinorUnits(finalization.payable_amount_halalas)}</bdi> {label('ر.س', 'SAR')}</strong></p>
@@ -148,5 +150,64 @@ export function ZakatRegulatoryReview(p: Props) {
           </form>)}
       </div>;
     })}
+  </section>;
+}
+
+type AdminAppointment = { appointment_id: string; user_id: string; reviewer_name: string; reviewer_email: string; appointment_reference: string; appointed_by_user_id: string | null; identity_verified_at: string | null; revoked_by_user_id: string | null; revoked_at: string | null; revocation_reason: string | null };
+type ReviewerCandidate = { user_id: string; name: string; email: string };
+
+export function ReviewerAdministration({ ar }: { ar: boolean }) {
+  const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+  const [candidates, setCandidates] = useState<ReviewerCandidate[]>([]);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const label = (arabic: string, english: string) => ar ? arabic : english;
+  const load = async () => {
+    const response = await fetch('/api/zakat-reviewers');
+    if (response.status === 401) return;
+    if (!response.ok) throw new Error();
+    const data = await response.json() as { appointments: AdminAppointment[]; candidates: ReviewerCandidate[] };
+    setAppointments(data.appointments); setCandidates(data.candidates);
+  };
+  useEffect(() => { void load().catch(() => setError(true)); }, []);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setError(false);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    try {
+      const response = await fetch('/api/zakat-reviewers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: form.get('user_id'), appointment_reference: form.get('appointment_reference'), identity_verified: form.get('identity_verified') === 'on' }) });
+      if (!response.ok) throw new Error();
+      formElement.reset(); await load();
+    } catch { setError(true); } finally { setBusy(false); }
+  };
+  const revoke = async (event: FormEvent<HTMLFormElement>, appointmentId: string) => {
+    event.preventDefault(); setBusy(true); setError(false);
+    const reason = new FormData(event.currentTarget).get('reason');
+    try {
+      const response = await fetch(`/api/zakat-reviewers/${appointmentId}/revoke`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+      if (!response.ok) throw new Error();
+      await load();
+    } catch { setError(true); } finally { setBusy(false); }
+  };
+  return <section className="zw-card" aria-labelledby="zakat-reviewer-admin-title">
+    <h5 id="zakat-reviewer-admin-title">{label('إدارة المراجعين المخوّلين', 'Manage authorized reviewers')}</h5>
+    <p>{label('لا يُفعّل التعيين إلا بعد تحقق المسؤول من هوية المراجع ومرجع تعيينه. لكل تعيين هوية مستقلة؛ إعادة التعيين لا تعيد صلاحية اعتماد سابق.', 'Appointments require administrator verification of reviewer identity and reference. Each appointment has a unique identity; reappointment never restores earlier approvals.')}</p>
+    <ul>{appointments.map((item) => <li key={item.appointment_id}>
+      <bdi>{item.reviewer_name} · {item.reviewer_email}</bdi> · <bdi>{item.appointment_reference}</bdi> · <bdi>{item.appointment_id}</bdi>
+      {item.identity_verified_at && <span> · {label('تحقق من الهوية بواسطة', 'Identity verified by')} <bdi>{item.appointed_by_user_id ?? '—'}</bdi> · <bdi>{item.identity_verified_at}</bdi></span>}
+      {item.revoked_at ? <span> · {label('ملغى بواسطة', 'Revoked by')} <bdi>{item.revoked_by_user_id ?? label('النظام أثناء الترحيل', 'system migration')}</bdi> · <bdi>{item.revoked_at}</bdi>{item.revocation_reason ? ` · ${item.revocation_reason}` : ''}</span> : <span> · {label('فعّال', 'Active')}</span>}
+      {!item.revoked_at && <form onSubmit={(event) => void revoke(event, item.appointment_id)}>
+        <label>{label('سبب الإلغاء', 'Revocation reason')} <input name="reason" required maxLength={2000} /></label>
+        <button className="ac-btn" disabled={busy}>{label('إلغاء التعيين', 'Revoke appointment')}</button>
+      </form>}
+    </li>)}</ul>
+    {candidates.length > 0 && <form onSubmit={(event) => void submit(event)}>
+      <label>{label('عضو الشركة', 'Company member')} <select name="user_id" required defaultValue=""><option value="">{label('اختر مستخدماً', 'Select a user')}</option>{candidates.map((candidate) => <option key={candidate.user_id} value={candidate.user_id}>{candidate.name} · {candidate.email}</option>)}</select></label>
+      <label>{label('مرجع التعيين المهني', 'Professional appointment reference')} <input name="appointment_reference" required maxLength={500} /></label>
+      <label><input type="checkbox" name="identity_verified" required /> {label('أؤكد أنني تحققت من هوية المراجع ومؤهلاته خارج النظام.', 'I verified the reviewer’s identity and qualifications outside the system.')}</label>
+      <button className="ac-btn" disabled={busy}>{label('تعيين المراجع', 'Appoint reviewer')}</button>
+    </form>}
+    {candidates.length === 0 && <p>{label('لا يوجد أعضاء نشطون مؤهلون للتعيين حالياً.', 'No eligible active company members are available.')}</p>}
+    {error && <p role="alert">{label('تعذر تحديث قائمة المراجعين. تحقق من الصلاحية وحاول مجدداً.', 'Could not update the reviewer registry. Check authorization and retry.')}</p>}
   </section>;
 }

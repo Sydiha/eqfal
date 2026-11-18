@@ -13,7 +13,7 @@ const catalog = [
     'access.full_access.grant', 'company.create', 'company.status.edit', 'company.view',
     'payroll.view', 'payroll.edit', 'payroll.approve', 'payroll.accounting.mapping.view',
     'payroll.accounting.mapping.manage', 'payroll.accounting.preview', 'payroll.accounting.post', 'payroll.settlement.view', 'payroll.settlement.create',
-    'invoice.approve', 'invoice.cancel', 'access.user.password.reset', 'payroll.settlement.exception.approve',
+    'invoice.approve', 'invoice.cancel', 'access.user.password.reset', 'payroll.settlement.exception.approve', 'zakat.reviewer.manage',
   ]),
 ].sort();
 
@@ -35,6 +35,7 @@ describe('versioned authorization policy', () => {
     expect(target).not.toContain('company.create');
     expect(target).toContain('company.status.edit');
     expect(target).toContain('payroll.settlement.exception.approve');
+    expect(target).not.toContain('zakat.reviewer.manage');
     expect(effectiveRoleCapabilities('company_manager', 1, ['access.view'], catalog)).toContain('access.view');
   });
 
@@ -45,6 +46,7 @@ describe('versioned authorization policy', () => {
     expect(target).not.toContain('access.full_access.grant');
     expect(target).not.toContain('company.create');
     expect(target).toContain('payroll.settlement.exception.approve');
+    expect(target).not.toContain('zakat.reviewer.manage');
   });
 
   it('keeps Accountant grants explicit and configurable under every policy version', () => {

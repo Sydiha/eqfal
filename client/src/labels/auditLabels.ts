@@ -90,6 +90,8 @@ const ACTIONS: Record<string, Pair> = {
   'tax_workpaper.adjustment.update': ['Update tax adjustment', 'تحديث تعديل ضريبي'], 'tax_workpaper.create': ['Create tax working paper', 'إنشاء ورقة عمل ضريبية'],
   'tax_workpaper.professional_review.resolve': ['Resolve professional review', 'حسم المراجعة المهنية'], 'tax_workpaper.reconcile': ['Reconcile tax working paper', 'تسوية ورقة عمل ضريبية'],
   'tax_workpaper.update': ['Update tax working paper', 'تعديل ورقة عمل ضريبية'],
+  'zakat.reviewer.appoint': ['Appoint Zakat reviewer', 'تعيين مراجع للزكاة'],
+  'zakat.reviewer.revoke': ['Revoke Zakat reviewer appointment', 'إلغاء تعيين مراجع الزكاة'],
   'vat_adjustment.create': ['Create VAT adjustment', 'إنشاء تعديل ضريبة القيمة المضافة'], 'vat_adjustment.update': ['Update VAT adjustment', 'تحديث تعديل ضريبة القيمة المضافة'],
   'vat_period.close': ['Close VAT period', 'إغلاق فترة ضريبية'], 'vat_period.create': ['Create VAT period', 'إنشاء فترة ضريبية'], 'vat_period.reopen': ['Reopen VAT period', 'إعادة فتح فترة ضريبية'],
   'vat_return.approve': ['Approve VAT return', 'اعتماد إقرار ضريبي'], 'vat_return.create': ['Create VAT return', 'إنشاء إقرار ضريبي'], 'vat_return.file': ['File VAT return', 'تقديم إقرار ضريبي'],

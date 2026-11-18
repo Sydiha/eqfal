@@ -109,25 +109,35 @@ export class ZakatWorksheetService {
   }
 
   private async decisions(company: string, year: string, worksheet: string, r: Runner, lock = false) {
-    return (await r.query<Omit<GateDecision, 'submitted_at' | 'approved_at' | 'ended_at'> & { submitted_at: Date; approved_at: Date | null; ended_at: Date | null }>(
+    const rows = (await r.query<Omit<GateDecision, 'submitted_at' | 'approved_at' | 'ended_at'> & { submitted_at: Date; approved_at: Date | null; ended_at: Date | null }>(
       `SELECT d.*, e.uploaded_by_user_id evidence_uploader, COALESCE(e.status='approved' AND e.sha256=d.evidence_sha256,false) evidence_current,
-              COALESCE(u.is_active AND a.appointment_reference=d.reviewer_appointment,false) reviewer_active
+              COALESCE(u.is_active AND m.is_active AND a.appointment_reference=d.reviewer_appointment
+                AND a.identity_verified_at IS NOT NULL AND a.revoked_at IS NULL,false) reviewer_active
        FROM zakat_regulatory_decisions d
        JOIN documents e ON e.id=d.evidence_document_id AND e.company_id=d.company_id
-       LEFT JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by
+       LEFT JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by AND a.appointment_id=d.reviewer_appointment_id
        LEFT JOIN users u ON u.id=d.reviewed_by
+       LEFT JOIN memberships m ON m.company_id=d.company_id AND m.user_id=d.reviewed_by
        WHERE d.company_id=$1 AND d.fiscal_year_id=$2 AND d.worksheet_id=$3 ORDER BY d.submitted_at, d.id ${lock ? 'FOR SHARE OF d,e' : ''}`,
-      [company, year, worksheet])).rows.map((row) => ({
+      [company, year, worksheet])).rows;
+    if (lock) {
+      const appointments = rows.map((row) => row.reviewer_appointment_id).filter((id): id is string => Boolean(id));
+      if (appointments.length) await r.query(
+        'SELECT appointment_id FROM zakat_regulatory_reviewers WHERE company_id=$1 AND appointment_id=ANY($2::uuid[]) FOR SHARE',
+        [company, appointments]);
+    }
+    return rows.map((row) => ({
       ...row, submitted_at: row.submitted_at.toISOString(),
       approved_at: row.approved_at?.toISOString() ?? null, ended_at: row.ended_at?.toISOString() ?? null,
     }));
   }
 
   private async reviewers(company: string, r: Runner) {
-    return (await r.query<{ id: string; name: string; appointment_reference: string }>(
-      `SELECT u.id, COALESCE(u.display_name,u.email) name, a.appointment_reference
+    return (await r.query<{ id: string; name: string; appointment_reference: string; appointment_id: string }>(
+      `SELECT u.id, COALESCE(u.display_name,u.email) name, a.appointment_reference, a.appointment_id
        FROM zakat_regulatory_reviewers a JOIN users u ON u.id=a.user_id AND u.is_active
-       WHERE a.company_id=$1 ORDER BY u.id`, [company])).rows;
+       JOIN memberships m ON m.company_id=a.company_id AND m.user_id=a.user_id AND m.is_active
+       WHERE a.company_id=$1 AND a.revoked_at IS NULL AND a.identity_verified_at IS NOT NULL ORDER BY u.id`, [company])).rows;
   }
 
   private async finalization(company: string, year: string, ws: Worksheet, r: Runner, approvalActor?: string, buildOnly = false) {
@@ -146,7 +156,7 @@ export class ZakatWorksheetService {
       ownership: own.fingerprint, balances: live?.fingerprint, ledger: live?.ledgerAccounts,
       classifications: children.classifications, adjustments: children.adjustments,
     });
-    const decisions = await this.decisions(company, year, ws.id, r, Boolean(approvalActor));
+    const decisions = await this.decisions(company, year, ws.id, r, true);
     const history = decisions.map((d) => ({ ...d, status: decisionStatus(d, fingerprint) }));
     const verified = new Set(regulatoryGates.flatMap((gate, i) =>
       history.some((d) => d.gate === gate && d.status === 'verified') ? [REQUIRED_BLOCKING_GATES[i]!] : []));
@@ -219,7 +229,7 @@ export class ZakatWorksheetService {
       } else {
         if (!appointment || !this.independentReviewer(ws, decision, actor)) throw new ZakatForbiddenError();
         if (decision.status !== 'pending') throw new ZakatConflictError('Only current, pending evidence can be approved', 'ZAKAT_STALE_SOURCE');
-        await c.query('UPDATE zakat_regulatory_decisions SET reviewed_by=$2,approved_at=now(),reviewer_appointment=$3 WHERE id=$1', [decision.id, actor, appointment.appointment_reference]);
+        await c.query('UPDATE zakat_regulatory_decisions SET reviewed_by=$2,approved_at=now(),reviewer_appointment=$3,reviewer_appointment_id=$4 WHERE id=$1', [decision.id, actor, appointment.appointment_reference, appointment.appointment_id]);
       }
       await this.log(c, company, actor, `zakat_regulatory_decision.${action.type}`, 'zakat_regulatory_decision', decision.id, { status: decision.status }, null, action.reason);
     });
@@ -271,11 +281,12 @@ export class ZakatWorksheetService {
         classifications: state?.children.classifications ?? [], adjustments: state?.children.adjustments ?? [], eligibility,
         ownership_live: own.verification, gates,
         readiness: { ...readiness, can_approve: canApprove },
-        regulatory_reviewers: reviewers.map(({ id, name }) => ({ id, name })),
+        regulatory_reviewers: reviewers.map(({ id, name, appointment_id }) => ({ id, name, appointment_id })),
         regulatory_decisions: ws && state ? state.history.map((d) => ({
           id: d.id, gate: d.gate, status: d.status, submitted_by: d.submitted_by, submitted_at: d.submitted_at,
           reviewed_by: d.reviewed_by, approved_at: d.approved_at, ended_by: d.ended_by, ended_at: d.ended_at,
-          end_reason: d.end_reason, reviewer_appointment: viewDocuments ? d.reviewer_appointment : null,
+          end_reason: d.end_reason, reviewer_appointment_id: d.reviewer_appointment_id,
+          reviewer_appointment: viewDocuments ? d.reviewer_appointment : null,
           ...(viewDocuments ? {
             evidence_document_id: d.evidence_document_id, evidence_sha256: d.evidence_sha256,
             authority_reference: d.authority_reference, facts: d.facts,

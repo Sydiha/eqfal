@@ -176,10 +176,12 @@ export async function calculateApprovedZakatBase(
   const decisions = (await client.query<{ gate: string; id: string; submitted_by: string }>(
     `SELECT d.gate,d.id,d.submitted_by FROM zakat_regulatory_decisions d
      JOIN documents e ON e.id=d.evidence_document_id AND e.company_id=d.company_id AND e.status='approved' AND e.sha256=d.evidence_sha256
-     JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by AND a.appointment_reference=d.reviewer_appointment
+     JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by
+       AND a.appointment_id=d.reviewer_appointment_id AND a.appointment_reference=d.reviewer_appointment
      JOIN users u ON u.id=d.reviewed_by AND u.is_active
+     JOIN memberships m ON m.company_id=d.company_id AND m.user_id=d.reviewed_by AND m.is_active
      WHERE d.company_id=$1 AND d.fiscal_year_id=$2 AND d.worksheet_id=$3 AND d.source_fingerprint=$4
-       AND d.approved_at IS NOT NULL AND d.ended_at IS NULL FOR SHARE OF d,e`,
+       AND d.approved_at IS NOT NULL AND d.ended_at IS NULL AND a.identity_verified_at IS NOT NULL AND a.revoked_at IS NULL FOR SHARE OF d,e,a`,
     [company, year, worksheet, trusted.fingerprint])).rows;
   const required = ['B0', 'B3', 'B4', 'B7', 'B9'];
   const actual = new Map(decisions.map((row) => [row.gate, row]));

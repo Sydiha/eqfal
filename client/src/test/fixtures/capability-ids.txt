@@ -180,3 +180,4 @@ wht_review.edit
 wht_review.review
 wht_review.submit
 wht_review.view
+zakat.reviewer.manage

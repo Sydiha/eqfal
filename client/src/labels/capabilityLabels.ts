@@ -75,6 +75,7 @@ const OVERRIDES: Record<string, Pair> = {
   'annual_close.package.finalize': ['Finalize annual closing packages', 'الاعتماد النهائي لحزمة الإقفال السنوي'],
   'annual_close.package.handoff': ['Hand off annual closing packages', 'تسليم حزمة الإقفال السنوي'],
   'annual_close.package.snapshot.create': ['Create annual closing package snapshots', 'إنشاء لقطة لحزمة الإقفال السنوي'],
+  'zakat.reviewer.manage': ['Manage Zakat reviewer appointments', 'إدارة تعيينات مراجعي الزكاة'],
   'audit.view': ['View audit log', 'عرض سجل التدقيق'],
   'bank.import': ['Import bank statements', 'استيراد كشوف البنك'], 'bank.match': ['Match bank transactions', 'مطابقة المعاملات البنكية'],
   'bank.transaction.manual': ['Enter manual bank transactions', 'إدخال حركات بنكية يدوية'],

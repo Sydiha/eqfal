@@ -66,7 +66,7 @@ export function canShowNavigationPage(page: NavigationPage, capabilities: readon
     case 'accounting':
       return has(capabilities, 'accounting.view');
     case 'annualClosing':
-      return has(capabilities, 'annual_close.view');
+      return has(capabilities, 'annual_close.view') || has(capabilities, 'zakat.reviewer.manage');
     case 'openingBalances':
       return has(capabilities, 'opening_balance.view');
     case 'periodicAdjustments':

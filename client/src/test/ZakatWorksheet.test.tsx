@@ -115,6 +115,37 @@ describe('Zakat worksheet', () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/zakat-worksheets/fy/regulatory-decisions/decision/approve', expect.objectContaining({ method: 'POST', body: '{}' })));
   });
 
+  it('shows the Arabic RTL reviewer administration and sends an explicit identity attestation', async () => {
+    await i18n.changeLanguage('ar');
+    const worksheetPayload = payload({ finalization: { status: 'BLOCKED', blockers: ['B0_amendment_1248'], payable_amount_halalas: null } });
+    let appointments: Array<{ appointment_id: string; user_id: string; reviewer_name: string; reviewer_email: string; appointment_reference: string; identity_verified_at: string; revoked_at: string | null; revocation_reason: string | null }> = [];
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+      const path = String(url);
+      if (path === '/api/zakat-reviewers' && !options?.method) return new Response(JSON.stringify({ appointments, candidates: [{ user_id: 'member', name: 'مراجع', email: 'reviewer@example.test' }] }));
+      if (path === '/api/zakat-reviewers' && options?.method === 'POST') {
+        const body = JSON.parse(String(options.body)) as { user_id: string; appointment_reference: string; identity_verified: boolean };
+        expect(body.identity_verified).toBe(true);
+        appointments = [{ appointment_id: 'appointment-1', user_id: body.user_id, reviewer_name: 'مراجع', reviewer_email: 'reviewer@example.test', appointment_reference: body.appointment_reference, identity_verified_at: '2026-01-01', revoked_at: null, revocation_reason: null }];
+        return new Response(JSON.stringify(appointments[0]), { status: 201 });
+      }
+      if (path.includes('/preview')) return new Response(JSON.stringify(worksheetPayload.preview));
+      if (path === '/api/documents') return new Response(JSON.stringify({ documents: [] }));
+      return new Response(JSON.stringify(worksheetPayload));
+    });
+    render(<ZakatWorksheet {...props} canManageReviewers />);
+    fireEvent.click(screen.getByRole('button', { name: 'عرض' }));
+    const region = await screen.findByRole('region', { name: 'المراجعة النظامية واعتماد الزكاة' });
+    expect(region).toHaveAttribute('dir', 'rtl');
+    expect(await screen.findByRole('heading', { name: 'إدارة المراجعين المخوّلين' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('عضو الشركة'), { target: { value: 'member' } });
+    fireEvent.change(screen.getByLabelText('مرجع التعيين المهني'), { target: { value: 'مراجع مهني' } });
+    fireEvent.click(screen.getByLabelText(/تحققت من هوية المراجع/));
+    fireEvent.click(screen.getByRole('button', { name: 'تعيين المراجع' }));
+    expect(await screen.findByText(/appointment-1/)).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith('/api/zakat-reviewers', expect.objectContaining({ method: 'POST' }));
+    expect(screen.getByText(/إعادة التعيين لا تعيد صلاحية اعتماد سابق/)).toBeInTheDocument();
+  });
+
   it('renders the stored English account name in English UI and falls back for legacy snapshots', async () => {
     mockFetch(); const first = render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     expect(await screen.findByText(/Cash/)).toBeTruthy();

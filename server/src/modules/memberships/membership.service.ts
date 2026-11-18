@@ -16,6 +16,8 @@ const FULL_ACCESS_EXPLICIT_CAPABILITIES = new Set(['payroll.approve']);
 export const SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES = new Set([
   'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create',
 ]);
+/** Zakat reviewer administration is never delegated by a role holder; only a System Admin may grant or revoke it. */
+export const SYSTEM_ADMIN_ONLY_CAPABILITIES = new Set(['zakat.reviewer.manage']);
 
 /** Delegable, company-scoped authority to grant, demote or manage Full Access (migration 075). */
 export const FULL_ACCESS_GRANT = 'access.full_access.grant';
@@ -246,8 +248,8 @@ export class MembershipService {
       // Cloning produces an ordinary custom role; copy only the source's stored grants so
       // a versioned target overlay is never materialized into a new role implicitly.
       const sourceCaps = [...(await this.repo.getRoleCapabilities(sourceRoleId, client))].sort();
-      const copied = sourceCaps.filter((id) => !isAdministrativeCapability(id));
-      const omitted = sourceCaps.filter(isAdministrativeCapability);
+      const copied = sourceCaps.filter((id) => !isAdministrativeCapability(id) && !SYSTEM_ADMIN_ONLY_CAPABILITIES.has(id));
+      const omitted = sourceCaps.filter((id) => isAdministrativeCapability(id) || SYSTEM_ADMIN_ONLY_CAPABILITIES.has(id));
       const delegated = copied.filter((id) => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id));
       if (delegated.length && !(await this.repo.isActiveSystemAdmin(actorUserId, client))) {
         const actorCaps = await this.repo.getActiveCapabilities(actorUserId, companyId, client);
@@ -323,7 +325,7 @@ export class MembershipService {
 
   async changeRoleCapability(roleId: string, capabilityId: string, companyId: string, actorUserId: string, add: boolean): Promise<void> {
     return this.transaction(async (client) => {
-      if (SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(capabilityId)) await this.lockRoleForDelegation(roleId, companyId, client);
+      if (SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(capabilityId) || SYSTEM_ADMIN_ONLY_CAPABILITIES.has(capabilityId)) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.authorization_policy_version >= 1 && role.authorization_policy_key !== 'accountant') throw new AccessPolicyError('Activated standard policy roles are immutable; create a custom role to override', 'ACCESS_POLICY_ROLE_IMMUTABLE');
@@ -350,7 +352,7 @@ export class MembershipService {
     const known = new Set(await this.repo.listCapabilities());
     for (const id of [...grants, ...revokes]) if (!known.has(id)) throw new Error(`Capability not found: '${id}'`);
     return this.transaction(async (client) => {
-      if ([...grants, ...revokes].some(id => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id))) await this.lockRoleForDelegation(roleId, companyId, client);
+      if ([...grants, ...revokes].some(id => SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id) || SYSTEM_ADMIN_ONLY_CAPABILITIES.has(id))) await this.lockRoleForDelegation(roleId, companyId, client);
       const role = await this.repo.findRoleById(roleId, client);
       if (!role || role.company_id !== companyId) throw new Error('Role not found');
       if (role.authorization_policy_version >= 1 && role.authorization_policy_key !== 'accountant') throw new AccessPolicyError('Activated standard policy roles are immutable; create a custom role to override', 'ACCESS_POLICY_ROLE_IMMUTABLE');
@@ -374,6 +376,13 @@ export class MembershipService {
   }
 
   private async assertCanChangeRoleCapability(roleId: string, id: string, companyId: string, actorUserId: string, add: boolean, actorCapabilities: string[], client: PoolClient): Promise<void> {
+    if (SYSTEM_ADMIN_ONLY_CAPABILITIES.has(id)) {
+      if (add && await this.repo.isUserAssignedRole(actorUserId, companyId, roleId, client)) {
+        throw new AccessPolicyError('Cannot grant a sensitive capability to your own role', 'ACCESS_SELF_GRANT');
+      }
+      if (await this.repo.isActiveSystemAdmin(actorUserId, client)) return;
+      throw new AccessPolicyError('Only an active System Admin may delegate this capability', 'ACCESS_SYSTEM_ADMIN_REQUIRED');
+    }
     if (add && SYSTEM_ADMIN_DELEGABLE_FINANCIAL_CAPABILITIES.has(id) && await this.repo.isUserAssignedRole(actorUserId, companyId, roleId, client)) {
       throw new AccessPolicyError('Cannot grant a sensitive capability to your own role', 'ACCESS_SELF_GRANT');
     }
