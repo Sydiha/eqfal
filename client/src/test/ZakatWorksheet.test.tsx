@@ -12,7 +12,7 @@ const payload = (over: object = {}, amountCents = '1234500') => ({
   classifications: [], adjustments: [], eligibility: [],
   ownership_live: { qualified: false, blockers: ['no_confirmed_ownership'], as_of_date: '2026-12-31', total_ownership_bps4: '0', partners: [] },
   gates,
-  readiness: { preparation_blockers: ['unclassified_balance'], gate_blockers: ['B0_amendment_1248'], unclassified_account_count: 1, can_submit: false, can_approve: false },
+  readiness: { preparation_blockers: ['unclassified_balance'], gate_blockers: ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval'], unclassified_account_count: 1, can_submit: false, can_approve: false },
   preview: { status: 'BLOCKED', calculation_performed: false, final_zakat_base_halalas: null, payable_amount_halalas: null, totals: null, lines: [], blockers: [{ code: 'FINALIZED_BOOK_RESULT_REQUIRED', path: 'finalizedBookResult' }], missing_requirements: ['finalized_book_result', 'regulatory_gates'], worksheet_blockers: ['no_confirmed_ownership'], blocker_groups: { user_data: ['account_classifications', 'ownership_eligibility', 'finalized_book_result'], mapping: ['balances_source_drift', 'classification_mapping'], regulatory_review: ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval', 'regulatory_decision_evidence'] } },
   ...over,
 });
@@ -36,6 +36,9 @@ describe('Zakat worksheet', () => {
     expect(screen.getAllByText(/Classify every in-scope account, including zero-balance accounts/)).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'Review account classifications' }).getAttribute('href')).toBe('#zakat-classification');
     expect(screen.getByText('B3 – Rounding rules')).toBeTruthy();
+    expect(screen.getByText('B0 – Impact of amendment 1248')).toBeTruthy();
+    expect(screen.getByText('B4 – Cap ordering (Arts. 23/25/29)')).toBeTruthy();
+    expect(screen.getByText('B7 – Book profit after Zakat')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Submit for review' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/payable amount:/i)).toBeNull();
     expect(screen.getByText('B9 – Accountant approval of reference cases')).toBeTruthy();
@@ -49,6 +52,19 @@ describe('Zakat worksheet', () => {
     expect(screen.getByRole('link', { name: 'Correct unsupported mapping' }).getAttribute('href')).toBe('#zakat-classification');
     expect(screen.getByRole('heading', { name: 'Authorized regulatory review' })).toBeTruthy();
     expect(screen.getByText('Only the authorized accountant may resolve regulatory decisions.')).toBeTruthy();
+  });
+  it('disables approval and withholds the payable display when any of B0/B3/B4/B7/B9 is unresolved', async () => {
+    const reviewed = payload({ worksheet: { ...payload().worksheet, status: 'reviewed' } });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
+      if (path.includes('/preview')) return new Response(JSON.stringify(reviewed.preview));
+      return new Response(JSON.stringify(reviewed));
+    });
+    render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeDisabled();
+    expect(screen.queryByText(/payable amount:/i)).toBeNull();
+    expect(screen.getByText(/Zakat payable is withheld/)).toBeTruthy();
   });
   it('renders a component breakdown only when the preview explicitly returns validated components', async () => {
     const f = mockFetch();

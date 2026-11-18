@@ -203,6 +203,14 @@ describe('readiness', () => {
     expect(REQUIRED_BLOCKING_GATES).toContain('B9_reference_cases_approval');
     expect(evaluateReadiness(input({ gates: verified })).payable_amount).toBeNull();
   });
+  it.each(REQUIRED_BLOCKING_GATES)('keeps approval and payable amount blocked while %s is unresolved', (unresolvedGate) => {
+    const gates = REQUIRED_BLOCKING_GATES.map((code) => gate(code, true, code === unresolvedGate ? 'unverified' : 'verified'));
+    const readiness = evaluateReadiness(input({ gates }));
+    expect(readiness.gate_blockers).toContain(unresolvedGate);
+    expect(readiness.can_approve).toBe(false);
+    expect(readiness.calculation_performed).toBe(false);
+    expect(readiness.payable_amount).toBeNull();
+  });
   it('blocks submission while an investment deduction classification exists', () => {
     expect(evaluateReadiness(input({ investmentClassifications: 1 })).preparation_blockers).toEqual(['unsupported_investment_deduction']);
   });
