@@ -50,14 +50,15 @@ function zeroLiabilities(data: ZakatCalculationInputV1): void {
 }
 
 describe('isolated end-to-end Zakat base engine', () => {
-  it('returns the Article 15(4) cessation exemption without a base or payable amount', () => {
+  it('blocks an unauthenticated Article 15(4) cessation claim without a base or payable amount', () => {
     const data = input();
     data.fiscalPeriod.endDate = '2027-12-19';
     data.fiscalPeriod.actualDays = 353;
     data.fiscalPeriod.activityPeriod = 'cessation';
     const result = calculateZakatBase(data);
-    expect(result.status).toBe('EXEMPT');
-    expect(result.exemptionCode).toBe('ARTICLE15_SHORT_CESSATION_PERIOD_EXEMPT');
+    expect(result.status).toBe('BLOCKED');
+    expect(result.exemptionCode).toBeNull();
+    expect(codes(result)).toContain('ARTICLE15_CESSATION_EVIDENCE_NOT_AUTHENTICATED');
     expect(result.finalZakatBaseHalalas).toBeNull();
     expect(result.payableAmountHalalas).toBeNull();
     expect(result.inputAssertionsAuthenticated).toBe(false);
@@ -71,14 +72,14 @@ describe('isolated end-to-end Zakat base engine', () => {
     expect(result.payableAmountHalalas).toBeNull();
   });
 
-  it('caps an Article 29 residual at remaining aggregate headroom and never exceeds total deductions', () => {
+  it('traces an under-cap Article 29 residual while withholding the final result', () => {
     const data = input();
     data.sourceBalances = data.sourceBalances.filter((row) => row.accountId !== 'loan');
     data.declaredStatementTotals.non_current_liability = '0.00';
     data.sourceBalances.find((row) => row.accountId === 'ap')!.amountSar = '120.00';
     const result = calculateZakatBase(data);
-    expect(result.blockers).toEqual([]);
-    expect(result.status).toBe('READY');
+    expect(codes(result)).toContain('REGULATORY_GATE_AUTHENTICATION_REQUIRED');
+    expect(result.status).toBe('BLOCKED');
     const liabilities = result.liabilityProcedure!.finalLiabilityAdditionsHalalas;
     expect(liabilities).toEqual({ numerator: '4000', denominator: '1' });
     expect(result.inputAssertionsAuthenticated).toBe(false);
@@ -97,7 +98,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.undeductedAssets = [{ accountId: 'cash', amountSar: '2.00', eligibilityStatus: 'verified', sourceReference: src('cash-undeducted'), evidence: ev('cash-undeducted'), regulatoryDecisionReferenceId: 'decision-B4', reviewAttestation: review('cash-undeducted') }];
     data.declaredAssetTotals = { deductibleCandidateSar: '1.00', undeductedSar: '2.00' };
     const result = calculateZakatBase(data);
-    expect(result.status).toBe('READY');
+    expect(result.status).toBe('BLOCKED');
     expect(result.liabilityProcedure?.step4Article25CurrentAddedHalalas).toEqual({ numerator: '100', denominator: '3' });
   });
 
@@ -107,7 +108,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     current.declaredStatementTotals.non_current_liability = '0.00';
     current.liabilityReclassifications = [{ reclassificationId: 'renewed-ap', accountId: 'ap', amountSar: '50.00', treatment: 'current_to_non_current', confirmed: true, currentDebtFacts: { sameCreditor: true, samePurpose: true, renewedOrRescheduled: true }, sourceReference: src('renewal'), evidence: ev('renewal-agreement'), regulatoryDecisionReferenceId: 'decision-B4' }];
     const currentResult = calculateZakatBase(current);
-    expect(currentResult.status).toBe('READY');
+    expect(currentResult.status).toBe('BLOCKED');
     expect(currentResult.liabilityProcedure?.step2CurrentToNonCurrentReclassifiedHalalas).toEqual({ numerator: '5000', denominator: '1' });
 
     const partnerLoan = input();
@@ -118,7 +119,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     partnerLoan.declaredStatementTotals.non_current_liability = '50.00';
     partnerLoan.liabilityReclassifications = [{ reclassificationId: 'partner-loan-equity', accountId: 'loan', amountSar: '50.00', treatment: 'partner_loan_to_equity', confirmed: true, partnerLoanFacts: { entityType: 'non_listed_capital_company', auditedFinancialStatements: true, classifiedAsLiability: true, repaymentTermDefined: false, returnAtMarketRate: true, singleOwnerControl: false }, sourceReference: src('partner-loan'), evidence: ev('loan-agreement-and-resolution'), regulatoryDecisionReferenceId: 'decision-B4' }];
     const equityResult = calculateZakatBase(partnerLoan);
-    expect(equityResult.status).toBe('READY');
+    expect(equityResult.status).toBe('BLOCKED');
     expect(equityResult.liabilityProcedure?.step3PartnerLoansReclassifiedToEquityHalalas).toEqual({ numerator: '5000', denominator: '1' });
 
     current.liabilityReclassifications[0].currentDebtFacts!.samePurpose = false;
@@ -134,7 +135,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.declaredStatementTotals.non_current_liability = '0.00';
     data.sourceBalances.push({ accountId: 'eosb', statementCategory: 'current_liability', classification: 'provision_eosb_leave', amountSar: '10.00', sign: 'positive', sourceReference: src('eosb'), evidence: ev('eosb-ledger'), regulatoryDecisionReferenceIds: ['decision-B4'] });
     const result = calculateZakatBase(data);
-    expect(result.status).toBe('READY');
+    expect(result.status).toBe('BLOCKED');
     expect(result.liabilityProcedure?.step1NonCurrentLiabilitiesHalalas).toEqual({ numerator: '1000', denominator: '1' });
   });
 
@@ -155,10 +156,10 @@ describe('isolated end-to-end Zakat base engine', () => {
     // Ordinary base 11,000 SAR; statutory floor = min(15,000 + 1,000, 20,000) = 16,000;
     // Article 28 ceiling = 20,000 + 1,000 = 21,000, so the floor is accepted.
     const floor = calculateZakatBase(data);
-    expect(floor.status).toBe('READY');
+    expect(floor.status).toBe('BLOCKED');
     expect(floor.ordinaryBaseBeforeLimitsHalalas).toEqual({ numerator: '11000', denominator: '1' });
     expect(floor.article27MinimumAppliedHalalas).toEqual({ numerator: '16000', denominator: '1' });
-    expect(floor.finalZakatBaseHalalas).toEqual({ numerator: '16000', denominator: '1' });
+    expect(floor.finalZakatBaseHalalas).toBeNull();
 
     data.sourceBalances[1].amountSar = '140.00';
     data.declaredStatementTotals.equity = '140.00';
@@ -175,11 +176,11 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.declaredStatementTotals.equity = '200.00';
     data.adjustments = [{ adjustmentId: 'unreflected-equity-addition', category: 'equity', direction: 'add', amountSar: '5000.00', sourceReference: src('equity-adjustment'), evidence: ev('equity-adjustment-proof'), regulatoryDecisionReferenceId: 'decision-B0', includedInArticle28ClosingEquity: false }];
     const result = calculateZakatBase(data);
-    expect(result.blockers).toEqual([]);
-    expect(result.status).toBe('READY');
+    expect(codes(result)).toContain('REGULATORY_GATE_AUTHENTICATION_REQUIRED');
+    expect(result.status).toBe('BLOCKED');
     expect(result.ordinaryBaseBeforeLimitsHalalas).toEqual({ numerator: '510000', denominator: '1' });
     expect(result.article28MaximumHalalas).toEqual({ numerator: '20000', denominator: '1' });
-    expect(result.finalZakatBaseHalalas).toEqual({ numerator: '20000', denominator: '1' });
+    expect(result.finalZakatBaseHalalas).toBeNull();
   });
 
   it('uses only reconciled Article 39 closing losses and blocks a mismatched rollforward', () => {
@@ -191,8 +192,8 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.declaredAssetTotals = { deductibleCandidateSar: '0.00', undeductedSar: '0.00' };
     data.carriedForwardLossReconciliations = [{ reconciliationId: 'loss-rec', accountId: 'capital', openingLossSar: '20.00', currentPeriodLossSar: '5.00', otherMovementsSar: '0.00', closingLossSar: '25.00', sourceReference: src('loss-rec'), evidence: ev('loss-rollforward'), regulatoryDecisionReferenceId: 'decision-B0' }];
     const accepted = calculateZakatBase(data);
-    expect(accepted.status).toBe('READY');
-    expect(accepted.finalZakatBaseHalalas).toEqual({ numerator: '0', denominator: '1' });
+    expect(accepted.status).toBe('BLOCKED');
+    expect(accepted.finalZakatBaseHalalas).toBeNull();
     data.carriedForwardLossReconciliations[0].closingLossSar = '24.00';
     const blocked = calculateZakatBase(data);
     expect(blocked.status).toBe('BLOCKED');
@@ -203,7 +204,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     const data = input();
     zeroLiabilities(data);
     data.finalizedBookResult.actuallyRecordedCharges = [{ chargeId: 'zakat-prov', kind: 'zakat_provision', amountSar: '6.00', includedInFinalizedBookResult: true, sourceReference: src('zakat-prov'), evidence: ev('posted-provision') }];
-    expect(calculateZakatBase(data).status).toBe('READY');
+    expect(calculateZakatBase(data).status).toBe('BLOCKED');
     data.finalizedBookResult.actuallyRecordedCharges[0].includedInFinalizedBookResult = false as never;
     expect(codes(calculateZakatBase(data))).toContain('RECORDED_CHARGE_NOT_IN_BOOK_RESULT');
   });
@@ -221,7 +222,7 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.adjustments[0].article63ExpenseCategory = 'current_year_provision';
     data.adjustments[0].reviewAttestation = review('supported-profit-adjustment');
     const reviewed = calculateZakatBase(data);
-    expect(reviewed.status).toBe('READY');
+    expect(reviewed.status).toBe('BLOCKED');
     expect(reviewed.inputAssertionsAuthenticated).toBe(false);
   });
 
@@ -232,7 +233,9 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.deductibleAssetCandidates[1].amountSar = '100.00';
     data.undeductedAssets[1].amountSar = '0.00';
     data.declaredAssetTotals = { deductibleCandidateSar: '120.00', undeductedSar: '80.00' };
-    expect(calculateZakatBase(data).status).toBe('READY'); // exactly 25% is within the threshold
+    const boundary = calculateZakatBase(data);
+    expect(boundary.status).toBe('BLOCKED');
+    expect(boundary.article73ProjectEvaluations[0].eligibleForDeduction).toBe(true); // exactly 25%
     data.article73Assessment.projects[0].costOfSalesSar = '50.02';
     const blocked = calculateZakatBase(data);
     expect(blocked.status).toBe('BLOCKED');
@@ -253,12 +256,12 @@ describe('isolated end-to-end Zakat base engine', () => {
       { ...data.article73Assessment.projects[0], accountId: 'offplan-current', statementCategory: 'current_asset', openingBalanceSar: '0.00', additionsSar: '0.00', costOfSalesSar: '0.00', otherMovementsSar: '0.00', closingBalanceSar: '30.00', sourceReference: src('offplan-current-facts'), evidence: ev('offplan-current-facts-proof') },
     ];
     const offPlan = calculateZakatBase(data);
-    expect(offPlan.status).toBe('READY');
+    expect(offPlan.status).toBe('BLOCKED');
     expect(offPlan.article73ProjectEvaluations[0].treatment).toBe('licensed_off_plan_sale');
     expect(offPlan.article73ProjectEvaluations[0].calculatedDeductionHalalas).toEqual({ numerator: '8000', denominator: '1' });
   });
 
-  it('preserves exact fractions and labels final HALF_UP payable rounding provisional', () => {
+  it('withholds final payable rounding while the policy remains provisional', () => {
     const data = input();
     data.sourceBalances = [{ ...data.sourceBalances[4], amountSar: '100.20', sign: 'positive' }];
     data.declaredStatementTotals = { current_asset: '0.00', non_current_asset: '0.00', current_liability: '0.00', non_current_liability: '0.00', equity: '100.20' };
@@ -268,10 +271,10 @@ describe('isolated end-to-end Zakat base engine', () => {
     data.finalizedBookResult.amountSar = '0.00';
     data.adjustedProfit.amountSar = '0.00';
     const result = calculateZakatBase(data);
-    expect(result.status).toBe('READY');
-    expect(result.finalZakatBaseHalalas).toEqual({ numerator: '10020', denominator: '1' });
-    expect(result.payableRounding).toBe('provisional');
-    expect(result.payableAmountHalalas).toBe('258');
+    expect(result.status).toBe('BLOCKED');
+    expect(result.finalZakatBaseHalalas).toBeNull();
+    expect(result.payableRounding).toBeNull();
+    expect(result.payableAmountHalalas).toBeNull();
   });
 
   it('blocks pending gates and unresolved asset/reclassification facts', () => {

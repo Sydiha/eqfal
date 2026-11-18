@@ -95,13 +95,13 @@ export type Article73ProjectEvaluation = {
   evidence: EvidenceReference[];
 };
 export type BaseEngineResult = {
-  status: 'READY' | 'BLOCKED' | 'EXEMPT';
+  status: 'BLOCKED';
   /** Caller supplied review/gate assertions are structurally checked but never authenticated here. */
   inputAssertionsAuthenticated: false;
   exemptionCode: string | null;
-  finalZakatBaseHalalas: ExactHalalas | null;
-  payableAmountHalalas: string | null;
-  payableRounding: 'provisional' | null;
+  finalZakatBaseHalalas: null;
+  payableAmountHalalas: null;
+  payableRounding: null;
   ordinaryBaseBeforeLimitsHalalas: ExactHalalas | null;
   article27MinimumAppliedHalalas: ExactHalalas | null;
   article28MaximumHalalas: ExactHalalas | null;
@@ -136,14 +136,17 @@ function proportionalTraceAllocation(lines: { amount: Rational }[], aggregate: R
 }
 function exemptArticle15Period(): BaseEngineResult {
   return {
-    status: 'EXEMPT', inputAssertionsAuthenticated: false, exemptionCode: 'ARTICLE15_SHORT_CESSATION_PERIOD_EXEMPT', finalZakatBaseHalalas: null, payableAmountHalalas: null,
+    status: 'BLOCKED', inputAssertionsAuthenticated: false, exemptionCode: null, finalZakatBaseHalalas: null, payableAmountHalalas: null,
     payableRounding: null, ordinaryBaseBeforeLimitsHalalas: null, article27MinimumAppliedHalalas: null,
     article28MaximumHalalas: null, liabilityProcedure: null, article73ProjectEvaluations: [], traceLines: [],
-    sourceReferences: [], blockers: [],
+    sourceReferences: [], blockers: [{
+      code: 'ARTICLE15_CESSATION_EVIDENCE_NOT_AUTHENTICATED', path: 'fiscalPeriod.activityPeriod',
+      message: 'A caller-supplied cessation assertion cannot establish a final Article 15(4) exemption.', disposition: 'blocked',
+    }],
   };
 }
 
-/** Runs the six liability stages and Articles 27/28 only when every contract input validates. */
+/** Runs review arithmetic; caller assertions cannot authorize a final base or payable amount. */
 export function calculateZakatBase(
   input: unknown,
   options: CalculationOptions = PROVISIONAL_DEFAULT_CALCULATION_OPTIONS,
@@ -438,19 +441,6 @@ export function calculateZakatBase(
       evidence: [...data.sourceBalances.filter((row) => row.statementCategory === 'equity').flatMap((row) => row.evidence), ...data.liabilityReclassifications.flatMap((row) => row.evidence), ...data.finalizedBookResult.evidence, ...data.adjustedProfit.evidence],
       regulatoryDecisionReferenceIds: [data.adjustedProfit.regulatoryDecisionReferenceId],
     },
-    {
-      id: 'base:final', component: 'final-base-and-period-rate', amountHalalas: serialize(finalBase),
-      sourceReferences: [data.finalizedBookResult.sourceReference, ...data.adjustedProfit.sourceReferences, ...data.regulatoryDecisionReferences.map((row) => row.sourceReference)],
-      evidence: [...data.finalizedBookResult.evidence, ...data.adjustedProfit.evidence],
-      regulatoryDecisionReferenceIds: data.regulatoryDecisionReferences.map((row) => row.referenceId),
-    },
-    {
-      id: 'zakat:period-amount', component: 'article15-period-rate-provisional-half-up',
-      amountHalalas: serialize(rat(BigInt(period.finalAmountHalalas))),
-      sourceReferences: [data.finalizedBookResult.sourceReference, ...data.adjustedProfit.sourceReferences, ...data.regulatoryDecisionReferences.map((row) => row.sourceReference)],
-      evidence: [...data.finalizedBookResult.evidence, ...data.adjustedProfit.evidence],
-      regulatoryDecisionReferenceIds: data.regulatoryDecisionReferences.map((row) => row.referenceId),
-    },
   ];
   const article73Groups = new Map<string, ZakatCalculationInputV1['article73Assessment']['projects']>();
   for (const project of data.article73Assessment.projects) {
@@ -482,10 +472,15 @@ export function calculateZakatBase(
     };
   });
   return {
-    status: 'READY', inputAssertionsAuthenticated: false, exemptionCode: null, finalZakatBaseHalalas: serialize(finalBase), payableAmountHalalas: period.finalAmountHalalas,
-    payableRounding: 'provisional', ordinaryBaseBeforeLimitsHalalas: serialize(normalBase),
+    status: 'BLOCKED', inputAssertionsAuthenticated: false, exemptionCode: null, finalZakatBaseHalalas: null, payableAmountHalalas: null,
+    payableRounding: null, ordinaryBaseBeforeLimitsHalalas: serialize(normalBase),
     article27MinimumAppliedHalalas: article27Minimum === null ? null : serialize(article27Minimum),
     article28MaximumHalalas: serialize(article28Maximum), liabilityProcedure, article73ProjectEvaluations, traceLines,
-    sourceReferences: traceLines.flatMap((line) => line.sourceReferences), blockers: [],
+    sourceReferences: traceLines.flatMap((line) => line.sourceReferences),
+    blockers: [{
+      code: 'REGULATORY_GATE_AUTHENTICATION_REQUIRED', path: 'regulatoryDecisionReferences',
+      message: 'Caller-supplied decision references cannot authenticate B0, B3, B4, B7, or B9; no final base or payable amount is released.',
+      disposition: 'blocked',
+    }],
   };
 }
