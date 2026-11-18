@@ -70,8 +70,6 @@ CREATE TRIGGER zakat_regulatory_decision_guard
 CREATE TRIGGER zakat_reviewer_appointment_guard
   BEFORE INSERT OR UPDATE OR DELETE ON zakat_regulatory_reviewers
   FOR EACH ROW EXECUTE FUNCTION guard_zakat_regulatory_reviewer_appointment();
-CREATE TRIGGER zakat_reviewer_appointment_truncate_guard BEFORE TRUNCATE ON zakat_regulatory_reviewers
-  FOR EACH STATEMENT EXECUTE FUNCTION guard_zakat_regulatory_reviewer_appointment();
 
 -- An approval is valid only for its exact, currently active, verified appointment.
 CREATE OR REPLACE FUNCTION guard_zakat_regulatory_decision() RETURNS trigger LANGUAGE plpgsql AS $$

@@ -234,7 +234,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM role_capabilities WHERE role_id=$1', [roles['Full AccessA']])).toBe(0);
     const caps = (await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).sort();
-    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create','payroll.settlement.exception.approve','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select','payroll.employee_advance_recovery.configure','payroll.employee_advance_recovery.correct','payroll.employee_advance_recovery.correct.approve'].includes(id)));
+    expect(caps).toEqual((await allCaps()).filter((id:string)=>!['payroll.approve','payroll.accounting.mapping.manage','payroll.accounting.post','payroll.settlement.create','payroll.settlement.exception.approve','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select','payroll.employee_advance_recovery.configure','payroll.employee_advance_recovery.correct','payroll.employee_advance_recovery.correct.approve','zakat.reviewer.manage'].includes(id)));
     for (const c of ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']) expect(caps).toContain(c);
     for (const c of ['payroll.approve', 'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create']) expect(caps).not.toContain(c);
     expect(caps).not.toContain('payroll.settlement.exception.approve');
