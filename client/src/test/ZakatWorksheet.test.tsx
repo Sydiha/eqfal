@@ -66,6 +66,31 @@ describe('Zakat worksheet', () => {
     expect(screen.queryByText(/payable amount:/i)).toBeNull();
     expect(screen.getByText(/Zakat payable is withheld/)).toBeTruthy();
   });
+  it('explains reviewed read-only state and offers a reasoned revision without approval', async () => {
+    const reviewed = payload({ worksheet: { ...payload().worksheet, status: 'reviewed' } });
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+      if (String(url).includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
+      if (options?.method === 'POST') return new Response(JSON.stringify(reviewed));
+      if (String(url).includes('/preview')) return new Response(JSON.stringify(reviewed.preview));
+      return new Response(JSON.stringify(reviewed));
+    });
+    render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByText(/This reviewed worksheet is read-only/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create revision' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Corrected classification' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create revision' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/zakat-worksheets/fy/revise', expect.objectContaining({ method: 'POST', body: JSON.stringify({ version: 3, reason: 'Corrected classification' }) })));
+  });
+  it('lets an edit-capable user change a classification on the new draft', async () => {
+    const draft = payload({ worksheet: { ...payload().worksheet, status: 'draft' } });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).includes('/api/documents')) return new Response(JSON.stringify({ documents: [] }));
+      if (String(url).includes('/preview')) return new Response(JSON.stringify(draft.preview));
+      return new Response(JSON.stringify(draft));
+    });
+    render(<ZakatWorksheet {...props} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
   it('renders a component breakdown only when the preview explicitly returns validated components', async () => {
     const f = mockFetch();
     f.mockImplementation(async (u) => {

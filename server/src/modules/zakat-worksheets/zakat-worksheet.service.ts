@@ -564,31 +564,36 @@ export class ZakatWorksheetService {
     return this.get(company, year);
   }
 
-  /** Opens a new draft revision of the approved worksheet. The approved revision stays untouched until the new revision is approved. */
+  /** Opens a new draft revision of the current approved or reviewed worksheet. Prior decisions stay bound to the prior worksheet. */
   async revise(company: string, year: string, actor: string, version: number, reason: string) {
     if (!reason.trim() || reason.length > 2000) throw new ZakatValidationError('A revision reason is required', 'ZAKAT_REASON_REQUIRED');
     const balances = await this.captureBalances(company, year);
     await this.tx(async (c) => {
-      const approved = (await c.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2 AND w.status='approved' FOR UPDATE`, [company, year])).rows[0];
-      if (!approved) throw new ZakatNotFoundError();
-      this.checkVersion(approved, version);
-      if ((await c.query('SELECT 1 FROM zakat_worksheets WHERE company_id=$1 AND fiscal_year_id=$2 AND status = ANY($3)', [company, year, OPEN])).rowCount) throw new ZakatConflictError('An open revision already exists', 'ZAKAT_OPEN_REVISION_EXISTS');
+      const current = (await c.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2 ORDER BY w.revision_no DESC LIMIT 1 FOR UPDATE`, [company, year])).rows[0];
+      if (!current || !['approved', 'reviewed'].includes(current.status)) throw new ZakatNotFoundError();
+      this.checkVersion(current, version);
+      if ((await c.query('SELECT 1 FROM zakat_worksheets WHERE company_id=$1 AND fiscal_year_id=$2 AND status = ANY($3) AND id<>$4', [company, year, OPEN, current.id])).rowCount) throw new ZakatConflictError('An open revision already exists', 'ZAKAT_OPEN_REVISION_EXISTS');
       if (await this.packageFinalized(company, year, c)) throw new ZakatConflictError('The annual package is finalized', 'ZAKAT_PACKAGE_FINALIZED');
       const own = await this.liveOwnership(company, year, c);
+      if (current.status === 'reviewed') {
+        // Close the reviewed row first so the partial unique index continues to enforce one open revision.
+        // The database trigger permits this status-only transition while retaining reviewer identity and timestamps.
+        await c.query(`UPDATE zakat_worksheets SET status='superseded', version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2`, [current.id, company]);
+      }
       const next = (await c.query<{ id: string }>(
         `INSERT INTO zakat_worksheets(company_id, fiscal_year_id, revision_no, revision_reason, supersedes_id, non_financing_confirmed, accounting_records_confirmed, prepared_by_user_id, ownership_snapshot, ownership_fingerprint, balances_snapshot, balances_fingerprint, snapshot_captured_at)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()) RETURNING id`,
-        [company, year, approved.revision_no + 1, reason.trim(), approved.id, approved.non_financing_confirmed, approved.accounting_records_confirmed, actor, JSON.stringify(own.verification), own.fingerprint, JSON.stringify(balances.snapshot), balances.fingerprint])).rows[0]!;
+        [company, year, current.revision_no + 1, reason.trim(), current.id, current.non_financing_confirmed, current.accounting_records_confirmed, actor, JSON.stringify(own.verification), own.fingerprint, JSON.stringify(balances.snapshot), balances.fingerprint])).rows[0]!;
       const ids = balances.snapshot.accounts.filter((a) => CLASSIFIABLE_CATEGORIES.includes(a.statement_category)).map((a) => a.account_id);
       await c.query(
         `INSERT INTO zakat_account_classifications(company_id, worksheet_id, account_id, zakat_type, reg_article, evidence_document_id, note, confirmed_by_user_id, confirmed_at)
          SELECT company_id, $3, account_id, zakat_type, reg_article, evidence_document_id, note, confirmed_by_user_id, confirmed_at FROM zakat_account_classifications WHERE company_id=$1 AND worksheet_id=$2 AND account_id = ANY($4::uuid[])`,
-        [company, approved.id, next.id, ids]);
+        [company, current.id, next.id, ids]);
       await c.query(
         `INSERT INTO zakat_worksheet_adjustments(company_id, worksheet_id, description, direction, amount, reg_article, evidence_document_id, evidence_note, created_by_user_id)
          SELECT company_id, $3, description, direction, amount, reg_article, evidence_document_id, evidence_note, created_by_user_id FROM zakat_worksheet_adjustments WHERE company_id=$1 AND worksheet_id=$2`,
-        [company, approved.id, next.id]);
-      await this.log(c, company, actor, 'zakat_worksheet.revise', 'zakat_worksheet', next.id, this.brief(approved), { revision_no: approved.revision_no + 1, supersedes_id: approved.id }, reason.trim());
+        [company, current.id, next.id]);
+      await this.log(c, company, actor, 'zakat_worksheet.revise', 'zakat_worksheet', next.id, this.brief(current), { revision_no: current.revision_no + 1, supersedes_id: current.id }, reason.trim());
     });
     return this.get(company, year);
   }

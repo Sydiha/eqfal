@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 // G6-1 static contracts: every route is capability-gated with the existing capabilities; the migration adds no capability and no amount column.
 const router = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.router.ts', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../migrations/105_zakat_worksheets.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '');
+const revisionMigration = readFileSync(new URL('../migrations/130_zakat_reviewed_revision.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '');
 const service = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.service.ts', import.meta.url), 'utf8');
 const rules = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.rules.ts', import.meta.url), 'utf8');
 const preview = readFileSync(new URL('../src/modules/zakat-worksheets/zakat-worksheet.preview.ts', import.meta.url), 'utf8');
@@ -57,6 +58,15 @@ describe('migration 105', () => {
     expect(migration).not.toMatch(/\bDROP\b|\bALTER TABLE\b/i);
     expect(migration.match(/INSERT INTO zakat_regulatory_gates[\s\S]*?;/)![0]).not.toMatch(/'verified'/);
     for (const g of ['B0_amendment_1248', 'B3_rounding', 'B4_cap_ordering', 'B7_book_profit_after_zakat', 'B9_reference_cases_approval']) expect(migration).toMatch(new RegExp(`'${g}'.*TRUE\\)`));
+  });
+});
+
+describe('migration 130 reviewed Zakat revisions', () => {
+  it('allows only the immutable reviewed-to-superseded transition and preserves the one-open constraint', () => {
+    expect(revisionMigration).toMatch(/OLD\.status IN \('approved','reviewed'\) AND NEW\.status = 'superseded'/);
+    expect(revisionMigration).toContain("to_jsonb(NEW) - 'status' - 'version' - 'updated_at' = to_jsonb(OLD) - 'status' - 'version' - 'updated_at'");
+    expect(migration).toContain("status IN ('draft','in_review','reviewed')");
+    expect(readFileSync(new URL('../src/modules/zakat-calculation/zakat-base-engine.ts', import.meta.url), 'utf8')).toContain("scope.status !== 'approved'");
   });
 });
 

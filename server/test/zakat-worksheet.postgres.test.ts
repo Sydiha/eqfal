@@ -268,6 +268,54 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     } finally { await resetGates(); }
   });
 
+  it('creates a draft from reviewed without losing its review history or reusing regulatory approvals', async () => {
+    await verifyGates();
+    try {
+      const t = await setup('reviewed-revision');
+      await prepare(t);
+      await act(t, 'submit');
+      await act(t, 'review');
+      await attest(t);
+
+      const reviewed = (await get(t)).worksheet;
+      const editor = await h.user('zakat-revision-editor');
+      await h.member(t.co, editor.id, ['tax_workpaper.view', 'tax_workpaper.edit']);
+      await editor.client.login();
+      expect((await editor.client.req('POST', `/zakat-worksheets/${t.fy}/revise`, { version: reviewed.version, reason: 'Unauthorized revision attempt' })).status).toBe(403);
+      const before = (await h.q<{ id: string; status: string; reviewed_by_user_id: string | null; reviewed_at: string | null; approved_snapshot: unknown; approved_by_user_id: string | null; approved_at: string | null }>(
+        'SELECT id,status,reviewed_by_user_id,reviewed_at,approved_snapshot,approved_by_user_id,approved_at FROM zakat_worksheets WHERE id=$1', [reviewed.id]))[0]!;
+      const auditBefore = await h.q('SELECT action,actor_user_id,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type=\'zakat_worksheet\' AND entity_id=$1 ORDER BY created_at,id', [reviewed.id]);
+      const decisionIds = (await h.q<{ id: string }>('SELECT id FROM zakat_regulatory_decisions WHERE worksheet_id=$1 ORDER BY id', [reviewed.id])).map((row) => row.id);
+      const decisionAuditBefore = await h.q('SELECT action,actor_user_id,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type=\'zakat_regulatory_decision\' AND entity_id=ANY($1::uuid[]) ORDER BY created_at,id', [decisionIds]);
+      expect((await post(t, '/revise', { version: reviewed.version, reason: '   ' })).json.code).toBe('ZAKAT_REASON_REQUIRED');
+      const revised = await post(t, '/revise', { version: reviewed.version, reason: 'Corrected reviewed classification' });
+      expect(revised.status).toBe(201);
+      expect(revised.json.worksheet).toMatchObject({ status: 'draft', revision_no: 2, supersedes_id: reviewed.id });
+
+      const after = (await h.q<{ id: string; status: string; reviewed_by_user_id: string | null; reviewed_at: string | null; approved_snapshot: unknown; approved_by_user_id: string | null; approved_at: string | null }>(
+        'SELECT id,status,reviewed_by_user_id,reviewed_at,approved_snapshot,approved_by_user_id,approved_at FROM zakat_worksheets WHERE id=$1', [reviewed.id]))[0]!;
+      expect(after).toEqual({ ...before, status: 'superseded' });
+      expect(await h.q('SELECT action,actor_user_id,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type=\'zakat_worksheet\' AND entity_id=$1 ORDER BY created_at,id', [reviewed.id])).toEqual(auditBefore);
+      expect(await h.q('SELECT action,actor_user_id,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type=\'zakat_regulatory_decision\' AND entity_id=ANY($1::uuid[]) ORDER BY created_at,id', [decisionIds])).toEqual(decisionAuditBefore);
+      expect((await get(t)).regulatory_decisions).toHaveLength(0);
+      expect(await h.count('SELECT COUNT(*) n FROM zakat_regulatory_decisions WHERE worksheet_id=$1', [reviewed.id])).toBe(5);
+      expect(await h.count("SELECT COUNT(*) n FROM zakat_regulatory_decisions WHERE worksheet_id=$1 AND stale_at IS NOT NULL AND stale_reason='worksheet_source_changed'", [reviewed.id])).toBe(5);
+      expect(await h.count("SELECT COUNT(*) n FROM zakat_worksheets WHERE id=$1 AND status='approved'", [reviewed.id])).toBe(0);
+      expect(await h.count('SELECT COUNT(*) n FROM zakat_worksheets WHERE company_id=$1 AND fiscal_year_id=$2 AND status IN (\'draft\',\'in_review\',\'reviewed\')', [t.co, t.fy])).toBe(1);
+      await expect(h.q("UPDATE zakat_worksheets SET reviewed_by_user_id=NULL WHERE id=$1", [reviewed.id])).rejects.toThrow(/immutable/);
+      await expect(h.q("UPDATE zakat_worksheets SET status='approved' WHERE id=$1", [reviewed.id])).rejects.toThrow(/immutable/);
+
+      const current = (await get(t)).worksheet;
+      expect((await editor.client.req('POST', `/zakat-worksheets/${t.fy}/approve`, { version: current.version })).status).toBe(403);
+      const edit = await editor.client.req('PUT', `/zakat-worksheets/${t.fy}/classifications/${t.cash}`, {
+        zakat_type: 'non_deductible_asset', reg_article: 'Art. 26', version: current.version,
+      });
+      expect(edit.status).toBe(200);
+      expect(edit.json.worksheet.status).toBe('draft');
+      expect(await h.count('SELECT COUNT(*) n FROM zakat_regulatory_decisions WHERE worksheet_id=$1', [revised.json.worksheet.id])).toBe(0);
+    } finally { await resetGates(); }
+  });
+
   it('detects source drift in balances and ownership, requires a refresh, and reports drift to the annual package summary', async () => {
     await verifyGates();
     try {
