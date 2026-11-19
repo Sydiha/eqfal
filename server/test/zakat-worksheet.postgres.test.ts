@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
+import { currentB9Facts } from '../src/modules/zakat-calculation/zakat-approval-binding';
 
 // G6-1 Zakat preparation workflow (real PostgreSQL, disposable DATABASE_URL only): eligibility evidence, ownership/balances snapshots,
 // accountant-confirmed classifications, revisions, permissions, tenant isolation, audit, immutability and the annual package summary.
@@ -77,7 +78,7 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     B3: { ...period, rounding: 'HALF_UP' },
     B4: { liabilityReclassifications: [], lossReconciliations: [] },
     B7: { charges: [], adjustments: [] },
-    B9: {},
+    B9: currentB9Facts(),
   });
   const reviewerFor = async (t: T) => {
     const reviewer = await h.user(`zakat-review-${++seq}`);
@@ -302,10 +303,15 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     await act(t, 'submit'); await act(t, 'review');
     await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [t.fy]);
     await h.q("UPDATE documents SET status='approved' WHERE id=ANY($1::uuid[])", [[t.doc, other.doc]]);
-    expect((await submitDecision(t, 'B9', {}, { evidence_document_id: other.doc })).status).toBe(400);
-    expect((await submitDecision(t, 'B9', {}, { reviewed_by: other.owner.id })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', currentB9Facts(), { evidence_document_id: other.doc })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', currentB9Facts(), { reviewed_by: other.owner.id })).status).toBe(400);
     expect((await submitDecision(t, 'B9', { reviewAttestation: { reviewerReference: other.owner.id } })).status).toBe(400);
-    expect((await submitDecision(t, 'B9', {})).status).toBe(204);
+    expect((await submitDecision(t, 'B9', {})).status).toBe(400);
+    expect((await submitDecision(t, 'B9', { ...currentB9Facts(), engineVersion: '' })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', { ...currentB9Facts(), referenceSuiteDigest: `sha256:${'0'.repeat(64)}` })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', { ...currentB9Facts(), engineVersion: `sha256:${'0'.repeat(64)}` })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', currentB9Facts(), { engine_version: `sha256:${'0'.repeat(64)}` })).status).toBe(400);
+    expect((await submitDecision(t, 'B9', currentB9Facts())).status).toBe(204);
     const decision = (await get(t)).regulatory_decisions[0];
     const path = `${decisionsPath}/${decision.id}/approve`;
     const unappointed = await h.user('zakat-unappointed');
@@ -330,9 +336,65 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect((await reviewer(path, {})).status).toBe(204);
     expect((await get(t)).regulatory_decisions[0]).toMatchObject({ status: 'verified', submitted_by: t.owner.id });
     expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(1);
+    await h.q('UPDATE documents SET uploaded_by_user_id=$2 WHERE id=$1', [t.doc, (await get(t)).regulatory_decisions[0].reviewed_by]);
+    await h.q('UPDATE documents SET uploaded_by_user_id=$2 WHERE id=$1', [t.doc, t.owner.id]);
+    expect((await get(t)).regulatory_decisions[0]).toMatchObject({ status: 'stale', stale_reason: 'evidence_changed' });
     await expect(h.q('DELETE FROM zakat_regulatory_decisions WHERE id=$1', [decision.id])).rejects.toThrow(/immutable/);
     await expect(h.q('TRUNCATE zakat_regulatory_decisions')).rejects.toThrow(/immutable/);
     expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+  });
+
+  it('never revives a stale approval after evidence withdrawal and restoration; requires new independent review', async () => {
+    const t = await setup('stale-evidence');
+    await prepare(t); await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    await attest(t, gateFacts(t), reviewer);
+    const before = (await get(t)).regulatory_decisions;
+    const b9 = before.find((d: { gate: string }) => d.gate === 'B9');
+    await h.q("UPDATE documents SET status='rejected',sha256=$2 WHERE id=$1", [t.doc, 'b'.repeat(64)]);
+    expect((await get(t)).regulatory_decisions.find((d: { id: string }) => d.id === b9.id)).toMatchObject({ status: 'stale', stale_reason: 'evidence_changed' });
+    await h.q("UPDATE documents SET status='approved',sha256=$2 WHERE id=$1", [t.doc, 'a'.repeat(64)]);
+    expect((await get(t)).regulatory_decisions.find((d: { id: string }) => d.id === b9.id)).toMatchObject({ status: 'stale', stale_reason: 'evidence_changed' });
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+    await expect(h.q('UPDATE zakat_regulatory_decisions SET stale_at=NULL,stale_reason=NULL WHERE id=$1', [b9.id])).rejects.toThrow(/cannot be restored/);
+    expect((await reviewer(`${decisionsPath}/${b9.id}/end`, { reason: 'Evidence withdrawn and resubmitted' })).status).toBe(204);
+    expect((await submitDecision(t, 'B9', currentB9Facts())).status).toBe(204);
+    const next = (await get(t)).regulatory_decisions.find((d: { gate: string; status: string }) => d.gate === 'B9' && d.status === 'pending');
+    expect(next.id).not.toBe(b9.id);
+    expect((await reviewer(`${decisionsPath}/${next.id}/approve`, {})).status).toBe(204);
+    expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(6);
+    expect((await get(t)).regulatory_decisions.find((d: { id: string }) => d.id === b9.id).status).toBe('ended');
+  });
+
+  it('keeps source drift stale after a posting reversal and rejects replayed B9 bindings', async () => {
+    const t = await setup('stale-source');
+    await prepare(t); await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    await attest(t, gateFacts(t), reviewer);
+    const b9 = (await get(t)).regulatory_decisions.find((d: { gate: string }) => d.gate === 'B9');
+    expect(b9.status).toBe('verified');
+    await h.postedJournal(t.co, t.fy, t.start, t.owner.id, [[t.cash, '1.00', '0'], [t.cap, '0', '1.00']]);
+    await h.postedJournal(t.co, t.fy, t.start, t.owner.id, [[t.cap, '1.00', '0'], [t.cash, '0', '1.00']]);
+    expect((await get(t)).regulatory_decisions.find((d: { id: string }) => d.id === b9.id)).toMatchObject({ status: 'stale', stale_reason: 'company_source_changed' });
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+    await expect(h.q('UPDATE zakat_regulatory_decisions SET engine_version=$2 WHERE id=$1', [b9.id, `sha256:${'0'.repeat(64)}`])).rejects.toThrow(/immutable/);
+  });
+
+  it('does not revive an approval when a reviewer appointment is removed and restored', async () => {
+    const t = await setup('reviewer-replay');
+    await prepare(t); await act(t, 'submit'); await act(t, 'review');
+    await h.q("UPDATE fiscal_years SET status='closed' WHERE id=$1", [t.fy]);
+    await h.q("UPDATE documents SET status='approved' WHERE id=$1", [t.doc]);
+    const reviewer = await reviewerFor(t);
+    expect((await submitDecision(t, 'B9', currentB9Facts())).status).toBe(204);
+    const decision = (await get(t)).regulatory_decisions[0];
+    expect((await reviewer(`${decisionsPath}/${decision.id}/approve`, {})).status).toBe(204);
+    expect((await get(t)).regulatory_decisions[0].status).toBe('verified');
+    const reviewerId = (await get(t)).regulatory_decisions[0].reviewed_by;
+    await h.q('DELETE FROM zakat_regulatory_reviewers WHERE company_id=$1 AND user_id=$2', [t.co, reviewerId]);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)',
+      [t.co, reviewerId, 'disposable integration fixture appointment']);
+    expect((await get(t)).regulatory_decisions[0]).toMatchObject({ status: 'stale', stale_reason: 'reviewer_appointment_changed' });
   });
 
   it('reconciles B7 charges to posted expense accounts before releasing payable', async () => {

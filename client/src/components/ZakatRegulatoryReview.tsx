@@ -17,6 +17,7 @@ type Decision = {
   end_reason: string | null;
 };
 export type RegulatoryState = {
+  regulatory_binding?: { engine_version: string; reference_suite_digest: string };
   regulatory_decisions?: Decision[];
   regulatory_reviewers?: { id: string; name: string }[];
   finalization?: { status: 'BLOCKED' | 'READY' | 'EXEMPT'; blockers: string[]; payable_amount_halalas: string | null };
@@ -65,7 +66,10 @@ export function ZakatRegulatoryReview(p: Props) {
         const activityDate = form.get('activity_date');
         facts = { activityPeriod: form.get('activity_period'), rounding: form.get('rounding'), ...(activityDate ? { activityDate } : {}) };
       } else {
-        facts = gate === 'B9' ? {} : JSON.parse(String(form.get('facts')));
+        facts = gate === 'B9' ? {
+          engineVersion: p.data.regulatory_binding?.engine_version,
+          referenceSuiteDigest: p.data.regulatory_binding?.reference_suite_digest,
+        } : JSON.parse(String(form.get('facts')));
       }
     } catch {
       setInvalid(true);
@@ -99,6 +103,10 @@ export function ZakatRegulatoryReview(p: Props) {
       return <div key={gate} className="zw-card">
         <h5><bdi>{gate}</bdi> · {status}</h5>
         <p>{requirements[gate][p.ar ? 0 : 1]}</p>
+        {gate === 'B9' && p.data.regulatory_binding && <p dir="ltr">
+          Engine: <code>{p.data.regulatory_binding.engine_version}</code><br />
+          Reference suite: <code>{p.data.regulatory_binding.reference_suite_digest}</code>
+        </p>}
         {active?.approved_at && active.reviewed_by && <p>{label('اعتمد بواسطة', 'Approved by')} {reviewer(active.reviewed_by)} · <bdi>{active.approved_at}</bdi></p>}
         {active && p.canViewDocuments && <details>
           <summary>{label('الأدلة والبيانات المقدّمة', 'Submitted evidence and facts')}</summary>

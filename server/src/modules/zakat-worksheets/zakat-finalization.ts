@@ -3,6 +3,7 @@ import {
   STATEMENT_CATEGORIES, ZAKAT_CALCULATION_INPUT_VERSION, type RegulatoryGate, type ZakatCalculationInputV1,
 } from '../zakat-calculation/calculation-input';
 import { parseSarToHalalas } from '../zakat-calculation/zakat-calculation';
+import { currentB9Facts } from '../zakat-calculation/zakat-approval-binding';
 import { actualDays, toSar } from './zakat-worksheet.preview';
 import type { BalancesSnapshot } from './zakat-worksheet.rules';
 
@@ -24,6 +25,10 @@ export type GateDecision = {
   ended_at: string | null;
   ended_by: string | null;
   end_reason: string | null;
+  stale_at: string | null;
+  stale_reason: string | null;
+  engine_version: string | null;
+  reference_suite_digest: string | null;
   evidence_current: boolean;
   reviewer_active: boolean;
 };
@@ -51,6 +56,12 @@ const only = (row: Record<string, unknown>, keys: readonly string[]) => Object.k
 
 export function validGateFacts(gate: RegulatoryGate, facts: unknown): facts is Record<string, unknown> {
   if (!record(facts)) return false;
+  if (gate === 'B9') {
+    const binding = currentB9Facts();
+    return only(facts, ['engineVersion', 'referenceSuiteDigest'])
+      && facts.engineVersion === binding.engineVersion
+      && facts.referenceSuiteDigest === binding.referenceSuiteDigest;
+  }
   if (gate === 'B3') {
     return only(facts, ['activityPeriod', 'activityDate', 'rounding'])
       && typeof facts.rounding === 'string' && ['HALF_UP', 'HALF_EVEN', 'DOWN'].includes(facts.rounding)
@@ -81,7 +92,10 @@ type Accounting = {
 const rows = (facts: Record<string, unknown>, key: string) => facts[key] as Record<string, unknown>[];
 
 const current = (d: GateDecision, fingerprint: string) =>
-  !d.ended_at && d.evidence_current && d.source_fingerprint === fingerprint;
+  !d.ended_at && !d.stale_at && d.evidence_current && d.source_fingerprint === fingerprint
+  && (d.gate !== 'B9' || (d.engine_version === currentB9Facts().engineVersion
+    && d.reference_suite_digest === currentB9Facts().referenceSuiteDigest
+    && validGateFacts('B9', d.facts)));
 
 export function decisionStatus(d: GateDecision, fingerprint: string) {
   if (d.ended_at) return 'ended';
