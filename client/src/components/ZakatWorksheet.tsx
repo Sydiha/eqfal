@@ -219,6 +219,8 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <h4>{t('zakatWorksheet.worksheetTitle')}</h4>
         {!w ? <>{p.canCreate && !data.scope.unsupported_reason && <button type="button" className="ac-btn ac-btn--primary" disabled={busy} onClick={() => void ws('', 'POST', {})}>{t('zakatWorksheet.create')}</button>}{!p.canCreate && <p className="zw-muted">{t('zakatWorksheet.notStarted')}</p>}</> : <>
           <p>{t('zakatWorksheet.revision')} <bdi>{w.revision_no}</bdi> · <span className="ac-badge">{t(`zakatWorksheet.statuses.${w.status}`)}</span>{w.revision_reason && <> · {t('zakatWorksheet.revisionReason')}: {w.revision_reason}</>}</p>
+          {!draft && <p className="zw-muted" role="status">{t(`zakatWorksheet.readOnly.${w.status}`, { defaultValue: t('zakatWorksheet.readOnly.default') })}</p>}
+          {draft && !p.canEdit && <p className="zw-muted" role="status">{t('zakatWorksheet.readOnly.noEdit')}</p>}
           {w.snapshot_captured_at && <p className="zw-muted">{t('zakatWorksheet.capturedAt')}: <bdi>{w.snapshot_captured_at}</bdi></p>}
           <fieldset id="zakat-declarations" disabled={!draft || !p.canEdit || busy}><legend>{t('zakatWorksheet.declarations')}</legend>
             <label><input type="checkbox" checked={w.non_financing_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: e.target.checked, accounting_records_confirmed: w.accounting_records_confirmed, version: w.version })} /> {t('zakatWorksheet.nonFinancing')}</label>
@@ -231,6 +233,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
       {w && <div className="zw-card" id="zakat-classification">
         <h4>{t('zakatWorksheet.classTitle')}</h4>
         <p className="zw-muted">{t('zakatWorksheet.classHelp')}</p>
+        {draft && !p.canEdit && <p className="zw-muted" role="status">{t('zakatWorksheet.readOnly.noEdit')}</p>}
         <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
           <tbody>{accounts.map((a) => { const c = classByAccount.get(a.account_id); const name = localizedAccountName(a, i18n.language); return (
             <tr key={`${a.account_id}-${c?.zakat_type ?? 'none'}-${w.version}`}><td><bdi>{a.code}</bdi> {name}</td><td>{t(`zakatWorksheet.categories.${a.statement_category}`)}</td><td className="zw-num"><bdi>{money(a.amount_cents)}</bdi></td>
@@ -269,7 +272,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           {w.status === 'in_review' && p.canReview && <button type="button" className="ac-btn ac-btn--primary" disabled={busy || !r.can_submit} onClick={() => void workflow('review')}>{t('zakatWorksheet.review')}</button>}
           {w.status === 'reviewed' && p.canApprove && <button type="button" className="ac-btn ac-btn--primary" disabled={busy || !r.can_approve} onClick={() => void workflow('approve')}>{t('zakatWorksheet.approve')}</button>}
           {['in_review', 'reviewed'].includes(w.status) && p.canReview && <button type="button" className="ac-btn" disabled={busy || !reason.trim()} onClick={() => void workflow('return', { reason }).then((ok) => { if (ok) setReason(''); })}>{t('zakatWorksheet.return')}</button>}
-          {w.status === 'approved' && p.canApprove && <button type="button" className="ac-btn" disabled={busy || !reason.trim()} onClick={() => void workflow('revise', { reason }).then((ok) => { if (ok) setReason(''); })}>{t('zakatWorksheet.revise')}</button>}
+          {['reviewed', 'approved'].includes(w.status) && p.canApprove && <button type="button" className="ac-btn" disabled={busy || !reason.trim()} onClick={() => void workflow('revise', { reason }).then((ok) => { if (ok) setReason(''); })}>{t('zakatWorksheet.revise')}</button>}
         </div>
         {w.status === 'reviewed' && r.gate_blockers.length > 0 && <p className="zw-error">{t('zakatWorksheet.approvalBlocked', { gates: r.gate_blockers.map((c) => t(`zakatWorksheet.gates.${c}`, { defaultValue: c })).join('، ') })}</p>}
         <h5>{t('zakatWorksheet.revisionsTitle')}</h5>
