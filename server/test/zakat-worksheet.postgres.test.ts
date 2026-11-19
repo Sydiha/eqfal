@@ -379,6 +379,59 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect(await audit(t.co, 'zakat.reviewer.revoke')).toBe(1);
   });
 
+  it('uses effective authorization for reviewer administration instead of direct role grants', async () => {
+    const t = await setup('reviewer-admin-policy');
+    const manager = await h.user(`zakat-manager-policy-${++seq}`);
+    await h.member(t.co, manager.id, ['zakat.reviewer.manage']);
+    const role = (await h.q<{ id: string }>(
+      'SELECT role_id id FROM memberships WHERE company_id=$1 AND user_id=$2', [t.co, manager.id]))[0]!.id;
+    // A direct row cannot override the Company Manager effective policy exclusion.
+    await h.q("UPDATE roles SET authorization_policy_key='company_manager',authorization_policy_version=1 WHERE id=$1", [role]);
+    const { ZakatReviewerAdministrationService } = await import('../src/modules/zakat-worksheets/zakat-reviewer-administration.service');
+    const administration = new ZakatReviewerAdministrationService(h.db);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+
+    await h.q('DELETE FROM role_capabilities WHERE role_id=$1 AND capability_id=$2', [role, 'zakat.reviewer.manage']);
+    await h.q('UPDATE roles SET authorization_policy_key=NULL,authorization_policy_version=0 WHERE id=$1', [role]);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+    await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2)', [role, 'zakat.reviewer.manage']);
+    await h.q('UPDATE memberships SET is_active=FALSE WHERE company_id=$1 AND user_id=$2', [t.co, manager.id]);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+  });
+
+  it.each([
+    ['payable-ready', 'regular', 'READY', '1031'],
+    ['article15-exemption', 'cessation', 'EXEMPT', null],
+  ] as const)('serializes finalization against a concurrent reviewer revocation (%s)', async (label, activity, expectedStatus, expectedPayable) => {
+    const t = await setup(`revoke-race-${label}`, activity === 'cessation' ? { end: '2025-06-30' } : {});
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    const facts = activity === 'cessation'
+      ? gateFacts(t, { activityPeriod: 'cessation', activityDate: '2025-06-30' }) : gateFacts(t);
+    const approve = await attest(t, facts, reviewer);
+    expect((await approve()).json.finalization).toMatchObject({ status: expectedStatus, payable_amount_halalas: expectedPayable });
+    const decisions = (await get(t)).regulatory_decisions;
+    const appointmentId = decisions[0]!.reviewer_appointment_id as string;
+
+    // Hold the same appointment row lock used by the revocation transaction. A finalization
+    // that began against its old snapshot must serialize-fail, then read back as blocked.
+    const revokeTx = await h.db.connect();
+    await revokeTx.query('BEGIN');
+    await revokeTx.query(
+      "UPDATE zakat_regulatory_reviewers SET revoked_by_user_id=$3,revoked_at=now(),revocation_reason='Concurrent revocation test' WHERE company_id=$1 AND appointment_id=$2",
+      [t.co, appointmentId, t.owner.id]);
+    const pendingRead = t.owner.client.req('GET', `/zakat-worksheets/${t.fy}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await revokeTx.query('COMMIT');
+    revokeTx.release();
+
+    const raced = await pendingRead;
+    if (raced.status === 200) expect(raced.json.finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+    else expect(raced.status).toBe(409);
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+  });
+
   it('reconciles B7 charges to posted expense accounts before releasing payable', async () => {
     const t = await setup('recorded-charge');
     const revenue = await h.account(t.co, 'Z-REVENUE', 'revenue', 'revenue');

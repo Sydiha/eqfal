@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
+import { MembershipRepository } from '../memberships/membership.repository';
 import { ZakatForbiddenError, ZakatNotFoundError, ZakatValidationError } from './zakat-worksheet.service';
 
 type Appointment = {
@@ -11,7 +12,8 @@ type Appointment = {
 /** Company scoped administration for unique, append-only reviewer appointment identities. */
 export class ZakatReviewerAdministrationService {
   private readonly audit = new AuditLogRepository();
-  constructor(private readonly db: Pool) {}
+  private readonly memberships: MembershipRepository;
+  constructor(private readonly db: Pool) { this.memberships = new MembershipRepository(db); }
 
   private async tx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.db.connect();
@@ -27,16 +29,26 @@ export class ZakatReviewerAdministrationService {
   }
 
   private async assertAdministrator(company: string, actor: string, client: Pool | PoolClient) {
-    const systemAdmin = await client.query(
-      'SELECT 1 FROM users u JOIN companies c ON c.id=$2 AND c.is_active WHERE u.id=$1 AND u.is_active AND u.is_system_admin FOR SHARE OF u,c', [actor, company]);
-    if (systemAdmin.rowCount) return;
-    const delegated = await client.query(
+    // Lock the authorization inputs while writes proceed, then delegate the decision to
+    // the same effective-capability resolver used by authenticated routes. This honors
+    // policy-role restrictions, Full Access exclusions, revoked grants, and inactive members.
+    const principal = await client.query(
       `SELECT 1 FROM users u JOIN companies c ON c.id=$2 AND c.is_active
-       JOIN memberships m ON m.user_id=u.id AND m.company_id=c.id AND m.is_active
-       JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
-       JOIN role_capabilities rc ON rc.role_id=r.id AND rc.capability_id='zakat.reviewer.manage'
-       WHERE u.id=$1 AND u.is_active FOR SHARE OF u,c,m,r,rc`, [actor, company]);
-    if (!delegated.rowCount) throw new ZakatForbiddenError();
+       WHERE u.id=$1 AND u.is_active FOR SHARE OF u,c`, [actor, company]);
+    if (!principal.rowCount) throw new ZakatForbiddenError();
+    const runner = 'release' in client ? client : undefined;
+    if (runner) {
+      await runner.query(
+        `SELECT m.id FROM memberships m JOIN roles r ON r.id=m.role_id AND r.company_id=m.company_id
+         WHERE m.user_id=$1 AND m.company_id=$2 AND m.is_active FOR SHARE OF m,r`, [actor, company]);
+      await runner.query(
+        `SELECT rc.role_id FROM role_capabilities rc JOIN roles r ON r.id=rc.role_id
+         JOIN memberships m ON m.role_id=r.id AND m.company_id=r.company_id AND m.is_active
+         WHERE m.user_id=$1 AND m.company_id=$2 AND rc.capability_id='zakat.reviewer.manage'
+         FOR SHARE OF rc`, [actor, company]);
+    }
+    const capabilities = await this.memberships.getActiveCapabilities(actor, company, runner);
+    if (!capabilities.includes('zakat.reviewer.manage')) throw new ZakatForbiddenError();
   }
 
   async list(company: string, actor: string) {
