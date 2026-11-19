@@ -50,7 +50,7 @@ db('payroll settlement SoD exceptions (PostgreSQL)',()=>{
  });
  it('allows a global System Administrator participant to settle without an exception',async()=>{
   const x=await fixture('sod-system-admin');
-  await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[x.contributor.id]);
+  await h.q('UPDATE users SET is_system_admin=TRUE,system_admin_policy_version=1 WHERE id=$1',[x.contributor.id]);
   const response=await x.contributor.client.req('POST','/payroll/settlements',x.body(await x.bank()));
   expect(response.status,JSON.stringify(response.json)).toBe(201);
   expect(response.json.allocation.sod_exception_id).toBeNull();

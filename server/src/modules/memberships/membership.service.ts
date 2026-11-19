@@ -1,3 +1,4 @@
+import { TARGET_AUTHORIZATION_POLICY_VERSION } from './authorization-policy';
 import { Pool, PoolClient } from 'pg';
 import { MembershipRepository } from './membership.repository';
 import { Membership, MembershipDetails, MembershipListItem, RoleCloneResult, UserCompanyAccess, CreateMembershipInput, CreateRoleInput, Role, RoleListItem } from './membership.types';
@@ -285,15 +286,16 @@ export class MembershipService {
   async getMembershipDetails(membershipId: string, companyId: string, actorUserId: string): Promise<MembershipDetails> {
     const membership = await this.repo.findMembershipById(membershipId);
     if (!membership || membership.company_id !== companyId) throw new Error('Membership not found');
-    const [user, rows] = await Promise.all([this.repo.findUserSummary(membership.user_id), this.repo.listMembershipsOfUser(membership.user_id)]);
-    if (!user) throw new Error('Membership not found');
+    const [summary, rows] = await Promise.all([this.repo.findUserSummary(membership.user_id), this.repo.listMembershipsOfUser(membership.user_id)]);
+    if (!summary) throw new Error('Membership not found');
+    const { system_admin_policy_version, ...user } = summary;
     const companies: UserCompanyAccess[] = [];
     for (const row of rows) {
       const current = row.company_id === companyId;
       if (!current && !(await this.repo.getActiveCapabilities(actorUserId, row.company_id)).includes('access.view')) continue;
       const effective = (await this.repo.getActiveCapabilities(membership.user_id, row.company_id)).sort();
       const live = row.is_active && row.company_is_active;
-      const source = user.is_system_admin && row.company_is_active ? 'system_admin_global'
+      const source = user.is_active && user.is_system_admin && system_admin_policy_version === TARGET_AUTHORIZATION_POLICY_VERSION && row.company_is_active ? 'system_admin_global'
         : live && row.role_is_full_access ? 'full_access_wildcard' : live && row.role_id ? 'role' : 'none';
       companies.push({
         membership_id: row.membership_id, company_id: row.company_id, company_name: row.company_name, company_name_ar: row.company_name_ar,

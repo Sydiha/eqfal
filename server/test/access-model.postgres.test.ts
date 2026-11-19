@@ -136,37 +136,22 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     clients.sa = new Client(email('sa'));
   });
 
-  it('migration 122 keeps roles on v0 and resolves legacy grants plus privileged payroll authority', async () => {
+  it('migration 122 defaults to stored grants and an admin without membership has no company capabilities until v1', async () => {
     const { MembershipRepository } = await import('../src/modules/memberships/membership.repository');
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM roles WHERE authorization_policy_version <> 0')).toBe(0);
     expect(await n('SELECT count(*) n FROM users WHERE system_admin_policy_version <> 0')).toBe(0);
-
-    const legacyCapabilities = async (userId: string, companyId: string) => (await q<{ id: string }>(
-      `SELECT cap.id
-       FROM capabilities cap
-       WHERE EXISTS (
-         SELECT 1
-         FROM users u
-         LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = $2 AND m.is_active = TRUE
-         LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-         WHERE u.id = $1 AND u.is_active = TRUE
-           AND (((u.is_system_admin OR (m.is_active AND r.authorization_policy_key IN ('company_manager','finance_manager')))
-                 AND (cap.id LIKE 'payroll.%' OR cap.id = 'bank.view') AND cap.id <> 'payroll.settlement.exception.approve')
-             OR (u.is_system_admin AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
-             OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
-               OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id))))
-       )
-       ORDER BY cap.id`,
-      [userId, companyId, ['payroll.accounting.mapping.view', 'payroll.accounting.preview', 'payroll.settlement.view']],
-    )).map((row) => row.id).sort();
-
-    for (const company of ['coA', 'coB']) {
-      expect((await repo.getActiveCapabilities(ids.sa!, ids[company]!)).sort()).toEqual((await allCaps()).sort());
-      for (const user of ['ownerA', 'staffA']) expect((await repo.getActiveCapabilities(ids[user]!, ids[company]!)).sort()).toEqual(await legacyCapabilities(ids[user]!, ids[company]!));
-    }
-    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toContain('access.full_access.grant');
+    expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toEqual([]);
+    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toEqual((await repo.getRoleCapabilities(roles['Company ManagerA']!)).sort());
     expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coB!)).toEqual([]);
+    await clients.sa!.login();
+    expect((await clients.sa!.req('GET', '/journals')).status).toBe(403);
+    await q('UPDATE users SET system_admin_policy_version=1 WHERE id=$1', [ids.sa]);
+    expect((await clients.sa!.req('GET', '/journals')).status).toBe(200);
+    await q('UPDATE users SET system_admin_policy_version=0 WHERE id=$1', [ids.sa]);
+    expect((await clients.sa!.req('GET', '/journals')).status).toBe(403);
+    // Remaining global authority scenarios use an activated fixture.
+    await q('UPDATE users SET system_admin_policy_version=1 WHERE id=$1', [ids.sa]);
   });
 
   // ── 2. System Admin global access without memberships ───────────────────
@@ -244,7 +229,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toContain('zz_future.capability');
     expect(await repo.getActiveCapabilities(ids.staffA!, ids.coA!)).not.toContain('zz_future.capability');
-    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toContain('zz_future.capability');
+    expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).not.toContain('zz_future.capability');
     await q("INSERT INTO capabilities(id, implicit_full_access) VALUES('zz_excluded.capability', FALSE)");
     expect(await repo.getActiveCapabilities(ids.ownerA!, ids.coA!)).not.toContain('zz_excluded.capability');
     await q("DELETE FROM capabilities WHERE id='zz_excluded.capability'");
@@ -292,6 +277,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
   });
 
   it('Company Manager may delegate within its company but cannot alter a protected owner or foreign company', async () => {
+    await q('UPDATE roles SET authorization_policy_version=1 WHERE id=$1', [roles['Company ManagerA']]);
     const mgr = clients.mgrA!;
     const staffMembership = await membershipId(ids.staffA!, ids.coA!);
     expect((await mgr.req('PUT', `/access/memberships/${staffMembership}/role`, { role_id: roles['Full AccessA'] })).status).toBe(200);
@@ -300,6 +286,7 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     expect((await mgr.req('PATCH', `/access/memberships/${ownerMembership}/active`, { is_active: false })).json.code).toBe('ACCESS_LAST_FULL_ACCESS');
     expect((await mgr.req('PUT', `/access/memberships/${ownerMembership}/role`, { role_id: roles['ViewerA'] })).json.code).toBe('ACCESS_LAST_FULL_ACCESS');
     expect((await q('SELECT role_id FROM memberships WHERE id=$1', [staffMembership]))[0].role_id).toBe(roles['ViewerA']);
+    await q('UPDATE roles SET authorization_policy_version=0 WHERE id=$1', [roles['Company ManagerA']]);
   });
 
   it('Company Manager in A cannot touch Company B memberships, roles or permissions', async () => {

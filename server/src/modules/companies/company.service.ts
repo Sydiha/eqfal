@@ -1,3 +1,4 @@
+import { MembershipRepository } from '../memberships/membership.repository';
 import { createHash } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
@@ -82,30 +83,12 @@ export class CompanyManagementService {
     return rows.length > 0;
   }
 
-  private async capabilitiesIn(userId: string, companyId: string, runner: Pick<Pool, 'query'> | PoolClient): Promise<string[] | null> {
-    if (await this.isSystemAdmin(userId, runner)) {
-      if ((await runner.query('SELECT 1 FROM companies WHERE id = $1', [companyId])).rows.length === 0) return null;
-      return (await runner.query<{ id: string }>('SELECT id FROM capabilities ORDER BY id')).rows.map((row) => row.id);
-    }
-    const membership = await runner.query<{ role_id: string | null }>(
-      'SELECT role_id FROM memberships WHERE user_id = $1 AND company_id = $2 AND is_active = TRUE',
-      [userId, companyId],
-    );
-    if (membership.rows.length === 0) return null;
-    const { rows } = await runner.query<{ capability_id: string }>(
-      `SELECT cap.id AS capability_id
-       FROM memberships m
-       JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       JOIN capabilities cap ON (r.is_full_access = TRUE AND cap.implicit_full_access = TRUE)
-         OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id)
-       WHERE m.user_id = $1 AND m.company_id = $2 AND m.is_active = TRUE`,
-      [userId, companyId],
-    );
-    return rows.map((row) => row.capability_id);
+  private async capabilitiesIn(userId: string, companyId: string, runner: Pick<Pool, 'query'> | PoolClient, includeInactiveCompany = false): Promise<string[] | null> {
+    return new MembershipRepository(this.pool).resolveCompanyCapabilities(userId, companyId, runner, includeInactiveCompany);
   }
 
-  private async requireCapability(userId: string, companyId: string, capability: string, runner: Pick<Pool, 'query'> | PoolClient): Promise<void> {
-    const caps = await this.capabilitiesIn(userId, companyId, runner);
+  private async requireCapability(userId: string, companyId: string, capability: string, runner: Pick<Pool, 'query'> | PoolClient, includeInactiveCompany = false): Promise<void> {
+    const caps = await this.capabilitiesIn(userId, companyId, runner, includeInactiveCompany);
     if (caps === null) throw new CompanyAccessError('not_found');
     if (!caps.includes(capability)) throw new CompanyAccessError('forbidden');
   }
@@ -126,7 +109,7 @@ export class CompanyManagementService {
       );
     const result: ManagedCompany[] = [];
     for (const row of rows) {
-      const caps = (await this.capabilitiesIn(userId, row.id, this.pool)) ?? [];
+      const caps = (await this.capabilitiesIn(userId, row.id, this.pool, true)) ?? [];
       result.push({ ...row, can_edit: caps.includes('company.edit'), can_toggle: caps.includes('company.status.edit') });
     }
     return result;
@@ -199,9 +182,11 @@ export class CompanyManagementService {
     });
   }
 
-  async setActive(id: string, active: boolean, actorUserId: string): Promise<CompanyRow> {
+  async setActive(id: string, active: boolean, actorUserId: string, globalAdministration = false): Promise<CompanyRow> {
     return this.transaction(async (client) => {
-      await this.requireCapability(actorUserId, id, 'company.status.edit', client);
+      if (!globalAdministration || !(await this.isSystemAdmin(actorUserId, client))) {
+        await this.requireCapability(actorUserId, id, 'company.status.edit', client, true);
+      }
       const before = (await client.query<CompanyRow>('SELECT id, slug, name, name_ar, is_active, created_at FROM companies WHERE id = $1 FOR UPDATE', [id])).rows[0];
       if (!before) throw new CompanyAccessError('not_found');
       if (!active && !(await this.isSystemAdmin(actorUserId, client))) {

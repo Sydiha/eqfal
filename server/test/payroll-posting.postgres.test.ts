@@ -293,9 +293,10 @@ db('payroll posting (PostgreSQL)',()=>{
   expect((await x.post()).status).toBe(201);
   const recovery=(await h.q<{id:string}>("SELECT id FROM payroll_employee_advance_recoveries WHERE company_id=$1 AND advance_id=$2 AND status='posted'",[x.co,advance.advanceId]))[0]!.id;
   const actor=await h.user(`correction-privileged-${role}-actor`);
-  if(role==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[actor.id]);
+  if(role==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE,system_admin_policy_version=1 WHERE id=$1',[actor.id]);
   else {
    const policyRole=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2',[x.co,role]))[0]!;
+   await h.q('UPDATE roles SET authorization_policy_version=1 WHERE id=$1',[policyRole.id]);
    await h.q('INSERT INTO memberships(user_id,company_id,role_id) VALUES($1,$2,$3)',[actor.id,x.co,policyRole.id]);
 
   }
@@ -355,7 +356,7 @@ db('payroll posting (PostgreSQL)',()=>{
  });
  it.each(['company_manager','finance_manager','system_admin'] as const)('allows %s authority to approve and post its own payroll contribution',async(authority)=>{
   const x=await fixture(`post-${authority}`,false);
-  if(authority==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE WHERE id=$1',[x.editor.id]);
+  if(authority==='system_admin')await h.q('UPDATE users SET is_system_admin=TRUE,system_admin_policy_version=1 WHERE id=$1',[x.editor.id]);
   else {
    let role=(await h.q<{id:string}>('SELECT id FROM roles WHERE company_id=$1 AND authorization_policy_key=$2 LIMIT 1',[x.co,authority]))[0];
    if(!role)role=(await h.q<{id:string}>("UPDATE roles r SET authorization_policy_key=$3 FROM memberships m WHERE m.role_id=r.id AND m.company_id=r.company_id AND m.company_id=$1 AND m.user_id=$2 RETURNING r.id",[x.co,x.editor.id,authority]))[0];

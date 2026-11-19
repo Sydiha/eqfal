@@ -195,6 +195,38 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect(await audit(t.co, 'zakat_worksheet.return_to_draft')).toBe(1);
   });
 
+  it.each(['system_admin', 'company_manager', 'finance_manager'] as const)(
+    'allows %s to prepare, review and approve one worksheet with independent regulatory evidence', async (role) => {
+      const fixture = await setup(`self-${role.replaceAll('_', '-')}`);
+      const actor = await h.user(`worksheet-${role}`);
+      if (role === 'system_admin') {
+        await h.q('UPDATE users SET is_system_admin=TRUE, system_admin_policy_version=1 WHERE id=$1', [actor.id]);
+      } else {
+        const localRole = (await h.q<{ id: string }>(
+          'UPDATE roles SET authorization_policy_version=1 WHERE company_id=$1 AND authorization_policy_key=$2 RETURNING id', [fixture.co, role],
+        ))[0]!;
+        await h.q('INSERT INTO memberships(company_id,user_id,role_id) VALUES($1,$2,$3)', [fixture.co, actor.id, localRole.id]);
+      }
+      await actor.client.login();
+      expect((await actor.client.req('POST', '/auth/switch-company', { companyId: fixture.co })).status).toBe(200);
+      const t = { ...fixture, owner: actor };
+      await prepare(t);
+      expect((await act(t, 'submit')).status).toBe(200);
+      expect((await act(t, 'review')).status).toBe(200);
+      expect((await act(t, 'approve')).json.code).toBe('ZAKAT_REGULATORY_GATES_UNVERIFIED');
+      await attest(t);
+      expect((await get(t)).readiness.can_approve).toBe(true);
+      const approved = await act(t, 'approve');
+      expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+      expect(approved.json.worksheet).toMatchObject({
+        prepared_by_user_id: actor.id, reviewed_by_user_id: actor.id, approved_by_user_id: actor.id,
+      });
+      expect(approved.json.finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1031' });
+      expect(await h.count(`SELECT count(*)::text n FROM audit_log WHERE company_id=$1 AND actor_user_id=$2
+        AND action='zakat_worksheet.approve' AND after_data->>'same_actor_approval'='true'`, [t.co, actor.id])).toBe(1);
+    },
+  );
+
   it('releases an exact payable only after independent approval, and requires fresh decisions on revision', async () => {
     await verifyGates();
     try {

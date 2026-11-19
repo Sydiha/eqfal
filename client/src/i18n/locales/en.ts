@@ -319,7 +319,7 @@ const en = {
       empty: 'No company memberships are visible to you for this user.', companies: 'Company memberships', currentCompany: 'current company', companyDisabled: 'company disabled',
       roleCapabilities: 'Role permissions', wildcard: 'Full Access wildcard: every permission, including future ones', effective: 'Effective permissions',
       source: { role: '{{count}} permissions from the role', full_access_wildcard: 'All {{count}} current permissions (Full Access wildcard; future permissions are included automatically)', system_admin_global: 'All {{count}} permissions through global System Admin authority', none: 'None (membership disabled, company disabled, or no role)' },
-      systemAdminNote: 'This account is a System Admin. It has every permission in every active company through global authority, regardless of role.',
+      systemAdminNote: 'This account is a System Admin. Company permissions depend on the active authorization policy and the account’s company role.',
       showEffective: 'Show effective permissions ({{count}})', hideEffective: 'Hide effective permissions',
     },
     cloneRole: 'Clone role', cloneRoleTitle: 'Clone role “{{name}}”', cloneName: 'New role name', cloneNote: 'Creates a new role in this company with the same operational permissions. It is assigned to nobody. Administrative authority and Full Access are never copied; grant them separately if needed.',
