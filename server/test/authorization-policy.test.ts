@@ -88,13 +88,13 @@ describe('versioned authorization policy', () => {
     expect(foreignCompany).toEqual([]);
   });
 
-  it('uses explicit grants for version zero System Administrators', async () => {
-    const rows = ['accounting.view', 'accounting.journal.post', 'payroll.settlement.exception.approve'].map((capability_id) => ({
-      capability_id, currently_authorized: capability_id === 'accounting.view', is_system_admin: true,
+  it('preserves global version zero System Administrator access before policy activation', async () => {
+    const rows = catalog.map((capability_id) => ({
+      capability_id, currently_authorized: false, is_system_admin: true,
       system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: false,
     }));
     expect(await new MembershipRepository({ query: async () => ({ rows }) } as never)
-      .getActiveCapabilities('admin', 'company-a')).toEqual(['accounting.view']);
+      .getActiveCapabilities('admin', 'company-a')).toEqual(catalog);
   });
 
   it('resolves activated System Administrator policy to every registered capability', async () => {

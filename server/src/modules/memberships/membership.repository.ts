@@ -430,7 +430,10 @@ export class MembershipRepository {
     const first = rows[0];
     if (!first) return null;
     const catalog = rows.map((row) => row.capability_id);
-    if (first.is_system_admin && Number(first.system_admin_policy_version) === TARGET_AUTHORIZATION_POLICY_VERSION) {
+    // Global System Admin authority is the legacy v0 behavior and remains global until any
+    // separately approved policy change defines otherwise. The current v1 target is the same
+    // full catalog, so deploying the versioned resolver must not narrow a v0 administrator.
+    if (first.is_system_admin) {
       return targetSystemAdministratorCapabilities(catalog);
     }
     const explicit = rows.filter((row) => row.currently_authorized

@@ -136,20 +136,20 @@ describeDatabase('access model: System Admin, Full Access wildcard, Company Mana
     clients.sa = new Client(email('sa'));
   });
 
-  it('migration 122 defaults to stored grants and an admin without membership has no company capabilities until v1', async () => {
+  it('migration 122 preserves global v0 System Admin access without membership', async () => {
     const { MembershipRepository } = await import('../src/modules/memberships/membership.repository');
     const repo = new MembershipRepository(pool);
     expect(await n('SELECT count(*) n FROM roles WHERE authorization_policy_version <> 0')).toBe(0);
     expect(await n('SELECT count(*) n FROM users WHERE system_admin_policy_version <> 0')).toBe(0);
-    expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toEqual([]);
+    expect(await repo.getActiveCapabilities(ids.sa!, ids.coA!)).toEqual((await allCaps()).sort());
     expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coA!)).toEqual((await repo.getRoleCapabilities(roles['Company ManagerA']!)).sort());
     expect(await repo.getActiveCapabilities(ids.mgrA!, ids.coB!)).toEqual([]);
     await clients.sa!.login();
-    expect((await clients.sa!.req('GET', '/journals')).status).toBe(403);
+    expect((await clients.sa!.req('GET', '/journals')).status).toBe(200);
     await q('UPDATE users SET system_admin_policy_version=1 WHERE id=$1', [ids.sa]);
     expect((await clients.sa!.req('GET', '/journals')).status).toBe(200);
     await q('UPDATE users SET system_admin_policy_version=0 WHERE id=$1', [ids.sa]);
-    expect((await clients.sa!.req('GET', '/journals')).status).toBe(403);
+    expect((await clients.sa!.req('GET', '/journals')).status).toBe(200);
     // Remaining global authority scenarios use an activated fixture.
     await q('UPDATE users SET system_admin_policy_version=1 WHERE id=$1', [ids.sa]);
   });
