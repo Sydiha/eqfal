@@ -15,8 +15,9 @@ describe('PR-4 bank import history', () => {
   beforeEach(async () => { await i18n.changeLanguage('ar'); });
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('keeps the stored filename text, isolates it, labels every cell and keeps Resume/Delete reachable', async () => {
-    const filename = 'كشف-حساب-أكتوبر-2026.xlsx';
+  it.each(['ar', 'en'] as const)('keeps the stored filename isolated in the %s locale and keeps row actions reachable', async (language) => {
+    await i18n.changeLanguage(language);
+    const filename = 'كشف-حساب-(Q4)-أكتوبر_2026.xlsx';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.includes('/api/bank-accounts')) return json({ accounts: [{ id: 'a1', display_name: 'Main', bank_name: null, currency_code: 'SAR', is_active: true }] });
       if (url.includes('/api/bank-import-batches')) return json({ batches: [{ id: 'b1', bank_account_id: 'a1', original_filename: filename, status: 'preview_ready', total_rows: 80, valid_rows: 70, duplicate_rows: 5, invalid_rows: 5, created_at: '2026-10-21T10:00:00Z' }] });
@@ -25,7 +26,7 @@ describe('PR-4 bank import history', () => {
     render(<MantineProvider><Banking canView canImport canDeleteImport canManage={false} canMatch={false} canReconcile={false} onUnauthorized={vi.fn()} /></MantineProvider>);
     const name = await screen.findByText(filename);
     expect(name.tagName).toBe('BDI');
-    expect(name).toHaveAttribute('dir', 'auto');
+    expect(name).toHaveAttribute('dir', 'ltr');
     const row = name.closest('tr')!;
     const cells = Array.from(row.querySelectorAll('td'));
     expect(cells.every((td) => td.getAttribute('data-label'))).toBe(true);

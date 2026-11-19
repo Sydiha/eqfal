@@ -31,6 +31,7 @@ describe('BankTransactionsView', () => {
     fireEvent.click(await screen.findByRole('button',{name:'Match'}));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Sale')).toBeInTheDocument();expect(screen.getByText('Customer A with a complete counterparty name')).toBeInTheDocument();expect(screen.getByText('1,234,567,890.00')).toBeInTheDocument();expect(screen.getByText('Partly settled')).toBeInTheDocument();expect(screen.getByText(/Remaining amount:/)).toHaveTextContent('1,000.00');expect(screen.getByText('SALE-A')).toBeInTheDocument();
+    expect(screen.getByText('SALE-A').closest('bdi')).toHaveAttribute('dir','auto');
 
     fireEvent.change(screen.getByRole('textbox',{name:'Search documents'}),{target:{value:'SALE-A'}});
     fireEvent.click(screen.getByRole('button',{name:'Search'}));
@@ -45,6 +46,18 @@ describe('BankTransactionsView', () => {
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledWith(`/api/bank-transactions/${transaction.id}/match`,expect.objectContaining({method:'POST',body:JSON.stringify({document_id:'doc-a'})})));
+  });
+  it.each(['en', 'ar'] as const)('isolates mixed Arabic filenames left-to-right in reconciliation candidates for %s', async (language) => {
+    await i18n.changeLanguage(language);
+    const transaction={id:'11111111-1111-4111-8111-111111111111',transaction_date:'2026-08-16',description:'Customer receipt',bank_reference:null,amount:'1150.00',running_balance:null,currency_code:'SAR',reconciliation_status:'unmatched'};
+    const filename='كشف-حساب-(Q4)-أكتوبر_2026.xlsx';
+    const candidate={id:'doc-ar',status:'approved',document_type:'sale',counterparty_name:'عميل تجريبي',document_date:'2026-08-01',reference_number:null,total_amount:'125.00',original_filename:filename,linked_obligation:null};
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.includes('match-candidates')?{transaction,match:{document_id:candidate.id},documents:[candidate]}:{transactions:[transaction]}),{status:200})));
+    render(<MantineProvider><BankTransactionsView canView canMatch canReconcile onUnauthorized={vi.fn()}/></MantineProvider>);
+    fireEvent.click(await screen.findByRole('button',{name:i18n.t('banks.match')}));
+    const rendered=await screen.findAllByText(filename);
+    expect(rendered).toHaveLength(2);
+    expect(rendered.every(name=>name.closest('bdi')?.getAttribute('dir')==='ltr')).toBe(true);
   });
   it('uses a selected row and detail pane while keeping bank metadata secondary', async () => {
     const transaction = {
