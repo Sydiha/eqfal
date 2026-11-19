@@ -1605,13 +1605,20 @@ export function Accounting({
                       <td className="ac-tab__wide">
                         {r.code} — {accountName(r)}
                       </td>
-                      <td className="ac-tab__num">{formatMoney(r.debit_movement)}</td>
-                      <td className="ac-tab__num">{formatMoney(r.credit_movement)}</td>
+                      <td className="ac-tab__num">
+                        <span className="ac-tab__mobile-label">{t("accounting.debitMovement")}</span>
+                        <bdi dir="ltr">{formatMoney(r.debit_movement)}</bdi>
+                      </td>
+                      <td className="ac-tab__num">
+                        <span className="ac-tab__mobile-label">{t("accounting.creditMovement")}</span>
+                        <bdi dir="ltr">{formatMoney(r.credit_movement)}</bdi>
+                      </td>
                       <td className="ac-tab__balance-cell">
+                        <span className="ac-tab__mobile-label">{t("accounting.balance")}</span>
                         <span className="ac-tab__balance">
                           {Number(r.debit_balance) > 0
-                            ? <><span>{formatMoney(r.debit_balance)}</span> <span className="ac-tab__side">{t("accounting.debit")}</span></>
-                            : <><span>{formatMoney(r.credit_balance)}</span> <span className="ac-tab__side">{t("accounting.credit")}</span></>}
+                            ? <><bdi dir="ltr">{formatMoney(r.debit_balance)}</bdi> <span className="ac-tab__side">{t("accounting.debit")}</span></>
+                            : <><bdi dir="ltr">{formatMoney(r.credit_balance)}</bdi> <span className="ac-tab__side">{t("accounting.credit")}</span></>}
                         </span>
                       </td>
                     </tr>
@@ -1628,12 +1635,19 @@ export function Accounting({
                     <tfoot>
                       <tr className="is-strong">
                         <th scope="row">{t("accounting.statements.total")}</th>
-                        <th className="ac-tab__num">{formatMoney(sumAmounts(trial.map((r) => r.debit_movement)))}</th>
-                        <th className="ac-tab__num">{formatMoney(sumAmounts(trial.map((r) => r.credit_movement)))}</th>
+                        <th className="ac-tab__num">
+                          <span className="ac-tab__mobile-label">{t("accounting.debitMovement")}</span>
+                          <bdi dir="ltr">{formatMoney(sumAmounts(trial.map((r) => r.debit_movement)))}</bdi>
+                        </th>
+                        <th className="ac-tab__num">
+                          <span className="ac-tab__mobile-label">{t("accounting.creditMovement")}</span>
+                          <bdi dir="ltr">{formatMoney(sumAmounts(trial.map((r) => r.credit_movement)))}</bdi>
+                        </th>
                         <th className="ac-tab__balance-cell">
+                          <span className="ac-tab__mobile-label">{t("accounting.balance")}</span>
                           <span className="ac-tab__balance">
-                            <span>{t("accounting.debit")} {formatMoney(debitBalance)}</span>{" "}
-                            <span>{t("accounting.credit")} {formatMoney(creditBalance)}</span>{" "}
+                            <span>{t("accounting.debit")} <bdi dir="ltr">{formatMoney(debitBalance)}</bdi></span>{" "}
+                            <span>{t("accounting.credit")} <bdi dir="ltr">{formatMoney(creditBalance)}</bdi></span>{" "}
                             <span className={`ac-tab__pill ${balanced ? "is-balanced" : "is-unbalanced"}`}>
                               {t(balanced ? "accounting.balanced" : "accounting.unbalanced")}
                             </span>

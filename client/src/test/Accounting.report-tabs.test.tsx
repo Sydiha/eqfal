@@ -67,6 +67,28 @@ describe('Accounting report and journal tabs (Figma 246:*)', () => {
     expect(screen.getByText('Fiscal year: 2026')).toBeInTheDocument();
   });
 
+  it('labels trial-balance movement and balance values in both mobile locales', async () => {
+    for (const language of ['en', 'ar'] as const) {
+      await i18n.changeLanguage(language);
+      window.history.replaceState(null, '', '/?page=accounting');
+      stub();
+      const view = render(ui());
+      fireEvent.click(await screen.findByRole('tab', { name: i18n.t('accounting.tabs.trial') }));
+      fireEvent.click(screen.getByRole('button', { name: i18n.t('accounting.run') }));
+      const bank = (await screen.findByText('1000 — Bank')).closest('tr')!;
+      expect(within(bank.children[1] as HTMLElement).getByText(i18n.t('accounting.debitMovement'))).toBeInTheDocument();
+      expect(within(bank.children[1] as HTMLElement).getByText('0.00', { selector: 'bdi' })).toBeInTheDocument();
+      expect(within(bank.children[2] as HTMLElement).getByText(i18n.t('accounting.creditMovement'))).toBeInTheDocument();
+      expect(within(bank.children[2] as HTMLElement).getByText('100.00', { selector: 'bdi' })).toBeInTheDocument();
+      expect(within(bank.children[3] as HTMLElement).getByText(i18n.t('accounting.balance'))).toBeInTheDocument();
+      expect(within(bank.children[3] as HTMLElement).getByText('100.00', { selector: 'bdi' })).toBeInTheDocument();
+      const total = screen.getByRole('rowheader', { name: i18n.t('accounting.statements.total') }).closest('tr')!;
+      expect(within(total.children[1] as HTMLElement).getByText(i18n.t('accounting.debitMovement'))).toBeInTheDocument();
+      expect(within(total.children[2] as HTMLElement).getByText(i18n.t('accounting.creditMovement'))).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
   it('totals the trial balance and flags an unbalanced result without hiding it', async () => {
     stub();
     render(ui());

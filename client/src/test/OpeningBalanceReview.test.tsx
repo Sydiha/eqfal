@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from './test-utils';
+import { fireEvent, screen, waitFor, within } from './test-utils';
 import { render } from './test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpeningBalanceReview } from '../components/OpeningBalanceReview';
@@ -9,10 +9,10 @@ const cash={id:'22222222-2222-4222-8222-222222222222',code:'1000',name:'Cash',ac
 const equity={id:'33333333-3333-4333-8333-333333333333',code:'3000',name:'Opening equity',account_type:'equity',is_active:true};
 const response=(body:unknown,status=200)=>Promise.resolve(new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}}));
 
-function loadMock(review:unknown,items:unknown[],difference='0.00'){
+function loadMock(review:unknown,items:unknown[],difference='0.00',accounts:unknown[]=[cash,equity]){
  return vi.fn().mockImplementation((url:string)=>{
   if(url==='/api/fiscal-years')return response({fiscalYears:[year]});
-  if(url==='/api/accounts')return response({accounts:[cash,equity]});
+  if(url==='/api/accounts')return response({accounts});
   if(url.endsWith('/suggestions'))return response({suggestions:[]});
   if(url.endsWith('/reconciliation'))return response({status:'verified',blocking:false,issues:[]});
   if(url.endsWith('/exceptions'))return response({required_count:0,accepted_unverified_count:0,stale_count:0,issues:[],exceptions:[]});
@@ -57,6 +57,32 @@ describe('OpeningBalanceReview',()=>{
  it('calls the approve endpoint only when balanced',async()=>{const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit',source_type:'bank_statement',source_reference:'statement',confidence:'high',note:null},{id:'i2',category:'equity',account_id:equity.id,amount:'100.00',balance_side:'credit',source_type:'manual_unverified',source_reference:null,confidence:'low',note:null}];const fetchMock=loadMock({id:'r1',status:'in_review',journal_entry_id:null},items);vi.stubGlobal('fetch',fetchMock);render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview canApprove onUnauthorized={vi.fn()}/>);await reviewTab();fireEvent.click(await screen.findByRole('button',{name:'Approve opening balance'}));await waitFor(()=>expect(fetchMock.mock.calls.some(([url,options])=>String(url).endsWith('/approve')&&(options as RequestInit|undefined)?.method==='POST')).toBe(true));});
 
  it('renders the Figma register: balanced badge, unverified source, account code/name instead of raw ids',async()=>{const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit' as const,source_type:'manual_unverified',source_reference:'REF-1',confidence:'low' as const,note:null},{id:'i2',category:'equity',account_id:'99999999-9999-4999-8999-999999999999',amount:'100.00',balance_side:'credit' as const,source_type:'bank_statement',source_reference:null,confidence:'high' as const,note:null}];vi.stubGlobal('fetch',loadMock({id:'r1',status:'approved',journal_entry_id:null},items));render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);expect(await screen.findByText('Balanced')).toBeInTheDocument();expect(screen.getByText('Unverified')).toBeInTheDocument();expect(screen.getByText('Unknown account')).toBeInTheDocument();expect(screen.queryByText(/99999999-9999/)).not.toBeInTheDocument();expect(screen.getByText('Cash',{exact:false})).toBeInTheDocument();expect(screen.getByText('REF-1')).toBeInTheDocument();});
+
+ it('uses localized account names in the register and selector with the shared language fallback',async()=>{
+  const localizedAccounts=[
+   {...cash,name:'Legacy cash',name_ar:'النقدية',name_en:'Cash account'},
+   {...equity,name:'Legacy equity',name_ar:'حقوق الملكية',name_en:null},
+  ];
+  const items=[
+   {id:'i1',category:'bank',account_id:cash.id,amount:'100.00',balance_side:'debit' as const,source_type:'bank_statement',source_reference:null,confidence:'high' as const,note:null},
+   {id:'i2',category:'equity',account_id:equity.id,amount:'100.00',balance_side:'credit' as const,source_type:'manual_unverified',source_reference:null,confidence:'low' as const,note:null},
+  ];
+  for(const [language,cashName,equityName] of [['ar','النقدية','حقوق الملكية'],['en','Cash account','حقوق الملكية']] as const){
+   window.history.replaceState(null,'','/');
+   await i18n.changeLanguage(language);
+   vi.stubGlobal('fetch',loadMock({id:'r1',status:'draft',journal_entry_id:null},items,'0.00',localizedAccounts));
+   const view=render(<OpeningBalanceReview canView canCreate canEdit canDelete canSubmit canReview canApprove={false} onUnauthorized={vi.fn()}/>);
+   const register=await screen.findByRole('table');
+   const bankRow=within(register).getByText('1000',{selector:'bdi'}).closest('tr')!;
+   const equityRow=within(register).getByText('3000',{selector:'bdi'}).closest('tr')!;
+   expect(bankRow.cells[1]).toHaveTextContent(cashName);
+   expect(equityRow.cells[1]).toHaveTextContent(equityName);
+   fireEvent.click(screen.getByText(language==='ar'?'إضافة بند':'Add item',{selector:'h3'}));
+   expect(screen.getByRole('option',{name:`1000 — ${cashName}`})).toBeInTheDocument();
+   expect(screen.getByRole('option',{name:`3000 — ${equityName}`})).toBeInTheDocument();
+   view.unmount();
+  }
+ });
 
  it('groups thousands for display only and shows a short manual source beside the unverified badge',async()=>{const items=[{id:'i1',category:'bank',account_id:cash.id,amount:'12500.00',balance_side:'debit' as const,source_type:'manual_unverified',source_reference:null,confidence:'low' as const,note:null}];vi.stubGlobal('fetch',loadMock({id:'r1',status:'draft',journal_entry_id:null},items));render(<OpeningBalanceReview canView canCreate={false} canEdit={false} canDelete={false} canSubmit={false} canReview={false} canApprove={false} onUnauthorized={vi.fn()}/>);expect(await screen.findByText('12,500.00')).toBeInTheDocument();expect(screen.getByText('Manual')).toBeInTheDocument();expect(screen.getByText('Unverified')).toBeInTheDocument();expect(screen.queryByText('Manual / unverified',{selector:'td *'})).not.toBeInTheDocument();});
 
