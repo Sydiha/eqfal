@@ -37,6 +37,7 @@ import { periodicAdjustmentsRouter } from './modules/periodic-adjustments/period
 import { annualClosingRouter } from './modules/annual-closing/annual-closing.router';
 import { taxWorkpaperRouter } from './modules/tax-working-papers/tax-working-paper.router';
 import { zakatWorksheetRouter } from './modules/zakat-worksheets/zakat-worksheet.router';
+import { zakatReviewerAdministrationRouter } from './modules/zakat-worksheets/zakat-reviewer-administration.router';
 import { accessAdministrationRouter } from './modules/memberships/access-administration.router';
 import { systemAdminRouter } from './modules/memberships/system-admin.router';
 import { homeAlertsRouter } from './modules/home-alerts/home-alerts.router';
@@ -112,6 +113,7 @@ app.use('/api', periodicAdjustmentsRouter);
 app.use('/api', annualClosingRouter);
 app.use('/api', taxWorkpaperRouter);
 app.use('/api', zakatWorksheetRouter);
+app.use('/api', zakatReviewerAdministrationRouter);
 app.use('/api', accessAdministrationRouter);
 app.use('/api', systemAdminRouter);
 app.use('/api', companyRouter);

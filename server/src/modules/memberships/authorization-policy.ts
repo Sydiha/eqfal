@@ -37,7 +37,7 @@ export function targetRoleCapabilities(key: AuthorizationPolicyKey, capabilityId
       && id !== 'company.create').sort();
   }
   // Company creation is global; every other catalog capability is scoped to an active company.
-  return capabilityIds.filter((id) => id !== 'company.create').sort();
+  return capabilityIds.filter((id) => id !== 'company.create' && id !== 'zakat.reviewer.manage').sort();
 }
 
 export function effectiveRoleCapabilities(

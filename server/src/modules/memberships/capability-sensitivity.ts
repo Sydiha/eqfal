@@ -47,6 +47,7 @@ const CRITICAL = new Set([
   'source_authority.view',
   'vat.close',
   'vat.reopen',
+  'zakat.reviewer.manage',
 ]);
 
 const SENSITIVE_EXACT = new Set([

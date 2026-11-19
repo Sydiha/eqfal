@@ -21,6 +21,7 @@ export type GateDecision = {
   reviewed_by: string | null;
   approved_at: string | null;
   reviewer_appointment: string | null;
+  reviewer_appointment_id: string | null;
   ended_at: string | null;
   ended_by: string | null;
   end_reason: string | null;
@@ -85,7 +86,7 @@ const current = (d: GateDecision, fingerprint: string) =>
 
 export function decisionStatus(d: GateDecision, fingerprint: string) {
   if (d.ended_at) return 'ended';
-  if (!current(d, fingerprint) || (d.reviewed_by && !d.reviewer_active)) return 'stale';
+  if (!current(d, fingerprint) || (d.reviewed_by && (!d.reviewer_active || !d.reviewer_appointment_id))) return 'stale';
   return d.reviewed_by && d.approved_at ? 'verified' : 'pending';
 }
 

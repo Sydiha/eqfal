@@ -36,7 +36,7 @@ type Data = RegulatoryState & {
 };
 export type ZakatWorksheetProps = {
   yearId: string; canCreate: boolean; canEdit: boolean; canCreateAdjustment: boolean; canEditAdjustment: boolean; canDeleteAdjustment: boolean;
-  canSubmit: boolean; canReview: boolean; canApprove: boolean; canCreateOwnership?: boolean; canConfirmOwnership?: boolean; canEditOwnership?: boolean; canViewDocuments?: boolean;
+  canSubmit: boolean; canReview: boolean; canApprove: boolean; canCreateOwnership?: boolean; canConfirmOwnership?: boolean; canEditOwnership?: boolean; canViewDocuments?: boolean; canManageReviewers?: boolean;
   onUnauthorized: () => void; onChanged?: () => void;
 };
 
@@ -158,7 +158,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
       <h3 id="zw-title">{t('zakatWorksheet.title')}</h3>{toggle}
       {error && <p role="alert" className="zw-error">{error}</p>}
 
-      {data.finalization ? <ZakatRegulatoryReview data={data} ar={ar} busy={busy} reviewed={w?.status === 'reviewed'}
+      {data.finalization ? <ZakatRegulatoryReview data={data} ar={ar} busy={busy} reviewed={w?.status === 'reviewed'} canManageReviewers={p.canManageReviewers}
         canSubmit={p.canEdit} canApprove={p.canApprove} canViewDocuments={Boolean(p.canViewDocuments)}
         version={w?.version} documents={documents} write={ws}
         blockerLabel={(code) => t(`zakatWorksheet.finalizationBlockers.${code}`, { defaultValue: t(`zakatWorksheet.blockers.${code}`, { defaultValue: `${t('zakatWorksheet.finalizationBlockerAction')} (${code})` }) })}

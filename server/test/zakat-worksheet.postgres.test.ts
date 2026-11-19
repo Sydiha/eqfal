@@ -71,6 +71,14 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
   const act = async (t: T, name: string, extra: object = {}) => post(t, `/${name}`, { version: (await get(t)).worksheet.version, ...extra });
   const audit = (co: string, action: string) => h.count('SELECT COUNT(*) n FROM audit_log WHERE company_id=$1 AND action=$2', [co, action]);
 
+  const adminFor = async (t: T) => {
+    const admin = await h.user(`zakat-admin-${++seq}`);
+    await h.member(t.co, admin.id, ['zakat.reviewer.manage']);
+    await admin.client.login();
+    return admin;
+  };
+  const appointReviewer = async (t: T, admin: Awaited<ReturnType<typeof adminFor>>, reviewer: Awaited<ReturnType<typeof h.user>>, reference: string) =>
+    admin.client.req('POST', '/zakat-reviewers', { user_id: reviewer.id, appointment_reference: reference, identity_verified: true });
   const decisionsPath = '/regulatory-decisions';
   const gateFacts = (t: T, period: Record<string, string> = { activityPeriod: 'regular' }) => ({
     B0: { projects: [], deductibleAssets: [{ accountId: t.fa, amountSar: '600.00' }], undeductedAssets: [{ accountId: t.cash, amountSar: '400.00' }] },
@@ -82,7 +90,7 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
   const reviewerFor = async (t: T) => {
     const reviewer = await h.user(`zakat-review-${++seq}`);
     await h.member(t.co, reviewer.id, ['tax_workpaper.view', 'tax_workpaper.approve', 'document.view']);
-    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, reviewer.id, 'disposable integration fixture appointment']);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference,appointed_by_user_id,identity_verified_at) VALUES($1,$2,$3,$4,now())', [t.co, reviewer.id, 'disposable integration fixture appointment', t.owner.id]);
     await reviewer.client.login();
     return (path: string, body: unknown) => reviewer.client.req('POST', `/zakat-worksheets/${t.fy}${path}`, body);
   };
@@ -319,11 +327,11 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect((await post(other, path, {})).status).toBe(404);
     const viewOnly = await h.user('zakat-appointed-view-only');
     await h.member(t.co, viewOnly.id, ['tax_workpaper.view', 'document.view']);
-    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, viewOnly.id, 'fixture without approval capability']);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference,appointed_by_user_id,identity_verified_at) VALUES($1,$2,$3,$4,now())', [t.co, viewOnly.id, 'fixture without approval capability', t.owner.id]);
     await viewOnly.client.login();
     expect((await viewOnly.client.req('POST', url, {})).status).toBe(403);
     expect((await unappointed.client.req('POST', url, {}, { origin: 'https://example.test' })).status).toBe(403);
-    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference) VALUES($1,$2,$3)', [t.co, t.owner.id, 'fixture self-review attempt']);
+    await h.q('INSERT INTO zakat_regulatory_reviewers(company_id,user_id,appointment_reference,appointed_by_user_id,identity_verified_at) VALUES($1,$2,$3,$4,now())', [t.co, t.owner.id, 'fixture self-review attempt', viewOnly.id]);
     expect((await post(t, path, {})).status).toBe(403);
     const reviewer = await reviewerFor(t);
     expect((await reviewer(path, { reviewed_by: t.owner.id })).status).toBe(400);
@@ -332,6 +340,95 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(1);
     await expect(h.q('DELETE FROM zakat_regulatory_decisions WHERE id=$1', [decision.id])).rejects.toThrow(/immutable/);
     await expect(h.q('TRUNCATE zakat_regulatory_decisions')).rejects.toThrow(/immutable/);
+    expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+  });
+
+  it('requires dedicated appointment administration and keeps old approvals invalid after revoke and reappointment', async () => {
+    const t = await setup('appointment-identity');
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await h.user(`zakat-review-reappoint-${++seq}`);
+    await h.member(t.co, reviewer.id, ['tax_workpaper.view', 'tax_workpaper.approve', 'document.view']);
+    await reviewer.client.login();
+    const admin = await adminFor(t);
+    const denied = await t.owner.client.req('GET', '/zakat-reviewers');
+    expect(denied.status).toBe(403);
+    const targetRole = (await h.q<{ id: string }>('INSERT INTO roles(company_id,name) VALUES($1,$2) RETURNING id', [t.co, 'reviewer-manager-copy-attempt']))[0]!.id;
+    const { MembershipService } = await import('../src/modules/memberships/membership.service');
+    await expect(new MembershipService(h.db).changeRoleCapability(targetRole, 'zakat.reviewer.manage', t.co, admin.id, true))
+      .rejects.toMatchObject({ code: 'ACCESS_SYSTEM_ADMIN_REQUIRED' });
+    const firstResponse = await appointReviewer(t, admin, reviewer, 'appointment reference one');
+    expect(firstResponse.status).toBe(201);
+    const firstId = firstResponse.json.appointment_id as string;
+    const reviewerPost = (path: string, body: unknown) => reviewer.client.req('POST', `/zakat-worksheets/${t.fy}${path}`, body);
+    const approveWorksheet = await attest(t, gateFacts(t), reviewerPost);
+    expect((await approveWorksheet()).json.finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1031' });
+    const before = await get(t);
+    expect(before.regulatory_decisions).toHaveLength(5);
+    expect(before.regulatory_decisions.every((row: { reviewer_appointment_id: string }) => row.reviewer_appointment_id === firstId)).toBe(true);
+
+    const revoked = await admin.client.req('POST', `/zakat-reviewers/${firstId}/revoke`, { reason: 'Appointment term ended' });
+    expect(revoked.status).toBe(200);
+    const secondResponse = await appointReviewer(t, admin, reviewer, 'appointment reference two');
+    expect(secondResponse.status).toBe(201);
+    expect(secondResponse.json.appointment_id).not.toBe(firstId);
+    const after = await get(t);
+    expect(after.regulatory_decisions.every((row: { status: string; reviewer_appointment_id: string }) => row.status === 'stale' && row.reviewer_appointment_id === firstId)).toBe(true);
+    expect(after.finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+    expect(await audit(t.co, 'zakat.reviewer.appoint')).toBe(2);
+    expect(await audit(t.co, 'zakat.reviewer.revoke')).toBe(1);
+  });
+
+  it('uses effective authorization for reviewer administration instead of direct role grants', async () => {
+    const t = await setup('reviewer-admin-policy');
+    const manager = await h.user(`zakat-manager-policy-${++seq}`);
+    await h.member(t.co, manager.id, ['zakat.reviewer.manage']);
+    const role = (await h.q<{ id: string }>(
+      'SELECT role_id id FROM memberships WHERE company_id=$1 AND user_id=$2', [t.co, manager.id]))[0]!.id;
+    // A direct row cannot override the Company Manager effective policy exclusion.
+    await h.q("UPDATE roles SET authorization_policy_key='company_manager',authorization_policy_version=1 WHERE id=$1", [role]);
+    const { ZakatReviewerAdministrationService } = await import('../src/modules/zakat-worksheets/zakat-reviewer-administration.service');
+    const administration = new ZakatReviewerAdministrationService(h.db);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+
+    await h.q('DELETE FROM role_capabilities WHERE role_id=$1 AND capability_id=$2', [role, 'zakat.reviewer.manage']);
+    await h.q('UPDATE roles SET authorization_policy_key=NULL,authorization_policy_version=0 WHERE id=$1', [role]);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+    await h.q('INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2)', [role, 'zakat.reviewer.manage']);
+    await h.q('UPDATE memberships SET is_active=FALSE WHERE company_id=$1 AND user_id=$2', [t.co, manager.id]);
+    await expect(administration.list(t.co, manager.id)).rejects.toBeInstanceOf(Svc.ZakatForbiddenError);
+  });
+
+  it.each([
+    ['payable-ready', 'regular', 'READY', '1031'],
+    ['article15-exemption', 'cessation', 'EXEMPT', null],
+  ] as const)('serializes finalization against a concurrent reviewer revocation (%s)', async (label, activity, expectedStatus, expectedPayable) => {
+    const t = await setup(`revoke-race-${label}`, activity === 'cessation' ? { end: '2025-06-30' } : {});
+    await prepare(t);
+    await act(t, 'submit'); await act(t, 'review');
+    const reviewer = await reviewerFor(t);
+    const facts = activity === 'cessation'
+      ? gateFacts(t, { activityPeriod: 'cessation', activityDate: '2025-06-30' }) : gateFacts(t);
+    const approve = await attest(t, facts, reviewer);
+    expect((await approve()).json.finalization).toMatchObject({ status: expectedStatus, payable_amount_halalas: expectedPayable });
+    const decisions = (await get(t)).regulatory_decisions;
+    const appointmentId = decisions[0]!.reviewer_appointment_id as string;
+
+    // Hold the same appointment row lock used by the revocation transaction. A finalization
+    // that began against its old snapshot must serialize-fail, then read back as blocked.
+    const revokeTx = await h.db.connect();
+    await revokeTx.query('BEGIN');
+    await revokeTx.query(
+      "UPDATE zakat_regulatory_reviewers SET revoked_by_user_id=$3,revoked_at=now(),revocation_reason='Concurrent revocation test' WHERE company_id=$1 AND appointment_id=$2",
+      [t.co, appointmentId, t.owner.id]);
+    const pendingRead = t.owner.client.req('GET', `/zakat-worksheets/${t.fy}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await revokeTx.query('COMMIT');
+    revokeTx.release();
+
+    const raced = await pendingRead;
+    if (raced.status === 200) expect(raced.json.finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
+    else expect(raced.status).toBe(409);
     expect((await get(t)).finalization).toMatchObject({ status: 'BLOCKED', payable_amount_halalas: null });
   });
 
