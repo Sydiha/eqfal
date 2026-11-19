@@ -19,6 +19,10 @@ Historical or superseded documents are evidence of previous decisions only. They
 
 If active instructions materially conflict or cannot be reconciled safely: **STOP and report the conflict to the Project Owner. Do not choose an interpretation independently.**
 
+### سياسة الصلاحيات المعتمدة من المالك
+
+تُعد [سياسة الصلاحيات العربية المعتمدة](docs/authorization/PHASE_1_AUTHORIZATION_POLICY_AR.md) مصدر الحقيقة لنطاق الأدوار والصلاحيات. تتقدم على افتراضات الأدوار والصلاحيات الداخلية السابقة أو المتعارضة، بما فيها مصفوفات الأدوار الافتراضية والاختبارات التي توثق سلوكًا سابقًا. مدير النظام يملك نطاقًا عامًا على النظام كله؛ ومدير الشركة والمدير المالي يملكان النطاق الكامل داخل شركتيهما فقط. يجوز لهذه الأدوار تنفيذ مراحل متعددة من مسار العمل، ولا تمنعها قيود فصل الواجبات العامة. لا يجيز ذلك تجاوز سلامة المعاملات أو المتطلبات التنظيمية والبيانات الإلزامية، ولا يغيّر وجوب التدقيق أو عزل الشركات. بقية المستخدمين لا يحصلون إلا على صلاحياتهم المعيّنة صراحةً.
+
 ## 2. Roles and Final Authority
 
 ### Project Owner
