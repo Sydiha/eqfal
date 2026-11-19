@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness } from './helpers/http-pg';
 import { currentB9Facts } from '../src/modules/zakat-calculation/zakat-approval-binding';
@@ -444,6 +445,28 @@ describeDatabase('zakat worksheet G6-1 (PostgreSQL)', () => {
     expect((await reviewer(`${decisionsPath}/${next.id}/approve`, {})).status).toBe(204);
     expect(await audit(t.co, 'zakat_regulatory_decision.approve')).toBe(6);
     expect((await get(t)).regulatory_decisions.find((d: { id: string }) => d.id === b9.id).status).toBe('ended');
+  });
+
+  it('inventories B9 for either release direction without staling or rewriting the decision', async () => {
+    const t = await setup('release-inventory');
+    await prepare(t); await act(t, 'submit'); await act(t, 'review');
+    const approve = await attest(t);
+    expect((await approve()).status).toBe(200);
+    const sql = readFileSync(new URL('../../docs/authorization/b9-rollout-inventory.sql', import.meta.url), 'utf8');
+    const client = await h.db.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      const rows = (await client.query(sql)).rows.filter((row) => row.company_id === t.co);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ reviewed: true, worksheet_status: 'approved', package_locked: false,
+        engine_version: currentB9Facts().engineVersion, reference_suite_digest: currentB9Facts().referenceSuiteDigest });
+      // The same inventory detects risk before a rollback to the baseline source binding.
+      expect(rows[0].engine_version).not.toBe('sha256:cbafb11dd8262300cb6a3b7300bacf1a006ef29706b9e6a84c21cdd1fa2434cb');
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+    expect((await get(t)).finalization).toMatchObject({ status: 'READY', payable_amount_halalas: '1031' });
   });
 
   it('keeps source drift stale after a posting reversal and rejects replayed B9 bindings', async () => {

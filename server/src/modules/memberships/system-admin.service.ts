@@ -166,20 +166,17 @@ export class SystemAdminService {
       const before = (await client.query<AdminUser>('SELECT id, email, display_name, is_active, is_system_admin, system_admin_policy_version, created_at, 0 AS active_memberships FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
       if (!before) throw new Error('User not found');
       if (value && !before.is_active) throw new AccessPolicyError('A disabled account cannot become System Admin', 'ACCESS_TARGET_INACTIVE');
+      if (before.is_system_admin === value) return before;
       if (!value) await this.assertNotLastSystemAdmin(client, userId);
       const after = (await client.query<AdminUser>(
         'UPDATE users SET is_system_admin = $2, system_admin_policy_version = 0, updated_at = NOW() WHERE id = $1 RETURNING id, email, display_name, is_active, is_system_admin, system_admin_policy_version, created_at, 0 AS active_memberships',
         [userId, value],
       )).rows[0] as AdminUser;
-      if (before.is_system_admin !== after.is_system_admin || Number(before.system_admin_policy_version ?? 0) !== Number(after.system_admin_policy_version ?? 0)) {
-        await this.log(client, {
-          actor: actorUserId,
-          action: before.is_system_admin !== after.is_system_admin ? (value ? 'system.admin.grant' : 'system.admin.revoke') : 'system.admin.policy.reset',
-          target: userId,
-          before: { is_system_admin: before.is_system_admin, system_admin_policy_version: before.system_admin_policy_version ?? 0 },
-          after: { is_system_admin: after.is_system_admin, system_admin_policy_version: after.system_admin_policy_version ?? 0 },
-        });
-      }
+      await this.log(client, {
+        actor: actorUserId, action: value ? 'system.admin.grant' : 'system.admin.revoke', target: userId,
+        before: { is_system_admin: before.is_system_admin, system_admin_policy_version: before.system_admin_policy_version },
+        after: { is_system_admin: after.is_system_admin, system_admin_policy_version: after.system_admin_policy_version },
+      });
       return after;
     });
   }

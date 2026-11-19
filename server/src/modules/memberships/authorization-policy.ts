@@ -30,7 +30,8 @@ export function effectiveRoleCapabilities(
   if (version === TARGET_AUTHORIZATION_POLICY_VERSION && (key === 'finance_manager' || key === 'company_manager')) {
     return targetRoleCapabilities(key, capabilityIds);
   }
-  return [...new Set(explicit)].sort();
+  // Stored grants belong to a company role, including the technical wildcard role.
+  return [...new Set(explicit)].filter((id) => id !== 'company.create').sort();
 }
 
 export function isAuthorizationPolicyKey(value: unknown): value is AuthorizationPolicyKey {
