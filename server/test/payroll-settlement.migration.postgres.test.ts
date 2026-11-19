@@ -64,7 +64,8 @@ suite('payroll settlement migration (PostgreSQL)', () => {
     await expect(h.q("INSERT INTO bank_transaction_matches(company_id,document_id,bank_transaction_id,matched_by_user_id,match_type) VALUES($1,$2,$3,$4,'document')",[x.co,doc,b,x.u.id])).rejects.toThrow(/payroll settlement/);
     await expect(h.q('DELETE FROM payroll_settlement_allocations WHERE id=$1',[a.id])).rejects.toThrow(/immutable/);
     await expect(h.q('UPDATE bank_transactions SET amount=-99 WHERE id=$1',[b])).rejects.toThrow(/immutable|payroll settlement history/i);
-    await expect(h.q("UPDATE bank_account_ledger_links SET valid_to='2026-02-01',ended_by=$2,ended_at=NOW() WHERE company_id=$1",[x.co,x.u.id])).rejects.toThrow(/payroll settlement history/);
+    await expect(h.q("UPDATE bank_account_ledger_links SET valid_to='2026-02-01',ended_by=$2,ended_at=NOW() WHERE company_id=$1 AND valid_to IS NULL",[x.co,x.u.id])).rejects.toThrow(/payroll settlement history/);
+    await expect(h.q("UPDATE bank_account_ledger_links SET valid_to='2025-12-30' WHERE id=$1",[historical])).rejects.toThrow(/ended bank ledger link is immutable/);
     await expect(h.q('UPDATE journal_lines SET debit=11 WHERE journal_entry_id=$1 AND debit>0',[a.journal])).rejects.toThrow(/immutable/);
   });
   it('keeps a posted November settlement protected after an adjacent October link is added',async()=>{
