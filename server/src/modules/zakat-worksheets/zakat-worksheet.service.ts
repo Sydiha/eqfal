@@ -10,6 +10,7 @@ import { actualDays, previewZakatWorksheet } from './zakat-worksheet.preview';
 import { calculateWorksheetFinalization, decisionStatus, regulatoryGates, validGateFacts, type GateDecision } from './zakat-finalization';
 import type { RegulatoryGate } from '../zakat-calculation/calculation-input';
 import { ZakatInputError } from '../zakat-calculation/zakat-calculation';
+import { currentB9Facts } from '../zakat-calculation/zakat-approval-binding';
 
 export class ZakatForbiddenError extends Error {}
 export class ZakatNotFoundError extends Error {}
@@ -109,7 +110,7 @@ export class ZakatWorksheetService {
   }
 
   private async decisions(company: string, year: string, worksheet: string, r: Runner, lock = false) {
-    return (await r.query<Omit<GateDecision, 'submitted_at' | 'approved_at' | 'ended_at'> & { submitted_at: Date; approved_at: Date | null; ended_at: Date | null }>(
+    return (await r.query<Omit<GateDecision, 'submitted_at' | 'approved_at' | 'ended_at' | 'stale_at'> & { submitted_at: Date; approved_at: Date | null; ended_at: Date | null; stale_at: Date | null }>(
       `SELECT d.*, e.uploaded_by_user_id evidence_uploader, COALESCE(e.status='approved' AND e.sha256=d.evidence_sha256,false) evidence_current,
               COALESCE(u.is_active AND a.appointment_reference=d.reviewer_appointment,false) reviewer_active
        FROM zakat_regulatory_decisions d
@@ -120,6 +121,7 @@ export class ZakatWorksheetService {
       [company, year, worksheet])).rows.map((row) => ({
       ...row, submitted_at: row.submitted_at.toISOString(),
       approved_at: row.approved_at?.toISOString() ?? null, ended_at: row.ended_at?.toISOString() ?? null,
+      stale_at: row.stale_at?.toISOString() ?? null,
     }));
   }
 
@@ -146,6 +148,14 @@ export class ZakatWorksheetService {
       ownership: own.fingerprint, balances: live?.fingerprint, ledger: live?.ledgerAccounts,
       classifications: children.classifications, adjustments: children.adjustments,
     });
+    // Persist detected drift. A later restoration of the old source fingerprint
+    // must never revive an approval that has already gone stale.
+    await r.query(`UPDATE zakat_regulatory_decisions SET stale_at=now(),
+      stale_reason=CASE WHEN source_fingerprint<>$4 THEN 'source_changed' ELSE 'calculation_binding_changed' END
+      WHERE company_id=$1 AND fiscal_year_id=$2 AND worksheet_id=$3 AND approved_at IS NOT NULL
+        AND ended_at IS NULL AND stale_at IS NULL AND (source_fingerprint<>$4 OR
+          (gate='B9' AND (engine_version IS DISTINCT FROM $5 OR reference_suite_digest IS DISTINCT FROM $6)))`,
+    [company, year, ws.id, fingerprint, currentB9Facts().engineVersion, currentB9Facts().referenceSuiteDigest]);
     const decisions = await this.decisions(company, year, ws.id, r, Boolean(approvalActor));
     const history = decisions.map((d) => ({ ...d, status: decisionStatus(d, fingerprint) }));
     const verified = new Set(regulatoryGates.flatMap((gate, i) =>
@@ -203,9 +213,11 @@ export class ZakatWorksheetService {
           "SELECT sha256 FROM documents WHERE id=$1 AND company_id=$2 AND status='approved'", [action.document, company])).rows[0];
         if (!document) throw new ZakatValidationError('An approved evidence document for this company is required', 'ZAKAT_REFERENCE_NOT_FOUND');
         const id = (await c.query<{ id: string }>(
-          `INSERT INTO zakat_regulatory_decisions(company_id,fiscal_year_id,worksheet_id,gate,source_fingerprint,evidence_document_id,evidence_sha256,authority_reference,facts,submitted_by)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-          [company, year, ws.id, action.gate, state.fingerprint, action.document, document.sha256, action.reference, action.facts, actor])).rows[0]!.id;
+          `INSERT INTO zakat_regulatory_decisions(company_id,fiscal_year_id,worksheet_id,gate,source_fingerprint,evidence_document_id,evidence_sha256,authority_reference,facts,submitted_by,engine_version,reference_suite_digest)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+          [company, year, ws.id, action.gate, state.fingerprint, action.document, document.sha256, action.reference, action.facts, actor,
+            action.gate === 'B9' ? currentB9Facts().engineVersion : null,
+            action.gate === 'B9' ? currentB9Facts().referenceSuiteDigest : null])).rows[0]!.id;
         await this.log(c, company, actor, 'zakat_regulatory_decision.submit', 'zakat_regulatory_decision', id, null, { gate: action.gate, worksheet_id: ws.id });
         return;
       }
@@ -272,13 +284,16 @@ export class ZakatWorksheetService {
         ownership_live: own.verification, gates,
         readiness: { ...readiness, can_approve: canApprove },
         regulatory_reviewers: reviewers.map(({ id, name }) => ({ id, name })),
+        regulatory_binding: { engine_version: currentB9Facts().engineVersion, reference_suite_digest: currentB9Facts().referenceSuiteDigest },
         regulatory_decisions: ws && state ? state.history.map((d) => ({
           id: d.id, gate: d.gate, status: d.status, submitted_by: d.submitted_by, submitted_at: d.submitted_at,
           reviewed_by: d.reviewed_by, approved_at: d.approved_at, ended_by: d.ended_by, ended_at: d.ended_at,
-          end_reason: d.end_reason, reviewer_appointment: viewDocuments ? d.reviewer_appointment : null,
+          end_reason: d.end_reason, stale_at: d.stale_at, stale_reason: d.stale_reason,
+          reviewer_appointment: viewDocuments ? d.reviewer_appointment : null,
           ...(viewDocuments ? {
             evidence_document_id: d.evidence_document_id, evidence_sha256: d.evidence_sha256,
             authority_reference: d.authority_reference, facts: d.facts,
+            engine_version: d.engine_version, reference_suite_digest: d.reference_suite_digest,
           } : {}),
           can_approve: Boolean(actor && appointed && ws.status === 'reviewed' && d.status === 'pending' && this.independentReviewer(ws, d, actor)),
           can_end: Boolean(actor && !d.ended_at && (appointed || (actor === d.submitted_by && !d.reviewed_by))),

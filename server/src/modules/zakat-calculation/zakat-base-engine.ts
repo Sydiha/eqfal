@@ -171,6 +171,7 @@ export async function calculateApprovedZakatBase(
     return blocked([{ code: 'CONSISTENT_TRANSACTION_REQUIRED', path: 'transaction', message: 'Finalization requires a consistent database transaction.', disposition: 'blocked' }]);
   }
   const { ZakatWorksheetService } = await import('../zakat-worksheets/zakat-worksheet.service');
+  const { currentB9Facts } = await import('./zakat-approval-binding');
   const service = new ZakatWorksheetService(client as never);
   const trusted = await service.trustedCalculationInput(company, year, worksheet, client, actor);
   const decisions = (await client.query<{ gate: string; id: string; submitted_by: string }>(
@@ -179,8 +180,10 @@ export async function calculateApprovedZakatBase(
      JOIN zakat_regulatory_reviewers a ON a.company_id=d.company_id AND a.user_id=d.reviewed_by AND a.appointment_reference=d.reviewer_appointment
      JOIN users u ON u.id=d.reviewed_by AND u.is_active
      WHERE d.company_id=$1 AND d.fiscal_year_id=$2 AND d.worksheet_id=$3 AND d.source_fingerprint=$4
-       AND d.approved_at IS NOT NULL AND d.ended_at IS NULL FOR SHARE OF d,e`,
-    [company, year, worksheet, trusted.fingerprint])).rows;
+       AND d.approved_at IS NOT NULL AND d.ended_at IS NULL AND d.stale_at IS NULL
+       AND (d.gate<>'B9' OR (d.engine_version=$5 AND d.reference_suite_digest=$6
+         AND d.facts->>'engineVersion'=$5 AND d.facts->>'referenceSuiteDigest'=$6)) FOR SHARE OF d,e`,
+    [company, year, worksheet, trusted.fingerprint, currentB9Facts().engineVersion, currentB9Facts().referenceSuiteDigest])).rows;
   const required = ['B0', 'B3', 'B4', 'B7', 'B9'];
   const actual = new Map(decisions.map((row) => [row.gate, row]));
   if (actual.size !== required.length || required.some((gate) => !actual.has(gate))
