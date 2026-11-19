@@ -27,7 +27,7 @@ describe('MembershipRepository authorization queries', () => {
     const sql = String(query.mock.calls[0]?.[0]);
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('AND m.is_active');
-    expect(sql).toContain('c.is_active OR $4::boolean');
+    expect(sql).toContain('c.is_active = TRUE OR $4::boolean');
     expect(sql).toContain('CROSS JOIN capabilities cap');
     expect(sql).toContain('FROM role_capabilities rc');
     expect(sql).toContain('rc.capability_id = cap.id');
@@ -55,7 +55,7 @@ describe('MembershipRepository authorization queries', () => {
     await expect(repo.getActiveCapabilities('user-1', 'company-b')).resolves.toEqual([]);
 
     const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toContain('c.is_active OR $4::boolean');
+    expect(sql).toContain('c.is_active = TRUE OR $4::boolean');
     expect(sql).toContain('r.company_id = m.company_id');
     expect(sql).toContain('AND m.is_active');
     expect(sql).toContain('m.company_id = c.id');

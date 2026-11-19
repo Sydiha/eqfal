@@ -420,11 +420,11 @@ export class MembershipRepository {
               COALESCE(r.authorization_policy_version, 0) AS role_policy_version,
               COALESCE(r.is_full_access, FALSE) AS role_is_full_access
        FROM users u
-       JOIN companies c ON c.id = $2 AND (c.is_active OR $4::boolean)
+       JOIN companies c ON c.id = $2 AND (c.is_active = TRUE OR $4::boolean)
        CROSS JOIN capabilities cap
-       LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = c.id AND m.is_active
+       LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = c.id AND m.is_active = TRUE
        LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       WHERE u.id = $1 AND u.is_active AND (u.is_system_admin OR m.id IS NOT NULL)`,
+       WHERE u.id = $1 AND u.is_active = TRUE AND (u.is_system_admin OR m.id IS NOT NULL)`,
       [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES], includeInactiveCompany],
     );
     const first = rows[0];
