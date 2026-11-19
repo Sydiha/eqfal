@@ -117,10 +117,18 @@ CREATE TRIGGER zakat_decision_reviewer_user_stale AFTER UPDATE OF is_active ON u
 CREATE FUNCTION stale_zakat_decisions_on_source_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE affected_company uuid;
 BEGIN
-  affected_company := COALESCE(NEW.company_id,OLD.company_id);
-  UPDATE zakat_regulatory_decisions SET stale_at=now(),stale_reason='company_source_changed'
-    WHERE company_id=affected_company AND approved_at IS NOT NULL AND ended_at IS NULL AND stale_at IS NULL;
-  RETURN COALESCE(NEW,OLD);
+  IF TG_OP <> 'INSERT' THEN
+    affected_company := OLD.company_id;
+    UPDATE zakat_regulatory_decisions SET stale_at=now(),stale_reason='company_source_changed'
+      WHERE company_id=affected_company AND approved_at IS NOT NULL AND ended_at IS NULL AND stale_at IS NULL;
+  END IF;
+  IF TG_OP <> 'DELETE' AND (TG_OP='INSERT' OR NEW.company_id IS DISTINCT FROM OLD.company_id) THEN
+    affected_company := NEW.company_id;
+    UPDATE zakat_regulatory_decisions SET stale_at=now(),stale_reason='company_source_changed'
+      WHERE company_id=affected_company AND approved_at IS NOT NULL AND ended_at IS NULL AND stale_at IS NULL;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
 END;
 $$;
 CREATE TRIGGER zakat_decision_fiscal_year_source_stale AFTER UPDATE ON fiscal_years
