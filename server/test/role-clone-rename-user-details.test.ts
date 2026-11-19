@@ -84,7 +84,7 @@ beforeEach(() => {
   vi.spyOn(MembershipRepository.prototype, 'getRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? []);
   vi.spyOn(MembershipRepository.prototype, 'getEffectiveRoleCapabilities').mockImplementation(async (id) => roleCaps[id] ?? (created.some((r) => r.id === id) ? ['accounting.journal.create'] : []));
   vi.spyOn(MembershipRepository.prototype, 'isActiveSystemAdmin').mockImplementation(async (u) => systemAdmins.has(u));
-  vi.spyOn(MembershipRepository.prototype, 'findUserSummary').mockImplementation(async (id) => ({ id, email: `${id}@example.com`, is_active: true, is_system_admin: systemAdmins.has(id) }));
+  vi.spyOn(MembershipRepository.prototype, 'findUserSummary').mockImplementation(async (id) => ({ id, email: `${id}@example.com`, is_active: true, is_system_admin: systemAdmins.has(id), system_admin_policy_version: systemAdmins.has(id) ? 1 : 0 }));
   vi.spyOn(MembershipRepository.prototype, 'listMembershipsOfUser').mockImplementation(async (userId) => memberships.filter((m) => m.user === userId).map((m): UserMembershipRow => ({
     membership_id: m.id, company_id: m.company, company_name: names[m.company]!, company_name_ar: null, company_is_active: true, is_active: m.active,
     role_id: m.role, role_name: m.role ? roles[m.role]!.name : null, role_is_full_access: m.role ? roles[m.role]!.is_full_access : false,

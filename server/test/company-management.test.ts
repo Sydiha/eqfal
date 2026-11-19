@@ -165,7 +165,7 @@ describe('company management service: tenant isolation and audit', () => {
   });
 
   it('forbids edit/toggle when the capability is missing in the target company', async () => {
-    const { pool, sqls } = fakePool((sql) => (sql.includes('FROM memberships WHERE') ? [{ role_id: 'r' }] : sql.includes('capability_id') ? [{ capability_id: 'company.view' }] : []));
+    const { pool, sqls } = fakePool((sql) => (sql.includes('FROM memberships WHERE') ? [{ role_id: 'r' }] : sql.includes('capability_id') ? [{ capability_id: 'company.view', currently_authorized: true }] : []));
     const service = new (await vi.importActual<typeof import('../src/modules/companies/company.service')>('../src/modules/companies/company.service')).CompanyManagementService(pool);
     await expect(service.update(COMPANY_ID, { name: 'x' }, 'user')).rejects.toMatchObject({ kind: 'forbidden' });
     await expect(service.setActive(COMPANY_ID, false, 'user')).rejects.toMatchObject({ kind: 'forbidden' });
@@ -175,7 +175,7 @@ describe('company management service: tenant isolation and audit', () => {
   it('refuses to disable the actor\'s last active company', async () => {
     const { pool, sqls } = fakePool((sql) => {
       if (sql.includes('FROM memberships WHERE')) return [{ role_id: 'r' }];
-      if (sql.includes('capability_id')) return [{ capability_id: 'company.status.edit' }];
+      if (sql.includes('capability_id')) return [{ capability_id: 'company.status.edit', currently_authorized: true }];
       if (sql.includes('FOR UPDATE')) return [row];
       return [];
     });
@@ -187,7 +187,7 @@ describe('company management service: tenant isolation and audit', () => {
   it('disables with audit in the same transaction, never deleting', async () => {
     const { pool, sqls } = fakePool((sql) => {
       if (sql.includes('FROM memberships WHERE')) return [{ role_id: 'r' }];
-      if (sql.includes('capability_id')) return [{ capability_id: 'company.status.edit' }];
+      if (sql.includes('capability_id')) return [{ capability_id: 'company.status.edit', currently_authorized: true }];
       if (sql.includes('FOR UPDATE')) return [row];
       if (sql.includes('company_id <>')) return [{ '?column?': 1 }];
       if (sql.includes('UPDATE companies')) return [{ ...row, is_active: false }];
@@ -218,7 +218,7 @@ describe('company management service: tenant isolation and audit', () => {
     const { pool, query } = fakePool((sql) => {
       if (sql.includes('FROM companies c')) return [row];
       if (sql.includes('FROM memberships WHERE')) return [{ role_id: 'r' }];
-      if (sql.includes('capability_id')) return [{ capability_id: 'company.edit' }];
+      if (sql.includes('capability_id')) return [{ capability_id: 'company.edit', currently_authorized: true }];
       return [];
     });
     const service = new (await vi.importActual<typeof import('../src/modules/companies/company.service')>('../src/modules/companies/company.service')).CompanyManagementService(pool);

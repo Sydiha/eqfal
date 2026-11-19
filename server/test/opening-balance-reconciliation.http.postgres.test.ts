@@ -209,7 +209,7 @@ describeDatabase('opening balance reconciliation gate (PostgreSQL)', () => {
     const ownIssue = (await other.manager.client.req('GET', `/opening-balances/${other.fy}/cash-verifications`)).json.items[0].issue;
     expect((await other.manager.client.req('POST', `/opening-balances/${other.fy}/cash-verifications/${own.id}`, { ...body, issue_key: ownIssue.issue_key, evidence_fingerprint: ownIssue.evidence_fingerprint, evidence_reference: 'COUNT-OTHER' })).status).toBe(403);
     const sysAdmin = await h.user('cash-admin-preparer');
-    await h.q('UPDATE users SET is_system_admin=true WHERE id=$1', [sysAdmin.id]);
+    await h.q('UPDATE users SET is_system_admin=true,system_admin_policy_version=1 WHERE id=$1', [sysAdmin.id]);
     await sysAdmin.client.login();
     const adminCo = await setup('cash-admin-prep');
     // The review is prepared by the active global administrator in a different company.

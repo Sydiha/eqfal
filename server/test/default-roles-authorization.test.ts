@@ -264,12 +264,13 @@ function makeFakePool(db: FakeDb): Pool {
     const rows: Array<Record<string, unknown>> = [];
     const currentAdminExceptions = new Set(['payroll.approve', 'payroll.accounting.mapping.manage', 'payroll.accounting.post', 'payroll.settlement.create']);
     const m = db.memberships.find((membership) => membership.user_id === userId && membership.company_id === companyId && membership.is_active);
+    if (!m && !isSystemAdmin) return { rows: [], rowCount: 0 };
     const role = m ? db.roles.find((entry) => entry.id === m.role_id && entry.company_id === m.company_id) : undefined;
     for (const capability_id of db.capabilities) {
-      const currently_authorized = (isSystemAdmin && !currentAdminExceptions.has(capability_id)) || (!!role && (
+      const currently_authorized = !!role && (
         (role.is_full_access && !currentAdminExceptions.has(capability_id)) || db.role_capabilities.some((rc) => rc.role_id === role.id && rc.capability_id === capability_id)
-      ));
-      if (currently_authorized) rows.push({ capability_id, currently_authorized, is_system_admin: isSystemAdmin, system_admin_policy_version: 0, role_policy_key: null, role_policy_version: 0, role_is_full_access: role?.is_full_access ?? false });
+      );
+      rows.push({ capability_id, currently_authorized, is_system_admin: isSystemAdmin, system_admin_policy_version: 0, role_policy_key: role?.name === 'Finance Manager' ? 'finance_manager' : null, role_policy_version: 0, role_is_full_access: role?.is_full_access ?? false });
     }
     return { rows, rowCount: rows.length };
   });

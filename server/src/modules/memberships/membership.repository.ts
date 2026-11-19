@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { Membership, MembershipListItem, Role, RoleListItem, CreateMembershipInput, CreateRoleInput } from './membership.types';
-import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES, PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY, targetRoleCapabilities } from './authorization-policy';
+import { effectiveRoleCapabilities, isAuthorizationPolicyKey, LEGACY_WILDCARD_READ_CAPABILITIES, PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY, targetSystemAdministratorCapabilities, TARGET_AUTHORIZATION_POLICY_VERSION } from './authorization-policy';
 
 type QueryRunner = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
@@ -171,9 +171,9 @@ export class MembershipRepository {
     return rows;
   }
 
-  async findUserSummary(userId: string): Promise<{ id: string; email: string; is_active: boolean; is_system_admin: boolean } | null> {
-    const { rows } = await this.pool.query<{ id: string; email: string; is_active: boolean; is_system_admin: boolean }>(
-      'SELECT id, email, is_active, is_system_admin FROM users WHERE id = $1', [userId]);
+  async findUserSummary(userId: string): Promise<{ id: string; email: string; is_active: boolean; is_system_admin: boolean; system_admin_policy_version: number } | null> {
+    const { rows } = await this.pool.query<{ id: string; email: string; is_active: boolean; is_system_admin: boolean; system_admin_policy_version: number }>(
+      'SELECT id, email, is_active, is_system_admin, system_admin_policy_version FROM users WHERE id = $1', [userId]);
     return rows[0] ?? null;
   }
 
@@ -246,7 +246,7 @@ export class MembershipRepository {
     return effectiveRoleCapabilities(
       !role.is_full_access && isAuthorizationPolicyKey(role.authorization_policy_key) ? role.authorization_policy_key : null,
       Number(role.authorization_policy_version),
-      stored,
+      role.is_full_access ? stored.filter((id) => id !== PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY) : stored,
       capabilities,
     );
   }
@@ -396,8 +396,13 @@ export class MembershipRepository {
     return rows[0] ?? null;
   }
 
-  async getActiveCapabilities(userId: string, companyId: string, client?: PoolClient): Promise<string[]> {
-    const runner: QueryRunner = client ?? this.pool;
+  async getActiveCapabilities(userId: string, companyId: string, client?: QueryRunner): Promise<string[]> {
+    return (await this.resolveCompanyCapabilities(userId, companyId, client)) ?? [];
+  }
+
+  /** Inactive companies may be addressed only by company lifecycle management. */
+  async resolveCompanyCapabilities(userId: string, companyId: string, client?: QueryRunner, includeInactiveCompany = false): Promise<string[] | null> {
+    const runner = client ?? this.pool;
     const { rows } = await runner.query<{
       capability_id: string;
       currently_authorized: boolean;
@@ -408,44 +413,34 @@ export class MembershipRepository {
       role_is_full_access: boolean;
     }>(
       `SELECT cap.id AS capability_id,
-              ((cap.implicit_full_access OR cap.id = ANY($3::text[])) AND u.is_system_admin)
-                 OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[]))) OR EXISTS (
-                   SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id
-                 ))) AS currently_authorized,
-              u.is_system_admin,
-              u.system_admin_policy_version,
+              ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[])))
+                OR EXISTS (SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id)) AS currently_authorized,
+              u.is_system_admin, u.system_admin_policy_version,
               r.authorization_policy_key AS role_policy_key,
               COALESCE(r.authorization_policy_version, 0) AS role_policy_version,
               COALESCE(r.is_full_access, FALSE) AS role_is_full_access
        FROM users u
-       JOIN companies c ON c.id = $2 AND c.is_active = TRUE
+       JOIN companies c ON c.id = $2 AND (c.is_active = TRUE OR $4::boolean)
        CROSS JOIN capabilities cap
        LEFT JOIN memberships m ON m.user_id = u.id AND m.company_id = c.id AND m.is_active = TRUE
        LEFT JOIN roles r ON r.id = m.role_id AND r.company_id = m.company_id
-       WHERE u.id = $1 AND u.is_active = TRUE
-         AND (
-           ((cap.implicit_full_access OR cap.id = ANY($3::text[])) AND u.is_system_admin)
-           OR (m.is_active AND ((r.is_full_access AND (cap.implicit_full_access OR cap.id = ANY($3::text[]))) OR EXISTS (
-             SELECT 1 FROM role_capabilities rc WHERE rc.role_id = r.id AND rc.capability_id = cap.id
-           )))
-           OR (u.is_system_admin AND u.system_admin_policy_version >= 1)
-           OR (NOT COALESCE(r.is_full_access, FALSE) AND r.authorization_policy_version >= 1
-               AND r.authorization_policy_key IN ('company_manager', 'finance_manager'))
-           OR u.is_system_admin
-           OR (NOT COALESCE(r.is_full_access, FALSE) AND r.authorization_policy_key IN ('company_manager', 'finance_manager'))
-        )`,
-      [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES]],
+       WHERE u.id = $1 AND u.is_active = TRUE AND (u.is_system_admin OR m.id IS NOT NULL)`,
+      [userId, companyId, [...LEGACY_WILDCARD_READ_CAPABILITIES], includeInactiveCompany],
     );
-    if (!rows.length) return [];
-    const first = rows[0]!;
+    const first = rows[0];
+    if (!first) return null;
     const catalog = rows.map((row) => row.capability_id);
-    if (first.is_system_admin) return [...new Set(catalog)].sort();
-    if (!first.role_is_full_access && isAuthorizationPolicyKey(first.role_policy_key)
-        && first.role_policy_key !== 'accountant') {
-      return targetRoleCapabilities(first.role_policy_key, catalog);
+    // Global System Admin authority is the legacy v0 behavior and remains global until any
+    // separately approved policy change defines otherwise. The current v1 target is the same
+    // full catalog, so deploying the versioned resolver must not narrow a v0 administrator.
+    if (first.is_system_admin) {
+      return targetSystemAdministratorCapabilities(catalog);
     }
-    const result = new Set(rows.filter((row) => row.currently_authorized
-      && !(row.role_is_full_access && row.capability_id === PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY)).map((row) => row.capability_id));
-    return [...result].sort();
+    const explicit = rows.filter((row) => row.currently_authorized
+      && !(row.role_is_full_access && row.capability_id === PAYROLL_SETTLEMENT_EXCEPTION_APPROVER_CAPABILITY)).map((row) => row.capability_id);
+    return effectiveRoleCapabilities(
+      !first.role_is_full_access && isAuthorizationPolicyKey(first.role_policy_key) ? first.role_policy_key : null,
+      Number(first.role_policy_version), explicit, catalog,
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { FinancialStatementNotFoundError, FinancialStatementsService, FinancialStatementUnmappedError } from '../accounting/financial-statements';
@@ -169,7 +170,7 @@ export class ZakatWorksheetService {
     if (currency !== 'SAR') blockers.push('FUNCTIONAL_CURRENCY_NOT_SAR');
     const closed = { own, live, children, fingerprint, history, readiness, gates };
     if (blockers.length || !live) return { ...closed, blockers, result: null };
-    if (approvalActor && !this.independentFinalApprover(ws, history, approvalActor)) throw new ZakatForbiddenError();
+    if (approvalActor && !await this.canApproveWorksheet(company, ws, history, approvalActor, r)) throw new ZakatForbiddenError();
 
     try {
       return { ...closed, ...await calculateWorksheetFinalization({
@@ -276,7 +277,7 @@ export class ZakatWorksheetService {
       const finalizationFingerprint = ws?.status === 'approved' && state && this.finalizationFingerprint(state);
       const released = ws?.status === 'approved' && finalizationFingerprint && ws.approved_snapshot?.finalization_fingerprint === finalizationFingerprint;
       const canApprove = Boolean(ws?.status === 'reviewed' && state?.result && state.blockers.every((code) => code === 'REGULATORY_GATE_AUTHENTICATION_REQUIRED' || code === 'ARTICLE15_CESSATION_EVIDENCE_NOT_AUTHENTICATED') && actor &&
-        this.independentFinalApprover(ws, state.history, actor));
+        await this.canApproveWorksheet(company, ws, state.history, actor, c));
       return {
         scope: { fiscal_year: own.fy, unsupported_reason: worksheetPeriodReason(own.fy.start_date, own.fy.end_date) },
         worksheet: ws, revisions: revisions.map((r) => ({ id: r.id, revision_no: r.revision_no, status: r.status, revision_reason: r.revision_reason, approved_at: r.approved_at })),
@@ -321,6 +322,10 @@ export class ZakatWorksheetService {
   private independentFinalApprover(ws: Worksheet, history: (GateDecision & { status: string })[], actor: string) {
     return actor !== ws.prepared_by_user_id && actor !== ws.reviewed_by_user_id
       && !history.some((d) => d.status === 'verified' && d.submitted_by === actor);
+  }
+
+  private async canApproveWorksheet(company: string, ws: Worksheet, history: (GateDecision & { status: string })[], actor: string, r: Runner) {
+    return this.independentFinalApprover(ws, history, actor) || await hasPrivilegedFinancialAuthority(r, company, actor);
   }
 
   /** Read-only preview through the isolated component composer; it never calculates payable Zakat. */
@@ -518,11 +523,13 @@ export class ZakatWorksheetService {
       this.checkVersion(ws, version);
       const { readiness } = await this.liveReadiness(company, year, ws, c, live.fingerprint);
       if (readiness.preparation_blockers.length) throw new ZakatValidationError(`Worksheet is not ready: ${readiness.preparation_blockers.join(', ')}`, 'ZAKAT_NOT_READY');
+      let sameActorApproval = false;
       if (action === 'approve') {
         if (await this.packageFinalized(company, year, c)) throw new ZakatConflictError('The annual package is finalized', 'ZAKAT_PACKAGE_FINALIZED');
         const state = await this.finalization(company, year, ws, c);
         if (state.readiness.gate_blockers.length) throw new ZakatConflictError(`Approval is blocked by unverified regulatory gates: ${state.readiness.gate_blockers.join(', ')}`, 'ZAKAT_REGULATORY_GATES_UNVERIFIED');
-        if (!this.independentFinalApprover(ws, state.history, actor)) throw new ZakatForbiddenError();
+        sameActorApproval = actor === ws.prepared_by_user_id || actor === ws.reviewed_by_user_id;
+        if (!await this.canApproveWorksheet(company, ws, state.history, actor, c)) throw new ZakatForbiddenError();
         const finalizationFingerprint = this.finalizationFingerprint(state);
         if (!finalizationFingerprint) throw new ZakatConflictError('Financial validation is incomplete', 'ZAKAT_NOT_READY');
         const { classifications, adjustments } = state.children;
@@ -546,7 +553,7 @@ export class ZakatWorksheetService {
       } else {
         await c.query(`UPDATE zakat_worksheets SET status='in_review', version=version+1, updated_at=NOW() WHERE id=$1 AND company_id=$2`, [ws.id, company]);
       }
-      await this.log(c, company, actor, `zakat_worksheet.${action}`, 'zakat_worksheet', ws.id, this.brief(ws), { status: { submit: 'in_review', review: 'reviewed', approve: 'approved' }[action] });
+      await this.log(c, company, actor, `zakat_worksheet.${action}`, 'zakat_worksheet', ws.id, this.brief(ws), { status: { submit: 'in_review', review: 'reviewed', approve: 'approved' }[action], ...(action === 'approve' ? { same_actor_approval: sameActorApproval } : {}) });
     });
     return this.get(company, year);
   }

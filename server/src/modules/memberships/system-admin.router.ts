@@ -87,7 +87,7 @@ systemAdminRouter.post('/admin/companies', ...write, asyncRoute(async (req, res)
 
 systemAdminRouter.patch('/admin/companies/:id/active', ...write, asyncRoute(async (req, res) => {
   if (!UUID.test(req.params.id!) || !exactObject(req.body, ['is_active']) || typeof req.body.is_active !== 'boolean') { res.status(400).json(BAD); return; }
-  try { res.json(await new CompanyManagementService(db()).setActive(req.params.id!, req.body.is_active, actor(req))); }
+  try { res.json(await new CompanyManagementService(db()).setActive(req.params.id!, req.body.is_active, actor(req), true)); }
   catch (error) { fail(error, res); }
 }));
 
