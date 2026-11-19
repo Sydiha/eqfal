@@ -94,11 +94,12 @@ zakatWorksheetRouter.post(`${decisionPath}/:decisionId/end`, ...write, requireCa
 
 const versionOnly = (b: Record<string, unknown>) => only(b, ['version']) && versionOf(b) !== null;
 const reasonBody = (b: Record<string, unknown>) => only(b, ['version', 'reason']) && versionOf(b) !== null && textOf(b['reason'], 2000, false) !== undefined && b['reason'] !== null;
+const revisionReasonBody = (b: Record<string, unknown>) => only(b, ['version', 'reason']) && versionOf(b) !== null && typeof b['reason'] === 'string' && b['reason'].length <= 2000;
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/submit', ...write, requireCapability('tax_workpaper.submit'), guard(versionOnly, (s, req, c, u) => s.transition(c, fy(req), u, 'submit', versionOf(req.body)!)));
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/review', ...write, requireCapability('tax_workpaper.review'), guard(versionOnly, (s, req, c, u) => s.transition(c, fy(req), u, 'review', versionOf(req.body)!)));
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/approve', ...write, requireCapability('tax_workpaper.approve'), guard(versionOnly, (s, req, c, u) => s.transition(c, fy(req), u, 'approve', versionOf(req.body)!)));
 zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/return', ...write, requireCapability('tax_workpaper.review'), guard(reasonBody, (s, req, c, u) => s.returnToDraft(c, fy(req), u, versionOf(req.body)!, String(req.body.reason))));
-zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/revise', ...write, requireCapability('tax_workpaper.approve'), guard(reasonBody, (s, req, c, u) => s.revise(c, fy(req), u, versionOf(req.body)!, String(req.body.reason)), 201));
+zakatWorksheetRouter.post('/zakat-worksheets/:fiscalYearId/revise', ...write, requireCapability('tax_workpaper.approve'), guard(revisionReasonBody, (s, req, c, u) => s.revise(c, fy(req), u, versionOf(req.body)!, String(req.body.reason)), 201));
 
 // Effective-dated ownership eligibility evidence (never inferred from missing partner attributes).
 zakatWorksheetRouter.get('/zakat-eligibility', ...base, requireCapability('tax_workpaper.view'), run(200, async (s, req, c) => {

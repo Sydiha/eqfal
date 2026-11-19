@@ -570,7 +570,9 @@ export class ZakatWorksheetService {
     const balances = await this.captureBalances(company, year);
     await this.tx(async (c) => {
       const current = (await c.query<Worksheet>(`SELECT ${WS} FROM zakat_worksheets w WHERE w.company_id=$1 AND w.fiscal_year_id=$2 ORDER BY w.revision_no DESC LIMIT 1 FOR UPDATE`, [company, year])).rows[0];
-      if (!current || !['approved', 'reviewed'].includes(current.status)) throw new ZakatNotFoundError();
+      if (!current) throw new ZakatNotFoundError();
+      if (['draft', 'in_review'].includes(current.status)) throw new ZakatConflictError('An open revision already exists', 'ZAKAT_OPEN_REVISION_EXISTS');
+      if (!['approved', 'reviewed'].includes(current.status)) throw new ZakatNotFoundError();
       this.checkVersion(current, version);
       if ((await c.query('SELECT 1 FROM zakat_worksheets WHERE company_id=$1 AND fiscal_year_id=$2 AND status = ANY($3) AND id<>$4', [company, year, OPEN, current.id])).rowCount) throw new ZakatConflictError('An open revision already exists', 'ZAKAT_OPEN_REVISION_EXISTS');
       if (await this.packageFinalized(company, year, c)) throw new ZakatConflictError('The annual package is finalized', 'ZAKAT_PACKAGE_FINALIZED');
