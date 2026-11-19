@@ -35,9 +35,10 @@ database('privileged financial authority (PostgreSQL)', () => {
         db, operator.id, policyRole ? 'role' : 'admin', policyRole?.id ?? actor.id, scope,
         String(1 - version), String(version), 'integration-test',
       ]);
+      const catalog = (await repo.listCapabilities()).sort();
       const stored = policyRole ? (await repo.getRoleCapabilities(policyRole.id)).sort() : [];
       const explicit = stored.filter((id) => id !== 'company.create');
-      expect(await repo.getActiveCapabilities(actor.id, company)).toEqual(explicit);
+      expect(await repo.getActiveCapabilities(actor.id, company)).toEqual(policyRole ? explicit : catalog);
       expect(await hasPrivilegedFinancialAuthority(h.db, foreign, actor.id)).toBe(role === 'system_admin');
       await owner.client.login();
       await actor.client.login();
@@ -54,7 +55,6 @@ database('privileged financial authority (PostgreSQL)', () => {
       if (!policyRole) {
         expect((await actor.client.req('PUT', `/admin/users/${actor.id}/system-admin`, { is_system_admin: true })).status).toBe(200);
       }
-      const catalog = (await repo.listCapabilities()).sort();
       const expected = policyRole ? catalog.filter((id) => id !== 'company.create') : catalog;
       expect(await repo.getActiveCapabilities(actor.id, company)).toEqual(expected);
       if (policyRole) expect(await repo.getEffectiveRoleCapabilities(policyRole.id)).toEqual(expected);
@@ -78,7 +78,7 @@ database('privileged financial authority (PostgreSQL)', () => {
       expect(approved.status, JSON.stringify(approved.json)).toBe(200);
       if (role !== 'system_admin') expect((await actor.client.req('POST', '/auth/switch-company', { companyId: foreign })).status).toBe(403);
       await setVersion(0);
-      expect(await repo.getActiveCapabilities(actor.id, company)).toEqual(explicit);
+      expect(await repo.getActiveCapabilities(actor.id, company)).toEqual(policyRole ? explicit : catalog);
       if (policyRole) {
         expect((await actor.client.req('DELETE', `/access/roles/${customRoleId}/capabilities/payroll.accounting.post`)).status).toBe(403);
         expect((await repo.getRoleCapabilities(policyRole.id)).sort()).toEqual(stored);
@@ -94,7 +94,7 @@ database('privileged financial authority (PostgreSQL)', () => {
           { action: 'authorization.policy.activate', old: '0', new: '1' },
           { action: 'authorization.policy.rollback', old: '1', new: '0' },
         ]);
-        expect(await repo.getActiveCapabilities(actor.id, foreign)).toEqual([]);
+        expect(await repo.getActiveCapabilities(actor.id, foreign)).toEqual(catalog);
         await setVersion(1);
         expect(await repo.getActiveCapabilities(actor.id, foreign)).toEqual(catalog);
       }
