@@ -29,7 +29,7 @@ const mockPeriods = [
 describe('DateContext', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => mockFiscalYears
@@ -231,7 +231,7 @@ describe('DateContext', () => {
 describe('DateContext full-year months', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => mockFiscalYears });
     (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => mockPeriods });
   });
@@ -261,5 +261,69 @@ describe('DateContext full-year months', () => {
     fireEvent.click(screen.getByText('all'));
     expect(screen.getByTestId('selected')).toHaveTextContent('all');
     expect(screen.getByTestId('count')).toHaveTextContent('12');
+  });
+});
+
+describe('DateContext fiscal-year request ordering', () => {
+  it('moves from FY 2026 to FY 2027 with the new year\'s period context', async () => {
+    localStorage.clear();
+    const years = [
+      { ...mockFiscalYears[0], id: 'fy-2026', name: 'FY 2026' },
+      { ...mockFiscalYears[0], id: 'fy-2027', name: 'FY 2027', start_date: '2027-01-01', end_date: '2027-12-31' },
+    ];
+    let requestIndex = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      requestIndex++;
+      if (requestIndex === 1) return Promise.resolve(new Response(JSON.stringify(years)));
+      if (requestIndex === 2) return Promise.resolve(new Response(JSON.stringify([{ ...mockPeriods[0], fiscal_year_id: 'fy-2026' }])));
+      if (requestIndex === 3) return Promise.resolve(new Response(JSON.stringify([{ id: 'period-2027', fiscal_year_id: 'fy-2027', period_start: '2027-11-01', period_end: '2027-11-30', status: 'open' }])));
+      throw new Error(`Unexpected request ${requestIndex}`);
+    }));
+    const Probe = () => {
+      const { selectedFiscalYearId, selectedPeriodId, onSelectFiscalYear } = useDateContext();
+      return <><span data-testid="year">{selectedFiscalYearId}</span><span data-testid="period">{selectedPeriodId}</span><button onClick={() => void onSelectFiscalYear('fy-2027')}>Switch to FY 2027</button></>;
+    };
+    render(<DateContextProvider companyId="company-1"><Probe /></DateContextProvider>);
+    await waitFor(() => expect(screen.getByTestId('year')).toHaveTextContent('fy-2026'));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to FY 2027' }));
+    await waitFor(() => expect(screen.getByTestId('period')).toHaveTextContent('period-2027'));
+    expect(screen.getByTestId('year')).toHaveTextContent('fy-2027');
+  });
+
+  it('keeps the latest FY selection and periods when requests resolve out of order', async () => {
+    localStorage.clear();
+    const years = [
+      { ...mockFiscalYears[0], id: 'fy-2026', name: 'FY 2026' },
+      { ...mockFiscalYears[0], id: 'fy-2027', name: 'FY 2027', start_date: '2027-01-01', end_date: '2027-12-31' },
+    ];
+    let requestIndex = 0;
+    let resolveOld!: (response: Response) => void;
+    let resolveLatest!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      requestIndex++;
+      if (requestIndex === 1) return Promise.resolve(new Response(JSON.stringify(years)));
+      if (requestIndex === 2) return Promise.resolve(new Response(JSON.stringify([{ ...mockPeriods[0], fiscal_year_id: 'fy-2026' }])));
+      if (requestIndex === 3) return new Promise<Response>(resolve => { resolveOld = resolve; });
+      if (requestIndex === 4) return new Promise<Response>(resolve => { resolveLatest = resolve; });
+      throw new Error(`Unexpected request ${requestIndex}`);
+    }));
+
+    const Probe = () => {
+      const { selectedFiscalYearId, selectedPeriodId, onSelectFiscalYear } = useDateContext();
+      return <><span data-testid="year">{selectedFiscalYearId}</span><span data-testid="period">{selectedPeriodId}</span>
+        <button onClick={() => void onSelectFiscalYear('fy-2027')}>FY 2027</button>
+        <button onClick={() => void onSelectFiscalYear('fy-2026')}>FY 2026</button></>;
+    };
+    render(<DateContextProvider companyId="company-1"><Probe /></DateContextProvider>);
+    await waitFor(() => expect(screen.getByTestId('period')).toHaveTextContent('period-july-2026'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'FY 2027' }));
+    fireEvent.click(screen.getByRole('button', { name: 'FY 2026' }));
+    resolveLatest(new Response(JSON.stringify([{ id: 'period-2026-new', fiscal_year_id: 'fy-2026', period_start: '2026-11-01', period_end: '2026-11-30', status: 'open' }])));
+    await waitFor(() => expect(screen.getByTestId('period')).toHaveTextContent('period-2026-new'));
+    resolveOld(new Response(JSON.stringify([{ id: 'period-2027-old', fiscal_year_id: 'fy-2027', period_start: '2027-11-01', period_end: '2027-11-30', status: 'open' }])));
+
+    await waitFor(() => expect(screen.getByTestId('year')).toHaveTextContent('fy-2026'));
+    expect(screen.getByTestId('period')).toHaveTextContent('period-2026-new');
   });
 });

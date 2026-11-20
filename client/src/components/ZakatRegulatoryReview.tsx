@@ -104,8 +104,8 @@ export function ZakatRegulatoryReview(p: Props) {
         <h5><bdi>{gate}</bdi> · {status}</h5>
         <p>{requirements[gate][p.ar ? 0 : 1]}</p>
         {gate === 'B9' && p.data.regulatory_binding && <p dir="ltr">
-          Engine: <code>{p.data.regulatory_binding.engine_version}</code><br />
-          Reference suite: <code>{p.data.regulatory_binding.reference_suite_digest}</code>
+          {label('إصدار المحرك', 'Engine version')}: <code>{p.data.regulatory_binding.engine_version}</code><br />
+          {label('بصمة مجموعة الحالات المرجعية', 'Reference suite digest')}: <code>{p.data.regulatory_binding.reference_suite_digest}</code>
         </p>}
         {active?.approved_at && active.reviewed_by && <p>{label('اعتمد بواسطة', 'Approved by')} {reviewer(active.reviewed_by)} · <bdi>{active.approved_at}</bdi></p>}
         {active && p.canViewDocuments && <details>

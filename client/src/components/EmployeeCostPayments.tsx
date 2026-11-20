@@ -1,4 +1,5 @@
-import {FormEvent,useEffect,useState} from 'react';
+import { monthOverlapsFiscalYear } from './employee-cost-report-month';
+import {FormEvent,useEffect,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatMoney} from '../money-format';
 
@@ -21,22 +22,26 @@ export function EmployeeCostPayments({records,years,capabilities,onUnauthorized}
   const canView=can('employee_cost.payment.view')&&can('employee_cost.view'),canDetail=can('employee_cost.payment.view')&&can('bank.view'),canAllocate=can('employee_cost.payment.allocate')&&can('bank.view'),canReverse=can('employee_cost.payment.reverse')&&can('bank.view'),salaryVisible=can('employee_cost.salary.view');
   const [options,setOptions]=useState<{bank_transactions:Option[];refund_transactions:Option[];counterparties:Party[]}>({bank_transactions:[],refund_transactions:[],counterparties:[]});
   const [selected,setSelected]=useState(''),[payments,setPayments]=useState<Payment[]>([]),[historyRecord,setHistoryRecord]=useState<Cost|null>(null),[historicalPayments,setHistoricalPayments]=useState<Payment[]>([]),[report,setReport]=useState<Report[]>([]),[paidAsOf,setPaidAsOf]=useState(''),[mode,setMode]=useState<'monthly'|'annual'>('monthly'),[month,setMonth]=useState(monthNow()),[year,setYear]=useState(years[0]?.id??''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const reportRequest=useRef(0);
   const [allocationId,setAllocationId]=useState(''),[bankId,setBankId]=useState(''),[amount,setAmount]=useState(''),[beneficiary,setBeneficiary]=useState<'employee'|'counterparty'>('employee'),[counterparty,setCounterparty]=useState(''),[note,setNote]=useState(''),[reversing,setReversing]=useState<Payment|null>(null),[reverseBank,setReverseBank]=useState(''),[reverseAmount,setReverseAmount]=useState(''),[reason,setReason]=useState('');
   const visibleRecords=records.filter(r=>r.status==='approved'&&(r.nature==='employer_cost'||salaryVisible)&&r.nature!=='employee_deduction');
   const allocationRecords=visibleRecords.filter(r=>!visibleRecords.some(child=>child.status==='approved'&&child.supersedes_id===r.id));
   const supersededRecords=visibleRecords.filter(r=>visibleRecords.some(child=>child.status==='approved'&&child.supersedes_id===r.id));
   const active=allocationRecords.find(r=>r.id===selected)??null;
   const fail=(e:unknown)=>{const code=e instanceof ApiError?e.code:null;setError(code?l(`errors.${code}`):l('errors.EMPLOYEE_COST_PAYMENT_INVALID'));};
-  const loadPayments=async(id=selected)=>{if(!id||!canDetail)return;setLoading(true);try{const x=await api<{payments:Payment[]}>(`/api/employee-costs/${id}/payments`,{},onUnauthorized);setPayments(x.payments);}catch(e){fail(e);}finally{setLoading(false);}};
-  const loadHistoricalPayments=async(record:Cost)=>{if(!canDetail)return;setHistoryRecord(record);setHistoricalPayments([]);try{const x=await api<{payments:Payment[]}>(`/api/employee-costs/${record.id}/payments`,{},onUnauthorized);setHistoricalPayments(x.payments);}catch(e){fail(e);}};
+  const loadPayments=async(id=selected)=>{if(!id||!canDetail)return;setLoading(true);try{const x=await api<{payments?:Payment[]}>(`/api/employee-costs/${id}/payments`,{},onUnauthorized);setPayments(Array.isArray(x.payments)?x.payments:[]);}catch(e){fail(e);}finally{setLoading(false);}};
+  const loadHistoricalPayments=async(record:Cost)=>{if(!canDetail)return;setHistoryRecord(record);setHistoricalPayments([]);try{const x=await api<{payments?:Payment[]}>(`/api/employee-costs/${record.id}/payments`,{},onUnauthorized);setHistoricalPayments(Array.isArray(x.payments)?x.payments:[]);}catch(e){fail(e);}};
   const loadOptions=async()=>{if(!canAllocate&&!canReverse)return;try{setOptions(await api('/api/employee-costs/payment-options',{},onUnauthorized));}catch(e){fail(e);}};
-  const runReport=async()=>{if(!year||!canView)return;try{const path=mode==='annual'?`/api/employee-costs/reconciliation/annual?fiscal_year_id=${esc(year)}`:`/api/employee-costs/reconciliation/monthly?fiscal_year_id=${esc(year)}&month=${esc(month)}`;const x=await api<{rows:Report[];paid_as_of:string}>(path,{},onUnauthorized);setReport(x.rows);setPaidAsOf(x.paid_as_of);}catch(e){fail(e);}};
+  const reportYear=years.find(y=>y.id===year);
+  const monthWithinYear = monthOverlapsFiscalYear(month, reportYear);
+  const runReport=async()=>{const requestId=++reportRequest.current;if(!year||!canView||mode==='monthly'&&!monthWithinYear){setReport([]);setPaidAsOf('');return;}setReport([]);try{const path=mode==='annual'?`/api/employee-costs/reconciliation/annual?fiscal_year_id=${esc(year)}`:`/api/employee-costs/reconciliation/monthly?fiscal_year_id=${esc(year)}&month=${esc(month)}`;const x=await api<{rows?:Report[];paid_as_of?:string}>(path,{},onUnauthorized);if(requestId===reportRequest.current){setReport(Array.isArray(x.rows)?x.rows:[]);setPaidAsOf(x.paid_as_of??'');}}catch(e){if(requestId===reportRequest.current){setReport([]);fail(e);}}};
   useEffect(()=>{if(!allocationRecords.some(r=>r.id===selected))setSelected(allocationRecords[0]?.id??'');},[selected,allocationRecords]);
   useEffect(()=>{setYear(old=>years.some(y=>y.id===old)?old:years[0]?.id??'');},[years]);
   useEffect(()=>{void loadOptions();},[canAllocate,canReverse]);
   useEffect(()=>{void loadPayments();},[selected,canDetail]);
   useEffect(()=>{void runReport();// eslint-disable-next-line react-hooks/exhaustive-deps
-  },[year,month,mode,canView]);
+    return()=>{reportRequest.current++;};
+  },[year,month,mode,canView,monthWithinYear]);
   if(!canView&&!canAllocate&&!canReverse)return null;
   const act=async(fn:()=>Promise<unknown>)=>{setBusy(true);setError('');try{await fn();await Promise.all([loadPayments(),loadOptions(),runReport()]);setAmount('');setNote('');setBankId('');setReversing(null);setReverseAmount('');setReason('');setReverseBank('');}catch(e){fail(e);}finally{setBusy(false);}};
   const selectedBeneficiary=active?.nature==='earning'?beneficiary:'counterparty';
@@ -50,7 +55,8 @@ export function EmployeeCostPayments({records,years,capabilities,onUnauthorized}
     {canView&&!canReverse&&<p role="note" className="ecc-muted">{l('reversalUnavailable')}</p>}
     {canView&&<>
       {!salaryVisible&&<p className="ecc-muted" role="note">{l('paymentsHidden')}</p>}
-      <div className="ecc-report-filters"><label>{t('employeeCostCenter.fiscalYear')}<select value={year} onChange={e=>setYear(e.target.value)}>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label><div className="ecc-switch" role="group" aria-label={l('reportedAt')}><button type="button" aria-pressed={mode==='monthly'} onClick={()=>setMode('monthly')}>{t('employeeCostCenter.monthly')}</button><button type="button" aria-pressed={mode==='annual'} onClick={()=>setMode('annual')}>{t('employeeCostCenter.annual')}</button></div>{mode==='monthly'&&<label>{t('employeeCostCenter.month')}<input type="month" value={month.slice(0,7)} onChange={e=>e.target.value&&setMonth(`${e.target.value}-01`)}/></label>}<button type="button" className="ecc-primary" onClick={()=>void runReport()}>{t('employeeCostCenter.runReport')}</button></div>
+      <div className="ecc-report-filters"><label>{t('employeeCostCenter.fiscalYear')}<select value={year} onChange={e=>setYear(e.target.value)}>{years.map(y=><option key={y.id} value={y.id}>{y.name}</option>)}</select></label><div className="ecc-switch" role="group" aria-label={l('reportedAt')}><button type="button" aria-pressed={mode==='monthly'} onClick={()=>setMode('monthly')}>{t('employeeCostCenter.monthly')}</button><button type="button" aria-pressed={mode==='annual'} onClick={()=>setMode('annual')}>{t('employeeCostCenter.annual')}</button></div>{mode==='monthly'&&<label>{t('employeeCostCenter.month')}<input type="month" value={month.slice(0,7)} min={reportYear?.start_date.slice(0,7)} max={reportYear?.end_date.slice(0,7)} onChange={e=>e.target.value&&setMonth(`${e.target.value}-01`)}/></label>}<button type="button" className="ecc-primary" onClick={()=>void runReport()}>{t('employeeCostCenter.runReport')}</button></div>
+      {mode==='monthly'&&reportYear&&!monthWithinYear&&<p className="ecc-field-error" role="status">{l('monthOutsideFiscalYear')}</p>}
       <p className="ecc-muted">{l('paidAsOf').replace('{{date}}',paidAsOf)}</p>
       <div className="ecc-table-wrap"><table><thead><tr><th>{t('employeeCostCenter.employee')}</th><th>{t('employeeCostCenter.category')}</th><th>{l('recorded')}</th><th>{l('paid')}</th><th>{l('paidInPeriod')}</th><th>{l('outstanding')}</th></tr></thead><tbody>{report.length?report.map((r,i)=><tr key={`${r.employee_id}-${r.category}-${r.nature}-${r.allocation_month}-${i}`}><td>{r.employee_number} · {r.display_name}</td><td>{t(`employeeCostCenter.categories.${r.category}`)} · {t(`employeeCostCenter.natures.${r.nature}`)}</td><td>{fmt(r.recorded_cost,r.currency_code)}</td><td>{r.nature==='employee_deduction'?'—':fmt(r.verified_paid,r.currency_code)}</td><td>{r.nature==='employee_deduction'?'—':fmt(r.paid_in_period,r.currency_code)}</td><td>{r.nature==='employee_deduction'?'—':fmt(r.outstanding,r.currency_code)}</td></tr>):<tr><td colSpan={6}>{l('noReport')}</td></tr>}</tbody></table></div>
     </>}

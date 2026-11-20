@@ -26,7 +26,7 @@ const ctx = (over: Partial<DateContextState> = {}): DateContextState => ({
     { id: 'month:2026-03', fiscal_year_id: 'fy', period_start: '2026-03-01', period_end: '2026-03-31', status: 'not_created' },
   ],
   periodMode: 'specific', isLoading: false, error: null,
-  onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => {},
+  onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => [],
   ...over,
 });
 const mount = (context: DateContextState) => {

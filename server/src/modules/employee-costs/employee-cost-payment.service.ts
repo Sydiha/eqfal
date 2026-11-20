@@ -1,3 +1,4 @@
+import { isReportMonthInFiscalYear } from './employee-cost.service';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { AccountingPeriodClosedError, assertAccountingDateWritable } from '../monthly-close/accounting-period.guard';
@@ -9,7 +10,6 @@ const invalid = (message='Invalid employee cost payment request') => new Employe
 const missing = () => new EmployeeCostPaymentError(404,'EMPLOYEE_COST_PAYMENT_NOT_FOUND','Not found');
 const conflict = (message='Employee cost payment conflicts with current financial state') => new EmployeeCostPaymentError(409,'EMPLOYEE_COST_PAYMENT_CONFLICT',message);
 const forbidden = () => new EmployeeCostPaymentError(403,'FORBIDDEN','Forbidden');
-const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const cents=(value:string)=>{const [whole,fraction='']=value.split('.');return BigInt(whole!)*100n+BigInt(fraction.padEnd(2,'0'));};
 const money=(value:bigint)=>`${value/100n}.${String(value%100n).padStart(2,'0')}`;
 
@@ -121,7 +121,7 @@ export class EmployeeCostPaymentService {
   async report(companyId:string,fiscalYearId:string,month:string|null,salaryVisible:boolean){
     const fy=(await this.db.query<{start_date:string;end_date:string;name:string}>(`SELECT start_date::text,end_date::text,name FROM fiscal_years WHERE id=$1 AND company_id=$2`,[fiscalYearId,companyId])).rows[0];
     if(!fy)throw missing();
-    if(month&&(!DATE.test(month)||new Date(`${month}T00:00:00Z`).toISOString().slice(0,10)!==month||month.slice(-2)!=='01'||month<fy.start_date||month>fy.end_date))throw invalid('Month is outside the selected fiscal year');
+    if (month && !isReportMonthInFiscalYear(month, fy)) throw invalid('Month is outside the selected fiscal year');
     const end=month?new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10):fy.end_date;
     const rows=(await this.db.query(`SELECT e.id employee_id,e.employee_number,e.display_name,r.category,r.nature,a.allocation_month::text,currency_code,
         SUM(a.amount)::text recorded_cost,

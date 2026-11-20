@@ -26,6 +26,9 @@ const cents = (v: string) => { const [whole, fraction = ''] = v.split('.'); retu
 const money = /^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
 const monthFloor = (v: string) => `${v.slice(0, 7)}-01`;
 const monthCeiling = (v: string) => { const d = new Date(`${v}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1, 0); return d.toISOString().slice(0, 10); };
+export function isReportMonthInFiscalYear(month: string, year: { start_date: string; end_date: string }): boolean {
+  return isDate(month) && month === monthFloor(month) && month <= year.end_date && monthCeiling(month) >= year.start_date;
+}
 const expectedNature = (category: EmployeeCostCategory): EmployeeCostNature => category === 'employee_deduction' ? 'employee_deduction' : ['salary','allowances','bonus','overtime'].includes(category) ? 'earning' : 'employer_cost';
 type Employee = { id: string; company_id: string; employee_number: string; display_name: string; employment_start: string | null; employment_end: string | null; is_active: boolean; version: number };
 type CostRecord = { id: string; company_id: string; employee_id: string; category: EmployeeCostCategory; nature: EmployeeCostNature; currency_code: string; total_amount: string; service_period_start: string; service_period_end: string; description: string; status: 'draft'|'approved'; version: number; supersedes_id: string | null; correction_reason: string | null; created_by: string; created_at: string; approved_by: string | null; approved_at: string | null };
@@ -174,7 +177,7 @@ export class EmployeeCostService {
   async report(companyId: string, fiscalYearId: string, month: string | null, salaryVisible: boolean) {
     const fy=(await this.db.query<{start_date:string;end_date:string;name:string}>(`SELECT start_date::text,end_date::text,name FROM fiscal_years WHERE id=$1 AND company_id=$2`,[fiscalYearId,companyId])).rows[0];
     if (!fy) throw missing();
-    if (month && (!isDate(month) || month !== monthFloor(month) || month > fy.end_date || monthCeiling(month) < fy.start_date)) throw invalid('Month is outside the fiscal year');
+    if (month && !isReportMonthInFiscalYear(month, fy)) throw invalid('Month is outside the fiscal year');
     const rows=(await this.db.query(`SELECT e.id employee_id,e.employee_number,e.display_name,r.category,r.nature,
         CASE WHEN $3::date IS NULL THEN NULL ELSE a.allocation_month::text END allocation_month,
         r.currency_code,SUM(a.amount)::text amount

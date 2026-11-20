@@ -63,7 +63,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
 
   const money = (cents: string) => formatMinorUnits(cents);
   const pct = (bps4: string) => (Number(bps4) / 10000).toLocaleString(ar ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  const blockerLabel = (code: string) => t(`zakatWorksheet.blockers.${code}`, { defaultValue: code });
+  const blockerLabel = (code: string) => t(`zakatWorksheet.blockers.${code}`, { defaultValue: t('zakatWorksheet.previewRequirements.unknown') });
 
   const load = useCallback(async () => {
     const base = `/api/zakat-worksheets/${encodeURIComponent(p.yearId)}`;
@@ -85,7 +85,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
     try {
       const r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
       if (r.status === 401) { p.onUnauthorized(); return false; }
-      if (!r.ok) { const j = (await r.json().catch(() => ({}))) as { error?: string; code?: string }; setError(j.code ? t(`zakatWorksheet.errors.${j.code}`, { defaultValue: j.error ?? t('zakatWorksheet.error') }) : (j.error ?? t('zakatWorksheet.error'))); return false; }
+      if (!r.ok) { const j = (await r.json().catch(() => ({}))) as { code?: string }; setError(j.code ? t(`zakatWorksheet.errors.${j.code}`, { defaultValue: t('zakatWorksheet.error') }) : t('zakatWorksheet.error')); return false; }
       await load(); p.onChanged?.(); return true;
     } finally { setBusy(false); }
   };

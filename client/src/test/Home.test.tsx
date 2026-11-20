@@ -298,7 +298,7 @@ describe('Owner-approved Home financial overview', () => {
     const base: DateContextState = {
       companyId: 'co-1', selectedFiscalYearId: 'fy-1', availableFiscalYears: [], selectedPeriodId: 'period-1',
       availablePeriodsForSelectedYear: [], periodMode: 'specific', isLoading: false, error: null,
-      onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => {},
+      onSelectFiscalYear: async () => {}, onSelectPeriod: () => {}, loadFiscalYears: async () => {}, loadPeriodsForYear: async () => [],
     };
     function Harness() {
       const [periodId, setPeriodId] = useState('period-1');

@@ -8,6 +8,8 @@ import { runMigrations } from '../src/db/migrate';
 import { BootstrapError, bootstrapInitialAdmin } from '../src/modules/bootstrap/bootstrap.service';
 
 const databaseUrl = process.env['DATABASE_URL'];
+// Vitest evaluates skipped suite declarations too; use a harmless URL when PostgreSQL suites are disabled.
+const testConnectionUrl = databaseUrl || 'postgres://localhost/eqfal_test';
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const PASSWORD = 'synthetic-Test-Pass-1!';
 const base = () => ({ email: 'Admin@Example.Test', password: PASSWORD, company: { slug: 'synthetic-co', name: 'Synthetic Co', name_ar: 'شركة تجريبية' } });
@@ -15,8 +17,8 @@ const base = () => ({ email: 'Admin@Example.Test', password: PASSWORD, company: 
 // Runs on its own throwaway database: the shared test database holds other suites' users/companies.
 describeDatabase('initial company & administrator bootstrap (disposable PostgreSQL)', () => {
   const dbName = `eqfal_bootstrap_${randomBytes(6).toString('hex')}`;
-  const adminPool = new Pool({ connectionString: databaseUrl, max: 1 });
-  const testUrl = new URL(databaseUrl as string);
+  const adminPool = new Pool({ connectionString: testConnectionUrl, max: 1 });
+  const testUrl = new URL(testConnectionUrl);
   testUrl.pathname = `/${dbName}`;
   let pool: Pool;
 

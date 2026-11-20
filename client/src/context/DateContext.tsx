@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 
 export interface FiscalYear {
   id: string;
@@ -29,7 +29,7 @@ export interface DateContextState {
   onSelectFiscalYear: (id: string) => Promise<void>;
   onSelectPeriod: (id: string, mode?: 'all' | 'specific') => void;
   loadFiscalYears: () => Promise<void>;
-  loadPeriodsForYear: (fiscalYearId: string) => Promise<void>;
+  loadPeriodsForYear: (fiscalYearId: string) => Promise<Period[]>;
 }
 
 /** Id prefix for calendar months of a fiscal year that have no monthly-close record yet (UI-only, never persisted to the backend). */
@@ -95,6 +95,9 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
   const [realPeriodsForSelectedYear, setRealPeriodsForSelectedYear] = useState<Period[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const periodsRequest = useRef(0);
+  const yearSelection = useRef(0);
+  const periodModeRef = useRef<'all' | 'specific'>('specific');
 
   // localStorage key helpers
   const getStorageKey = (suffix: string) => `eqfal_${suffix}_${companyId}`;
@@ -120,21 +123,24 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
 
   // Load periods for a specific fiscal year
   const loadPeriodsForYear = useCallback(async (fiscalYearId: string) => {
+    const requestId = ++periodsRequest.current;
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const response = await fetch('/api/monthly-close-periods');
       if (!response.ok) throw new Error('Failed to load periods');
       const data = await response.json();
       const allPeriods = Array.isArray(data) ? data : data.periods || [];
-      const yearPeriods = allPeriods.filter((p: Period) => p.fiscal_year_id === fiscalYearId);
-      setRealPeriodsForSelectedYear(yearPeriods);
+      const yearPeriods: Period[] = allPeriods.filter((p: Period) => p.fiscal_year_id === fiscalYearId);
+      if (requestId === periodsRequest.current) setRealPeriodsForSelectedYear(yearPeriods);
       return yearPeriods;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
+      if (requestId === periodsRequest.current) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(message);
+      }
       throw err;
     } finally {
-      setIsLoading(false);
+      if (requestId === periodsRequest.current) setIsLoading(false);
     }
   }, []);
 
@@ -142,7 +148,7 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
   useEffect(() => {
     const year = availableFiscalYears.find(y => y.id === selectedFiscalYearId);
     setAvailablePeriodsForSelectedYear(
-      year && realPeriodsForSelectedYear.every(p => p.fiscal_year_id === year.id)
+      year && typeof year.start_date === 'string' && typeof year.end_date === 'string' && realPeriodsForSelectedYear.every(p => p.fiscal_year_id === year.id)
         ? buildYearMonths(year, realPeriodsForSelectedYear)
         : realPeriodsForSelectedYear,
     );
@@ -177,6 +183,7 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
 
   // Initialize fiscal years and selected year on mount or companyId change
   useEffect(() => {
+    const selectionId = ++yearSelection.current;
     // Clear the previous company's date state before fetching the new company's data
     setAvailableFiscalYears([]);
     setSelectedFiscalYearId(null);
@@ -185,22 +192,30 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
     const initialize = async () => {
       try {
         const years = await loadFiscalYears();
+        if (selectionId !== yearSelection.current) return;
         const defaultYear = determineDefaultFiscalYear(years);
         if (defaultYear) {
           setSelectedFiscalYearId(defaultYear.id);
           const periods = await loadPeriodsForYear(defaultYear.id);
+          if (selectionId !== yearSelection.current) return;
 
           // Set default period
           const persistedPeriodId = localStorage.getItem(getStorageKey('selectedPeriodId'));
           const periodMode = (localStorage.getItem(getStorageKey('periodMode')) || 'specific') as 'all' | 'specific';
+          periodModeRef.current = periodMode;
           setPeriodMode(periodMode);
 
-          if (persistedPeriodId && periodMode === 'specific') {
+          if (persistedPeriodId && periodMode === 'specific' && periods.some(period => period.id === persistedPeriodId)) {
             setSelectedPeriodId(persistedPeriodId);
-          } else if (!persistedPeriodId && periodMode === 'specific') {
+          } else if (periodMode === 'specific') {
             // Select most recent period
             if (periods.length > 0) {
-              setSelectedPeriodId(periods[periods.length - 1].id);
+              const defaultPeriodId = periods[periods.length - 1].id;
+              setSelectedPeriodId(defaultPeriodId);
+              localStorage.setItem(getStorageKey('selectedPeriodId'), defaultPeriodId);
+            } else {
+              setSelectedPeriodId(null);
+              localStorage.removeItem(getStorageKey('selectedPeriodId'));
             }
           }
         }
@@ -209,29 +224,38 @@ export const DateContextProvider: React.FC<DateContextProviderProps> = ({ childr
       }
     };
 
-    initialize();
+    void initialize();
+    return () => { yearSelection.current++; };
   }, [companyId, loadFiscalYears, loadPeriodsForYear, determineDefaultFiscalYear]);
 
   // Handle fiscal year change
   const onSelectFiscalYear = useCallback(async (id: string) => {
+    const selectionId = ++yearSelection.current;
+    // Clear the prior period immediately so reports cannot keep using another year's period
+    // while the newly selected year's periods are loading.
+    setRealPeriodsForSelectedYear([]);
+    setSelectedPeriodId(null);
     setSelectedFiscalYearId(id);
     localStorage.setItem(getStorageKey('selectedFiscalYearId'), id);
 
     const periods = await loadPeriodsForYear(id);
-    if (periods.length > 0 && periodMode === 'specific') {
+    if (selectionId === yearSelection.current && periods.length > 0 && periodModeRef.current === 'specific') {
       setSelectedPeriodId(periods[0].id);
       localStorage.setItem(getStorageKey('selectedPeriodId'), periods[0].id);
     }
-  }, [loadPeriodsForYear, periodMode, companyId]);
+  }, [loadPeriodsForYear, companyId]);
 
   // Handle period change
   const onSelectPeriod = useCallback((id: string, mode: 'all' | 'specific' = 'specific') => {
+    yearSelection.current++;
     if (mode === 'all') {
+      periodModeRef.current = 'all';
       setPeriodMode('all');
       setSelectedPeriodId(null);
       localStorage.setItem(getStorageKey('periodMode'), 'all');
       localStorage.removeItem(getStorageKey('selectedPeriodId'));
     } else {
+      periodModeRef.current = 'specific';
       setPeriodMode('specific');
       setSelectedPeriodId(id);
       localStorage.setItem(getStorageKey('periodMode'), 'specific');

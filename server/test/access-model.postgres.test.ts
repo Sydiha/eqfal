@@ -10,13 +10,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // and invoice approval without manual journal permissions. Runs on its OWN throwaway database because System Admin
 // status is global (the shared test database holds other suites' users).
 const databaseUrl = process.env['DATABASE_URL'];
+// Vitest evaluates skipped suite declarations too; use a harmless URL when PostgreSQL suites are disabled.
+const testConnectionUrl = databaseUrl || 'postgres://localhost/eqfal_test';
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const PASSWORD = 'Access-Model-1!';
 
 describeDatabase('access model: System Admin, Full Access wildcard, Company Manager (PostgreSQL)', () => {
   const dbName = `eqfal_access_${randomBytes(6).toString('hex')}`;
-  const adminPool = new Pool({ connectionString: databaseUrl, max: 1 });
-  const testUrl = new URL(databaseUrl as string);
+  const adminPool = new Pool({ connectionString: testConnectionUrl, max: 1 });
+  const testUrl = new URL(testConnectionUrl);
   testUrl.pathname = `/${dbName}`;
   const originalUrl = process.env['DATABASE_URL'];
   let pool: Pool;

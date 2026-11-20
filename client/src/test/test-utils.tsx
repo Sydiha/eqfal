@@ -14,7 +14,7 @@ const createMockDateContext = (): DateContextState => ({
   onSelectFiscalYear: async () => {},
   onSelectPeriod: () => {},
   loadFiscalYears: async () => {},
-  loadPeriodsForYear: async () => {},
+  loadPeriodsForYear: async () => [],
 });
 
 interface AllTheProvidersProps {
