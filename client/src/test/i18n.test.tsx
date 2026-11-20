@@ -46,6 +46,12 @@ afterEach(() => {
 // ── RTL / LTR ────────────────────────────────────────────────────────────────
 
 describe('i18n — RTL/LTR direction', () => {
+  it('provides localized fiscal-year range guidance in Arabic and English', async () => {
+    expect(i18n.getResource('ar', 'translation', 'employeeCostCenter.monthOutsideFiscalYear')).toBe('اختر شهرًا ضمن السنة المالية المحددة.');
+    expect(i18n.getResource('en', 'translation', 'employeeCostCenter.monthOutsideFiscalYear')).toBe('Choose a month within the selected fiscal year.');
+    expect(i18n.getResource('ar', 'translation', 'employeeCostCenter.payments.monthOutsideFiscalYear')).toBe('اختر شهرًا ضمن السنة المالية المحددة.');
+    expect(i18n.getResource('en', 'translation', 'employeeCostCenter.payments.monthOutsideFiscalYear')).toBe('Choose a month within the selected fiscal year.');
+  });
   it('updates Mantine direction when the language changes at runtime', async () => {
     function MantineDirectionProbe() {
       const { dir } = useDirection();

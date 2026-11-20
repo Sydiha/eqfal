@@ -26,3 +26,4 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.zw{gap:14px;min-width:0}.zw>h3{font-size:1.1rem;line-height:1.45}.zw-card{gap:12px;padding:14px;overflow-wrap:anywhere}.zw-card>h4{font-size:1rem;line-height:1.45}.zw-card>h5{font-size:.9rem;line-height:1.45}.zw-form{gap:12px 14px}.zw fieldset{min-width:0;margin:0;padding:12px;border:1px solid var(--ac-border,#e5e7eb);border-radius:8px}.zw-actions{align-items:center}.zw-actions button{max-width:100%;white-space:normal;overflow-wrap:anywhere}.zw .table-wrap{max-width:100%;overscroll-behavior-inline:contain}

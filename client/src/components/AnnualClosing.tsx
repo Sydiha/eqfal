@@ -48,25 +48,29 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const [professionalAction,setProfessionalAction]=useState<'review'|'approve'|null>(null);
   const [professionalNote,setProfessionalNote]=useState('');
   const [packageBusy,setPackageBusy]=useState(false);
+  const explicitYearSelection=useRef(false);
   const mutatingRef=useRef(false);
   const [tab,setTab]=useState<'readiness'|'package'|'wht'>(()=>{const requested=readQueryParameter('annualCloseTab',{allowedValues:['readiness','package','wht']});return requested==='package'&&canViewPackage||requested==='wht'&&canViewWht?requested:'readiness'});
   const selectTab=(next:'readiness'|'package'|'wht')=>{if(next==='package'&&!canViewPackage||next==='wht'&&!canViewWht)return;setTab(next);writeQueryParameters({annualCloseTab:next});};
   useEffect(()=>{const restore=()=>{const requested=readQueryParameter('annualCloseTab',{allowedValues:['readiness','package','wht']});setTab(requested==='package'&&canViewPackage||requested==='wht'&&canViewWht?requested:'readiness')};window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[canViewPackage,canViewWht]);
   useEffect(() => {
     if (!canView) return;
+    let cancelled = false;
     void fetch('/api/fiscal-years').catch(e => { throw toApiError(e); }).then(async response => {
       if (response.status === 401) { onUnauthorized(); return; }
       if (!response.ok) throw await parseApiError(response);
       const data = await response.json() as { fiscalYears: FiscalYear[] };
+      if (cancelled) return;
       setYears(data.fiscalYears);
-      // Use selected fiscal year from DateContext if available, otherwise use first
-      setYearId(current => current || selectedFiscalYearId || data.fiscalYears[0]?.id || '');
-    }).catch(e => setError(screenErrorMessage(e, t, t('annualClosing.error'))));
+      // The global year is the initial/default context; a year explicitly chosen here remains independent.
+      setYearId(current => explicitYearSelection.current ? current : selectedFiscalYearId || current || data.fiscalYears[0]?.id || '');
+    }).catch(e => { if (!cancelled) setError(screenErrorMessage(e, t, t('annualClosing.error'))); });
+    return () => { cancelled = true; };
   }, [canView, onUnauthorized, selectedFiscalYearId]);
   useEffect(() => {
     if (!canView || !yearId) { setResult(null); return; }
     let cancelled = false;
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setResult(null);
     void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}`).catch(e => { throw toApiError(e); }).then(async response => {
       if (response.status === 401) { onUnauthorized(); return null; }
       if (!response.ok) throw await parseApiError(response);
@@ -74,7 +78,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
     }).then(data => { if (data && !cancelled) setResult(data); }).catch(e => { if (!cancelled) setError(screenErrorMessage(e, t, t('annualClosing.error'))); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [canView, onUnauthorized, yearId, refresh]);
-  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}let cancelled=false;void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).catch(e=>{throw toApiError(e);}).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw await parseApiError(response);return response.json() as Promise<PackageResult>;}).then(data=>{if(data&&!cancelled)setPackageResult(data);}).catch(e=>{if(!cancelled){setPackageResult(null);setPackageError(screenErrorMessage(e,t,t('annualClosing.packageLoadError')));}});return()=>{cancelled=true;};},[canViewPackage,onUnauthorized,refresh,t,yearId]);
+  useEffect(()=>{if(!canViewPackage||!yearId){setPackageResult(null);return;}let cancelled=false;setPackageResult(null);void fetch(`/api/annual-closing/${encodeURIComponent(yearId)}/package`).catch(e=>{throw toApiError(e);}).then(async response=>{if(response.status===401){onUnauthorized();return null;}if(!response.ok)throw await parseApiError(response);return response.json() as Promise<PackageResult>;}).then(data=>{if(data&&!cancelled)setPackageResult(data);}).catch(e=>{if(!cancelled){setPackageResult(null);setPackageError(screenErrorMessage(e,t,t('annualClosing.packageLoadError')));}});return()=>{cancelled=true;};},[canViewPackage,onUnauthorized,refresh,t,yearId]);
   const isArabic=i18n.language.startsWith('ar');
   const sourceLabel=(source:string)=>isArabic?t(`annualClosing.package.sources.${source}`,{defaultValue:t('annualClosing.package.unknownSource')}):source;
   const blockerCode=(blocker:string)=>blocker.split(':').at(-1)??blocker;
@@ -139,7 +143,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
     rows:shownManifest.map(item=>({name:sectionName(item),state:status(item.status),source:sourceLabel(item.source),blockers:item.blockers.map(blockerLabel).join(isArabic?'، ':', ')})),cutover:cutoverLines}):null;
   return <section className="panel annual-closing-view" aria-labelledby="annual-closing-title">
     <header className="ac-header"><h1 id="annual-closing-title">{t('annualClosing.title')}</h1><p>{t('annualClosing.description')}</p></header>
-    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{formatDisplayDate(selectedYear.start_date,i18n.language).replace(/\u200f/g,'')} – {formatDisplayDate(selectedYear.end_date,i18n.language).replace(/\u200f/g,'')}</bdi></span>}</div>
+    <div className="ac-card ac-context"><label className="ac-context__year"><span className="ac-muted">{t('annualClosing.fiscalYear')}</span><select value={yearId} disabled={packageBusy} onChange={event => { explicitYearSelection.current=true; setPackageResult(null); setPackageError(''); setFinalizationBlockers([]); setResult(null); setYearId(event.target.value); }}><option value="">{t('annualClosing.selectYear')}</option>{years.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}</select></label>{selectedYear&&<span className="ac-muted ac-context__range"><bdi dir="ltr">{formatDisplayDate(selectedYear.start_date,i18n.language).replace(/\u200f/g,'')} – {formatDisplayDate(selectedYear.end_date,i18n.language).replace(/\u200f/g,'')}</bdi></span>}</div>
     {loading && <p role="status">{t('annualClosing.loading')}</p>}{error && <p role="alert">{error}</p>}
     {result && <>
       <div className="ac-tabs" role="tablist" aria-label={t('annualClosing.title')}>{tabs.map(([key,label])=><button key={key} type="button" role="tab" id={`ac-tab-${key}`} aria-selected={tab===key} aria-controls={`ac-panel-${key}`} className={tab===key?'ac-tab ac-tab--active':'ac-tab'} onClick={()=>selectTab(key)}>{t(label)}</button>)}</div>

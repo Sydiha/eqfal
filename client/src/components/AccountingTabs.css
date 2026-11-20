@@ -42,11 +42,11 @@
 .ac-tabview .ac-tab__row{display:grid;grid-template-columns:minmax(0,160fr) minmax(0,156fr) minmax(0,343fr) minmax(0,166fr) minmax(0,120fr) auto;align-items:end;gap:10px;margin:0}
 
 /* Report parameter forms */
-.ac-tabview .ac-tab__report-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.ac-tabview .ac-tab__report-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 10px}
 .ac-tabview .ac-tab__field--year{width:184px}
 .ac-tabview .ac-tab__field--date{width:216px}
 .ac-tabview .ac-tab__field--account{width:320px}
-.ac-tabview .ac-tab__report-form>.ac-tab__primary{margin-inline-start:auto}
+.ac-tabview .ac-tab__report-form>.ac-tab__primary{margin-inline-start:0}
 
 /* Tables */
 .ac-tabview .ac-tab__table{overflow-x:auto;margin:0;border:1px solid var(--ac-border);border-radius:8px;background:#fff}

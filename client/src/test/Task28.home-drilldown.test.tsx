@@ -34,7 +34,7 @@ const dateContext = (over: Partial<DateContextState> = {}): DateContextState => 
   onSelectFiscalYear: async () => {},
   onSelectPeriod: () => {},
   loadFiscalYears: async () => {},
-  loadPeriodsForYear: async () => {},
+  loadPeriodsForYear: async () => [],
   ...over,
 });
 let fetchMock: ReturnType<typeof vi.fn>;

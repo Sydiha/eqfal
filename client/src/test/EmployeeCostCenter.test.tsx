@@ -31,6 +31,28 @@ function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Re
 }
 
 describe('Employee Cost Center',()=>{
+  it('ignores an older monthly report response after the user changes the report month',async()=>{
+    const pending:Array<(response:Response)=>void>=[];
+    vi.stubGlobal('fetch',vi.fn((input:string|URL|Request)=>{
+      const url=String(input);
+      if(url==='/api/employees')return Promise.resolve(new Response(JSON.stringify({employees:[employee]})));
+      if(url==='/api/employee-costs/fiscal-years')return Promise.resolve(new Response(JSON.stringify({fiscal_years:[fiscalYear]})));
+      if(url==='/api/employee-costs')return Promise.resolve(new Response(JSON.stringify({records:[]})));
+      if(url.includes('/reports/monthly'))return new Promise<Response>(resolve=>pending.push(resolve));
+      throw new Error(`Unexpected request ${url}`);
+    }));
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view']} onUnauthorized={onUnauthorized}/>);
+    await waitFor(()=>expect(pending).toHaveLength(1));
+    fireEvent.change(screen.getByLabelText('Allocation month'),{target:{value:'2026-12'}});
+    await waitFor(()=>expect(pending).toHaveLength(2));
+    const row=(category:string,amount:string)=>({employee_id:'e1',employee_number:'E1',display_name:'Employee One',category,nature:'employer_cost',allocation_month:'2026-12-01',currency_code:'SAR',amount});
+    pending[1]!(new Response(JSON.stringify({rows:[row('bonus','22.00')]})));
+    expect(await screen.findByText('Bonus')).toBeInTheDocument();
+    pending[0]!(new Response(JSON.stringify({rows:[row('employer_gosi','11.00')]})));
+    await waitFor(()=>expect(screen.getByText('Bonus')).toBeInTheDocument());
+    expect(screen.queryByText('Employer GOSI')).toBeNull();
+  });
+
   it('does not show bank payment reconciliation to users holding only allocation authority',async()=>{
     mockApi([cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.payment.allocate','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
