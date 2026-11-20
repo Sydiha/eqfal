@@ -78,6 +78,7 @@
 .ac-tabview .ac-tab__table--trial td:nth-child(2),.ac-tabview .ac-tab__table--trial td:nth-child(3){min-width:146px}
 .ac-tabview .ac-tab__table--trial td:nth-child(4){min-width:120px;padding-inline-end:108px}
 .ac-tabview .ac-tab__balance{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.ac-tabview .ac-tab__mobile-label{display:none}
 
 .ac-tabview .ac-tab__table--ledger td{height:47px}
 .ac-tabview .ac-tab__table--ledger td:nth-child(2){min-width:118px}
@@ -137,6 +138,11 @@
   .ac-tabview .ac-tab__table .badge{align-self:center}
   .ac-tabview .ac-tab__statement tr:not(.is-section)>:last-child{width:auto}
   .ac-tabview .ac-tab__table--trial td:nth-child(4){padding-inline-end:12px}
+  .ac-tabview .ac-tab__table--trial .ac-tab__mobile-label{display:block;flex:none;color:var(--ac-muted);font-size:11px;font-weight:600;white-space:normal}
+  .ac-tabview .ac-tab__table--trial tbody td.ac-tab__num,
+  .ac-tabview .ac-tab__table--trial tfoot th.ac-tab__num{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ac-tabview .ac-tab__table--trial .ac-tab__balance-cell{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ac-tabview .ac-tab__table--trial .ac-tab__balance{width:auto;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 }
 /* S2 UAT: cutover disclosure grouped for reading; text unchanged. */
 .ac-tabview .ac-cutover-note{margin:0 0 16px;padding:14px 16px;border:1px solid #d7e3ec;border-radius:12px;background:#f8fbfc;font-size:13px;line-height:1.6}
