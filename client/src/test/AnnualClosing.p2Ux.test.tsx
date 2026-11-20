@@ -77,6 +77,26 @@ describe('Annual Closing P2 UI fixes', () => {
     expect(warning).not.toHaveTextContent('unknown_private_code');
   });
 
+  it.each([[true, true], [false, false]])('links to the Tax/Zakat workpaper only when its target is rendered (canViewWorkpaper=%s)', async (canViewWorkpaper, linkExpected) => {
+    mockApi({ finalize: { blockers: ['tax_zakat_working_paper:workpaper_not_started'] } });
+    const { container } = render(<AnnualClosing canView canViewPackage canFinalizePackage canViewWorkpaper={canViewWorkpaper} onUnauthorized={vi.fn()} />);
+    await openPackage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Finalize package' }));
+    const warning = await screen.findByRole('alert');
+    const action = within(warning).getByText('View workpaper in package');
+    const link = action.closest('a');
+    if (linkExpected) {
+      expect(link).toHaveAttribute('href', '#tax-workpaper-title');
+      const target = container.querySelector('#tax-workpaper-title');
+      expect(target).toBeInTheDocument();
+      expect(target?.closest('[role="tabpanel"]')).not.toHaveAttribute('hidden');
+    } else {
+      expect(link).toBeNull();
+      expect(action.tagName).toBe('SPAN');
+      expect(container.querySelector('#tax-workpaper-title')).not.toBeInTheDocument();
+    }
+  });
+
   it('renders human-readable package reviewers while retaining isolated actor IDs in Arabic', async () => {
     await i18n.changeLanguage('ar');
     document.documentElement.dir = 'rtl';
