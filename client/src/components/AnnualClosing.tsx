@@ -24,7 +24,7 @@ type Result = {
 };
 type ManifestSection={section:string;status:string;blocker_count:number;blockers:string[];source:string;summary:Record<string,string|number|boolean>};
 type Snapshot={id:string;snapshot_no:number;snapshot_type:'preview'|'final';manifest:ManifestSection[];source_fingerprint:string;created_at:string};
-type Package={id:string;status:'draft'|'finalized'|'handed_off'|'reviewed'|'approved';version:number;final_snapshot_id:string|null;finalized_at:string|null;handed_off_at:string|null;handoff_note:string|null;handoff_reference:string|null;reviewed_by_user_id:string|null;reviewed_at:string|null;review_note:string|null;approved_by_user_id:string|null;approved_at:string|null;approval_note:string|null;snapshots:Snapshot[]};
+type Package={id:string;status:'draft'|'finalized'|'handed_off'|'reviewed'|'approved';version:number;final_snapshot_id:string|null;finalized_at:string|null;handed_off_at:string|null;handoff_note:string|null;handoff_reference:string|null;reviewed_by_user_id:string|null;reviewed_by_display_name?:string|null;reviewed_at:string|null;review_note:string|null;approved_by_user_id:string|null;approved_by_display_name?:string|null;approved_at:string|null;approval_note:string|null;snapshots:Snapshot[]};
 type PackageResult={package:Package|null;live:{manifest:ManifestSection[];source_fingerprint:string}|null;drift:boolean;fingerprint_version?:1|2|null;financial_coverage?:boolean|null;legacy_fingerprint?:boolean};
 
 export type AnnualNavPage = 'monthlyClose' | 'accounting' | 'vat' | 'banks' | 'documents' | 'obligations' | 'partners' | 'assets' | 'periodicAdjustments' | 'openingBalances';
@@ -80,7 +80,6 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
   const blockerCode=(blocker:string)=>blocker.split(':').at(-1)??blocker;
   const blockerLabel=(blocker:string)=>t(`annualClosing.package.blockerMessages.${blockerCode(blocker)}`,{defaultValue:t('annualClosing.package.unknownBlocker')});
   const genericBlockerCodes=new Set(['blocked','needs_review','not_started','not_applicable']);
-  const displayFinalizationBlockers=finalizationBlockers.filter(blocker=>!genericBlockerCodes.has(blockerCode(blocker))).map(blockerLabel);
   const snapshotTypeLabel=(type:Snapshot['snapshot_type'])=>t(`annualClosing.package.snapshotTypes.${type}`);
   const formatDateTime=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(date);};
   const blockedFinancialDomainCount=result?financialStatementDomainKeys.filter(key=>(result.domains[key]?.blocker_count??0)>0).length:0;
@@ -102,6 +101,28 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
     if(key==='wht')return canViewWht?{tab:'wht'}:null;
     return null;
   };
+  const blockerActionDomain:Record<string,string>={monthly_close:'monthly_close',trial_balance:'ledger',general_ledger:'ledger',statement_of_financial_position:'ledger',profit_or_loss:'ledger',changes_in_equity:'ledger',cash_flow:'ledger',vat_periods_returns:'vat',bank_reconciliation:'banking',receivables_payables:'receivables_payables',document_exceptions:'documents',partners_ownership:'partners',fixed_assets_depreciation:'assets',periodic_adjustments:'adjustments',opening_balances:'opening_balances'};
+  const finalizationBlockerGroups=Array.from(finalizationBlockers.reduce((groups,raw)=>{const [section,...codeParts]=raw.split(':');const code=codeParts.join(':')||'missing';const group=groups.get(section!)??{section:section!,codes:[]};if(!group.codes.includes(code))group.codes.push(code);groups.set(section!,group);return groups;},new Map<string,{section:string;codes:string[]}>()).values());
+  const sectionName=(item:ManifestSection)=>t(`annualClosing.package.sections.${item.section}`,{defaultValue:t('annualClosing.package.unknownSection')});
+  const blockerAction=(section:string):{label:string;target:AnnualNavPage|null;href:string|null}=>{
+    if(section==='tax_zakat_working_paper')return {label:t('annualClosing.nextAction.zakat'),target:null,href:canViewWorkpaper?'#tax-workpaper-title':null};
+    if(section==='pre_cutover_history')return {label:t('annualClosing.nextAction.pre_cutover_history'),target:null,href:cutoverLines.length?'#annual-cutover':null};
+    const domain=blockerActionDomain[section];
+    if(!domain)return {label:t('annualClosing.package.reviewSourceRecords'),target:null,href:null};
+    const label=t(`annualClosing.nextAction.${domain}`);
+    const target=nextActionTarget(domain,'blocked');
+    return {label,target:target&&'page'in target?target.page:null,href:null};
+  };
+  const actorHistory=(key:'reviewedAt'|'approvedAt',id:string|null,name:string|null,date:string,note:string|null)=>{
+    const marker={actor:'__EQFAL_ACTOR__',date:'__EQFAL_DATE__',note:'__EQFAL_NOTE__'};
+    const template=t(`annualClosing.package.${key}`,{actor:marker.actor,date:marker.date,note:marker.note});
+    return template.split(/(__EQFAL_ACTOR__|__EQFAL_DATE__|__EQFAL_NOTE__)/g).map((part,index)=>{
+      if(part===marker.actor)return <span key={index}><bdi dir="auto">{name||t('annualClosing.package.actorNameUnavailable')}</bdi>{' '}<bdi dir="ltr" className="ac-actor-id">({id||'—'})</bdi></span>;
+      if(part===marker.date)return <bdi key={index} dir="auto">{formatDateTime(date)}</bdi>;
+      if(part===marker.note)return <bdi key={index} dir="auto">{note||'—'}</bdi>;
+      return part;
+    });
+  };
   const badgeClass=(value:string)=>`ac-badge ac-badge--${value==='ready'||value==='approved'?'ok':value==='blocked'?'bad':value==='needs_review'||value==='draft'?'warn':'neutral'}`;
   const tabs=[['readiness','annualClosing.tabs.readiness'],['package','annualClosing.tabs.package'],['wht','annualClosing.tabs.wht']] as const;
   const fyName=selectedYear?.name??result?.fiscal_year.name??'';
@@ -110,7 +131,6 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
     overall:result.ready?t('annualClosing.ready'):t('annualClosing.notReady'),unresolvedTotal:result.blocker_count,fsReadinessState:status(result.financial_statements_readiness.status),zakatState:status(result.zakat_readiness.status),
     domains:Object.entries(result.domains).map(([key,value])=>({name:t(`annualClosing.domainNames.${key}`),state:status(value.status),items:value.blocker_count})),
     manifest:result.package_manifest.map(item=>({name:t(`annualClosing.manifestNames.${item.section}`)+(item.version_no?` — ${t('annualClosing.package.approvedVersion',{number:item.version_no})}`:''),state:status(item.status),items:item.section==='financial_statements_readiness'?t('annualClosing.blockedDomains',{count:blockedFinancialDomainCount}):item.blocker_count??null}))}):null;
-  const sectionName=(item:ManifestSection)=>t(`annualClosing.package.sections.${item.section}`);
   const shownManifest=packageResult?.package?(packageResult.package.snapshots.at(-1)?.manifest??packageResult.live?.manifest??[]):[];
   const cutoverLines=packageCutoverLines(t,shownManifest.find(item=>item.section==='pre_cutover_history')?.summary,{cash_flow:t('annualClosing.package.sections.pre_cutover_cash_flow'),equity:t('annualClosing.package.sections.pre_cutover_equity')});
   const packageExport=result&&!loading&&packageResult?.package?annualPackageExport({ar:isArabic,company,generatedAt:generatedStamp(),fiscalYear:fyName,startDate:selectedYear?.start_date??result.fiscal_year.start_date,endDate:selectedYear?.end_date??result.fiscal_year.end_date,title:t('annualClosing.package.title'),
@@ -144,7 +164,7 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
           </div>
         </div>
         {packageError&&<p role="alert">{packageError}</p>}
-        {finalizationBlockers.length>0&&<div className="warning-alert" role="alert"><strong>{t('annualClosing.package.finalizationWarningTitle')}</strong>{displayFinalizationBlockers.length>0&&<ul>{displayFinalizationBlockers.map((blocker,index)=><li key={`${blocker}-${index}`}>{blocker}</li>)}</ul>}</div>}
+        {finalizationBlockers.length>0&&<div className="warning-alert" role="alert"><strong>{t('annualClosing.package.finalizationWarningTitle')}</strong><ul>{finalizationBlockerGroups.map(group=>{const status=group.codes.find(code=>genericBlockerCodes.has(code));const details=group.codes.filter(code=>!genericBlockerCodes.has(code));const action=blockerAction(group.section);return <li key={group.section}><strong>{t(`annualClosing.package.sections.${group.section}`,{defaultValue:t('annualClosing.package.unknownSection')})}</strong>{details.length>0?<ul>{details.map((code,index)=><li key={`${code}-${index}`}>{blockerLabel(code)}</li>)}</ul>:<span>: {status?t(`annualClosing.status.${status}`,{defaultValue:blockerLabel(status)}):t('annualClosing.package.unknownBlocker')}</span>}<div className="ac-blocker-action"><span>{t('annualClosing.package.nextAction')}: </span>{action.target&&onNavigate?<button type="button" className="ac-link" onClick={()=>onNavigate(action.target!)}>{action.label}</button>:action.href?<a className="ac-link" href={action.href}>{action.label}</a>:<span>{action.label}</span>}</div></li>;})}</ul></div>}
         {packageResult&&!packageResult.package&&<p>{t('annualClosing.package.notCreated')}</p>}
         {packageResult?.package&&<>
           {packageResult.drift&&<p role="status" className="ac-drift">{t('annualClosing.package.drift')}</p>}
@@ -152,9 +172,9 @@ export function AnnualClosing({ canView, canViewPackage=false, canCreatePackage=
           {(()=>{const m=shownManifest.find(item=>item.section==='monthly_close')?.summary;if(!m)return null;const num=(k:string)=>Number(m[k]??0);return <p className="ac-note" data-testid="package-monthly-policy">{t('annualClosing.monthlyPolicy.packageLine',{policy:t(`annualClosing.monthlyPolicy.${m.monthly_close_policy==='optional'?'optional':'required'}Short`),closed:num('closed_periods'),open:num('open_periods'),missing:num('missing_periods'),expected:num('expected_periods')})}</p>;})()}
           <p className="ac-note">{t('annualClosing.package.notFiling')}</p>
           <ExportButtons language={i18n.language} document={packageExport} landscape/>
-          {cutoverLines.length>0&&<div role="note" className="ac-note ac-cutover" aria-label={cutoverLines[0]![0]}><p><strong>{cutoverLines[0]![0]}: </strong>{cutoverLines[0]![1]}</p><dl>{cutoverLines.slice(1).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>}
-          <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('annualClosing.section')}</th><th>{t('annualClosing.state')}</th><th>{t('annualClosing.package.source')}</th><th>{t('annualClosing.package.blockers')}</th></tr></thead><tbody>{(packageResult.package.snapshots.at(-1)?.manifest??packageResult.live?.manifest??[]).map(item=><tr key={item.section}><td>{sectionName(item)}</td><td><span className={badgeClass(item.status)}>{status(item.status)}</span></td><td>{sourceLabel(item.source)}</td><td>{item.blockers.map(blockerLabel).join(isArabic?'، ':', ')||'—'}</td></tr>)}</tbody></table></div>
-          <div className="ac-meta">{packageResult.package.snapshots.map(snapshot=><p key={snapshot.id}>{t('annualClosing.package.snapshot',{number:snapshot.snapshot_no,type:snapshotTypeLabel(snapshot.snapshot_type),date:formatDateTime(snapshot.created_at)})}</p>)}{packageResult.package.finalized_at&&<p>{t('annualClosing.package.finalizedAt',{date:formatDateTime(packageResult.package.finalized_at)})}</p>}{packageResult.package.handed_off_at&&<p>{t('annualClosing.package.handedOffAt',{date:formatDateTime(packageResult.package.handed_off_at)})}</p>}{packageResult.package.reviewed_at&&<p>{t('annualClosing.package.reviewedAt',{date:formatDateTime(packageResult.package.reviewed_at),actor:packageResult.package.reviewed_by_user_id||'—',note:packageResult.package.review_note||'—'})}</p>}{packageResult.package.approved_at&&<p>{t('annualClosing.package.approvedAt',{date:formatDateTime(packageResult.package.approved_at),actor:packageResult.package.approved_by_user_id||'—',note:packageResult.package.approval_note||'—'})}</p>}</div>
+          {cutoverLines.length>0&&<div id="annual-cutover" role="note" className="ac-note ac-cutover" aria-label={cutoverLines[0]![0]}><p><strong>{cutoverLines[0]![0]}: </strong>{cutoverLines[0]![1]}</p><dl>{cutoverLines.slice(1).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>}
+          <div className="table-wrap ac-stack ac-package-manifest"><table className="ac-table"><thead><tr><th>{t('annualClosing.section')}</th><th>{t('annualClosing.state')}</th><th>{t('annualClosing.package.source')}</th><th>{t('annualClosing.package.blockers')}</th></tr></thead><tbody>{(packageResult.package.snapshots.at(-1)?.manifest??packageResult.live?.manifest??[]).map(item=><tr key={item.section}><td data-label={t('annualClosing.section')}>{sectionName(item)}</td><td data-label={t('annualClosing.state')}><span className={badgeClass(item.status)}>{status(item.status)}</span></td><td data-label={t('annualClosing.package.source')}>{sourceLabel(item.source)}</td><td data-label={t('annualClosing.package.blockers')}>{item.blockers.map(blockerLabel).join(isArabic?'، ':', ')||'—'}</td></tr>)}</tbody></table></div>
+          <div className="ac-meta">{packageResult.package.snapshots.map(snapshot=><p key={snapshot.id}>{t('annualClosing.package.snapshot',{number:snapshot.snapshot_no,type:snapshotTypeLabel(snapshot.snapshot_type),date:formatDateTime(snapshot.created_at)})}</p>)}{packageResult.package.finalized_at&&<p>{t('annualClosing.package.finalizedAt',{date:formatDateTime(packageResult.package.finalized_at)})}</p>}{packageResult.package.handed_off_at&&<p>{t('annualClosing.package.handedOffAt',{date:formatDateTime(packageResult.package.handed_off_at)})}</p>}{packageResult.package.reviewed_at&&<p>{actorHistory('reviewedAt',packageResult.package.reviewed_by_user_id,packageResult.package.reviewed_by_display_name??null,packageResult.package.reviewed_at,packageResult.package.review_note)}</p>}{packageResult.package.approved_at&&<p>{actorHistory('approvedAt',packageResult.package.approved_by_user_id,packageResult.package.approved_by_display_name??null,packageResult.package.approved_at,packageResult.package.approval_note)}</p>}</div>
         </>}
       </section>}
       {professionalAction&&<Dialog title={t(`annualClosing.package.${professionalAction}DialogTitle`)} onClose={()=>setProfessionalAction(null)}><div className="form-grid"><label>{t('annualClosing.package.professionalNote')}<textarea value={professionalNote} onChange={event=>setProfessionalNote(event.currentTarget.value)} maxLength={2000}/></label><div className="modal-actions"><button type="button" onClick={()=>setProfessionalAction(null)}>{t('common.cancel')}</button><button type="button" className="primary" onClick={confirmProfessionalAction}>{t(`annualClosing.package.${professionalAction}Confirm`)}</button></div></div></Dialog>}

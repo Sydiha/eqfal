@@ -130,7 +130,7 @@ describe('Annual Closing Center', () => {
     const warning=await screen.findByRole('alert');
     expect(warning).toHaveClass('warning-alert');
     expect(within(warning).getByText('تعذر اعتماد الحزمة نهائيًا')).toBeInTheDocument();
-    expect(within(warning).getAllByRole('listitem')).toHaveLength(2);
+    expect(warning.querySelectorAll(':scope > ul > li')).toHaveLength(2);
     expect(within(warning).getByText('الإقفال الشهري غير جاهز')).toBeInTheDocument();
     expect(within(warning).getByText('قائمة التدفقات النقدية غير جاهزة')).toBeInTheDocument();
     expect(warning).not.toHaveTextContent('القسم متعثر');
@@ -148,7 +148,7 @@ describe('Annual Closing Center', () => {
     fireEvent.click(await screen.findByRole('button',{name:'Finalize package'}));
     const warning=await screen.findByRole('alert');
     expect(within(warning).getByText('Package could not be finalized')).toBeInTheDocument();
-    expect(within(warning).getAllByRole('listitem')).toHaveLength(2);
+    expect(warning.querySelectorAll(':scope > ul > li')).toHaveLength(2);
     expect(within(warning).getByText('Monthly close is not ready')).toBeInTheDocument();
     expect(within(warning).getByText('Cash Flow is not ready')).toBeInTheDocument();
     expect(warning).not.toHaveTextContent('Blocked');
