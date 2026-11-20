@@ -45,6 +45,10 @@
 .annual-closing-view .ac-meta p{margin:0;color:var(--ac-muted);font-size:11px}
 .annual-closing-view .ac-package .ac-note{margin:0 0 8px}
 .annual-closing-view .warning-alert{margin:0 0 8px;padding:8px 12px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px}
+.annual-closing-view .warning-alert ul{margin:6px 0 0;padding-inline-start:20px}
+.annual-closing-view .warning-alert li+li{margin-top:6px}
+.annual-closing-view .ac-blocker-action{margin-top:4px;color:var(--ac-ink)}
+.annual-closing-view .ac-actor-id{color:var(--ac-muted);font-size:10px;unicode-bidi:isolate}
 /* Wrapped legacy sections: TaxWorkpaper and WhtReviews (styling only, no logic) */
 .annual-closing-view .ac-card .panel{margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}
 .annual-closing-view .ac-card section h2{margin:0 0 8px;font-size:14px;font-weight:600}
@@ -82,6 +86,7 @@
  .annual-closing-view .table-wrap.ac-stack td:first-child{grid-column:1/-1;font-weight:600}
  .annual-closing-view .table-wrap.ac-stack td:not(:first-child)::before{content:attr(data-label) ": ";color:var(--ac-muted);font-size:11px;font-weight:400}
  .annual-closing-view .table-wrap.ac-stack td.ac-next{grid-column:1/-1}
+ .annual-closing-view .table-wrap.ac-package-manifest td:last-child{grid-column:1/-1}
 }
 @media (max-width:720px){
  .annual-closing-view .ac-summary{row-gap:12px}

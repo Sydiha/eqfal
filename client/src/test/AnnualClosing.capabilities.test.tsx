@@ -55,7 +55,11 @@ describe('Annual Close Package granular capabilities',()=>{
     await openPackageTab();
     expect(await screen.findByRole('button',{name:'Record professional approval'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Record professional review'})).not.toBeInTheDocument();
-    expect(screen.getByText(/Professionally reviewed by reviewer/)).toBeInTheDocument();
+    expect(screen.getByText(/Professionally reviewed by/)).toBeInTheDocument();
+    expect(screen.getByText('Name unavailable')).toBeInTheDocument();
+    const reviewerId = document.querySelector('bdi.ac-actor-id');
+    expect(reviewerId).toHaveAttribute('dir','ltr');
+    expect(reviewerId).toHaveTextContent('(reviewer)');
   });
 
   it('uses an in-app review dialog, cancels without mutation, and confirms with the optional note',async()=>{
