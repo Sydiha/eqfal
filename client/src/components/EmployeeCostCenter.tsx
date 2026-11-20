@@ -1,3 +1,4 @@
+import { monthOverlapsFiscalYear } from './employee-cost-report-month';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '../money-format';
@@ -35,8 +36,7 @@ export function EmployeeCostCenter({capabilities,onUnauthorized}:Props){
   useEffect(()=>{void load();},[load]);
   const act=async(fn:()=>Promise<unknown>)=>{setBusy(true);setMessage('');try{await fn();await load();}catch(e){fail(e);}finally{setBusy(false);}};
   const selectedReportYear=years.find(y=>y.id===fiscalYear);
-  const monthEnd=(value:string)=>{const [year,monthNumber]=value.slice(0,7).split('-').map(Number);return `${year}-${String(monthNumber).padStart(2,'0')}-${String(new Date(Date.UTC(year!,monthNumber!,0)).getUTCDate()).padStart(2,'0')}`;};
-  const monthWithinYear=!!selectedReportYear&&month<=selectedReportYear.end_date&&monthEnd(month)>=selectedReportYear.start_date;
+  const monthWithinYear = monthOverlapsFiscalYear(month, selectedReportYear);
   const runReport=async()=>{const requestId=++reportRequest.current;if(!fiscalYear||reportMode==='monthly'&&!monthWithinYear){setReport([]);return;}setReport([]);try{const path=reportMode==='annual'?`/api/employee-costs/reports/annual?fiscal_year_id=${encodeURIComponent(fiscalYear)}`:`/api/employee-costs/reports/monthly?fiscal_year_id=${encodeURIComponent(fiscalYear)}&month=${encodeURIComponent(month)}`;const result=await api<{rows:ReportRow[]}>(path,{},onUnauthorized);if(requestId===reportRequest.current)setReport(result.rows);}catch(e){if(requestId===reportRequest.current){setReport([]);fail(e);}}};
   useEffect(()=>{if(canCosts&&fiscalYear)void runReport();// eslint-disable-next-line react-hooks/exhaustive-deps
     return()=>{reportRequest.current++;};

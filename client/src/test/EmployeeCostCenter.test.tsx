@@ -11,7 +11,7 @@ const onUnauthorized=vi.fn();
 const employee={id:'e1',employee_number:'E1',display_name:'Employee One',employment_start:'2025-01-01',employment_end:null,is_active:true,version:1};
 const fiscalYear={id:'fy1',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'};
 const cost=(id:string,status:'draft'|'approved')=>({id,employee_id:'e1',employee_number:'E1',display_name:'Employee One',category:'salary',nature:'earning' as const,currency_code:'SAR',total_amount:'100.00',service_period_start:'2026-01-01',service_period_end:'2026-01-31',description:'January salary',status,version:1,supersedes_id:null,correction_reason:null,allocations:[{id:`${id}-allocation`,fiscal_year_id:'fy1',allocation_month:'2026-01-01',amount:'100.00'}]});
-function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Record<string,unknown>}|null=null){
+function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Record<string,unknown>}|null=null, year=fiscalYear){
   const writes:Array<{url:string;method:string;body:Record<string,unknown>}> = [];
   vi.stubGlobal('fetch',vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
     const url=String(input),method=init?.method??'GET';
@@ -21,7 +21,7 @@ function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Re
       writes.push({url,method,body:data});
       body={record:{id:'new-cost'}};
     }else if(url==='/api/employees')body={employees:[employee]};
-    else if(url==='/api/employee-costs/fiscal-years')body={fiscal_years:[fiscalYear]};
+    else if(url==='/api/employee-costs/fiscal-years')body={fiscal_years:[year]};
     else if(url==='/api/employee-costs')body={records};
     else if(url.includes('/reports/'))body={rows:[]};
     const failed=method!=='GET'&&failure?.path===url;
@@ -31,6 +31,26 @@ function mockApi(records:unknown[]=[],failure:{path:string;status:number;body:Re
 }
 
 describe('Employee Cost Center',()=>{
+  it('requests both overlapping boundary months in each monthly report', async () => {
+    mockApi([], null, { ...fiscalYear, start_date: '2031-12-16', end_date: '2032-02-15' });
+    render(<EmployeeCostCenter capabilities={['employee.view', 'employee_cost.view', 'employee_cost.payment.view']} onUnauthorized={onUnauthorized}/>);
+    await waitFor(() => {
+      const years = screen.getAllByLabelText('Fiscal year');
+      expect(years).toHaveLength(2);
+      for (const select of years) expect(select).toHaveValue(fiscalYear.id);
+    });
+    const inputs = screen.getAllByLabelText('Allocation month');
+    expect(inputs).toHaveLength(2);
+    for (const month of ['2031-12', '2032-02', '2031-11', '2032-03']) {
+      for (const input of inputs) fireEvent.change(input, { target: { value: month } });
+      for (const report of ['reports', 'reconciliation']) {
+        const url = `/api/employee-costs/${report}/monthly?fiscal_year_id=fy1&month=${month}-01`;
+        const requested = vi.mocked(fetch).mock.calls.some(([path]) => path === url);
+        expect(requested, url).toBe(month === '2031-12' || month === '2032-02');
+      }
+    }
+  });
+
   it('ignores an older monthly report response after the user changes the report month',async()=>{
     const pending:Array<(response:Response)=>void>=[];
     vi.stubGlobal('fetch',vi.fn((input:string|URL|Request)=>{

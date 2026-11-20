@@ -1,3 +1,4 @@
+import { monthOverlapsFiscalYear } from './employee-cost-report-month';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {formatMoney} from '../money-format';
@@ -32,7 +33,7 @@ export function EmployeeCostPayments({records,years,capabilities,onUnauthorized}
   const loadHistoricalPayments=async(record:Cost)=>{if(!canDetail)return;setHistoryRecord(record);setHistoricalPayments([]);try{const x=await api<{payments?:Payment[]}>(`/api/employee-costs/${record.id}/payments`,{},onUnauthorized);setHistoricalPayments(Array.isArray(x.payments)?x.payments:[]);}catch(e){fail(e);}};
   const loadOptions=async()=>{if(!canAllocate&&!canReverse)return;try{setOptions(await api('/api/employee-costs/payment-options',{},onUnauthorized));}catch(e){fail(e);}};
   const reportYear=years.find(y=>y.id===year);
-  const monthWithinYear=!!reportYear&&month>=reportYear.start_date&&month<=reportYear.end_date;
+  const monthWithinYear = monthOverlapsFiscalYear(month, reportYear);
   const runReport=async()=>{const requestId=++reportRequest.current;if(!year||!canView||mode==='monthly'&&!monthWithinYear){setReport([]);setPaidAsOf('');return;}setReport([]);try{const path=mode==='annual'?`/api/employee-costs/reconciliation/annual?fiscal_year_id=${esc(year)}`:`/api/employee-costs/reconciliation/monthly?fiscal_year_id=${esc(year)}&month=${esc(month)}`;const x=await api<{rows?:Report[];paid_as_of?:string}>(path,{},onUnauthorized);if(requestId===reportRequest.current){setReport(Array.isArray(x.rows)?x.rows:[]);setPaidAsOf(x.paid_as_of??'');}}catch(e){if(requestId===reportRequest.current){setReport([]);fail(e);}}};
   useEffect(()=>{if(!allocationRecords.some(r=>r.id===selected))setSelected(allocationRecords[0]?.id??'');},[selected,allocationRecords]);
   useEffect(()=>{setYear(old=>years.some(y=>y.id===old)?old:years[0]?.id??'');},[years]);

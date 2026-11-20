@@ -26,6 +26,21 @@ describeDatabase('ECC-02 employee cost payment reconciliation (PostgreSQL)',()=>
     const costId=draft.json.record.id,costAllocationId=(await h.q<{id:string}>('SELECT id FROM employee_cost_allocations WHERE cost_record_id=$1',[costId]))[0]!.id;
     return{owner,viewer,limited,company,fy,employee,costId,costAllocationId,bank,tx};
   }
+  it('accepts exactly the overlapping months on both monthly report endpoints', async () => {
+    const owner = await h.user('ecc-overlap-owner');
+    const company = await h.company('ecc-overlap', owner.id);
+    await owner.client.login();
+    const year = await h.fiscalYear(company, 'Partial months', '2031-12-16', '2032-02-15');
+    for (const report of ['reports', 'reconciliation']) {
+      for (const month of ['2031-11-01', '2031-12-01', '2032-02-01', '2032-03-01', '2031-12-16']) {
+        const url = `/employee-costs/${report}/monthly?fiscal_year_id=${year}&month=${month}`;
+        const response = await owner.client.req('GET', url);
+        const overlaps = month === '2031-12-01' || month === '2032-02-01';
+        expect(response.status, url).toBe(overlaps ? 200 : 400);
+        if (overlaps) expect(response.json.month).toBe(month);
+      }
+    }
+  });
   it('supports partial and multi-employee allocations while serializing capacity across concurrent payments',async()=>{
     const x=await setup('ecc-pay-partial');
     const second=(await x.owner.client.req('POST','/employees',{employee_number:'E2',display_name:'Employee Two',employment_start:'2025-01-01',employment_end:null})).json;
