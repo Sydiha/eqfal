@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
@@ -82,7 +83,7 @@ export class PayrollAccountingService {
     return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, warnings:plan.warnings, eligible:!row.journal_id && plan.can_preview && (row.separated || privileged) && row.eligible};
   }
 
-  async post(companyId: string, draftId: string, actor: string) {
+  async post(companyId: string, draftId: string, actor: string, bonuses: { entitlement_id: string; amount: string }[] = []) {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
@@ -95,6 +96,14 @@ export class PayrollAccountingService {
       const existing = (await client.query<{id:string; reference:string; status:string}>("SELECT id,reference,status FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2", [companyId,draftId])).rows[0];
       if (existing) {
         if (existing.status !== 'posted') throw new PayrollAccountingError('PAYROLL_JOURNAL_INVALID',409);
+        const saved = (await client.query<{entitlement_id:string; amount:string}>(`
+          SELECT entitlement_id,amount::text FROM employee_bonus_balance_entries
+          WHERE company_id=$1 AND journal_id=$2 AND kind='payroll'
+        `,[companyId,existing.id])).rows;
+        if (saved.length !== bonuses.length || saved.some(row => !bonuses.some(b =>
+          b.entitlement_id === row.entitlement_id && cents(b.amount) === cents(row.amount)))) {
+          throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
+        }
         await client.query('COMMIT'); return {journal:existing, existing:true};
       }
       if (draft.status !== 'approved') throw new PayrollAccountingError('PAYROLL_NOT_APPROVED', 409);
@@ -116,11 +125,40 @@ export class PayrollAccountingService {
         (salary+allowances+bonus+overtime<deductions OR (legacy_allowances IS NOT NULL AND allowances<>legacy_allowances+housing_allowance+transportation_allowance+other_allowance)
          OR (legacy_allowances IS NULL AND (housing_allowance<>0 OR transportation_allowance<>0 OR other_allowance<>0)))`, [companyId,draftId])).rows[0]!.n;
       if (invalid !== '0') throw new PayrollAccountingError('PAYROLL_INVALID', 409);
-      const plan = await this.calculateReadiness(companyId, draftId, client);
+      const bonusLines = [];
+      const used = new Map<string,bigint>();
+      for (const bonus of [...bonuses].sort((a,b)=>a.entitlement_id.localeCompare(b.entitlement_id))) {
+        const row = (await client.query<{employee_id:string; liability_account_id:string; bonus:string}>(`
+          SELECT e.employee_id,r.liability_account_id,p.bonus::text
+          FROM employee_bonus_recognitions r
+          JOIN employee_bonus_entitlements e ON e.company_id=r.company_id AND e.id=r.entitlement_id
+          JOIN payroll_draft_employees p ON p.company_id=e.company_id AND p.employee_id=e.employee_id AND p.draft_id=$3
+          WHERE r.company_id=$1 AND r.entitlement_id=$2 AND r.accounting_date<=$4
+        `,[companyId,bonus.entitlement_id,draftId,draft.period_month])).rows[0];
+        if (!row) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
+        const sum = (used.get(row.employee_id) ?? 0n) + cents(bonus.amount);
+        if (sum > cents(row.bonus)) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
+        used.set(row.employee_id,sum);
+        bonusLines.push({ ...bonus, account_id: row.liability_account_id });
+      }
+      const plan = await this.calculateReadiness(companyId, draftId, client, bonusLines);
       if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, plan.blockers);
       const journal = (await client.query<{id:string;reference:string}>(`INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,reference,source_type,source_id,entry_type,created_by)
         VALUES($1,$2,$3,$4,$5,'payroll',$6,'standard',$7) RETURNING id,reference`, [companyId,years[0]!.id,draft.period_month,`Payroll ${draft.period_month.slice(0,7)}`,`PAYROLL ${draft.period_month.slice(0,7)}`,draftId,actor])).rows[0]!;
       for (const [i,line] of plan.lines.entries()) await client.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,$4,$5,$6,$7)', [companyId,journal.id,line.account_id,line.debit,line.credit,line.mapping_key,i+1]);
+      for (const bonus of bonusLines) {
+        try {
+          await client.query(`
+            INSERT INTO employee_bonus_balance_entries(company_id,entitlement_id,journal_id,idempotency_key,kind,amount,created_by)
+            VALUES($1,$2,$3,$4,'payroll',$5,$6)
+          `,[companyId,bonus.entitlement_id,journal.id,randomUUID(),bonus.amount,actor]);
+        } catch (error) {
+          if (['23505','23514'].includes((error as {code?:string}).code ?? '')) {
+            throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
+          }
+          throw error;
+        }
+      }
       const recoveryLine=(await client.query<{id:string}>('SELECT id FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2 AND memo=\'employee_salary_advance_receivable\' AND credit>0',[companyId,journal.id])).rows[0];
       if(reservations.length){if(!recoveryLine)throw new PayrollAccountingError('PAYROLL_ADVANCE_JOURNAL_INVALID',409);const changed=await client.query("UPDATE payroll_employee_advance_recoveries SET status='posted',expires_at=NULL,journal_entry_id=$3,journal_line_id=$4 WHERE company_id=$1 AND draft_id=$2 AND status='reserved' AND expires_at>clock_timestamp()",[companyId,draftId,journal.id,recoveryLine.id]);if(changed.rowCount!==reservations.length)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_EXPIRED',409);}
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'journal.create',entity_type:'journal_entry',entity_id:journal.id,after_data:{source_type:'payroll',source_id:draftId,lines:plan.lines}},client);
@@ -140,7 +178,7 @@ export class PayrollAccountingService {
     return this.calculateReadiness(companyId, draftId, this.db);
   }
 
-  private async calculateReadiness(companyId: string, draftId: string, db: Pool | PoolClient) {
+  private async calculateReadiness(companyId: string, draftId: string, db: Pool | PoolClient, bonusLines: { account_id: string; amount: string }[] = []) {
     const draft = (await db.query<{ id: string; period_month: string; currency_code: string; status: string }>(
       'SELECT id,period_month::text,currency_code,status FROM payroll_drafts WHERE id=$1 AND company_id=$2', [draftId, companyId])).rows[0];
     if (!draft) throw new PayrollAccountingError('PAYROLL_NOT_FOUND', 404);
@@ -203,8 +241,10 @@ export class PayrollAccountingService {
     const complete = PAYROLL_ACCOUNT_MAPPINGS.every(x => byKey.get(x.key)?.is_active && byKey.get(x.key)?.account_type === x.type);
     const recoveryAccount=(await db.query<{account_id:string;is_active:boolean;account_type:string}>(`SELECT a.id account_id,a.is_active,a.account_type FROM employee_salary_advance_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1`,[companyId])).rows[0];
     if(recoveries>0n&&(!recoveryAccount?.is_active||recoveryAccount.account_type!=='asset'))blockers.push({code:'advance_mapping_invalid'});
+    const priorExpense = bonusLines.reduce((total,line)=>total+cents(line.amount),0n);
     const proposedLines = complete ? [
-      { mapping_key: 'earnings_expense', account_id: byKey.get('earnings_expense')!.account_id, debit: money(earnings), credit: '0.00' },
+      { mapping_key: 'earnings_expense', account_id: byKey.get('earnings_expense')!.account_id, debit: money(earnings - priorExpense), credit: '0.00' },
+      ...bonusLines.map(line=>({mapping_key:'recognized_bonus_liability', account_id:line.account_id, debit:line.amount, credit:'0.00'})),
       { mapping_key: 'employer_contribution_expense', account_id: byKey.get('employer_contribution_expense')!.account_id, debit: money(employer), credit: '0.00' },
       { mapping_key: 'net_payroll_liability', account_id: byKey.get('net_payroll_liability')!.account_id, debit: '0.00', credit: money(net) },
       { mapping_key: 'employee_deduction_liability', account_id: byKey.get('employee_deduction_liability')!.account_id, debit: '0.00', credit: money(deductions) },

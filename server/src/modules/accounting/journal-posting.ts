@@ -1,3 +1,4 @@
+import { bonusAdjustmentIsExact, bonusRecognitionIsExact } from '../employee-costs/bonus-recognition';
 import { PoolClient } from 'pg';
 import { payrollJournalIsExact } from '../payroll/payroll-journal-verification';
 import { payrollRecoveryCorrectionJournalIsExact } from '../payroll/payroll-recovery-correction-verification';
@@ -53,7 +54,7 @@ async function source(companyId: string, type: string, id: string, client: PoolC
  * In-process only (never derived from a request): the opening-balance review that is approving this journal. An
  * `opening_balance` journal is postable only when this review is verified inside the posting transaction.
  */
-export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string; payrollSettlementId?: string; payrollRecoveryCorrectionId?: string };
+export type InternalPostingContext = { openingBalanceReviewId?: string; cutoverAuthorityId?: string; payrollDraftId?: string; payrollSettlementId?: string; payrollRecoveryCorrectionId?: string; bonusRecognitionId?: string; bonusAdjustmentId?: string };
 
 async function assertOpeningBalanceReviewContext(
   client: PoolClient,
@@ -206,6 +207,18 @@ export async function postJournalInTransaction(
   } else if (journal.source_type === 'payroll_recovery_correction') {
     if(!internal.payrollRecoveryCorrectionId||internal.payrollRecoveryCorrectionId!==journal.source_id||journal.entry_type!=='standard'||!(await payrollRecoveryCorrectionJournalIsExact(client,companyId,id,internal.payrollRecoveryCorrectionId))){
       throw new JournalPostingValidationError('Payroll recovery correction journals can only be posted by the correction workflow');
+    }
+  } else if (journal.source_type === 'employee_bonus_recognition') {
+    if (!internal.bonusRecognitionId || internal.bonusRecognitionId !== journal.source_id ||
+        journal.entry_type !== 'standard' ||
+        !(await bonusRecognitionIsExact(client, companyId, id, internal.bonusRecognitionId))) {
+      throw new JournalPostingValidationError('Bonus recognition journal does not match its verified entitlement');
+    }
+  } else if (journal.source_type === 'employee_bonus_adjustment') {
+    if (!internal.bonusAdjustmentId || internal.bonusAdjustmentId !== journal.source_id ||
+        journal.entry_type !== 'standard' ||
+        !(await bonusAdjustmentIsExact(client, companyId, id, internal.bonusAdjustmentId))) {
+      throw new JournalPostingValidationError('Bonus adjustment journal does not match its balance entry');
     }
   } else if (journal.source_type && journal.source_id) {
     const operationalSource = await source(companyId, journal.source_type, journal.source_id, client);

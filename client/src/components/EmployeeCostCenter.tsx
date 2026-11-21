@@ -5,6 +5,7 @@ import { formatMoney } from '../money-format';
 import { WorkspaceState } from './SharedUI';
 import { EmployeeCostPayments } from './EmployeeCostPayments';
 import { EmployeeSalaryAdvances } from './EmployeeSalaryAdvances';
+import { EmployeeBonusBalances } from './EmployeeBonusBalances';
 import './EmployeeCostCenter.css';
 
 type Employee={id:string;employee_number:string;display_name:string;employment_start:string|null;employment_end:string|null;is_active:boolean;version:number};
@@ -59,6 +60,7 @@ export function EmployeeCostCenter({capabilities,onUnauthorized}:Props){
       <div className="ecc-table-wrap"><table><thead><tr><th>{l('employeeNumber')}</th><th>{l('name')}</th><th>{l('employmentStart')}</th><th>{l('employmentEnd')}</th><th>{l('status')}</th></tr></thead><tbody>{employees.length?employees.map(e=><tr key={e.id}><td>{e.employee_number}</td><td>{e.display_name}</td><td>{date(e.employment_start)}</td><td>{date(e.employment_end)}</td><td>{l(e.is_active?'active':'inactive')}</td></tr>):<tr><td colSpan={5}>{l('noEmployees')}</td></tr>}</tbody></table></div>
     </section>
     <EmployeeSalaryAdvances capabilities={capabilities} onUnauthorized={onUnauthorized}/>
+    {canCosts && salaryVisible && <EmployeeBonusBalances arabic={ar} onUnauthorized={onUnauthorized} capabilities={capabilities} employees={employees}/>}
     {canCosts&&<>
       <section className="ecc-card" aria-labelledby="ecc-reports"><div className="ecc-card-head"><h3 id="ecc-reports">{l('reports')}</h3><span className="ecc-report-caption">{l('recordedLabel')}</span></div>
         {!salaryVisible&&<p className="ecc-muted" role="note">{l('salaryHidden')}</p>}

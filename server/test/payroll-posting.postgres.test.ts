@@ -14,7 +14,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const co=await h.company(label,owner.id), other=await h.company(`${label}-other`,outsider.id);
   await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.accounting.post','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']);
   await h.member(co,approver.id,['payroll.view','payroll.approve','payroll.accounting.post','employee.view','employee_salary_advance.approve']);
-  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view']);
+  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view','employee_cost.salary.view','payroll.settlement.create','bank.view','bank.reconcile']);
   for(const u of [owner,editor,approver,poster,outsider]) await u.client.login();
   const fy=await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
   const employee=(await h.q<{id:string}>("INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,'E1','Employee',$2) RETURNING id",[co,owner.id]))[0]!.id;
@@ -26,6 +26,124 @@ db('payroll posting (PostgreSQL)',()=>{
   const post=()=>poster.client.req('POST',`/payroll/drafts/${draft.id}/accounting-post`,{});
   return {owner,editor,approver,poster,outsider,co,other,fy,employee,accounts,draft,post};
  }
+ it('settles SAR 21,000 through payroll and bank without expensing the payroll portion twice',async()=>{
+  const x=await fixture('bonus-mixed',false);
+  const bonusAccount=await h.account(x.co,'BONUS','liability','current_liability');
+  const [bonus]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-02-01','2026-02-28','Eligible','Verified','fixed',21000,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,x.employee,randomUUID(),x.owner.id]);
+  const recognition=await x.owner.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+    fulfilled_on:'2026-02-28',accounting_date:'2026-02-28',evidence:'Signed evidence',
+    expense_account_id:x.accounts[0],liability_account_id:bonusAccount,
+  });
+  expect(recognition.status,JSON.stringify(recognition.json)).toBe(201);
+  const path=`/payroll/drafts/${x.draft.id}`;
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,version:1,bonus:'10000.00'})).status).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  const choices=await x.poster.client.req('GET',`${path}/bonus-options`);
+  expect(choices.status,JSON.stringify(choices.json)).toBe(200);
+  expect(choices.json.options).toEqual([expect.objectContaining({
+    entitlement_id:bonus!.id,employee_id:x.employee,maximum:'10000.00',
+  })]);
+  const post=()=>x.poster.client.req('POST',`${path}/accounting-post`,{bonus_allocations:[{entitlement_id:bonus!.id,amount:'10000'}]});
+  const posted=await post();
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  expect((await post()).status).toBe(200);
+  expect((await x.poster.client.req('GET',`${path}/bonus-options`)).json.options).toEqual([]);
+  const lines=await h.q('SELECT account_id,debit::text,credit::text,memo FROM journal_lines WHERE journal_entry_id=$1',[posted.json.journal.id]);
+  expect(lines).toContainEqual({account_id:bonusAccount,debit:'10000.00',credit:'0.00',memo:'recognized_bonus_liability'});
+  expect(lines).toContainEqual({account_id:x.accounts[0],debit:'100.70',credit:'0.00',memo:'earnings_expense'});
+  expect(lines).toContainEqual({account_id:x.accounts[2],debit:'0.00',credit:'10100.20',memo:'net_payroll_liability'});
+  const cash=await h.account(x.co,'BANK','asset','current_asset');
+  await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[cash]);
+  const [bank]=await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Bank','SAR',$2) RETURNING id",[x.co,x.owner.id]);
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank!.id,cash,x.owner.id]);
+  async function bankTransaction(amount:string) {
+    return (await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+      VALUES($1,$2,'2026-03-10',$3,'SAR','Bonus',$4,$5,'strong','manual','other',$6) RETURNING id`,
+      [x.co,bank!.id,amount,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  }
+  const [liability]=await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND credit>0',[recognition.json.journal_id]);
+  const direct={bank_transaction_id:await bankTransaction('-11000'),liability_line_id:liability!.id,amount:'11000',idempotency_key:randomUUID()};
+  const cashier=await h.user('bonus-mixed-cashier');
+  await h.member(x.co,cashier.id,['payroll.view','payroll.settlement.create','bank.view','bank.reconcile','employee_cost.salary.view']);
+  await cashier.client.login();
+  const settle=(body:typeof direct)=>cashier.client.req('POST','/payroll/settlements',body);
+  const results=await Promise.all([settle(direct),settle(direct)]);
+  expect(results.map(r=>r.status).sort(),JSON.stringify(results.map(r=>r.json))).toEqual([200,201]);
+  expect((await settle({...direct,bank_transaction_id:await bankTransaction('-1'),amount:'1',idempotency_key:randomUUID()})).status).toBe(409);
+  const [payrollLine]=await h.q<{id:string}>("SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND memo='net_payroll_liability'",[posted.json.journal.id]);
+  expect((await settle({...direct,liability_line_id:payrollLine!.id,amount:'1',idempotency_key:randomUUID()})).status).toBe(409);
+  const payrollPaid=await settle({
+    bank_transaction_id:await bankTransaction('-10100.20'),liability_line_id:payrollLine!.id,
+    amount:'10100.20',idempotency_key:randomUUID(),
+  });
+  expect(payrollPaid.status,JSON.stringify(payrollPaid.json)).toBe(201);
+  expect(await h.q('SELECT sum(amount)::text amount FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2',[x.co,bonus!.id])).toEqual([{amount:'21000.00'}]);
+  const url=`/employee-bonuses/${bonus!.id}/adjustments`;
+  const adjustment={kind:'decrease',amount:'1',accounting_date:'2026-03-11',reason:'Documented correction',idempotency_key:randomUUID()};
+  expect((await x.owner.client.req('POST',url,adjustment)).status).toBe(403);
+  const adjuster=await h.user('bonus-independent-adjuster');
+  await h.member(x.co,adjuster.id,['employee.view','employee_cost.salary.view','employee_cost.correct','employee_cost.approve','accounting.journal.post']);
+  await adjuster.client.login();
+  const adjust=(body:typeof adjustment)=>adjuster.client.req('POST',url,body);
+  expect((await adjust(adjustment)).status).toBe(409);
+  const increase={...adjustment,kind:'increase',amount:'20',idempotency_key:randomUUID()};
+  const adjusted=await adjust(increase);
+  expect(adjusted.status,JSON.stringify(adjusted.json)).toBe(201);
+  expect((await adjust(increase)).status).toBe(200);
+  expect(await h.q('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',[adjusted.json.journal_id])).toEqual([
+    {account_id:x.accounts[0],debit:'20.00',credit:'0.00'},
+    {account_id:bonusAccount,debit:'0.00',credit:'20.00'},
+  ]);
+  expect((await settle({...direct,bank_transaction_id:await bankTransaction('-5'),amount:'5',idempotency_key:randomUUID()})).status).toBe(201);
+  expect((await adjust({...adjustment,amount:'16',idempotency_key:randomUUID()})).status).toBe(409);
+  expect((await adjust({...adjustment,amount:'15',idempotency_key:randomUUID()})).status).toBe(201);
+  const reverser=await h.user('bonus-independent-reverser');
+  await h.member(x.co,reverser.id,['employee.view','employee_cost.salary.view','employee_cost.payment.reverse',
+    'accounting.journal.post','bank.view','bank.reconcile']);
+  await reverser.client.login();
+  const [payment]=await h.q<{id:string}>(`
+    SELECT b.id FROM employee_bonus_balance_entries b
+    JOIN payroll_settlement_allocations p ON p.company_id=b.company_id AND p.journal_entry_id=b.journal_id
+    WHERE b.company_id=$1 AND b.entitlement_id=$2 AND p.bank_transaction_id=$3
+  `,[x.co,bonus!.id,direct.bank_transaction_id]);
+  const refund={payment_id:payment!.id,bank_transaction_id:await bankTransaction('2000'),amount:'2000',
+    reason:'Verified employee refund',idempotency_key:randomUUID()};
+  const reverse=()=>reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,refund);
+  const reversals=await Promise.all([reverse(),reverse()]);
+  expect(reversals.map(r=>r.status).sort(),JSON.stringify(reversals.map(r=>r.json))).toEqual([200,201]);
+  expect(reversals[0]!.json.journal_id).toBe(reversals[1]!.json.journal_id);
+  expect((await reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,{
+    ...refund,idempotency_key:randomUUID(),
+  })).status).toBe(409);
+  expect(await h.q('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',
+    [reversals[0]!.json.journal_id])).toEqual([
+    {account_id:cash,debit:'2000.00',credit:'0.00'},
+    {account_id:bonusAccount,debit:'0.00',credit:'2000.00'},
+  ]);
+  expect(await h.q(`SELECT (e.amount+sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END))::text outstanding
+    FROM employee_bonus_entitlements e JOIN employee_bonus_balance_entries b ON b.company_id=e.company_id AND b.entitlement_id=e.id
+    WHERE e.company_id=$1 AND e.id=$2 GROUP BY e.id`,[x.co,bonus!.id])).toEqual([{outstanding:'2000.00'}]);
+  const [payrollPayment]=await h.q<{id:string}>(
+    "SELECT id FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2 AND kind='payroll'",
+    [x.co,bonus!.id],
+  );
+  const payrollRefund=await reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,{
+    ...refund,payment_id:payrollPayment!.id,bank_transaction_id:await bankTransaction('1000'),
+    amount:'1000',idempotency_key:randomUUID(),
+  });
+  expect(payrollRefund.status,JSON.stringify(payrollRefund.json)).toBe(201);
+  expect(await h.q("SELECT sum(amount)::text restored FROM employee_bonus_balance_entries WHERE entitlement_id=$1 AND kind='reversal'",[bonus!.id]))
+    .toEqual([{restored:'3000.00'}]);
+
+
+
+
+ });
  async function issueAdvance(x:Awaited<ReturnType<typeof fixture>>, amount='25.25', issueDate='2026-03-10'){
   const tag=randomUUID().slice(0,8);
   const receivable=await h.account(x.co,`AR-${tag}`,'asset','current_asset');

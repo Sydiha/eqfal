@@ -15,6 +15,7 @@ import { partnerTransactionRouter } from './modules/partners/partner-transaction
 import { personalPaymentRouter } from './modules/personal-payments/personal-payment.router';
 import { payrollRouter } from './modules/payroll/payroll.router';
 import { employeeCostRouter } from './modules/employee-costs/employee-cost.router';
+import { bonusRouter } from './modules/employee-costs/bonus.router';
 import { employeeCostPaymentRouter } from './modules/employee-costs/employee-cost-payment.router';
 import { employeeSalaryAdvanceRouter } from './modules/employee-advances/employee-salary-advance.router';
 import { obligationRouter } from './modules/obligations/obligation.router';
@@ -87,6 +88,7 @@ app.use('/api', partnerRouter);
 app.use('/api', partnerTransactionRouter);
 app.use('/api', personalPaymentRouter);
 app.use('/api', employeeCostRouter);
+app.use('/api', bonusRouter);
 app.use('/api', payrollRouter);
 app.use('/api', employeeCostPaymentRouter);
 app.use('/api', employeeSalaryAdvanceRouter);

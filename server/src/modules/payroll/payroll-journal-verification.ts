@@ -11,9 +11,15 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
         COALESCE(SUM(p.deductions),0) deductions,COALESCE(SUM(p.employer_contributions),0) employer,
         COALESCE((SELECT sum(r.amount) FROM payroll_employee_advance_recoveries r WHERE r.company_id=$1 AND r.draft_id=$3 AND r.status='posted'),0) recoveries
       FROM payroll_draft_employees p JOIN draft d ON p.draft_id=d.id WHERE p.company_id=$1
+    ), bonus AS (
+      SELECT r.liability_account_id account_id, b.amount, e.employee_id, r.accounting_date
+      FROM employee_bonus_balance_entries b
+      JOIN employee_bonus_recognitions r ON r.company_id=b.company_id AND r.entitlement_id=b.entitlement_id
+      JOIN employee_bonus_entitlements e ON e.company_id=b.company_id AND e.id=b.entitlement_id
+      WHERE b.company_id=$1 AND b.journal_id=$2 AND b.kind='payroll'
     ), expected_raw AS (
       SELECT v.key,v.debit,v.credit FROM totals t CROSS JOIN LATERAL (VALUES
-        ('earnings_expense',t.earnings,0::numeric),('employer_contribution_expense',t.employer,0::numeric),
+        ('earnings_expense',t.earnings-COALESCE((SELECT sum(amount) FROM bonus),0),0::numeric),('employer_contribution_expense',t.employer,0::numeric),
         ('net_payroll_liability',0::numeric,t.earnings-t.deductions-t.recoveries),('employee_deduction_liability',0::numeric,t.deductions),
         ('employer_contribution_liability',0::numeric,t.employer)) v(key,debit,credit)
       UNION ALL SELECT 'employee_salary_advance_receivable',0::numeric,t.recoveries FROM totals t WHERE t.recoveries>0
@@ -25,10 +31,17 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
         AND a.account_type=CASE WHEN e.key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' WHEN e.key='employee_salary_advance_receivable' THEN 'asset' ELSE 'liability' END
         AND (e.key<>'employee_salary_advance_receivable' OR (a.statement_category='current_asset' AND NOT EXISTS(SELECT 1 FROM bank_account_ledger_links b WHERE b.company_id=a.company_id AND b.account_id=a.id)))
       WHERE e.debit>0 OR e.credit>0
+      UNION ALL SELECT account_id,amount,0::numeric,'recognized_bonus_liability' FROM bonus
     ), actual AS (
       SELECT account_id,debit,credit,memo FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2
     )
     SELECT EXISTS(SELECT 1 FROM draft) AND (SELECT n>0 AND earnings>=deductions+recoveries AND earnings+employer>0 FROM totals)
+      AND NOT EXISTS (
+        SELECT 1 FROM bonus b CROSS JOIN draft d
+        LEFT JOIN payroll_draft_employees p ON p.company_id=$1 AND p.draft_id=d.id AND p.employee_id=b.employee_id
+        GROUP BY b.employee_id,p.bonus
+        HAVING p.bonus IS NULL OR sum(b.amount)>p.bonus OR bool_or(b.accounting_date>d.period_month)
+      )
       AND (SELECT count(*)=5 FROM payroll_account_mappings m JOIN accounts a ON a.company_id=m.company_id AND a.id=m.account_id
         WHERE m.company_id=$1 AND a.is_active AND a.account_type=CASE WHEN m.mapping_key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' ELSE 'liability' END)
       AND NOT EXISTS((SELECT * FROM expected EXCEPT ALL SELECT * FROM actual) UNION ALL (SELECT * FROM actual EXCEPT ALL SELECT * FROM expected)) valid

@@ -9,7 +9,7 @@ db('payroll settlement API (PostgreSQL)',()=>{
  async function fixture(label:string){
   const owner=await h.user(label+'owner'),actor=await h.user(label+'actor'),other=await h.user(label+'other');
   const co=await h.company(label,owner.id),foreign=await h.company(label+'foreign',other.id);
-  await h.member(co,actor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view','bank.reconcile']);
+  await h.member(co,actor.id,['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view','bank.reconcile','employee_cost.salary.view']);
   for(const u of [owner,actor,other])await u.client.login();
   const fy=await h.fiscalYear(co,'FY26','2026-01-01','2026-12-31');
   const expense=await h.account(co,'E','expense','operating_expense'),liability=await h.account(co,'L','liability','current_liability'),cash=await h.account(co,'B','asset','current_asset');
@@ -34,6 +34,37 @@ db('payroll settlement API (PostgreSQL)',()=>{
   }
   return {owner,actor,other,co,foreign,fy,line,original,liability,cash,tx,body,manualJournal};
  }
+ it('shares bank ownership with direct bonus installments and rejects concurrent overspending',async()=>{
+  const x=await fixture('bonus-bank');
+  const [employee]=await h.q<{id:string}>(`
+    INSERT INTO employees(company_id,employee_number,display_name,created_by)
+    VALUES($1,'B1','Bonus employee',$2) RETURNING id
+  `,[x.co,x.owner.id]);
+  const [bonus]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-01-01','2026-01-31','Eligible','Verified',
+      'fixed',100,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,employee!.id,randomUUID(),x.owner.id]);
+  const expense=await h.account(x.co,'BONUS','expense','operating_expense');
+  const recognized=await x.owner.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+    fulfilled_on:'2026-02-01',accounting_date:'2026-02-01',evidence:'Signed evidence',
+    expense_account_id:expense,liability_account_id:x.liability,
+  });
+  expect(recognized.status,JSON.stringify(recognized.json)).toBe(201);
+  const [line]=await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND credit>0',[recognized.json.journal_id]);
+  const banks=await Promise.all([x.tx(),x.tx()]);
+  const inputs=banks.map(bank=>({...x.body(bank,'60'),liability_line_id:line!.id}));
+  const post=(index:number)=>x.actor.client.req('POST','/payroll/settlements',inputs[index]);
+  const results=await Promise.all([post(0),post(1)]);
+  expect(results.map(result=>result.status).sort()).toEqual([201,409]);
+  const winner=results.findIndex(result=>result.status===201);
+  expect((await post(winner)).status).toBe(200);
+  const duplicate=await x.actor.client.req('POST','/payroll/settlements',x.body(banks[winner]!,'1'));
+  expect(duplicate.status).toBe(409);
+  expect(await h.count("SELECT count(*) n FROM employee_bonus_balance_entries WHERE entitlement_id=$1 AND kind='bank'",[bonus!.id])).toBe(1);
+ });
  it('posts partial and full settlement once with exact liability and bank lines',async()=>{
   const x=await fixture('api-post'),bank=await x.tx(),input=x.body(bank,'40');
   const a=await x.actor.client.req('POST','/payroll/settlements',input);expect(a.status,JSON.stringify(a.json)).toBe(201);
