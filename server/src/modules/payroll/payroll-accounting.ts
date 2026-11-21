@@ -19,6 +19,8 @@ const mappingByKey = new Map(PAYROLL_ACCOUNT_MAPPINGS.map(x => [x.key, x]));
 const cents = (v: string) => { const [whole, fraction = ''] = v.split('.'); return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')); };
 const money = (v: bigint) => `${v / 100n}.${String(v % 100n).padStart(2, '0')}`;
 
+export type NewPayrollBonusAward = { employee_id: string; award_code: string; reason: string };
+
 export class PayrollAccountingError extends Error {
   constructor(public readonly code: string, public readonly status = 400, public readonly details?: unknown) { super(code); }
 }
@@ -84,7 +86,7 @@ export class PayrollAccountingService {
     return {journal:row.journal_id && row.journal_status==='posted'?{id:row.journal_id,reference:row.reference}:null, blockers, warnings:plan.warnings, eligible:!row.journal_id && plan.can_preview && (row.separated || privileged) && row.eligible};
   }
 
-  async post(companyId: string, draftId: string, actor: string, bonuses: { entitlement_id: string; amount: string }[] = []) {
+  async post(companyId: string, draftId: string, actor: string, bonuses: { entitlement_id: string; amount: string }[] = [], newAwards: NewPayrollBonusAward[] = []) {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
@@ -104,6 +106,15 @@ export class PayrollAccountingService {
         `,[companyId,existing.id])).rows;
         if (saved.length !== bonuses.length || saved.some(row => !bonuses.some(b =>
           b.entitlement_id === row.entitlement_id && cents(b.amount) === cents(row.amount)))) {
+          throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
+        }
+        const previous = (await client.query<{awards:NewPayrollBonusAward[]}>(`
+          SELECT COALESCE(after_data->'new_bonus_awards','[]'::jsonb) awards FROM audit_log
+          WHERE company_id=$1 AND entity_id=$2 AND action='payroll.accounting.post'
+            AND after_data->>'journal_entry_id'=$3 ORDER BY id LIMIT 1
+        `,[companyId,draftId,existing.id])).rows[0]?.awards ?? [];
+        if (previous.length!==newAwards.length || previous.some(before=>!newAwards.some(after=>
+          before.employee_id===after.employee_id && before.award_code===after.award_code && before.reason===after.reason))) {
           throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
         }
         await client.query('COMMIT'); return {journal:existing, existing:true};
@@ -155,22 +166,63 @@ export class PayrollAccountingService {
         used.set(row.employee_id,sum);
         bonusLines.push({ ...bonus, account_id: row.liability_account_id });
       }
-      // Discover recognized obligations through the entire payroll month, even
-      // when the request omitted allocations and would otherwise post on day one.
-      const required = (await client.query<{employee_id:string; amount:string}>(`
-        SELECT p.employee_id,LEAST(p.bonus,COALESCE(sum(GREATEST(available.amount,0)),0))::text amount
+      // Lock the same balance rows that bank payments, refunds and adjustments
+      // update before deriving either availability or the duplicate-payment guard.
+      await client.query(`
+        SELECT l.entitlement_id FROM employee_bonus_balance_locks l
+        JOIN employee_bonus_entitlements e ON e.company_id=l.company_id AND e.id=l.entitlement_id
+        JOIN employee_bonus_recognitions r ON r.company_id=l.company_id AND r.entitlement_id=l.entitlement_id
+        JOIN payroll_draft_employees p ON p.company_id=e.company_id AND p.employee_id=e.employee_id
+        WHERE l.company_id=$1 AND p.draft_id=$2 AND p.bonus>0 AND r.accounting_date<$3::date
+        ORDER BY l.entitlement_id FOR UPDATE OF l
+      `,[companyId,draftId,dates.next_month]);
+      const recognized = (await client.query<{employee_id:string; bonus:string; required:string; has_prior_payment:boolean; recognized_codes:string[]}>(`
+        SELECT p.employee_id,p.bonus::text,
+          LEAST(p.bonus,sum(GREATEST(e.amount+history.movement,0)))::text required,
+          bool_or(history.has_payment AND (
+            e.period_end >= $4::date OR r.accounting_date >= $4::date OR history.paid_this_month
+            OR e.amount+history.movement>0
+          )) has_prior_payment,
+          array_agg(DISTINCT e.award_code) FILTER (WHERE history.has_payment AND (
+            e.period_end >= $4::date OR r.accounting_date >= $4::date OR history.paid_this_month
+            OR e.amount+history.movement>0
+          )) recognized_codes
         FROM payroll_draft_employees p
         JOIN employee_bonus_entitlements e ON e.company_id=p.company_id AND e.employee_id=p.employee_id
         JOIN employee_bonus_recognitions r ON r.company_id=e.company_id AND r.entitlement_id=e.id
         CROSS JOIN LATERAL (
-          SELECT e.amount+COALESCE(sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END),0) amount
-          FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id
-        ) available
+          SELECT COALESCE(sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END),0) movement,
+            COALESCE(sum(CASE WHEN b.kind IN ('payroll','bank') THEN b.amount WHEN b.kind='reversal' THEN -b.amount ELSE 0 END),0)>0 has_payment,
+            COALESCE(bool_or(b.kind IN ('payroll','bank') AND j.accounting_date >= $4::date AND j.accounting_date < $3::date),false) paid_this_month
+          FROM employee_bonus_balance_entries b
+          JOIN journal_entries j ON j.company_id=b.company_id AND j.id=b.journal_id AND j.status='posted'
+          WHERE b.company_id=e.company_id AND b.entitlement_id=e.id
+        ) history
         WHERE p.company_id=$1 AND p.draft_id=$2 AND p.bonus>0 AND r.accounting_date<$3::date
         GROUP BY p.employee_id,p.bonus
-      `,[companyId,draftId,dates.next_month])).rows;
-      if (required.some(row => (used.get(row.employee_id) ?? 0n) < cents(row.amount))) {
+      `,[companyId,draftId,dates.next_month,draft.period_month])).rows;
+      if (recognized.some(row => (used.get(row.employee_id) ?? 0n) < cents(row.required))) {
         throw new PayrollAccountingError('PAYROLL_BONUS_ALLOCATION_REQUIRED',409);
+      }
+      const declarations = new Map(newAwards.map(award=>[award.employee_id,award]));
+      if (recognized.some(row=>row.has_prior_payment && cents(row.bonus)>(used.get(row.employee_id)??0n) &&
+          !declarations.has(row.employee_id))) {
+        throw new PayrollAccountingError('PAYROLL_DISTINCT_BONUS_REQUIRED',409);
+      }
+      const auditedAwards = [];
+      for (const award of newAwards) {
+        const row = (await client.query<{bonus:string; conflicting:boolean}>(`
+          SELECT p.bonus::text,EXISTS (
+            SELECT 1 FROM employee_bonus_entitlements e WHERE e.company_id=p.company_id AND e.employee_id=p.employee_id
+              AND e.award_code=$4 AND (e.period_start<$5::date AND e.period_end >= $6::date
+                OR EXISTS (SELECT 1 FROM employee_bonus_recognitions r WHERE r.company_id=e.company_id
+                  AND r.entitlement_id=e.id AND r.accounting_date >= $6::date AND r.accounting_date<$5::date))
+          ) conflicting
+          FROM payroll_draft_employees p WHERE p.company_id=$1 AND p.draft_id=$2 AND p.employee_id=$3
+        `,[companyId,draftId,award.employee_id,award.award_code,dates.next_month,draft.period_month])).rows[0];
+        const residual = row ? cents(row.bonus)-(used.get(award.employee_id)??0n) : 0n;
+        if (!row || row.conflicting || residual<=0n || recognized.find(r=>r.employee_id===award.employee_id)?.recognized_codes?.includes(award.award_code)) throw new PayrollAccountingError('PAYROLL_DISTINCT_BONUS_CONFLICT',409);
+        auditedAwards.push({...award,amount:money(residual)});
       }
       const plan = await this.calculateReadiness(companyId, draftId, client, bonusLines);
       if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, plan.blockers);
@@ -194,7 +246,7 @@ export class PayrollAccountingService {
       if(reservations.length){if(!recoveryLine)throw new PayrollAccountingError('PAYROLL_ADVANCE_JOURNAL_INVALID',409);const changed=await client.query("UPDATE payroll_employee_advance_recoveries SET status='posted',expires_at=NULL,journal_entry_id=$3,journal_line_id=$4 WHERE company_id=$1 AND draft_id=$2 AND status='reserved' AND expires_at>clock_timestamp()",[companyId,draftId,journal.id,recoveryLine.id]);if(changed.rowCount!==reservations.length)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_EXPIRED',409);}
       await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'journal.create',entity_type:'journal_entry',entity_id:journal.id,after_data:{source_type:'payroll',source_id:draftId,lines:plan.lines}},client);
       const posted = await postJournalInTransaction(client,companyId,actor,journal.id,{payrollDraftId:draftId});
-      await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'payroll.accounting.post',entity_type:'payroll_draft',entity_id:draftId,after_data:{journal_entry_id:journal.id,totals:plan.totals}},client);
+      await this.audit.logEvent({company_id:companyId,actor_user_id:actor,action:'payroll.accounting.post',entity_type:'payroll_draft',entity_id:draftId,after_data:{journal_entry_id:journal.id,totals:plan.totals,new_bonus_awards:auditedAwards}},client);
       await client.query('COMMIT');
       return {journal:posted,existing:false};
     } catch (error) {
