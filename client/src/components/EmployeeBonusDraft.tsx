@@ -21,7 +21,7 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized 
       const response = await fetch('/api/employee-bonuses', {
         credentials: 'same-origin', method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          request_key: requestKey, frequency: fields.get('frequency'),
+          request_key: requestKey, award_code: fields.get('award_code'), frequency: fields.get('frequency'),
           period_start: fields.get('period_start'), period_end: fields.get('period_end'),
           eligibility_condition: fields.get('eligibility_condition'), recognition_condition: fields.get('recognition_condition'),
           employees: selected.map(id => ({
@@ -54,6 +54,8 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized 
     <form onSubmit={event => void save(event)}>
       <fieldset disabled={busy}>
         <legend>{label('الفترة وشروط الاستحقاق', 'Period and entitlement conditions')}</legend>
+        <label>{label('رمز المكافأة', 'Award code')} <input name="award_code" defaultValue="standard"
+          pattern="[a-z0-9][a-z0-9_\-]{0,49}" maxLength={50} required /></label>
         <label>{label('الدورية', 'Frequency')} <select name="frequency">
           <option value="monthly">{label('شهرية', 'Monthly')}</option>
           <option value="quarterly">{label('ربع سنوية', 'Quarterly')}</option>

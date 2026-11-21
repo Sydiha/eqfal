@@ -14,7 +14,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const co=await h.company(label,owner.id), other=await h.company(`${label}-other`,outsider.id);
   await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.accounting.post','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']);
   await h.member(co,approver.id,['payroll.view','payroll.approve','payroll.accounting.post','employee.view','employee_salary_advance.approve']);
-  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view','employee_cost.salary.view','payroll.settlement.create','bank.view','bank.reconcile']);
+  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view','employee.view','employee_cost.view','employee_cost.salary.view','payroll.settlement.create','bank.view','bank.reconcile']);
   for(const u of [owner,editor,approver,poster,outsider]) await u.client.login();
   const fy=await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
   const employee=(await h.q<{id:string}>("INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,'E1','Employee',$2) RETURNING id",[co,owner.id]))[0]!.id;
@@ -35,7 +35,10 @@ db('payroll posting (PostgreSQL)',()=>{
       applicable_allowances,created_by,approved_by,approved_at)
     VALUES($1,$2,$3,'monthly','2026-02-01','2026-02-28','Eligible','Verified','fixed',21000,0,0,$4,$4,now()) RETURNING id
   `,[x.co,x.employee,randomUUID(),x.owner.id]);
-  const recognition=await x.owner.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+  const recognizer=await h.user('bonus-independent-recognizer');
+  await h.member(x.co,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+  await recognizer.client.login();
+  const recognition=await recognizer.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
     fulfilled_on:'2026-02-28',accounting_date:'2026-02-28',evidence:'Signed evidence',
     expense_account_id:x.accounts[0],liability_account_id:bonusAccount,
   });
@@ -43,6 +46,8 @@ db('payroll posting (PostgreSQL)',()=>{
   const path=`/payroll/drafts/${x.draft.id}`;
   expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,version:1,bonus:'10000.00'})).status).toBe(200);
   expect((await approveDraft(x)).status).toBe(200);
+  const omitted=await x.poster.client.req('POST',`${path}/accounting-post`,{});
+  expect(omitted.json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
   const choices=await x.poster.client.req('GET',`${path}/bonus-options`);
   expect(choices.status,JSON.stringify(choices.json)).toBe(200);
   expect(choices.json.options).toEqual([expect.objectContaining({
@@ -52,6 +57,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const posted=await post();
   expect(posted.status,JSON.stringify(posted.json)).toBe(201);
   expect((await post()).status).toBe(200);
+  expect((await x.poster.client.req('GET','/employee-bonuses')).json.bonuses[0]).toMatchObject({settled:'0.00',pending_payroll:'10000.00',outstanding:'21000.00'});
   expect((await x.poster.client.req('GET',`${path}/bonus-options`)).json.options).toEqual([]);
   const lines=await h.q('SELECT account_id,debit::text,credit::text,memo FROM journal_lines WHERE journal_entry_id=$1',[posted.json.journal.id]);
   expect(lines).toContainEqual({account_id:bonusAccount,debit:'10000.00',credit:'0.00',memo:'recognized_bonus_liability'});
@@ -82,6 +88,7 @@ db('payroll posting (PostgreSQL)',()=>{
     amount:'10100.20',idempotency_key:randomUUID(),
   });
   expect(payrollPaid.status,JSON.stringify(payrollPaid.json)).toBe(201);
+  expect((await x.poster.client.req('GET','/employee-bonuses')).json.bonuses[0]).toMatchObject({settled:'21000.00',pending_payroll:'0.00',outstanding:'0.00'});
   expect(await h.q('SELECT sum(amount)::text amount FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2',[x.co,bonus!.id])).toEqual([{amount:'21000.00'}]);
   const url=`/employee-bonuses/${bonus!.id}/adjustments`;
   const adjustment={kind:'decrease',amount:'1',accounting_date:'2026-03-11',reason:'Documented correction',idempotency_key:randomUUID()};

@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 type Bonus = {
   id: string;
   display_name: string;
+  award_code?: string;
   period_start: string;
   period_end: string;
   amount: string;
@@ -12,6 +13,7 @@ type Bonus = {
   accounting_date: string | null;
   outstanding: string | null;
   settled: string;
+  pending_payroll?: string;
   liability_line_id?: string | null;
   schedule?: { id: string; due_on: string; amount: string; channel: string }[];
 };
@@ -80,18 +82,20 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
         <th scope="col">{label('المبلغ المعتمد (ر.س)', 'Approved amount (SAR)')}</th>
         <th scope="col">{label('تاريخ الاعتراف', 'Recognition date')}</th>
         <th scope="col">{label('المسوّى (ر.س)', 'Settled (SAR)')}</th>
+        <th scope="col">{label('بانتظار صرف الرواتب (ر.س)', 'Pending payroll payment (SAR)')}</th>
         <th scope="col">{label('المتبقي (ر.س)', 'Outstanding (SAR)')}</th>
         <th scope="col">{label('الجدول والإجراءات', 'Schedule and actions')}</th>
       </tr></thead>
       <tbody>{bonuses.map(bonus => <tr key={bonus.id}>
-        <td>{bonus.display_name}</td>
+        <td>{bonus.display_name}{bonus.award_code && <> · <bdi>{bonus.award_code}</bdi></>}</td>
         <td><bdi>{bonus.period_start} – {bonus.period_end}</bdi></td>
         <td><bdi>{bonus.approved_at ? bonus.amount : '—'}</bdi></td>
         <td><bdi>{bonus.accounting_date ?? '—'}</bdi></td>
         <td><bdi>{bonus.settled}</bdi></td>
+        <td><bdi>{bonus.pending_payroll ?? '0.00'}</bdi></td>
         <td><bdi>{bonus.outstanding ?? '—'}</bdi></td>
         <td>
-          {bonus.liability_line_id && Number(bonus.outstanding)>0 &&
+          {bonus.liability_line_id && Number(bonus.outstanding)>Number(bonus.pending_payroll ?? 0) &&
             ['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view','bank.reconcile'].every(can) &&
             <EmployeeBonusBankPayment liabilityLine={bonus.liability_line_id} arabic={arabic}
               onSaved={() => void load()} onUnauthorized={onUnauthorized} />}

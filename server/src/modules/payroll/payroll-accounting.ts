@@ -87,6 +87,7 @@ export class PayrollAccountingService {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`bonus-payroll-recognition:${companyId}`]);
       const draft = (await client.query<{period_month:string; status:string; approved_by:string}>(
         'SELECT period_month::text,status,approved_by FROM payroll_drafts WHERE id=$1 AND company_id=$2 FOR UPDATE', [draftId, companyId])).rows[0];
       if (!draft) throw new PayrollAccountingError('PAYROLL_NOT_FOUND', 404);
@@ -140,6 +141,20 @@ export class PayrollAccountingService {
         if (sum > cents(row.bonus)) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
         used.set(row.employee_id,sum);
         bonusLines.push({ ...bonus, account_id: row.liability_account_id });
+      }
+      const required = (await client.query<{employee_id:string; bonus:string}>(`
+        SELECT p.employee_id,p.bonus::text FROM payroll_draft_employees p
+        WHERE p.company_id=$1 AND p.draft_id=$2 AND p.bonus>0 AND EXISTS (
+          SELECT 1 FROM employee_bonus_entitlements e
+          JOIN employee_bonus_recognitions r ON r.company_id=e.company_id AND r.entitlement_id=e.id
+          WHERE e.company_id=p.company_id AND e.employee_id=p.employee_id AND r.accounting_date<=$3
+            AND (r.accounting_date>=date_trunc('month',$3::date)::date OR e.period_end>=date_trunc('month',$3::date)::date OR
+              e.amount+COALESCE((SELECT sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END)
+                FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id),0)>0)
+        )
+      `,[companyId,draftId,draft.period_month])).rows;
+      if (required.some(row => (used.get(row.employee_id) ?? 0n) !== cents(row.bonus))) {
+        throw new PayrollAccountingError('PAYROLL_BONUS_ALLOCATION_REQUIRED',409);
       }
       const plan = await this.calculateReadiness(companyId, draftId, client, bonusLines);
       if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, plan.blockers);

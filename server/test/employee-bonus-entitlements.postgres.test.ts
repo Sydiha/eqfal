@@ -29,10 +29,10 @@ postgres('bonus entitlement calculations', () => {
         `INSERT INTO employee_bonus_entitlements(
           company_id,employee_id,request_key,frequency,period_start,period_end,
           eligibility_condition,recognition_condition,calculation_method,percentage_basis,
-          calculation_value,basic_salary,applicable_allowances,created_by
-        ) VALUES ($1,$2,$3,'quarterly','2026-01-01','2026-03-31','Eligibility','Condition',$4,$5,$6,1000.01,250,$7)
+          calculation_value,basic_salary,applicable_allowances,created_by,award_code
+        ) VALUES ($1,$2,$3,'quarterly','2026-01-01','2026-03-31','Eligibility','Condition',$4,$5,$6,1000.01,250,$7,$8)
         RETURNING id,amount::text`,
-        [company, employee!.id, randomUUID(), method, basis, value, owner.id],
+        [company, employee!.id, randomUUID(), method, basis, value, owner.id, `award-${method}-${basis??value.replace('.', '-')}`],
       );
       expect(bonus!.amount).toBe(expected);
       await harness.q('UPDATE employee_bonus_entitlements SET approved_by=$2,approved_at=now() WHERE id=$1', [bonus!.id, owner.id]);
@@ -52,21 +52,29 @@ postgres('bonus entitlement calculations', () => {
       "INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,'1','Employee',$2) RETURNING id",
       [company, owner.id],
     );
+    const approver = await harness.user('recognition-approval-actor');
+    await harness.member(company,approver.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+    await approver.client.login();
     const [bonus] = await harness.q<{ id: string }>(`
       INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
         eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
         applicable_allowances,created_by,approved_by,approved_at)
       VALUES ($1,$2,$3,'annual','2024-01-01','2024-12-31','Employee eligible','Targets verified',
-        'fixed',100,0,0,$4,$4,now()) RETURNING id
-    `, [company, employee!.id, randomUUID(), owner.id]);
+        'fixed',100,0,0,$4,$5,now()) RETURNING id
+    `, [company, employee!.id, randomUUID(), owner.id, approver.id]);
     const url = `/employee-bonuses/${bonus!.id}/recognition`;
     const body = {
       fulfilled_on: '2024-12-31', accounting_date: '2024-12-31', evidence: 'Signed results',
       expense_account_id: expense, liability_account_id: liability,
     };
-    expect((await owner.client.req('POST', url, body)).status).toBe(409);
+    expect((await owner.client.req('POST', url, body)).status).toBe(403);
+    expect((await approver.client.req('POST', url, body)).status).toBe(403);
+    const recognizer = await harness.user('independent-recognizer');
+    await harness.member(company,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+    await recognizer.client.login();
+    expect((await recognizer.client.req('POST', url, body)).status).toBe(409);
     const revised = { ...body, accounting_date: '2025-01-01', date_reason: 'Finance approved treatment in the open period' };
-    const responses = await Promise.all([owner.client.req('POST', url, revised), owner.client.req('POST', url, revised)]);
+    const responses = await Promise.all([recognizer.client.req('POST', url, revised), recognizer.client.req('POST', url, revised)]);
     expect(responses.map(response => response.status).sort()).toEqual([200, 201]);
     expect(responses[0]!.json.journal_id).toBe(responses[1]!.json.journal_id);
     expect(await harness.count("SELECT COUNT(*) n FROM journal_entries WHERE company_id=$1 AND source_id=$2 AND status='posted'", [company, bonus!.id])).toBe(1);
@@ -107,11 +115,14 @@ postgres('bonus entitlement calculations', () => {
       INSERT INTO employees(company_id,employee_number,display_name,created_by)
       VALUES($1,'B1','First employee',$2),($1,'B2','Second employee',$2) RETURNING id
     `,[company,owner.id]);
-    const created=await creator.client.req('POST','/employee-bonuses',{
+    const draftBody={
       request_key:randomUUID(),frequency:'quarterly',period_start:'2026-01-01',period_end:'2026-03-31',
       eligibility_condition:'Employment',recognition_condition:'Targets confirmed',
       employees:employees.map(({id},index)=>({employee_id:id,method:'fixed',value:index?'0':'100',basic_salary:'0',allowances:'0'})),
-    });
+    };
+    const created=await creator.client.req('POST','/employee-bonuses',draftBody);
+    expect((await creator.client.req('POST','/employee-bonuses',{...draftBody,request_key:randomUUID()})).status).toBe(409);
+    expect((await creator.client.req('POST','/employee-bonuses',{...draftBody,request_key:randomUUID(),award_code:'retention'})).status).toBe(201);
     expect(created.status,JSON.stringify(created.json)).toBe(201);
     expect(created.json.bonuses.map((b:{amount:string})=>b.amount)).toEqual(['100.00','0.00']);
     const path=`/employee-bonuses/${created.json.bonuses[0].id}`;
@@ -124,6 +135,6 @@ postgres('bonus entitlement calculations', () => {
     expect((await pay({...schedule,request_key:randomUUID()})).status).toBe(409);
     const balances=await approver.client.req('GET','/employee-bonuses');
     expect(balances.status).toBe(200);
-    expect(balances.json.bonuses[0].schedule).toEqual([expect.objectContaining({amount:'60.00',channel:'bank'})]);
+    expect(balances.json.bonuses.find((b:{id:string})=>b.id===created.json.bonuses[0].id).schedule).toEqual([expect.objectContaining({amount:'60.00',channel:'bank'})]);
   });
 });

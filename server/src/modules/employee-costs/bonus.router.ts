@@ -39,13 +39,20 @@ bonusRouter.post('/employee-bonuses/:id/recognition',
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const entitlement = (await client.query<{ approved: boolean; amount: string }>(
-          'SELECT approved_at IS NOT NULL approved,amount::text FROM employee_bonus_entitlements WHERE company_id=$1 AND id=$2 FOR UPDATE',
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`bonus-payroll-recognition:${company}`]);
+        const entitlement = (await client.query<{ approved: boolean; amount: string; created_by:string; approved_by:string }>(
+          'SELECT approved_at IS NOT NULL approved,amount::text,created_by,approved_by FROM employee_bonus_entitlements WHERE company_id=$1 AND id=$2 FOR UPDATE',
           [company, id],
         )).rows[0];
         if (!entitlement || !entitlement.approved || entitlement.amount === '0.00') {
           await client.query('ROLLBACK');
           res.status(entitlement ? 409 : 404).json({ code: 'BONUS_RECOGNITION_INELIGIBLE' });
+          return;
+        }
+        const relatedActor = [entitlement.created_by,entitlement.approved_by].includes(actor);
+        if (relatedActor && !(await hasPrivilegedFinancialAuthority(client,company,actor))) {
+          await client.query('ROLLBACK');
+          res.status(403).json({ code:'BONUS_RECOGNITION_SEPARATION_REQUIRED' });
           return;
         }
         const existing = (await client.query<{ journal_id: string; same: boolean }>(`
@@ -94,7 +101,7 @@ bonusRouter.post('/employee-bonuses/:id/recognition',
         await audit.logEvent({
           company_id: company, actor_user_id: actor, action: 'employee_bonus.recognize',
           entity_type: 'employee_bonus_entitlement', entity_id: id,
-          after_data: { journal_id: journal, fulfilled_on: fulfilled, accounting_date: date },
+          after_data: { journal_id: journal, fulfilled_on: fulfilled, accounting_date: date, privileged_role_override: relatedActor },
           reason: reason || undefined,
         }, client);
         await client.query('COMMIT');
@@ -229,12 +236,13 @@ bonusRouter.get('/employee-bonuses',
     try {
       const company = getAuthenticatedContext(req)!.activeCompanyId!;
       const result = await pool.query(`
-        SELECT e.id,e.employee_id,p.display_name,e.frequency,e.period_start::text,e.period_end::text,
+        SELECT e.id,e.employee_id,p.display_name,e.award_code,e.frequency,e.period_start::text,e.period_end::text,
           e.calculation_method,e.amount::text,e.approved_at,r.fulfilled_on::text,r.accounting_date::text,
           (SELECT l.id FROM journal_lines l WHERE l.company_id=r.company_id AND l.journal_entry_id=r.journal_id
             AND l.account_id=r.liability_account_id AND l.credit>0) AS liability_line_id,
           CASE WHEN r.journal_id IS NULL THEN NULL ELSE
             (e.amount+COALESCE(b.adjustments,0)-COALESCE(b.settled,0))::text END AS outstanding,
+          COALESCE(b.pending,0)::numeric(18,2)::text AS pending_payroll,
           COALESCE(b.settled,0)::numeric(18,2)::text AS settled,
           COALESCE((SELECT json_agg(json_build_object('id',s.id,'due_on',s.due_on,'amount',s.amount::text,
             'channel',s.channel) ORDER BY s.due_on,s.id) FROM employee_bonus_payment_schedule s
@@ -244,9 +252,19 @@ bonusRouter.get('/employee-bonuses',
         LEFT JOIN employee_bonus_recognitions r ON r.entitlement_id=e.id AND r.company_id=e.company_id
         LEFT JOIN LATERAL (
           SELECT sum(CASE WHEN kind='increase' THEN amount WHEN kind='decrease' THEN -amount ELSE 0 END) adjustments,
-            sum(CASE WHEN kind IN ('payroll','bank') THEN amount WHEN kind='reversal' THEN -amount ELSE 0 END) settled
-          FROM employee_bonus_balance_entries
-          WHERE company_id=e.company_id AND entitlement_id=e.id
+            sum(CASE WHEN x.kind='bank' OR (x.kind='payroll' AND paid.complete) THEN x.amount
+              WHEN x.kind='reversal' THEN -x.amount ELSE 0 END) settled,
+            sum(CASE WHEN x.kind='payroll' AND NOT COALESCE(paid.complete,false) THEN x.amount ELSE 0 END) pending
+          FROM employee_bonus_balance_entries x
+          LEFT JOIN LATERAL (
+            SELECT sum(s.amount)=l.credit complete
+            FROM journal_lines l
+            JOIN payroll_settlement_allocations s ON s.company_id=l.company_id AND s.liability_line_id=l.id
+            JOIN journal_entries j ON j.company_id=s.company_id AND j.id=s.journal_entry_id AND j.status='posted'
+            WHERE l.company_id=x.company_id AND l.journal_entry_id=x.journal_id AND l.memo='net_payroll_liability'
+            GROUP BY l.id
+          ) paid ON x.kind='payroll'
+          WHERE x.company_id=e.company_id AND x.entitlement_id=e.id
         ) b ON true
         WHERE e.company_id=$1
         ORDER BY e.period_start DESC,p.display_name,e.id
@@ -266,8 +284,9 @@ bonusRouter.post('/employee-bonuses',
   async (req, res, next) => {
     const auth = getAuthenticatedContext(req)!;
     const { request_key: key, frequency, period_start: start, period_end: end,
-      eligibility_condition: eligibility, recognition_condition: condition, employees } = req.body ?? {};
-    if (typeof key !== 'string' || !uuid.test(key) ||
+      eligibility_condition: eligibility, recognition_condition: condition, employees, award_code: awardCode = 'standard' } = req.body ?? {};
+    if (typeof awardCode !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(awardCode) ||
+        typeof key !== 'string' || !uuid.test(key) ||
         !['monthly','quarterly','annual','one_time'].includes(frequency) ||
         !isDate(start) || !isDate(end) || end < start || !textWithin(eligibility,1000) || !textWithin(condition,1000) ||
         !Array.isArray(employees) || !employees.length || employees.length>100 || employees.some(e =>
@@ -292,10 +311,10 @@ bonusRouter.post('/employee-bonuses',
           const record = (await client.query<{id:string; amount:string}>(`
             INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
               eligibility_condition,recognition_condition,calculation_method,percentage_basis,calculation_value,
-              basic_salary,applicable_allowances,created_by)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,amount::text
+              basic_salary,applicable_allowances,created_by,award_code)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id,amount::text
           `, [auth.activeCompanyId,employee.employee_id,key,frequency,start,end,eligibility.trim(),condition.trim(),
-            employee.method,employee.basis??null,employee.value,employee.basic_salary,employee.allowances,auth.user.id])).rows[0]!;
+            employee.method,employee.basis??null,employee.value,employee.basic_salary,employee.allowances,auth.user.id,awardCode])).rows[0]!;
           await audit.logEvent({
             company_id:auth.activeCompanyId!,actor_user_id:auth.user.id,action:'employee_bonus.create',
             entity_type:'employee_bonus_entitlement',entity_id:record.id,after_data:{request_key:key},

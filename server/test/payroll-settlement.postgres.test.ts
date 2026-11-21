@@ -48,7 +48,10 @@ db('payroll settlement API (PostgreSQL)',()=>{
       'fixed',100,0,0,$4,$4,now()) RETURNING id
   `,[x.co,employee!.id,randomUUID(),x.owner.id]);
   const expense=await h.account(x.co,'BONUS','expense','operating_expense');
-  const recognized=await x.owner.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+  const recognizer=await h.user('bonus-independent-recognizer');
+  await h.member(x.co,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+  await recognizer.client.login();
+  const recognized=await recognizer.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
     fulfilled_on:'2026-02-01',accounting_date:'2026-02-01',evidence:'Signed evidence',
     expense_account_id:expense,liability_account_id:x.liability,
   });
