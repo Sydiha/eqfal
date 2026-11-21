@@ -198,10 +198,43 @@ payrollRouter.get('/payroll/drafts/:id/accounting-preview',...read,requireCapabi
  try{s.json(await service.preview(company(q),q.params.id));}catch(e){if(!accountingFailure(e,s))throw e;}
 }));
 
+payrollRouter.get('/payroll/drafts/:id/bonus-options',...read,requireCapability('payroll.accounting.post'),
+ requireCapability('employee_cost.salary.view'),route(async(q,s)=>{
+ if(!uuid.test(q.params.id))return void error(s,'PAYROLL_INVALID');
+ const rows=(await pool!.query(`
+   SELECT e.id entitlement_id,p.employee_id,employee.display_name,e.period_start::text,e.period_end::text,
+     LEAST(p.bonus,available.amount)::text maximum
+   FROM payroll_drafts d
+   JOIN payroll_draft_employees p ON p.company_id=d.company_id AND p.draft_id=d.id
+   JOIN employees employee ON employee.company_id=p.company_id AND employee.id=p.employee_id
+   JOIN employee_bonus_entitlements e ON e.company_id=p.company_id AND e.employee_id=p.employee_id
+   JOIN employee_bonus_recognitions r ON r.company_id=e.company_id AND r.entitlement_id=e.id
+   JOIN journal_entries j ON j.company_id=r.company_id AND j.id=r.journal_id AND j.status='posted'
+   CROSS JOIN LATERAL (
+     SELECT e.amount+COALESCE(sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END),0) amount
+     FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id
+   ) available
+   WHERE d.company_id=$1 AND d.id=$2 AND d.status='approved' AND p.bonus>0 AND available.amount>0
+     AND r.accounting_date<d.period_month+interval '1 month'
+     AND NOT EXISTS(SELECT 1 FROM journal_entries posted WHERE posted.company_id=d.company_id
+       AND posted.source_type='payroll' AND posted.source_id=d.id AND posted.status='posted')
+   ORDER BY employee.display_name,e.period_start,e.id
+ `,[company(q),q.params.id])).rows;
+ s.json({options:rows});
+}));
+
 payrollRouter.post('/payroll/drafts/:id/accounting-post',requireSameOrigin,...read,requireCapability('payroll.accounting.post'),route(async(q,s)=>{
- if(!uuid.test(q.params.id)||!q.body||typeof q.body!=='object'||Array.isArray(q.body)||Object.keys(q.body).length)return void error(s,'PAYROLL_INVALID');
+ const body=q.body;
+ if(!uuid.test(q.params.id)||!body||typeof body!=='object'||Array.isArray(body)||
+    Object.keys(body).some(key=>key!=='bonus_allocations'))return void error(s,'PAYROLL_INVALID');
+ const bonuses=body.bonus_allocations===undefined?[]:body.bonus_allocations;
+ if(!Array.isArray(bonuses)||bonuses.length>100||bonuses.some(b=>!b||typeof b.entitlement_id!=='string'||
+    !uuid.test(b.entitlement_id)||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n)||
+    new Set(bonuses.map(b=>b.entitlement_id.toLowerCase())).size!==bonuses.length)return void error(s,'PAYROLL_INVALID');
+ const auth=getAuthenticatedContext(q)!;
+ if(bonuses.length&&!auth.capabilities.includes('employee_cost.salary.view'))return void error(s,'FORBIDDEN',403);
  const service=accountingService(s);if(!service)return;
- try{const result=await service.post(company(q),q.params.id,getAuthenticatedContext(q)!.user.id);s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
+ try{const result=await service.post(company(q),q.params.id,auth.user.id,bonuses.map(b=>({entitlement_id:b.entitlement_id.toLowerCase(),amount:b.amount})));s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
 }));
 
 payrollRouter.post('/payroll/recovery-corrections',requireSameOrigin,...read,requireCapability('payroll.employee_advance_recovery.correct'),route(async(q,s)=>{
@@ -281,6 +314,6 @@ payrollRouter.post('/payroll/settlements',requireSameOrigin,...read,requireCapab
    ||(b.sod_exception_id!==undefined&&(typeof b.sod_exception_id!=='string'||!uuid.test(b.sod_exception_id)))
    ||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n||cents(b.amount)>maxMoney) return void error(s,'PAYROLL_SETTLEMENT_INVALID');
  if(!pool)return void error(s,'DB_UNAVAILABLE',503);
- try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key,sodExceptionId:b.sod_exception_id});s.status(result.existing?200:201).json(result);}
+ try {const result=await new PayrollSettlementService(pool).create(company(q),getAuthenticatedContext(q)!.user.id,{bankTransactionId:b.bank_transaction_id,liabilityLineId:b.liability_line_id,amount:b.amount,idempotencyKey:b.idempotency_key,sodExceptionId:b.sod_exception_id,canSettleBonus:getAuthenticatedContext(q)!.capabilities.includes('employee_cost.salary.view')});s.status(result.existing?200:201).json(result);}
  catch(e){if(e instanceof PayrollSettlementError)return void error(s,e.code,e.status);throw e;}
 }));

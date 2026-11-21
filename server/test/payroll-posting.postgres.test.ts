@@ -4,7 +4,7 @@ import { startHarness } from './helpers/http-pg';
 
 const db = process.env['DATABASE_URL'] ? describe : describe.skip;
 const keys = ['earnings_expense','employer_contribution_expense','net_payroll_liability','employee_deduction_liability','employer_contribution_liability'];
-const values = {version:0,salary:'100.10',housing_allowance:'0.10',transportation_allowance:'0.05',other_allowance:'0.05',bonus:'0.30',overtime:'0.40',deductions:'0.50',employer_contributions:'0.60'};
+const values = {version:0,salary:'100.40',housing_allowance:'0.10',transportation_allowance:'0.05',other_allowance:'0.05',bonus:'0.00',overtime:'0.40',deductions:'0.50',employer_contributions:'0.60'};
 
 db('payroll posting (PostgreSQL)',()=>{
  let h:Awaited<ReturnType<typeof startHarness>>;
@@ -14,7 +14,7 @@ db('payroll posting (PostgreSQL)',()=>{
   const co=await h.company(label,owner.id), other=await h.company(`${label}-other`,outsider.id);
   await h.member(co,editor.id,['payroll.view','payroll.edit','payroll.accounting.post','payroll.employee_advance_recovery.view','payroll.employee_advance_recovery.select']);
   await h.member(co,approver.id,['payroll.view','payroll.approve','payroll.accounting.post','employee.view','employee_salary_advance.approve']);
-  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view']);
+  await h.member(co,poster.id,['payroll.view','payroll.accounting.post','accounting.view','employee.view','employee_cost.view','employee_cost.salary.view','payroll.settlement.create','bank.view','bank.reconcile']);
   for(const u of [owner,editor,approver,poster,outsider]) await u.client.login();
   const fy=await h.fiscalYear(co,'FY2026','2026-01-01','2026-12-31');
   const employee=(await h.q<{id:string}>("INSERT INTO employees(company_id,employee_number,display_name,created_by) VALUES($1,'E1','Employee',$2) RETURNING id",[co,owner.id]))[0]!.id;
@@ -26,6 +26,262 @@ db('payroll posting (PostgreSQL)',()=>{
   const post=()=>poster.client.req('POST',`/payroll/drafts/${draft.id}/accounting-post`,{});
   return {owner,editor,approver,poster,outsider,co,other,fy,employee,accounts,draft,post};
  }
+ async function recognizeSeparateAward(x:Awaited<ReturnType<typeof fixture>>, liability:string, amount:string, recognizer:Awaited<ReturnType<typeof h.user>>) {
+  const [award]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at,award_code)
+    VALUES($1,$2,$3,'monthly','2026-03-01','2026-03-31','Eligible','Verified','fixed',$4,0,0,$5,$6,now(),'retention') RETURNING id
+  `,[x.co,x.employee,randomUUID(),amount,x.editor.id,x.approver.id]);
+  const recognized=await recognizer.client.req('POST',`/employee-bonuses/${award!.id}/recognition`,{
+    fulfilled_on:'2026-03-15',accounting_date:'2026-03-15',evidence:'Separate approved retention award',
+    expense_account_id:x.accounts[0],liability_account_id:liability,
+  });
+  expect(recognized.status,JSON.stringify(recognized.json)).toBe(201);
+  return {entitlement_id:award!.id,amount};
+ }
+ it.each([
+  {label:'mid-month recognition',date:'2026-03-15',total:'10000.00',newExpense:'0.00'},
+  {label:'two separately recognized bonuses',date:'2026-02-28',total:'12000.00',newExpense:'2000.00'},
+ ])('posts $label only with its required recognized allocation',async({label,date,total,newExpense})=>{
+  const x=await fixture(label,false);
+  const liability=await h.account(x.co,'BON-CASE','liability','current_liability');
+  const [bonus]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-03-01','2026-03-31','Eligible','Verified','fixed',10000,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,x.employee,randomUUID(),x.owner.id]);
+  const recognizer=await h.user(label+'-recognizer');
+  await h.member(x.co,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+  await recognizer.client.login();
+  const recognition=await recognizer.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+    fulfilled_on:date,accounting_date:date,evidence:'Signed evidence',
+    expense_account_id:x.accounts[0],liability_account_id:liability,
+  });
+  expect(recognition.status,JSON.stringify(recognition.json)).toBe(201);
+  const path=`/payroll/drafts/${x.draft.id}`;
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:total})).status).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  const post=(body:object)=>x.poster.client.req('POST',`${path}/accounting-post`,body);
+  expect((await post({})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect((await post({bonus_allocations:[{entitlement_id:bonus!.id,amount:'9999.99'}]})).json.code)
+    .toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect(await h.count("SELECT count(*) n FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2",[x.co,x.draft.id])).toBe(0);
+  expect((await x.poster.client.req('GET',`${path}/bonus-options`)).json.options)
+    .toEqual([expect.objectContaining({entitlement_id:bonus!.id,maximum:'10000.00'})]);
+  const allocations=[{entitlement_id:bonus!.id,amount:'10000.00'}];
+  if (newExpense!=='0.00') {
+    expect((await post({bonus_allocations:allocations})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+    allocations.push(await recognizeSeparateAward(x,liability,newExpense,recognizer));
+  }
+  const posted=await post({bonus_allocations:allocations});
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  const [totals]=await h.q(`SELECT j.accounting_date::text,
+    sum(l.debit)=sum(l.credit) balanced,
+    sum(l.debit) FILTER(WHERE l.memo='earnings_expense')::text expense,
+    sum(l.debit) FILTER(WHERE l.memo='recognized_bonus_liability')::text allocated,
+    sum(l.credit) FILTER(WHERE l.memo='net_payroll_liability')::text net
+    FROM journal_entries j JOIN journal_lines l ON l.journal_entry_id=j.id AND l.company_id=j.company_id
+    WHERE j.id=$1 GROUP BY j.id`,[posted.json.journal.id]);
+  expect(totals).toEqual({ accounting_date:'2026-03-15',balanced:true,
+    expense:'100.70',allocated:total,
+    net:newExpense==='0.00'?'10100.20':'12100.20' });
+ });
+ it.each([
+   {label:'fully bank settled',paid:'10000',available:'0',race:false},
+   {label:'partially bank settled',paid:'4000',available:'6000',race:false},
+   {label:'bank and payroll race',paid:'4000',available:'6000',race:true},
+ ])('requires recognized entitlements for payroll after $label',async({label,paid,available,race})=>{
+  const x=await fixture(label,false);
+  const liability=await h.account(x.co,'BON-SET','liability','current_liability');
+  const [award]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-03-01','2026-03-31','Eligible','Verified','fixed',10000,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,x.employee,randomUUID(),x.owner.id]);
+  const finance=await h.user(label+'-finance');
+  await h.member(x.co,finance.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post',
+    'payroll.view','payroll.settlement.create','bank.view','bank.reconcile']);
+  await finance.client.login();
+  const recognized=await finance.client.req('POST',`/employee-bonuses/${award!.id}/recognition`,{
+    fulfilled_on:'2026-03-15',accounting_date:'2026-03-15',evidence:'Signed evidence',
+    expense_account_id:x.accounts[0],liability_account_id:liability,
+  });
+  expect(recognized.status).toBe(201);
+  const [line]=await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND credit>0',[recognized.json.journal_id]);
+  const cash=await h.account(x.co,'BON-CASH','asset','current_asset');
+  await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[cash]);
+  const [bank]=await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Bank','SAR',$2) RETURNING id",[x.co,x.owner.id]);
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank!.id,cash,x.owner.id]);
+  const [tx]=await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+    VALUES($1,$2,'2026-03-16',$3,'SAR','Bonus',$4,$5,'strong','manual','other',$6) RETURNING id`,
+    [x.co,bank!.id,`-${paid}`,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]);
+  const cashier=await h.user(label+'-cashier');
+  await h.member(x.co,cashier.id,['payroll.view','payroll.settlement.create','employee_cost.salary.view','bank.view','bank.reconcile']);
+  await cashier.client.login();
+  const settled=await cashier.client.req('POST','/payroll/settlements',{
+    bank_transaction_id:tx!.id,liability_line_id:line!.id,amount:paid,idempotency_key:randomUUID(),
+  });
+  expect(settled.status,JSON.stringify(settled.json)).toBe(201);
+  const path=`/payroll/drafts/${x.draft.id}`;
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:'10000'})).status).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  const post=(body:object)=>x.poster.client.req('POST',`${path}/accounting-post`,body);
+  const allocations=available==='0'?[]:[{entitlement_id:award!.id,amount:available}];
+  expect((await post({})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect((await post({bonus_allocations:allocations})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect((await post({bonus_allocations:[{entitlement_id:award!.id,amount:'10000'}]})).json.code).toBe('PAYROLL_BONUS_CONFLICT');
+  expect((await post({bonus_allocations:allocations,new_bonus_awards:[{employee_id:x.employee,award_code:'retention',reason:'Free text'}]})).status).toBe(400);
+  const separate=await recognizeSeparateAward(x,liability,paid,finance);
+  const all=[...allocations,separate];
+  if (race) {
+    const [second]=await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+      VALUES($1,$2,'2026-03-16',-6000,'SAR','Bonus',$3,$4,'strong','manual','other',$5) RETURNING id`,
+      [x.co,bank!.id,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]);
+    const [payroll,bankPayment]=await Promise.all([post({bonus_allocations:all}),cashier.client.req('POST','/payroll/settlements',{
+      bank_transaction_id:second!.id,liability_line_id:line!.id,amount:'6000',idempotency_key:randomUUID(),
+    })]);
+    expect([payroll.status,bankPayment.status].sort(),JSON.stringify([payroll.json,bankPayment.json])).toEqual([201,409]);
+    expect(await h.q("SELECT sum(amount)::text consumed FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2",[x.co,award!.id]))
+      .toEqual([{consumed:'10000.00'}]);
+    return;
+  }
+  const posted=await post({bonus_allocations:all});
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  expect((await post({bonus_allocations:all})).status).toBe(200);
+  expect(await h.q(`SELECT sum(debit)=sum(credit) balanced,
+      sum(debit) FILTER(WHERE memo='earnings_expense')::text expense,
+      sum(credit) FILTER(WHERE memo='net_payroll_liability')::text net
+    FROM journal_lines WHERE journal_entry_id=$1`,[posted.json.journal.id]))
+    .toEqual([{balanced:true,expense:'100.70',net:'10100.20'}]);
+ });
+ it('settles SAR 21,000 through payroll and bank without expensing the payroll portion twice',async()=>{
+  const x=await fixture('bonus-mixed',false);
+  const bonusAccount=await h.account(x.co,'BONUS','liability','current_liability');
+  const [bonus]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-02-01','2026-02-28','Eligible','Verified','fixed',21000,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,x.employee,randomUUID(),x.owner.id]);
+  const recognizer=await h.user('bonus-independent-recognizer');
+  await h.member(x.co,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+  await recognizer.client.login();
+  const recognition=await recognizer.client.req('POST',`/employee-bonuses/${bonus!.id}/recognition`,{
+    fulfilled_on:'2026-02-28',accounting_date:'2026-02-28',evidence:'Signed evidence',
+    expense_account_id:x.accounts[0],liability_account_id:bonusAccount,
+  });
+  expect(recognition.status,JSON.stringify(recognition.json)).toBe(201);
+  const path=`/payroll/drafts/${x.draft.id}`;
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:'10000.00'})).status).toBe(200);
+  expect((await approveDraft(x)).status).toBe(200);
+  const omitted=await x.poster.client.req('POST',`${path}/accounting-post`,{});
+  expect(omitted.json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  const choices=await x.poster.client.req('GET',`${path}/bonus-options`);
+  expect(choices.status,JSON.stringify(choices.json)).toBe(200);
+  expect(choices.json.options).toEqual([expect.objectContaining({
+    entitlement_id:bonus!.id,employee_id:x.employee,maximum:'10000.00',
+  })]);
+  const post=()=>x.poster.client.req('POST',`${path}/accounting-post`,{bonus_allocations:[{entitlement_id:bonus!.id,amount:'10000'}]});
+  const posted=await post();
+  expect(posted.status,JSON.stringify(posted.json)).toBe(201);
+  expect((await post()).status).toBe(200);
+  expect((await x.poster.client.req('GET','/employee-bonuses')).json.bonuses[0]).toMatchObject({settled:'0.00',pending_payroll:'10000.00',outstanding:'21000.00'});
+  expect((await x.poster.client.req('GET',`${path}/bonus-options`)).json.options).toEqual([]);
+  const lines=await h.q('SELECT account_id,debit::text,credit::text,memo FROM journal_lines WHERE journal_entry_id=$1',[posted.json.journal.id]);
+  expect(lines).toContainEqual({account_id:bonusAccount,debit:'10000.00',credit:'0.00',memo:'recognized_bonus_liability'});
+  expect(lines).toContainEqual({account_id:x.accounts[0],debit:'100.70',credit:'0.00',memo:'earnings_expense'});
+  expect(lines).toContainEqual({account_id:x.accounts[2],debit:'0.00',credit:'10100.20',memo:'net_payroll_liability'});
+  const cash=await h.account(x.co,'BANK','asset','current_asset');
+  await h.q("UPDATE accounts SET cash_role='cash' WHERE id=$1",[cash]);
+  const [bank]=await h.q<{id:string}>("INSERT INTO bank_accounts(company_id,display_name,currency_code,created_by) VALUES($1,'Bank','SAR',$2) RETURNING id",[x.co,x.owner.id]);
+  await h.q("INSERT INTO bank_account_ledger_links(company_id,bank_account_id,account_id,valid_from,created_by) VALUES($1,$2,$3,'2026-01-01',$4)",[x.co,bank!.id,cash,x.owner.id]);
+  async function bankTransaction(amount:string) {
+    return (await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+      VALUES($1,$2,'2026-03-10',$3,'SAR','Bonus',$4,$5,'strong','manual','other',$6) RETURNING id`,
+      [x.co,bank!.id,amount,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]))[0]!.id;
+  }
+  const [liability]=await h.q<{id:string}>('SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND credit>0',[recognition.json.journal_id]);
+  const direct={bank_transaction_id:await bankTransaction('-11000'),liability_line_id:liability!.id,amount:'11000',idempotency_key:randomUUID()};
+  const cashier=await h.user('bonus-mixed-cashier');
+  await h.member(x.co,cashier.id,['payroll.view','payroll.settlement.create','bank.view','bank.reconcile','employee_cost.salary.view']);
+  await cashier.client.login();
+  const settle=(body:typeof direct)=>cashier.client.req('POST','/payroll/settlements',body);
+  const results=await Promise.all([settle(direct),settle(direct)]);
+  expect(results.map(r=>r.status).sort(),JSON.stringify(results.map(r=>r.json))).toEqual([200,201]);
+  expect((await settle({...direct,bank_transaction_id:await bankTransaction('-1'),amount:'1',idempotency_key:randomUUID()})).status).toBe(409);
+  const [payrollLine]=await h.q<{id:string}>("SELECT id FROM journal_lines WHERE journal_entry_id=$1 AND memo='net_payroll_liability'",[posted.json.journal.id]);
+  expect((await settle({...direct,liability_line_id:payrollLine!.id,amount:'1',idempotency_key:randomUUID()})).status).toBe(409);
+  const payrollPaid=await settle({
+    bank_transaction_id:await bankTransaction('-10100.20'),liability_line_id:payrollLine!.id,
+    amount:'10100.20',idempotency_key:randomUUID(),
+  });
+  expect(payrollPaid.status,JSON.stringify(payrollPaid.json)).toBe(201);
+  expect((await x.poster.client.req('GET','/employee-bonuses')).json.bonuses[0]).toMatchObject({settled:'21000.00',pending_payroll:'0.00',outstanding:'0.00'});
+  expect(await h.q('SELECT sum(amount)::text amount FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2',[x.co,bonus!.id])).toEqual([{amount:'21000.00'}]);
+  const url=`/employee-bonuses/${bonus!.id}/adjustments`;
+  const adjustment={kind:'decrease',amount:'1',accounting_date:'2026-03-11',reason:'Documented correction',idempotency_key:randomUUID()};
+  expect((await x.owner.client.req('POST',url,adjustment)).status).toBe(403);
+  const adjuster=await h.user('bonus-independent-adjuster');
+  await h.member(x.co,adjuster.id,['employee.view','employee_cost.salary.view','employee_cost.correct','employee_cost.approve','accounting.journal.post']);
+  await adjuster.client.login();
+  const adjust=(body:typeof adjustment)=>adjuster.client.req('POST',url,body);
+  expect((await adjust(adjustment)).status).toBe(409);
+  const increase={...adjustment,kind:'increase',amount:'20',idempotency_key:randomUUID()};
+  const adjusted=await adjust(increase);
+  expect(adjusted.status,JSON.stringify(adjusted.json)).toBe(201);
+  expect((await adjust(increase)).status).toBe(200);
+  expect(await h.q('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',[adjusted.json.journal_id])).toEqual([
+    {account_id:x.accounts[0],debit:'20.00',credit:'0.00'},
+    {account_id:bonusAccount,debit:'0.00',credit:'20.00'},
+  ]);
+  expect((await settle({...direct,bank_transaction_id:await bankTransaction('-5'),amount:'5',idempotency_key:randomUUID()})).status).toBe(201);
+  expect((await adjust({...adjustment,amount:'16',idempotency_key:randomUUID()})).status).toBe(409);
+  expect((await adjust({...adjustment,amount:'15',idempotency_key:randomUUID()})).status).toBe(201);
+  const reverser=await h.user('bonus-independent-reverser');
+  await h.member(x.co,reverser.id,['employee.view','employee_cost.salary.view','employee_cost.payment.reverse',
+    'accounting.journal.post','bank.view','bank.reconcile']);
+  await reverser.client.login();
+  const [payment]=await h.q<{id:string}>(`
+    SELECT b.id FROM employee_bonus_balance_entries b
+    JOIN payroll_settlement_allocations p ON p.company_id=b.company_id AND p.journal_entry_id=b.journal_id
+    WHERE b.company_id=$1 AND b.entitlement_id=$2 AND p.bank_transaction_id=$3
+  `,[x.co,bonus!.id,direct.bank_transaction_id]);
+  const refund={payment_id:payment!.id,bank_transaction_id:await bankTransaction('2000'),amount:'2000',
+    reason:'Verified employee refund',idempotency_key:randomUUID()};
+  const reverse=()=>reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,refund);
+  const reversals=await Promise.all([reverse(),reverse()]);
+  expect(reversals.map(r=>r.status).sort(),JSON.stringify(reversals.map(r=>r.json))).toEqual([200,201]);
+  expect(reversals[0]!.json.journal_id).toBe(reversals[1]!.json.journal_id);
+  expect((await reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,{
+    ...refund,idempotency_key:randomUUID(),
+  })).status).toBe(409);
+  expect(await h.q('SELECT account_id,debit::text,credit::text FROM journal_lines WHERE journal_entry_id=$1 ORDER BY sequence',
+    [reversals[0]!.json.journal_id])).toEqual([
+    {account_id:cash,debit:'2000.00',credit:'0.00'},
+    {account_id:bonusAccount,debit:'0.00',credit:'2000.00'},
+  ]);
+  expect(await h.q(`SELECT (e.amount+sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END))::text outstanding
+    FROM employee_bonus_entitlements e JOIN employee_bonus_balance_entries b ON b.company_id=e.company_id AND b.entitlement_id=e.id
+    WHERE e.company_id=$1 AND e.id=$2 GROUP BY e.id`,[x.co,bonus!.id])).toEqual([{outstanding:'2000.00'}]);
+  const [payrollPayment]=await h.q<{id:string}>(
+    "SELECT id FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2 AND kind='payroll'",
+    [x.co,bonus!.id],
+  );
+  const payrollRefund=await reverser.client.req('POST',`/employee-bonuses/${bonus!.id}/bank-reversals`,{
+    ...refund,payment_id:payrollPayment!.id,bank_transaction_id:await bankTransaction('1000'),
+    amount:'1000',idempotency_key:randomUUID(),
+  });
+  expect(payrollRefund.status,JSON.stringify(payrollRefund.json)).toBe(201);
+  expect(await h.q("SELECT sum(amount)::text restored FROM employee_bonus_balance_entries WHERE entitlement_id=$1 AND kind='reversal'",[bonus!.id]))
+    .toEqual([{restored:'3000.00'}]);
+
+
+
+
+ });
  async function issueAdvance(x:Awaited<ReturnType<typeof fixture>>, amount='25.25', issueDate='2026-03-10'){
   const tag=randomUUID().slice(0,8);
   const receivable=await h.account(x.co,`AR-${tag}`,'asset','current_asset');

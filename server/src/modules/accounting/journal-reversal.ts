@@ -37,7 +37,10 @@ export async function reverseJournalInTransaction(
   )).rows[0];
   if (!original) throw new JournalPostingNotFoundError();
   if (original.status !== 'posted') throw new JournalReversalBlockedError('JOURNAL_REVERSAL_NOT_POSTED', 'Only a posted journal can be reversed');
-  if (original.source_type !== null) {
+  if (original.source_type !== null || (await client.query(
+    "SELECT 1 FROM employee_bonus_balance_entries WHERE company_id=$1 AND journal_id=$2 AND kind='reversal'",
+    [companyId,journalId],
+  )).rowCount) {
     throw new JournalReversalBlockedError('JOURNAL_REVERSAL_SYSTEM_GENERATED',
       'System-generated journals cannot be reversed directly; use the correction workflow of their source (e.g. credit/debit note)');
   }

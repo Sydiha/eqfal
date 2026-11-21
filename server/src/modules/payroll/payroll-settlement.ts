@@ -173,10 +173,18 @@ export class PayrollSettlementService {
         FROM payroll_settlement_sod_exceptions WHERE company_id=$1 AND (requested_by=$2 OR ($3 AND status='pending')) ORDER BY requested_at,id`,[company,actor,canApprove])).rows;
     }finally{c.release();}
   }
-  async create(company:string, actor:string, input:{bankTransactionId:string;liabilityLineId:string;amount:string;idempotencyKey:string;sodExceptionId?:string}) {
+  async create(company:string, actor:string, input:{bankTransactionId:string;liabilityLineId:string;amount:string;idempotencyKey:string;sodExceptionId?:string; canSettleBonus?:boolean}) {
     const c=await this.db.connect();
     try {
       await c.query('BEGIN');
+      const bonus = (await c.query<{ verified_by: string; approved_by: string; created_by: string }>(`
+        SELECT r.verified_by,e.approved_by,e.created_by FROM journal_lines l
+        JOIN employee_bonus_recognitions r ON r.company_id=l.company_id AND r.journal_id=l.journal_entry_id
+          AND r.liability_account_id=l.account_id
+        JOIN employee_bonus_entitlements e ON e.company_id=r.company_id AND e.id=r.entitlement_id
+        WHERE l.company_id=$1 AND l.id=$2 AND l.credit>0
+      `, [company,input.liabilityLineId])).rows[0];
+      if (bonus && !input.canSettleBonus) throw new PayrollSettlementError('FORBIDDEN',403);
       await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`payroll-settlement:${company}:${input.idempotencyKey}`]);
       const existing=(await c.query<{id:string;bank_transaction_id:string;liability_line_id:string;amount:string;journal_entry_id:string;created_by:string;sod_exception_id:string|null}>(
         'SELECT id,bank_transaction_id,liability_line_id,amount::text,journal_entry_id,created_by,sod_exception_id FROM payroll_settlement_allocations WHERE company_id=$1 AND idempotency_key=$2',[company,input.idempotencyKey])).rows[0];
@@ -221,21 +229,24 @@ export class PayrollSettlementService {
           liability_amount::text,settled_amount::text,decided_by,approval_expires_at::text,clock_timestamp()::text AS database_now FROM payroll_settlement_sod_exceptions WHERE id=$1 AND company_id=$2 FOR UPDATE`,[input.sodExceptionId,company])).rows[0];
         if(!sodException)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
       }
-      const evidence=await this.sodEvidence(c,company,input.liabilityLineId);
-      const conflicted=evidence.participants.includes(actor);
+      if (bonus && input.sodExceptionId) throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+      const evidence=bonus ? null : await this.sodEvidence(c,company,input.liabilityLineId);
+      const conflicted=bonus ? [bonus.verified_by,bonus.approved_by,bonus.created_by].includes(actor) : evidence!.participants.includes(actor);
       if(input.sodExceptionId){
-        if(!sodException||!conflicted||sodException.intended_actor_id!==actor||sodException.payroll_draft_id!==evidence.draftId||sodException.liability_line_id!==input.liabilityLineId)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
+        if(!evidence||!sodException||!conflicted||sodException.intended_actor_id!==actor||sodException.payroll_draft_id!==evidence.draftId||sodException.liability_line_id!==input.liabilityLineId)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_INVALID');
         if(!approvedSodExceptionIsUnexpired(sodException.status,sodException.approval_expires_at,sodException.database_now))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_EXPIRED');
         if(sodException.participant_fingerprint!==evidence.fingerprint||sodException.payroll_journal_id!==evidence.journalId||sodException.liability_amount!==evidence.liabilityAmount||sodException.settled_amount!==evidence.settledAmount)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_STALE');
         if(!sodException.decided_by||sodException.decided_by===actor||evidence.participants.includes(sodException.decided_by))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_CONFLICTED_APPROVER');
       }else if(conflicted&&!privileged)throw conflict('PAYROLL_SETTLEMENT_SOD_REQUIRED');
-      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,COALESCE(d.period_month,od.period_month)::text period_month,COALESCE(d.currency_code,od.currency_code) currency_code FROM journal_lines l
+      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,CASE WHEN d.id IS NOT NULL THEN j.accounting_date::text ELSE COALESCE(od.period_month,br.accounting_date)::text END period_month,COALESCE(d.currency_code,od.currency_code,'SAR') currency_code FROM journal_lines l
         JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
         LEFT JOIN payroll_drafts d ON j.source_type='payroll' AND d.id=j.source_id AND d.company_id=j.company_id
         LEFT JOIN payroll_recovery_corrections rc ON j.source_type='payroll_recovery_correction' AND rc.journal_entry_id=j.id AND rc.company_id=j.company_id AND rc.status='posted'
         LEFT JOIN payroll_employee_advance_recoveries r ON r.id=rc.recovery_id AND r.company_id=rc.company_id
         LEFT JOIN payroll_drafts od ON od.id=r.draft_id AND od.company_id=r.company_id
+        LEFT JOIN employee_bonus_recognitions br ON br.company_id=l.company_id AND br.journal_id=j.id AND br.liability_account_id=l.account_id
         WHERE l.company_id=$1 AND l.id=$2 AND j.status='posted' AND l.debit=0 AND l.credit>0 AND (
+          (j.source_type='employee_bonus_recognition' AND br.entitlement_id IS NOT NULL) OR
           (j.source_type='payroll' AND d.status='approved' AND l.memo IN ('net_payroll_liability','employee_deduction_liability','employer_contribution_liability')) OR
           (j.source_type='payroll_recovery_correction' AND rc.status='posted' AND od.status='approved' AND l.memo='employee_salary_advance_payroll_liability_reversal')) FOR UPDATE OF l`,[company,input.liabilityLineId])).rows[0];
       if(!liability) throw new PayrollSettlementError('PAYROLL_SETTLEMENT_NOT_FOUND',404);
