@@ -3,6 +3,7 @@ import { Pool, PoolClient } from 'pg';
 import { AuditLogRepository } from '../audit-log/audit-log.repository';
 import { assertAccountingDateWritable, AccountingPeriodClosedError } from '../monthly-close/accounting-period.guard';
 import { postJournalInTransaction, FiscalYearClosedError, LedgerSourceAuthorityBlockedError, JournalPostingConflictError, JournalPostingValidationError } from '../accounting/journal-posting';
+import { assertLedgerSourceAuthority } from '../accounting/ledger-source-authority';
 import { lockPayrollEccMonths, PAYROLL_ECC_CATEGORIES } from './payroll-ecc-lock';
 import { hasPrivilegedFinancialAuthority } from '../memberships/privileged-financial-authority';
 
@@ -114,11 +115,23 @@ export class PayrollAccountingService {
         -COALESCE((SELECT sum(c.amount) FROM payroll_recovery_corrections c JOIN payroll_employee_advance_recoveries x ON x.id=c.recovery_id WHERE x.company_id=$1 AND x.advance_id=$2 AND c.status='posted'),0)
         +COALESCE((SELECT sum(x.amount) FROM payroll_employee_advance_recoveries x WHERE x.company_id=$1 AND x.advance_id=$2 AND x.status='reserved' AND x.expires_at>clock_timestamp()),0) ok
         FROM employee_salary_advances a WHERE a.company_id=$1 AND a.id=$2 FOR UPDATE`,[companyId,r.advance_id,r.employee_id])).rows[0]?.ok;if(!balance)throw new PayrollAccountingError('PAYROLL_ADVANCE_RESERVATION_INVALID',409);}
+      // A payroll reclassification cannot predate any liability it consumes.
+      const dates = (await client.query<{accounting_date:string; next_month:string}>(`
+        SELECT GREATEST($2::date,max(r.accounting_date))::text accounting_date,
+          ($2::date+interval '1 month')::date::text next_month
+        FROM employee_bonus_recognitions r
+        WHERE r.company_id=$1 AND r.entitlement_id=ANY($3::uuid[])
+      `,[companyId,draft.period_month,bonuses.map(b=>b.entitlement_id)])).rows[0]!;
+      if (dates.accounting_date>=dates.next_month) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
       const years = (await client.query<{id:string;status:string}>(
-        'SELECT id,status FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date ORDER BY start_date FOR SHARE', [companyId,draft.period_month])).rows;
+        'SELECT id,status FROM fiscal_years WHERE company_id=$1 AND $2::date BETWEEN start_date AND end_date ORDER BY start_date FOR SHARE', [companyId,dates.accounting_date])).rows;
       if (years.length !== 1 || years[0]!.status !== 'open') throw new PayrollAccountingError('PAYROLL_PERIOD_INELIGIBLE', 409);
       // Fiscal year, accounting month, then ECC month: all paths take these in the same order.
       await assertAccountingDateWritable(companyId, draft.period_month, client);
+      if (dates.accounting_date!==draft.period_month) {
+        await assertLedgerSourceAuthority(client,companyId,draft.period_month);
+        await assertAccountingDateWritable(companyId,dates.accounting_date,client);
+      }
       await lockPayrollEccMonths(client, companyId, [draft.period_month]);
       await client.query('SELECT m.id FROM payroll_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1 FOR SHARE OF m,a', [companyId]);
       await client.query('SELECT m.company_id FROM employee_salary_advance_account_mappings m JOIN accounts a ON a.id=m.account_id AND a.company_id=m.company_id WHERE m.company_id=$1 FOR SHARE OF m,a',[companyId]);
@@ -135,31 +148,34 @@ export class PayrollAccountingService {
           JOIN employee_bonus_entitlements e ON e.company_id=r.company_id AND e.id=r.entitlement_id
           JOIN payroll_draft_employees p ON p.company_id=e.company_id AND p.employee_id=e.employee_id AND p.draft_id=$3
           WHERE r.company_id=$1 AND r.entitlement_id=$2 AND r.accounting_date<=$4
-        `,[companyId,bonus.entitlement_id,draftId,draft.period_month])).rows[0];
+        `,[companyId,bonus.entitlement_id,draftId,dates.accounting_date])).rows[0];
         if (!row) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
         const sum = (used.get(row.employee_id) ?? 0n) + cents(bonus.amount);
         if (sum > cents(row.bonus)) throw new PayrollAccountingError('PAYROLL_BONUS_CONFLICT',409);
         used.set(row.employee_id,sum);
         bonusLines.push({ ...bonus, account_id: row.liability_account_id });
       }
-      const required = (await client.query<{employee_id:string; bonus:string}>(`
-        SELECT p.employee_id,p.bonus::text FROM payroll_draft_employees p
-        WHERE p.company_id=$1 AND p.draft_id=$2 AND p.bonus>0 AND EXISTS (
-          SELECT 1 FROM employee_bonus_entitlements e
-          JOIN employee_bonus_recognitions r ON r.company_id=e.company_id AND r.entitlement_id=e.id
-          WHERE e.company_id=p.company_id AND e.employee_id=p.employee_id AND r.accounting_date<=$3
-            AND (r.accounting_date>=date_trunc('month',$3::date)::date OR e.period_end>=date_trunc('month',$3::date)::date OR
-              e.amount+COALESCE((SELECT sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END)
-                FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id),0)>0)
-        )
-      `,[companyId,draftId,draft.period_month])).rows;
-      if (required.some(row => (used.get(row.employee_id) ?? 0n) !== cents(row.bonus))) {
+      // Discover recognized obligations through the entire payroll month, even
+      // when the request omitted allocations and would otherwise post on day one.
+      const required = (await client.query<{employee_id:string; amount:string}>(`
+        SELECT p.employee_id,LEAST(p.bonus,COALESCE(sum(GREATEST(available.amount,0)),0))::text amount
+        FROM payroll_draft_employees p
+        JOIN employee_bonus_entitlements e ON e.company_id=p.company_id AND e.employee_id=p.employee_id
+        JOIN employee_bonus_recognitions r ON r.company_id=e.company_id AND r.entitlement_id=e.id
+        CROSS JOIN LATERAL (
+          SELECT e.amount+COALESCE(sum(CASE WHEN b.kind IN ('increase','reversal') THEN b.amount ELSE -b.amount END),0) amount
+          FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id
+        ) available
+        WHERE p.company_id=$1 AND p.draft_id=$2 AND p.bonus>0 AND r.accounting_date<$3::date
+        GROUP BY p.employee_id,p.bonus
+      `,[companyId,draftId,dates.next_month])).rows;
+      if (required.some(row => (used.get(row.employee_id) ?? 0n) < cents(row.amount))) {
         throw new PayrollAccountingError('PAYROLL_BONUS_ALLOCATION_REQUIRED',409);
       }
       const plan = await this.calculateReadiness(companyId, draftId, client, bonusLines);
       if (!plan.can_preview || !plan.balanced) throw new PayrollAccountingError('PAYROLL_POST_BLOCKED', 409, plan.blockers);
       const journal = (await client.query<{id:string;reference:string}>(`INSERT INTO journal_entries(company_id,fiscal_year_id,accounting_date,description,reference,source_type,source_id,entry_type,created_by)
-        VALUES($1,$2,$3,$4,$5,'payroll',$6,'standard',$7) RETURNING id,reference`, [companyId,years[0]!.id,draft.period_month,`Payroll ${draft.period_month.slice(0,7)}`,`PAYROLL ${draft.period_month.slice(0,7)}`,draftId,actor])).rows[0]!;
+        VALUES($1,$2,$3,$4,$5,'payroll',$6,'standard',$7) RETURNING id,reference`, [companyId,years[0]!.id,dates.accounting_date,`Payroll ${draft.period_month.slice(0,7)}`,`PAYROLL ${draft.period_month.slice(0,7)}`,draftId,actor])).rows[0]!;
       for (const [i,line] of plan.lines.entries()) await client.query('INSERT INTO journal_lines(company_id,journal_entry_id,account_id,debit,credit,memo,sequence) VALUES($1,$2,$3,$4,$5,$6,$7)', [companyId,journal.id,line.account_id,line.debit,line.credit,line.mapping_key,i+1]);
       for (const bonus of bonusLines) {
         try {

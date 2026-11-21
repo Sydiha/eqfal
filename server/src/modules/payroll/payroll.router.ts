@@ -215,7 +215,7 @@ payrollRouter.get('/payroll/drafts/:id/bonus-options',...read,requireCapability(
      FROM employee_bonus_balance_entries b WHERE b.company_id=e.company_id AND b.entitlement_id=e.id
    ) available
    WHERE d.company_id=$1 AND d.id=$2 AND d.status='approved' AND p.bonus>0 AND available.amount>0
-     AND r.accounting_date<=d.period_month
+     AND r.accounting_date<d.period_month+interval '1 month'
      AND NOT EXISTS(SELECT 1 FROM journal_entries posted WHERE posted.company_id=d.company_id
        AND posted.source_type='payroll' AND posted.source_id=d.id AND posted.status='posted')
    ORDER BY employee.display_name,e.period_start,e.id

@@ -238,7 +238,7 @@ export class PayrollSettlementService {
         if(sodException.participant_fingerprint!==evidence.fingerprint||sodException.payroll_journal_id!==evidence.journalId||sodException.liability_amount!==evidence.liabilityAmount||sodException.settled_amount!==evidence.settledAmount)throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_STALE');
         if(!sodException.decided_by||sodException.decided_by===actor||evidence.participants.includes(sodException.decided_by))throw conflict('PAYROLL_SETTLEMENT_SOD_EXCEPTION_CONFLICTED_APPROVER');
       }else if(conflicted&&!privileged)throw conflict('PAYROLL_SETTLEMENT_SOD_REQUIRED');
-      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,COALESCE(d.period_month,od.period_month,br.accounting_date)::text period_month,COALESCE(d.currency_code,od.currency_code,'SAR') currency_code FROM journal_lines l
+      const liability=(await c.query<{account_id:string;period_month:string;currency_code:string}>(`SELECT l.account_id,CASE WHEN d.id IS NOT NULL THEN j.accounting_date::text ELSE COALESCE(od.period_month,br.accounting_date)::text END period_month,COALESCE(d.currency_code,od.currency_code,'SAR') currency_code FROM journal_lines l
         JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
         LEFT JOIN payroll_drafts d ON j.source_type='payroll' AND d.id=j.source_id AND d.company_id=j.company_id
         LEFT JOIN payroll_recovery_corrections rc ON j.source_type='payroll_recovery_correction' AND rc.journal_entry_id=j.id AND rc.company_id=j.company_id AND rc.status='posted'

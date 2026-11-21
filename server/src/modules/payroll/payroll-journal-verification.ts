@@ -4,8 +4,8 @@ import { PoolClient } from 'pg';
 export async function payrollJournalIsExact(client: PoolClient, companyId: string, journalId: string, draftId: string): Promise<boolean> {
   const result = await client.query<{valid:boolean}>(`
     WITH draft AS (
-      SELECT d.id,d.period_month FROM payroll_drafts d JOIN journal_entries j ON j.company_id=d.company_id AND j.source_id=d.id
-      WHERE d.company_id=$1 AND d.id=$3 AND d.status='approved' AND j.id=$2 AND j.source_type='payroll' AND j.accounting_date=d.period_month
+      SELECT d.id,d.period_month,j.accounting_date FROM payroll_drafts d JOIN journal_entries j ON j.company_id=d.company_id AND j.source_id=d.id
+      WHERE d.company_id=$1 AND d.id=$3 AND d.status='approved' AND j.id=$2 AND j.source_type='payroll'
     ), totals AS (
       SELECT COUNT(*) n,COALESCE(SUM(p.salary+p.allowances+p.bonus+p.overtime),0) earnings,
         COALESCE(SUM(p.deductions),0) deductions,COALESCE(SUM(p.employer_contributions),0) employer,
@@ -35,12 +35,15 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
     ), actual AS (
       SELECT account_id,debit,credit,memo FROM journal_lines WHERE company_id=$1 AND journal_entry_id=$2
     )
-    SELECT EXISTS(SELECT 1 FROM draft) AND (SELECT n>0 AND earnings>=deductions+recoveries AND earnings+employer>0 FROM totals)
+    SELECT EXISTS(
+      SELECT 1 FROM draft d WHERE d.accounting_date=GREATEST(d.period_month,(SELECT max(b.accounting_date) FROM bonus b))
+        AND d.accounting_date<d.period_month+interval '1 month'
+    ) AND (SELECT n>0 AND earnings>=deductions+recoveries AND earnings+employer>0 FROM totals)
       AND NOT EXISTS (
         SELECT 1 FROM bonus b CROSS JOIN draft d
         LEFT JOIN payroll_draft_employees p ON p.company_id=$1 AND p.draft_id=d.id AND p.employee_id=b.employee_id
         GROUP BY b.employee_id,p.bonus
-        HAVING p.bonus IS NULL OR sum(b.amount)>p.bonus OR bool_or(b.accounting_date>d.period_month)
+        HAVING p.bonus IS NULL OR sum(b.amount)>p.bonus OR bool_or(b.accounting_date>d.accounting_date)
       )
       AND (SELECT count(*)=5 FROM payroll_account_mappings m JOIN accounts a ON a.company_id=m.company_id AND a.id=m.account_id
         WHERE m.company_id=$1 AND a.is_active AND a.account_type=CASE WHEN m.mapping_key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' ELSE 'liability' END)
