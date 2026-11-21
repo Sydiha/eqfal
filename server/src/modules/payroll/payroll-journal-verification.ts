@@ -16,7 +16,8 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
       FROM employee_bonus_balance_entries b
       JOIN employee_bonus_recognitions r ON r.company_id=b.company_id AND r.entitlement_id=b.entitlement_id
       JOIN employee_bonus_entitlements e ON e.company_id=b.company_id AND e.id=b.entitlement_id
-      WHERE b.company_id=$1 AND b.journal_id=$2 AND b.kind='payroll'
+      JOIN journal_entries recognized ON recognized.company_id=r.company_id AND recognized.id=r.journal_id AND recognized.status='posted'
+      WHERE b.company_id=$1 AND b.journal_id=$2 AND b.kind='payroll' AND e.approved_at IS NOT NULL
     ), expected_raw AS (
       SELECT v.key,v.debit,v.credit FROM totals t CROSS JOIN LATERAL (VALUES
         ('earnings_expense',t.earnings-COALESCE((SELECT sum(amount) FROM bonus),0),0::numeric),('employer_contribution_expense',t.employer,0::numeric),
@@ -40,10 +41,14 @@ export async function payrollJournalIsExact(client: PoolClient, companyId: strin
         AND d.accounting_date<d.period_month+interval '1 month'
     ) AND (SELECT n>0 AND earnings>=deductions+recoveries AND earnings+employer>0 FROM totals)
       AND NOT EXISTS (
+        SELECT 1 FROM draft d JOIN payroll_draft_employees p ON p.company_id=$1 AND p.draft_id=d.id
+        WHERE p.bonus<>COALESCE((SELECT sum(b.amount) FROM bonus b WHERE b.employee_id=p.employee_id),0)
+      )
+      AND NOT EXISTS (
         SELECT 1 FROM bonus b CROSS JOIN draft d
-        LEFT JOIN payroll_draft_employees p ON p.company_id=$1 AND p.draft_id=d.id AND p.employee_id=b.employee_id
-        GROUP BY b.employee_id,p.bonus
-        HAVING p.bonus IS NULL OR sum(b.amount)>p.bonus OR bool_or(b.accounting_date>d.accounting_date)
+        WHERE b.accounting_date>d.accounting_date OR NOT EXISTS (
+          SELECT 1 FROM payroll_draft_employees p WHERE p.company_id=$1 AND p.draft_id=d.id AND p.employee_id=b.employee_id
+        )
       )
       AND (SELECT count(*)=5 FROM payroll_account_mappings m JOIN accounts a ON a.company_id=m.company_id AND a.id=m.account_id
         WHERE m.company_id=$1 AND a.is_active AND a.account_type=CASE WHEN m.mapping_key IN ('earnings_expense','employer_contribution_expense') THEN 'expense' ELSE 'liability' END)

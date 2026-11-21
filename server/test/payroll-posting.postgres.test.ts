@@ -4,7 +4,7 @@ import { startHarness } from './helpers/http-pg';
 
 const db = process.env['DATABASE_URL'] ? describe : describe.skip;
 const keys = ['earnings_expense','employer_contribution_expense','net_payroll_liability','employee_deduction_liability','employer_contribution_liability'];
-const values = {version:0,salary:'100.10',housing_allowance:'0.10',transportation_allowance:'0.05',other_allowance:'0.05',bonus:'0.30',overtime:'0.40',deductions:'0.50',employer_contributions:'0.60'};
+const values = {version:0,salary:'100.40',housing_allowance:'0.10',transportation_allowance:'0.05',other_allowance:'0.05',bonus:'0.00',overtime:'0.40',deductions:'0.50',employer_contributions:'0.60'};
 
 db('payroll posting (PostgreSQL)',()=>{
  let h:Awaited<ReturnType<typeof startHarness>>;
@@ -26,9 +26,23 @@ db('payroll posting (PostgreSQL)',()=>{
   const post=()=>poster.client.req('POST',`/payroll/drafts/${draft.id}/accounting-post`,{});
   return {owner,editor,approver,poster,outsider,co,other,fy,employee,accounts,draft,post};
  }
+ async function recognizeSeparateAward(x:Awaited<ReturnType<typeof fixture>>, liability:string, amount:string, recognizer:Awaited<ReturnType<typeof h.user>>) {
+  const [award]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at,award_code)
+    VALUES($1,$2,$3,'monthly','2026-03-01','2026-03-31','Eligible','Verified','fixed',$4,0,0,$5,$6,now(),'retention') RETURNING id
+  `,[x.co,x.employee,randomUUID(),amount,x.editor.id,x.approver.id]);
+  const recognized=await recognizer.client.req('POST',`/employee-bonuses/${award!.id}/recognition`,{
+    fulfilled_on:'2026-03-15',accounting_date:'2026-03-15',evidence:'Separate approved retention award',
+    expense_account_id:x.accounts[0],liability_account_id:liability,
+  });
+  expect(recognized.status,JSON.stringify(recognized.json)).toBe(201);
+  return {entitlement_id:award!.id,amount};
+ }
  it.each([
   {label:'mid-month recognition',date:'2026-03-15',total:'10000.00',newExpense:'0.00'},
-  {label:'mixed recognized and new bonus',date:'2026-02-28',total:'12000.00',newExpense:'2000.00'},
+  {label:'two separately recognized bonuses',date:'2026-02-28',total:'12000.00',newExpense:'2000.00'},
  ])('posts $label only with its required recognized allocation',async({label,date,total,newExpense})=>{
   const x=await fixture(label,false);
   const liability=await h.account(x.co,'BON-CASE','liability','current_liability');
@@ -47,7 +61,7 @@ db('payroll posting (PostgreSQL)',()=>{
   });
   expect(recognition.status,JSON.stringify(recognition.json)).toBe(201);
   const path=`/payroll/drafts/${x.draft.id}`;
-  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,version:1,bonus:total})).status).toBe(200);
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:total})).status).toBe(200);
   expect((await approveDraft(x)).status).toBe(200);
   const post=(body:object)=>x.poster.client.req('POST',`${path}/accounting-post`,body);
   expect((await post({})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
@@ -56,7 +70,12 @@ db('payroll posting (PostgreSQL)',()=>{
   expect(await h.count("SELECT count(*) n FROM journal_entries WHERE company_id=$1 AND source_type='payroll' AND source_id=$2",[x.co,x.draft.id])).toBe(0);
   expect((await x.poster.client.req('GET',`${path}/bonus-options`)).json.options)
     .toEqual([expect.objectContaining({entitlement_id:bonus!.id,maximum:'10000.00'})]);
-  const posted=await post({bonus_allocations:[{entitlement_id:bonus!.id,amount:'10000.00'}]});
+  const allocations=[{entitlement_id:bonus!.id,amount:'10000.00'}];
+  if (newExpense!=='0.00') {
+    expect((await post({bonus_allocations:allocations})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+    allocations.push(await recognizeSeparateAward(x,liability,newExpense,recognizer));
+  }
+  const posted=await post({bonus_allocations:allocations});
   expect(posted.status,JSON.stringify(posted.json)).toBe(201);
   const [totals]=await h.q(`SELECT j.accounting_date::text,
     sum(l.debit)=sum(l.credit) balanced,
@@ -65,14 +84,15 @@ db('payroll posting (PostgreSQL)',()=>{
     sum(l.credit) FILTER(WHERE l.memo='net_payroll_liability')::text net
     FROM journal_entries j JOIN journal_lines l ON l.journal_entry_id=j.id AND l.company_id=j.company_id
     WHERE j.id=$1 GROUP BY j.id`,[posted.json.journal.id]);
-  expect(totals).toEqual({ accounting_date:date>'2026-03-01'?date:'2026-03-01',balanced:true,
-    expense:newExpense==='0.00'?'100.70':'2100.70',allocated:'10000.00',
+  expect(totals).toEqual({ accounting_date:'2026-03-15',balanced:true,
+    expense:'100.70',allocated:total,
     net:newExpense==='0.00'?'10100.20':'12100.20' });
  });
  it.each([
-   {label:'fully bank settled',paid:'10000',available:'0'},
-   {label:'partially bank settled',paid:'4000',available:'6000'},
- ])('requires distinct-award evidence for payroll after $label',async({label,paid,available})=>{
+   {label:'fully bank settled',paid:'10000',available:'0',race:false},
+   {label:'partially bank settled',paid:'4000',available:'6000',race:false},
+   {label:'bank and payroll race',paid:'4000',available:'6000',race:true},
+ ])('requires recognized entitlements for payroll after $label',async({label,paid,available,race})=>{
   const x=await fixture(label,false);
   const liability=await h.account(x.co,'BON-SET','liability','current_liability');
   const [award]=await h.q<{id:string}>(`
@@ -106,26 +126,36 @@ db('payroll posting (PostgreSQL)',()=>{
   });
   expect(settled.status,JSON.stringify(settled.json)).toBe(201);
   const path=`/payroll/drafts/${x.draft.id}`;
-  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,version:1,bonus:'10000'})).status).toBe(200);
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:'10000'})).status).toBe(200);
   expect((await approveDraft(x)).status).toBe(200);
   const post=(body:object)=>x.poster.client.req('POST',`${path}/accounting-post`,body);
   const allocations=available==='0'?[]:[{entitlement_id:award!.id,amount:available}];
-  expect((await post({})).json.code).toBe(available==='0'?'PAYROLL_DISTINCT_BONUS_REQUIRED':'PAYROLL_BONUS_ALLOCATION_REQUIRED');
-  expect((await post({bonus_allocations:allocations})).json.code).toBe('PAYROLL_DISTINCT_BONUS_REQUIRED');
-  const declaration={employee_id:x.employee,award_code:'retention',reason:'Independent retention award'};
-  expect((await post({bonus_allocations:allocations,new_bonus_awards:[{...declaration,award_code:'standard'}]})).status).toBe(409);
-  const posted=await post({bonus_allocations:allocations,new_bonus_awards:[declaration]});
+  expect((await post({})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect((await post({bonus_allocations:allocations})).json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');
+  expect((await post({bonus_allocations:[{entitlement_id:award!.id,amount:'10000'}]})).json.code).toBe('PAYROLL_BONUS_CONFLICT');
+  expect((await post({bonus_allocations:allocations,new_bonus_awards:[{employee_id:x.employee,award_code:'retention',reason:'Free text'}]})).status).toBe(400);
+  const separate=await recognizeSeparateAward(x,liability,paid,finance);
+  const all=[...allocations,separate];
+  if (race) {
+    const [second]=await h.q<{id:string}>(`INSERT INTO bank_transactions(company_id,bank_account_id,transaction_date,amount,currency_code,description,bank_reference,fingerprint,fingerprint_strength,source_kind,manual_category,created_by_user_id)
+      VALUES($1,$2,'2026-03-16',-6000,'SAR','Bonus',$3,$4,'strong','manual','other',$5) RETURNING id`,
+      [x.co,bank!.id,randomUUID(),randomUUID().replaceAll('-',''),x.owner.id]);
+    const [payroll,bankPayment]=await Promise.all([post({bonus_allocations:all}),cashier.client.req('POST','/payroll/settlements',{
+      bank_transaction_id:second!.id,liability_line_id:line!.id,amount:'6000',idempotency_key:randomUUID(),
+    })]);
+    expect([payroll.status,bankPayment.status].sort(),JSON.stringify([payroll.json,bankPayment.json])).toEqual([201,409]);
+    expect(await h.q("SELECT sum(amount)::text consumed FROM employee_bonus_balance_entries WHERE company_id=$1 AND entitlement_id=$2",[x.co,award!.id]))
+      .toEqual([{consumed:'10000.00'}]);
+    return;
+  }
+  const posted=await post({bonus_allocations:all});
   expect(posted.status,JSON.stringify(posted.json)).toBe(201);
-  expect((await post({bonus_allocations:allocations,new_bonus_awards:[declaration]})).status).toBe(200);
-  expect((await post({bonus_allocations:allocations,new_bonus_awards:[{...declaration,reason:'Changed reason'}]})).status).toBe(409);
-  expect(await h.q(`SELECT after_data->'new_bonus_awards' awards FROM audit_log
-    WHERE company_id=$1 AND entity_id=$2 AND action='payroll.accounting.post'`,[x.co,x.draft.id]))
-    .toEqual([{awards:[{...declaration,amount:available==='0'?'10000.00':'4000.00'}]}]);
+  expect((await post({bonus_allocations:all})).status).toBe(200);
   expect(await h.q(`SELECT sum(debit)=sum(credit) balanced,
       sum(debit) FILTER(WHERE memo='earnings_expense')::text expense,
       sum(credit) FILTER(WHERE memo='net_payroll_liability')::text net
     FROM journal_lines WHERE journal_entry_id=$1`,[posted.json.journal.id]))
-    .toEqual([{balanced:true,expense:available==='0'?'10100.70':'4100.70',net:'10100.20'}]);
+    .toEqual([{balanced:true,expense:'100.70',net:'10100.20'}]);
  });
  it('settles SAR 21,000 through payroll and bank without expensing the payroll portion twice',async()=>{
   const x=await fixture('bonus-mixed',false);
@@ -145,7 +175,7 @@ db('payroll posting (PostgreSQL)',()=>{
   });
   expect(recognition.status,JSON.stringify(recognition.json)).toBe(201);
   const path=`/payroll/drafts/${x.draft.id}`;
-  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,version:1,bonus:'10000.00'})).status).toBe(200);
+  expect((await x.editor.client.req('PUT',`${path}/employees/${x.employee}`,{...values,salary:'100.10',version:1,bonus:'10000.00'})).status).toBe(200);
   expect((await approveDraft(x)).status).toBe(200);
   const omitted=await x.poster.client.req('POST',`${path}/accounting-post`,{});
   expect(omitted.json.code).toBe('PAYROLL_BONUS_ALLOCATION_REQUIRED');

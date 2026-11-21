@@ -226,20 +226,15 @@ payrollRouter.get('/payroll/drafts/:id/bonus-options',...read,requireCapability(
 payrollRouter.post('/payroll/drafts/:id/accounting-post',requireSameOrigin,...read,requireCapability('payroll.accounting.post'),route(async(q,s)=>{
  const body=q.body;
  if(!uuid.test(q.params.id)||!body||typeof body!=='object'||Array.isArray(body)||
-    Object.keys(body).some(key=>key!=='bonus_allocations'&&key!=='new_bonus_awards'))return void error(s,'PAYROLL_INVALID');
+    Object.keys(body).some(key=>key!=='bonus_allocations'))return void error(s,'PAYROLL_INVALID');
  const bonuses=body.bonus_allocations===undefined?[]:body.bonus_allocations;
  if(!Array.isArray(bonuses)||bonuses.length>100||bonuses.some(b=>!b||typeof b.entitlement_id!=='string'||
     !uuid.test(b.entitlement_id)||typeof b.amount!=='string'||!money.test(b.amount)||cents(b.amount)<=0n)||
-    new Set(bonuses.map(b=>b.entitlement_id)).size!==bonuses.length)return void error(s,'PAYROLL_INVALID');
- const awards=body.new_bonus_awards===undefined?[]:body.new_bonus_awards;
- if(!Array.isArray(awards)||awards.length>100||awards.some(a=>!a||typeof a.employee_id!=='string'||
-    !uuid.test(a.employee_id)||typeof a.award_code!=='string'||!/^[a-z0-9][a-z0-9_-]{0,49}$/.test(a.award_code)||
-    typeof a.reason!=='string'||!a.reason.trim()||a.reason.length>1000)||
-    new Set(awards.map(a=>a.employee_id.toLowerCase())).size!==awards.length)return void error(s,'PAYROLL_INVALID');
+    new Set(bonuses.map(b=>b.entitlement_id.toLowerCase())).size!==bonuses.length)return void error(s,'PAYROLL_INVALID');
  const auth=getAuthenticatedContext(q)!;
- if((bonuses.length||awards.length)&&!auth.capabilities.includes('employee_cost.salary.view'))return void error(s,'FORBIDDEN',403);
+ if(bonuses.length&&!auth.capabilities.includes('employee_cost.salary.view'))return void error(s,'FORBIDDEN',403);
  const service=accountingService(s);if(!service)return;
- try{const result=await service.post(company(q),q.params.id,auth.user.id,bonuses,awards.map(a=>({employee_id:a.employee_id.toLowerCase(),award_code:a.award_code,reason:a.reason.trim()})));s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
+ try{const result=await service.post(company(q),q.params.id,auth.user.id,bonuses.map(b=>({entitlement_id:b.entitlement_id.toLowerCase(),amount:b.amount})));s.status(result.existing?200:201).json(result);}catch(e){if(!accountingFailure(e,s))throw e;}
 }));
 
 payrollRouter.post('/payroll/recovery-corrections',requireSameOrigin,...read,requireCapability('payroll.employee_advance_recovery.correct'),route(async(q,s)=>{
