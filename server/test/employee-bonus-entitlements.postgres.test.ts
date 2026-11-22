@@ -137,4 +137,43 @@ postgres('bonus entitlement calculations', () => {
     expect(balances.status).toBe(200);
     expect(balances.json.bonuses.find((b:{id:string})=>b.id===created.json.bonuses[0].id).schedule).toEqual([expect.objectContaining({amount:'60.00',channel:'bank'})]);
   });
+
+  it('saves and lists the bonustest2027 SAR 15,000 bank installment, rejects excess, and deduplicates retries', async () => {
+    const creator=await harness.user('bonus-schedule-exact-creator');
+    const approver=await harness.user('bonus-schedule-exact-approver');
+    const owner=await harness.user('bonus-schedule-exact-owner');
+    const company=await harness.company('bonus schedule exact',owner.id);
+    const common=['employee.view','employee_cost.salary.view','employee_cost.view'];
+    await harness.member(company,creator.id,[...common,'employee_cost.create']);
+    await harness.member(company,approver.id,[...common,'employee_cost.approve','employee_cost.payment.allocate']);
+    await creator.client.login();
+    await approver.client.login();
+    const [employee]=await harness.q<{id:string}>(`
+      INSERT INTO employees(company_id,employee_number,display_name,created_by)
+      VALUES($1,'B-EXACT','Bonus schedule test',$2) RETURNING id
+    `,[company,owner.id]);
+    const created=await creator.client.req('POST','/employee-bonuses',{
+      request_key:randomUUID(),award_code:'bonustest2027',frequency:'one_time',
+      period_start:'2027-01-01',period_end:'2027-12-31',
+      eligibility_condition:'Approved test entitlement',recognition_condition:'Approved test entitlement',
+      employees:[{employee_id:employee!.id,method:'fixed',value:'15000',basic_salary:'0',allowances:'0'}],
+    });
+    expect(created.status,JSON.stringify(created.json)).toBe(201);
+    const id=created.json.bonuses[0].id as string;
+    expect((await approver.client.req('POST',`/employee-bonuses/${id}/approval`,{})).status).toBe(200);
+
+    const request={request_key:randomUUID(),due_on:'2027-02-05',amount:'15000',channel:'bank'};
+    const route=`/employee-bonuses/${id}/schedule`;
+    const saved=await approver.client.req('POST',route,request);
+    expect(saved.status,JSON.stringify(saved.json)).toBe(201);
+    expect((await approver.client.req('POST',route,request)).status).toBe(200);
+    const rejected=await approver.client.req('POST',route,{...request,request_key:randomUUID(),amount:'1'});
+    expect(rejected).toEqual({status:409,json:{code:'BONUS_SCHEDULE_EXCEEDS_APPROVED'}});
+
+    const refreshed=await approver.client.req('GET','/employee-bonuses');
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.json.bonuses.find((bonus:{id:string})=>bonus.id===id).schedule).toEqual([
+      expect.objectContaining({due_on:'2027-02-05',amount:'15000.00',channel:'bank'}),
+    ]);
+  });
 });

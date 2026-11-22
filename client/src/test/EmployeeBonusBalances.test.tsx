@@ -32,22 +32,84 @@ it('shows Arabic RTL balances after loading and distinguishes draft and recogniz
 it('submits an approved bonus installment from the Arabic schedule form', async () => {
   const bonuses = [{
     id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31',
-    amount: '100.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null,
+    award_code: 'bonustest2027', amount: '15000.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null,
   }];
-  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : { bonuses }), { status: 200 }));
+  let listCalls = 0;
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url === '/api/accounts') return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+    if (options?.method === 'POST') return new Response(JSON.stringify({ id: 'schedule-1' }), { status: 201 });
+    listCalls++;
+    const currentBonuses = listCalls > 1
+      ? [{ ...bonuses[0], schedule: [{ id: 'schedule-1', due_on: '2027-02-05', amount: '15000.00', channel: 'bank' }] }]
+      : bonuses;
+    return new Response(JSON.stringify({ bonuses: currentBonuses }), { status: 200 });
+  });
   vi.stubGlobal('fetch', fetch);
   render(<EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.payment.allocate']} />);
   fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
   const table = await screen.findByRole('table');
   fireEvent.click(within(table).getByText('جدولة دفعة'));
-  fireEvent.change(within(table).getByLabelText('موعد الدفع'), { target: { value: '2026-04-15' } });
-  fireEvent.change(within(table).getByLabelText('المبلغ'), { target: { value: '40' } });
+  fireEvent.change(within(table).getByLabelText('موعد الدفع'), { target: { value: '2027-02-05' } });
+  fireEvent.change(within(table).getByLabelText('المبلغ'), { target: { value: '15000' } });
   fireEvent.click(within(table).getByRole('button', { name: 'حفظ الموعد' }));
-  expect(fetch).toHaveBeenCalledWith('/api/employee-bonuses/bonus/schedule', expect.objectContaining({
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/employee-bonuses/bonus/schedule', expect.objectContaining({
     method: 'POST',
-    body: expect.stringContaining('"amount":"40"'),
-  }));
-  await screen.findByRole('button', { name: 'تحديث الأرصدة' });
+    body: expect.stringContaining('"due_on":"2027-02-05","amount":"15000","channel":"bank"'),
+  })));
+  expect(await screen.findByRole('status')).toHaveTextContent('تم حفظ موعد الدفع وتحديث جدول المكافأة.');
+  expect(await within(table).findByText(/2027-02-05 · 15000.00/)).toBeInTheDocument();
+  expect(fetch.mock.calls.filter(([url, options]) => url === '/api/employee-bonuses' && options?.method !== 'POST')).toHaveLength(2);
+});
+
+it('shows an actionable Arabic validation code when the schedule request is rejected', async () => {
+  const bonuses = [{
+    id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31',
+    amount: '15000.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null,
+  }];
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith('/schedule') && options?.method === 'POST') {
+      return new Response(JSON.stringify({ code: 'BONUS_SCHEDULE_EXCEEDS_APPROVED' }), { status: 409 });
+    }
+    return new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : { bonuses }), { status: 200 });
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.payment.allocate']} />);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  const table = await screen.findByRole('table');
+  fireEvent.click(within(table).getByText('جدولة دفعة'));
+  fireEvent.change(within(table).getByLabelText('موعد الدفع'), { target: { value: '2027-02-05' } });
+  fireEvent.change(within(table).getByLabelText('المبلغ'), { target: { value: '15000' } });
+  fireEvent.click(within(table).getByRole('button', { name: 'حفظ الموعد' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('المبلغ يتجاوز الرصيد المعتمد المتاح');
+  expect(alert).toHaveTextContent('BONUS_SCHEDULE_EXCEEDS_APPROVED');
+  expect(screen.queryByText('تعذر تحميل أرصدة المكافآت')).not.toBeInTheDocument();
+});
+
+it('sends only one schedule request when the form is submitted twice while saving', async () => {
+  const bonuses = [{
+    id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31',
+    amount: '15000.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null,
+  }];
+  let finishPost!: (response: Response) => void;
+  const pendingPost = new Promise<Response>(resolve => { finishPost = resolve; });
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith('/schedule') && options?.method === 'POST') return pendingPost;
+    return new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : { bonuses }), { status: 200 });
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.payment.allocate']} />);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  const table = await screen.findByRole('table');
+  fireEvent.click(within(table).getByText('جدولة دفعة'));
+  fireEvent.change(within(table).getByLabelText('موعد الدفع'), { target: { value: '2027-02-05' } });
+  fireEvent.change(within(table).getByLabelText('المبلغ'), { target: { value: '15000' } });
+  const form = within(table).getByLabelText('المبلغ').closest('form')!;
+  fireEvent.submit(form);
+  fireEvent.submit(form);
+  await waitFor(() => expect(fetch.mock.calls.filter(([url, options]) => url.endsWith('/schedule') && options?.method === 'POST')).toHaveLength(1));
+  finishPost(new Response(JSON.stringify({ id: 'schedule-1' }), { status: 201 }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('تم حفظ موعد الدفع'));
 });
 
 const recognitionBonus = { id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31', amount: '100.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null };

@@ -1,7 +1,7 @@
 import { EmployeeBonusBankPayment } from './EmployeeBonusBankPayment';
 import { EmployeeBonusDraft } from './EmployeeBonusDraft';
 import { Select } from '@mantine/core';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useOptionalCompany } from '../context/CompanyContext';
 
 type Bonus = {
@@ -33,6 +33,9 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
   const [accountsFailed, setAccountsFailed] = useState(false);
   const [recognitionSelections, setRecognitionSelections] = useState<Record<string, string>>({});
   const [recognitionError, setRecognitionError] = useState('');
+  const [scheduleFeedback, setScheduleFeedback] = useState<{ bonusId: string; type: 'success' | 'error'; message: string } | null>(null);
+  const submitting = useRef(false);
+  const scheduleRequests = useRef<Record<string, { signature: string; key: string }>>({});
   const label = (ar: string, en: string) => arabic ? ar : en;
   useEffect(() => {
     if (company && !company.activeCompanyId) {
@@ -59,7 +62,7 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
   const liabilityAccounts = (accounts ?? []).filter(account => account.account_type === 'liability' && account.is_active && account.has_children === false);
   const accountOptions = (list: Account[]) => list.map(account => ({ value: account.id, label: `${account.code} — ${account.name_ar || account.name}` }));
   const selectRecognitionAccount = (key: string, value: string | null) => setRecognitionSelections(current => ({ ...current, [key]: value ?? '' }));
-  async function load() {
+  async function load(): Promise<boolean> {
     setLoading(true);
     setFailed(false);
     try {
@@ -68,14 +71,18 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
       if (!response.ok) throw new Error('Could not load bonuses');
       const data = await response.json() as { bonuses: Bonus[] };
       setBonuses(data.bonuses);
+      return true;
     } catch {
       setFailed(true);
+      return false;
     } finally {
       setLoading(false);
     }
   }
   const can = (capability: string) => capabilities.includes(capability);
   async function submit(id: string, action: 'approval' | 'schedule' | 'recognition', payload: object) {
+    if (submitting.current) return;
+    submitting.current = true;
     setLoading(true);
     setFailed(false);
     try {
@@ -86,16 +93,54 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
       if (response.status === 401) onUnauthorized();
       if (!response.ok) {
         let code = '';
-        try { code = String((await response.clone().json() as { code?: string }).code ?? ''); } catch { /* use generic message */ }
+        let detail = '';
+        try {
+          const body = await response.clone().json() as { code?: string; message?: string; detail?: string };
+          code = String(body.code ?? '');
+          detail = String(body.detail ?? body.message ?? '');
+        } catch { /* use the HTTP status when the server has no JSON error body */ }
+        if (action === 'schedule') {
+          const codeLabel = code ? ` (${code})` : ` (HTTP ${response.status})`;
+          const message = code === 'BONUS_SCHEDULE_INVALID'
+            ? label('تحقق من تاريخ الدفع، وأدخل مبلغاً موجباً بصيغة رقمية حتى منزلتين عشريتين، واختر مسار صرف صحيحاً.', 'Check the due date, enter a positive numeric amount with up to two decimal places, and choose a valid payment channel.')
+            : code === 'BONUS_SCHEDULE_INELIGIBLE'
+              ? label('لا يمكن الجدولة: يجب أن يكون الاستحقاق معتمداً وبمبلغ موجب.', 'This entitlement cannot be scheduled: it must be approved with a positive amount.')
+              : code === 'BONUS_SCHEDULE_EXCEEDS_APPROVED'
+                ? label('المبلغ يتجاوز الرصيد المعتمد المتاح. خفّض المبلغ أو راجع الدفعات المجدولة.', 'The amount exceeds the approved balance available. Reduce it or review the existing installments.')
+                : code === 'BONUS_SCHEDULE_CONFLICT'
+                  ? label('تعارض مفتاح الطلب مع محاولة سابقة. حدّث الأرصدة قبل إعادة الجدولة.', 'This request key conflicts with a previous attempt. Refresh balances before scheduling again.')
+                  : response.status === 403
+                    ? label('لا تملك الصلاحية اللازمة لجدولة دفعة المكافأة.', 'You do not have permission to schedule a bonus payment.')
+                    : code === 'DB_UNAVAILABLE'
+                      ? label('خدمة الحفظ غير متاحة حالياً. حدّث الأرصدة ثم أعد المحاولة.', 'Saving is temporarily unavailable. Refresh balances and retry.')
+                      : label('تعذر حفظ موعد الدفع. راجع البيانات وحالة الاستحقاق، ثم أعد المحاولة.', 'Could not save the payment schedule. Check the values and entitlement status, then retry.');
+          setScheduleFeedback({ bonusId: id, type: 'error', message: `${message}${codeLabel}${detail ? ` — ${detail}` : ''}` });
+          return;
+        }
         if (action === 'recognition') setRecognitionError(code === 'BONUS_ACCOUNTS_INELIGIBLE'
           ? label('الحساب المحدد غير مؤهل أو لم يعد متاحًا لهذه الشركة. حدّث الحسابات واختر حسابًا نشطًا من النوع الصحيح.', 'The selected account is no longer eligible for this company. Refresh and choose an active account of the required type.')
           : label('تعذر ترحيل الاعتراف. تحقق من التواريخ ودليل الاستحقاق وأهلية الحسابات.', 'Could not post recognition. Check the dates, evidence, and account eligibility.'));
         throw new Error('Could not save bonus');
       }
-      await load();
+      if (action === 'schedule') {
+        const key = (payload as { request_key?: string }).request_key;
+        if (scheduleRequests.current[id]?.key === key) delete scheduleRequests.current[id];
+      }
+      const refreshed = await load();
+      if (action === 'schedule') setScheduleFeedback({
+        bonusId: id, type: 'success',
+        message: refreshed
+          ? label('تم حفظ موعد الدفع وتحديث جدول المكافأة.', 'Payment schedule saved and bonus balances refreshed.')
+          : label('تم حفظ الموعد، لكن تعذر تحديث الجدول. اضغط «تحديث الأرصدة» للتحقق من الموعد المحفوظ.', 'The schedule was saved, but the list could not refresh. Select “Refresh balances” to verify the saved installment.'),
+      });
     } catch {
-      if (action !== 'recognition') setFailed(true);
+      if (action === 'schedule') setScheduleFeedback({
+        bonusId: id, type: 'error',
+        message: label('تعذر الاتصال بالخادم أثناء الحفظ. أعد المحاولة؛ سيُعاد استخدام مفتاح الطلب لتجنب تكرار الجدولة.', 'Could not reach the server while saving. Retry; the same request key will be reused to prevent a duplicate schedule.'),
+      });
+      else if (action !== 'recognition') setFailed(true);
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   }
@@ -107,7 +152,14 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
     }
     setRecognitionError('');
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    void submit(id, action, action === 'schedule' ? { ...values, request_key: crypto.randomUUID() } : values);
+    if (action === 'schedule') {
+      const signature = JSON.stringify(values);
+      const prior = scheduleRequests.current[id];
+      const key = prior?.signature === signature ? prior.key : crypto.randomUUID();
+      scheduleRequests.current[id] = { signature, key };
+      setScheduleFeedback(null);
+      void submit(id, action, { ...values, request_key: key });
+    } else void submit(id, action, values);
   }
   return <section className="ecc-card" dir={arabic ? 'rtl' : 'ltr'} aria-labelledby="employee-bonus-title">
     <div className="ecc-card-head">
@@ -190,6 +242,7 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
                 <option value="bank">{label('بنك', 'Bank')}</option>
                 <option value="payroll">{label('رواتب', 'Payroll')}</option>
               </select></label>
+              {scheduleFeedback?.bonusId === bonus.id && <p role={scheduleFeedback.type === 'error' ? 'alert' : 'status'}>{scheduleFeedback.message}</p>}
               <button disabled={loading}>{label('حفظ الموعد', 'Save schedule')}</button>
             </form>
           </details>}
