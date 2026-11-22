@@ -40,6 +40,25 @@ db('payroll posting (PostgreSQL)',()=>{
   expect(recognized.status,JSON.stringify(recognized.json)).toBe(201);
   return {entitlement_id:award!.id,amount};
  }
+ it('rejects aggregate accounts for bonus recognition on the server',async()=>{
+  const x=await fixture('bonus-recognition-postable-account',false);
+  await h.q('INSERT INTO accounts(company_id,code,name,account_type,parent_account_id) VALUES($1,$2,$3,$4,$5)',[x.co,'A0-CHILD','Expense subaccount','expense',x.accounts[0]]);
+  const [award]=await h.q<{id:string}>(`
+    INSERT INTO employee_bonus_entitlements(company_id,employee_id,request_key,frequency,period_start,period_end,
+      eligibility_condition,recognition_condition,calculation_method,calculation_value,basic_salary,
+      applicable_allowances,created_by,approved_by,approved_at)
+    VALUES($1,$2,$3,'monthly','2026-03-01','2026-03-31','Eligible','Verified','fixed',100,0,0,$4,$4,now()) RETURNING id
+  `,[x.co,x.employee,randomUUID(),x.owner.id]);
+  const recognizer=await h.user('bonus-recognition-postable-account-recognizer');
+  await h.member(x.co,recognizer.id,['employee.view','employee_cost.salary.view','employee_cost.approve','accounting.journal.post']);
+  await recognizer.client.login();
+  const response=await recognizer.client.req('POST',`/employee-bonuses/${award!.id}/recognition`,{
+    fulfilled_on:'2026-03-15',accounting_date:'2026-03-15',evidence:'Signed evidence',
+    expense_account_id:x.accounts[0],liability_account_id:x.accounts[2],
+  });
+  expect(response.status).toBe(409);
+  expect(response.json.code).toBe('BONUS_ACCOUNTS_INELIGIBLE');
+ });
  it.each([
   {label:'mid-month recognition',date:'2026-03-15',total:'10000.00',newExpense:'0.00'},
   {label:'two separately recognized bonuses',date:'2026-02-28',total:'12000.00',newExpense:'2000.00'},

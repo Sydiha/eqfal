@@ -1,11 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { EmployeeBonusBalances } from '../components/EmployeeBonusBalances';
+import { CompanyProvider, useCompany } from '../context/CompanyContext';
+import { MantineProvider } from '@mantine/core';
 
 afterEach(() => vi.unstubAllGlobals());
 
 it('shows Arabic RTL balances after loading and distinguishes draft and recognized bonuses', async () => {
-  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : {
     bonuses: [{
       id: 'recognized', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31',
       amount: '21000.00', approved_at: '2026-04-01', accounting_date: '2026-04-02',
@@ -17,7 +19,7 @@ it('shows Arabic RTL balances after loading and distinguishes draft and recogniz
   }), { status: 200 }));
   vi.stubGlobal('fetch', fetch);
   render(<EmployeeBonusBalances arabic onUnauthorized={vi.fn()} />);
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch.mock.calls.some(([url]) => url === '/api/employee-bonuses')).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
   const table = await screen.findByRole('table');
   expect(table.closest('section')).toHaveAttribute('dir', 'rtl');
@@ -32,7 +34,7 @@ it('submits an approved bonus installment from the Arabic schedule form', async 
     id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31',
     amount: '100.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null,
   }];
-  const fetch = vi.fn(async () => new Response(JSON.stringify({ bonuses }), { status: 200 }));
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : { bonuses }), { status: 200 }));
   vi.stubGlobal('fetch', fetch);
   render(<EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.payment.allocate']} />);
   fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
@@ -46,4 +48,87 @@ it('submits an approved bonus installment from the Arabic schedule form', async 
     body: expect.stringContaining('"amount":"40"'),
   }));
   await screen.findByRole('button', { name: 'تحديث الأرصدة' });
+});
+
+const recognitionBonus = { id: 'bonus', display_name: 'سارة', period_start: '2026-01-01', period_end: '2026-03-31', amount: '100.00', approved_at: '2026-04-01', accounting_date: null, settled: '0.00', outstanding: null };
+const recognitionAccounts = [
+  { id: 'expense-id', code: '5100', name: 'مصروف', name_ar: 'مصروف المكافآت', account_type: 'expense', is_active: true, has_children: false },
+  { id: 'liability-id', code: '2200', name: 'التزام', name_ar: 'مستحقات المكافآت', account_type: 'liability', is_active: true, has_children: false },
+  { id: 'inactive-expense', code: '5101', name: 'غير نشط', name_ar: 'حساب غير نشط', account_type: 'expense', is_active: false, has_children: false },
+  { id: 'parent-liability', code: '2201', name: 'مجمع', name_ar: 'حساب تجميعي', account_type: 'liability', is_active: true, has_children: true },
+  { id: 'wrong-type', code: '4100', name: 'إيراد', name_ar: 'إيراد', account_type: 'revenue', is_active: true, has_children: false },
+];
+
+it('offers only active postable accounts by type and submits their internal IDs', async () => {
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url === '/api/accounts') return new Response(JSON.stringify({ accounts: recognitionAccounts }));
+    if (url === '/api/employee-bonuses') return new Response(JSON.stringify({ bonuses: [recognitionBonus] }));
+    if (url.endsWith('/recognition') && options?.method === 'POST') return new Response(JSON.stringify({ journal_id: 'journal' }), { status: 201 });
+    return new Response('{}');
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<MantineProvider><EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.approve', 'accounting.journal.post']} /></MantineProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  const row = within(await screen.findByRole('row', { name: /سارة/ }));
+  fireEvent.click(row.getByText('إثبات الاستحقاق والترحيل'));
+  const expense = await screen.findByRole('textbox', { name: 'حساب المصروف' });
+  const offeredAccounts = screen.getAllByRole('option', { hidden: true }).map(option => option.textContent);
+  expect(offeredAccounts).toEqual(expect.arrayContaining(['5100 — مصروف المكافآت', '2200 — مستحقات المكافآت']));
+  expect(offeredAccounts.join(' ')).not.toMatch(/5101|2201|4100/);
+  fireEvent.change(expense, { target: { value: '5100' } });
+  fireEvent.click(await screen.findByRole('option', { name: /5100 — مصروف المكافآت/, hidden: true }));
+  const liability = screen.getByRole('textbox', { name: 'حساب الالتزام' });
+  fireEvent.change(liability, { target: { value: '2200' } });
+  fireEvent.click(await screen.findByRole('option', { name: /2200 — مستحقات المكافآت/, hidden: true }));
+  fireEvent.change(row.getByLabelText('تاريخ تحقق الشرط'), { target: { value: '2026-04-01' } });
+  fireEvent.change(row.getByLabelText('تاريخ الاعتراف'), { target: { value: '2026-04-01' } });
+  fireEvent.change(row.getByLabelText('دليل الاستحقاق'), { target: { value: 'اعتماد المكافأة' } });
+  fireEvent.click(row.getByRole('button', { name: 'ترحيل الاعتراف' }));
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/employee-bonuses/bonus/recognition', expect.objectContaining({
+    method: 'POST', body: JSON.stringify({ fulfilled_on: '2026-04-01', accounting_date: '2026-04-01', evidence: 'اعتماد المكافأة', date_reason: '', expense_account_id: 'expense-id', liability_account_id: 'liability-id' }),
+  })));
+});
+
+it('reloads company accounts after a company switch and clears prior selections', async () => {
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: recognitionAccounts } : { bonuses: [recognitionBonus] })));
+  vi.stubGlobal('fetch', fetch);
+  function Switchable() {
+    const { setActiveCompany } = useCompany();
+    return <><button type="button" onClick={() => setActiveCompany('company-b')}>Switch company</button>
+      <MantineProvider><EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.approve', 'accounting.journal.post']} /></MantineProvider></>;
+  }
+  const ui = render(<CompanyProvider allowedCompanies={[{ id: 'company-a', name: 'A' }, { id: 'company-b', name: 'B' }]} initialCompanyId="company-a"><Switchable /></CompanyProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  fireEvent.click(within(await screen.findByRole('row', { name: /سارة/ })).getByText('إثبات الاستحقاق والترحيل'));
+  const expense = await screen.findByRole('textbox', { name: 'حساب المصروف' });
+  fireEvent.change(expense, { target: { value: '5100' } });
+  fireEvent.click(await screen.findByRole('option', { name: /5100 — مصروف المكافآت/, hidden: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Switch company' }));
+  await waitFor(() => expect(fetch.mock.calls.filter(([url]) => url === '/api/accounts')).toHaveLength(2));
+  await waitFor(() => expect(expense).toHaveValue(''));
+  ui.unmount();
+});
+
+it('explains when no eligible accounts are available and blocks recognition', async () => {
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: [] } : { bonuses: [recognitionBonus] })));
+  vi.stubGlobal('fetch', fetch);
+  render(<MantineProvider><EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.approve', 'accounting.journal.post']} /></MantineProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  const row = within(await screen.findByRole('row', { name: /سارة/ }));
+  fireEvent.click(row.getByText('إثبات الاستحقاق والترحيل'));
+  expect(await screen.findByText('لا توجد حسابات مصروف نشطة وقابلة للترحيل.')).toBeInTheDocument();
+  expect(screen.getByText('لا توجد حسابات التزام نشطة وقابلة للترحيل.')).toBeInTheDocument();
+  expect(row.getByRole('button', { name: 'ترحيل الاعتراف' })).toBeDisabled();
+});
+
+it('shows Arabic validation when either recognition account is missing', async () => {
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/accounts' ? { accounts: recognitionAccounts.slice(0, 2) } : { bonuses: [recognitionBonus] })));
+  vi.stubGlobal('fetch', fetch);
+  render(<MantineProvider><EmployeeBonusBalances arabic onUnauthorized={vi.fn()} capabilities={['employee_cost.approve', 'accounting.journal.post']} /></MantineProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'عرض الأرصدة' }));
+  const row = within(await screen.findByRole('row', { name: /سارة/ }));
+  fireEvent.click(row.getByText('إثبات الاستحقاق والترحيل'));
+  const expense = await screen.findByRole('textbox', { name: 'حساب المصروف' });
+  fireEvent.submit(expense.closest('form')!);
+  expect(await screen.findByRole('alert')).toHaveTextContent('اختر حساب المصروف وحساب الالتزام قبل الترحيل.');
 });
