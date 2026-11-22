@@ -1,6 +1,8 @@
 import { EmployeeBonusBankPayment } from './EmployeeBonusBankPayment';
 import { EmployeeBonusDraft } from './EmployeeBonusDraft';
-import { useState, type FormEvent } from 'react';
+import { Select } from '@mantine/core';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useOptionalCompany } from '../context/CompanyContext';
 
 type Bonus = {
   id: string;
@@ -17,14 +19,46 @@ type Bonus = {
   liability_line_id?: string | null;
   schedule?: { id: string; due_on: string; amount: string; channel: string }[];
 };
+type Account = { id: string; code: string; name: string; name_ar?: string | null; account_type: string; is_active: boolean; has_children?: boolean };
 
 type Props = { arabic: boolean; onUnauthorized: () => void; capabilities?: string[]; employees?: { id: string; display_name: string }[] };
 
 export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [], employees = [] }: Props) {
+  const company = useOptionalCompany();
+  const companyKey = company?.activeCompanyId ?? 'active-session';
   const [bonuses, setBonuses] = useState<Bonus[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [accountsFailed, setAccountsFailed] = useState(false);
+  const [recognitionSelections, setRecognitionSelections] = useState<Record<string, string>>({});
+  const [recognitionError, setRecognitionError] = useState('');
   const label = (ar: string, en: string) => arabic ? ar : en;
+  useEffect(() => {
+    if (company && !company.activeCompanyId) {
+      setAccounts(null);
+      return;
+    }
+    const controller = new AbortController();
+    setAccounts(null);
+    setAccountsFailed(false);
+    setRecognitionSelections({});
+    setRecognitionError('');
+    fetch('/api/accounts', { credentials: 'same-origin', signal: controller.signal })
+      .then(async response => {
+        if (response.status === 401) onUnauthorized();
+        if (!response.ok) throw new Error('Could not load accounts');
+        const data = await response.json() as { accounts?: Account[] };
+        if (!Array.isArray(data.accounts)) throw new Error('Invalid account response');
+        if (!controller.signal.aborted) setAccounts(data.accounts);
+      })
+      .catch(() => { if (!controller.signal.aborted) setAccountsFailed(true); });
+    return () => controller.abort();
+  }, [companyKey, company?.activeCompanyId, onUnauthorized]);
+  const expenseAccounts = (accounts ?? []).filter(account => account.account_type === 'expense' && account.is_active && account.has_children === false);
+  const liabilityAccounts = (accounts ?? []).filter(account => account.account_type === 'liability' && account.is_active && account.has_children === false);
+  const accountOptions = (list: Account[]) => list.map(account => ({ value: account.id, label: `${account.code} — ${account.name_ar || account.name}` }));
+  const selectRecognitionAccount = (key: string, value: string | null) => setRecognitionSelections(current => ({ ...current, [key]: value ?? '' }));
   async function load() {
     setLoading(true);
     setFailed(false);
@@ -50,16 +84,28 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
         body: JSON.stringify(payload),
       });
       if (response.status === 401) onUnauthorized();
-      if (!response.ok) throw new Error('Could not save bonus');
+      if (!response.ok) {
+        let code = '';
+        try { code = String((await response.clone().json() as { code?: string }).code ?? ''); } catch { /* use generic message */ }
+        if (action === 'recognition') setRecognitionError(code === 'BONUS_ACCOUNTS_INELIGIBLE'
+          ? label('الحساب المحدد غير مؤهل أو لم يعد متاحًا لهذه الشركة. حدّث الحسابات واختر حسابًا نشطًا من النوع الصحيح.', 'The selected account is no longer eligible for this company. Refresh and choose an active account of the required type.')
+          : label('تعذر ترحيل الاعتراف. تحقق من التواريخ ودليل الاستحقاق وأهلية الحسابات.', 'Could not post recognition. Check the dates, evidence, and account eligibility.'));
+        throw new Error('Could not save bonus');
+      }
       await load();
     } catch {
-      setFailed(true);
+      if (action !== 'recognition') setFailed(true);
     } finally {
       setLoading(false);
     }
   }
   function submitForm(event: FormEvent<HTMLFormElement>, id: string, action: 'schedule' | 'recognition') {
     event.preventDefault();
+    if (action === 'recognition' && (!recognitionSelections[`${id}:expense`] || !recognitionSelections[`${id}:liability`])) {
+      setRecognitionError(label('اختر حساب المصروف وحساب الالتزام قبل الترحيل.', 'Select both the expense and liability accounts before posting.'));
+      return;
+    }
+    setRecognitionError('');
     const values = Object.fromEntries(new FormData(event.currentTarget));
     void submit(id, action, action === 'schedule' ? { ...values, request_key: crypto.randomUUID() } : values);
   }
@@ -115,9 +161,24 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
               <label>{label('تاريخ الاعتراف', 'Accounting date')} <input name="accounting_date" type="date" required /></label>
               <label>{label('دليل الاستحقاق', 'Supporting evidence')} <textarea name="evidence" required maxLength={4000} /></label>
               <label>{label('سبب اختلاف التاريخ', 'Reason for date difference')} <input name="date_reason" maxLength={1000} /></label>
-              <label>{label('معرّف حساب المصروف', 'Expense account ID')} <input name="expense_account_id" required /></label>
-              <label>{label('معرّف حساب الالتزام', 'Liability account ID')} <input name="liability_account_id" required /></label>
-              <button disabled={loading}>{label('ترحيل الاعتراف', 'Post recognition')}</button>
+              <label>{label('حساب المصروف', 'Expense account')}
+                <Select name="expense_account_id" aria-label={label('حساب المصروف', 'Expense account')} data={accountOptions(expenseAccounts)} value={recognitionSelections[`${bonus.id}:expense`] || null}
+                  onChange={value => selectRecognitionAccount(`${bonus.id}:expense`, value)} searchable required disabled={accounts === null || accountsFailed}
+                  placeholder={accounts === null ? label('جارٍ تحميل الحسابات', 'Loading accounts') : expenseAccounts.length ? label('اختر حساب المصروف', 'Select an expense account') : label('لا توجد حسابات مصروف مؤهلة', 'No eligible expense accounts')}
+                  nothingFoundMessage={label('لا توجد نتائج مطابقة', 'No matching accounts')} />
+              </label>
+              <label>{label('حساب الالتزام', 'Liability account')}
+                <Select name="liability_account_id" aria-label={label('حساب الالتزام', 'Liability account')} data={accountOptions(liabilityAccounts)} value={recognitionSelections[`${bonus.id}:liability`] || null}
+                  onChange={value => selectRecognitionAccount(`${bonus.id}:liability`, value)} searchable required disabled={accounts === null || accountsFailed}
+                  placeholder={accounts === null ? label('جارٍ تحميل الحسابات', 'Loading accounts') : liabilityAccounts.length ? label('اختر حساب الالتزام', 'Select a liability account') : label('لا توجد حسابات التزام مؤهلة', 'No eligible liability accounts')}
+                  nothingFoundMessage={label('لا توجد نتائج مطابقة', 'No matching accounts')} />
+              </label>
+              {accounts === null && !accountsFailed && <p role="status">{label('جارٍ تحميل حسابات الشركة', 'Loading company accounts')}</p>}
+              {accountsFailed && <p role="alert">{label('تعذر تحميل الحسابات. حدّث الصفحة أو تحقق من صلاحية عرض الحسابات.', 'Could not load accounts. Refresh or check account viewing access.')}</p>}
+              {accounts !== null && !accountsFailed && !expenseAccounts.length && <p role="status">{label('لا توجد حسابات مصروف نشطة وقابلة للترحيل.', 'No active, postable expense accounts are available.')}</p>}
+              {accounts !== null && !accountsFailed && !liabilityAccounts.length && <p role="status">{label('لا توجد حسابات التزام نشطة وقابلة للترحيل.', 'No active, postable liability accounts are available.')}</p>}
+              {recognitionError && <p role="alert">{recognitionError}</p>}
+              <button disabled={loading || accounts === null || accountsFailed || !expenseAccounts.length || !liabilityAccounts.length}>{label('ترحيل الاعتراف', 'Post recognition')}</button>
             </form>
           </details>}
           {bonus.approved_at && Number(bonus.amount) > 0 && can('employee_cost.payment.allocate') && <details>

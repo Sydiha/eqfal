@@ -75,9 +75,10 @@ bonusRouter.post('/employee-bonuses/:id/recognition',
           return;
         }
         const accounts = await client.query(`
-          SELECT id FROM accounts WHERE company_id=$1 AND is_active
-            AND ((id=$2 AND account_type='expense') OR (id=$3 AND account_type='liability'))
-          ORDER BY id FOR SHARE
+          SELECT a.id FROM accounts a WHERE a.company_id=$1 AND a.is_active
+            AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.company_id=a.company_id AND child.parent_account_id=a.id)
+            AND ((a.id=$2 AND a.account_type='expense') OR (a.id=$3 AND a.account_type='liability'))
+          ORDER BY a.id FOR SHARE
         `, [company, expense, liability]);
         if (accounts.rows.length !== 2) {
           await client.query('ROLLBACK');
