@@ -1,65 +1,59 @@
 # EQFAL Project State
 
-**Last updated:** 2026-10-30
+**Last updated:** 2026-11-24
 **Repository:** Sydiha/eqfal
 **Branch:** main
 
 ## Current Baseline
-- **Verified main HEAD at update time:** `a5723c5` (PR #529, G8). GitHub `main` is the source of truth and may be ahead.
-- **CI:** see GitHub checks on the commit (not restated; not re-run in this docs task).
-- Repo migrations: 001–097 and 099–103 present (098 intentionally absent; reserved, NOT authorized).
+- **Verified main HEAD at update time:** `60351fc` (merge of PR #611). GitHub `main` is the source of truth and may be ahead.
+- **CI:** see GitHub checks on the commit (not restated here; not re-run in this docs task).
+- Repo migrations: 001–097 and 099–137 present. **098 intentionally absent** (reserved, NOT authorized).
 - Vocabulary: Implemented / Verified / Partial / Deferred / Pending UAT / Unknown. Code merged + CI green is NOT functional UAT.
 
 ## Phase Status
 | Phase | Status |
 |-------|--------|
-| B Users/Permissions | Implemented — Pending UAT |
-| C Company setup & financial import | Implemented in part; Pending UAT; mode 3 and extended reconciliation Deferred |
-| D Operational cycle | Implemented (G1–G3, G5, G8, R9, Q5) — all Pending UAT |
-| E Reporting/Closing | Partial (G6 zakat, G7 concurrency inventory open) |
+| B Users/Permissions | Implemented (authorization policy #581, #603, #604); Pending UAT |
+| C Company setup & financial import | Implemented in part (CoA import #544, cash opening balances #545–#547; migrations 107–111); Pending UAT; mode 3 and extended reconciliation Deferred |
+| D Operational cycle | Implemented (G1–G3, G5, G8, R9, Q5, payroll, salary advances, bonuses); Pending UAT |
+| E Reporting/Closing | Partial (Zakat engine and approval flow #594–#602; calculation still gated; G7 concurrency partial) |
 | F Final readiness | Not started |
 
-## Delivered #506–#529 (all merged; implementation + CI only)
-- #506 docs C6. #507 G5 (mig 099). #508 R9 (mig 100). #509 Q5 (mig 101). #510/#512 R9 follow-ups.
-- #511 CI PG16 tools. #513 PR-2A error messages. #514 PR-2B stable 409 `code`.
-- #515–#519 RTL/mobile/localization UI (PR-3A..4B). #520 docs sync through #519.
-- #521 remaining UI fixes. #522 invoice mappings polish. #523 three UI defects (loading label, bank import errors, personal-payments status).
-- #524 unified presentation on 8 banking/obligations screens. #525 custody document picker (replaces typed ID). #526 UX polish (year-first dates, custody closed-period error, picker a11y).
-- #527 central period guards reject writes in a closed fiscal year (409 `FISCAL_YEAR_CLOSED`, no migration).
-- #528 optional monthly closing policy per fiscal year (mig 102; `fiscal_years.monthly_close_policy`). **Implemented, UAT pending.** Annual close must not be weakened.
-- #529 G8 optional labor-relationship classification on counterparties (mig 103; `counterparties.labor_relationship`). **Implemented, functional UAT pending.**
+## Delivered Since #529 (merged; implementation + CI only, not UAT)
+- **Docs/governance:** #530 docs sync; #555 Phase 14 evidence; #569/#571 Codex model routing policy; #603 authorization policy documentation.
+- **Document integrity:** #531 draft overwrite guard (documents, journals, assets); #532/#534 R6 reopen and lifecycle; #533 R8 Action Center.
+- **Banking:** #539/#540 manual bank transaction entry (mig 106); #542 obligation settlements in bank details; #578 bank ownership staging (mig 119, inert); #587 bounded historical bank ledger links.
+- **Accounting:** #541 prefilled settlement drafts; #553 exact-cent reporting and settlements; #554 annual receivables/payables cutoff; #535 cutover lock order and closed-year codes; #585 monthly periods protected after FY close; #608 fiscal-year context.
+- **Opening balances / cash:** #545–#547 cash on hand (mig 107–108); physical cash verification (migrations 109–111).
+- **Employee Cost Center:** #564–#568 foundation, bank reconciliation of employee costs, corrections; mig 112.
+- **Payroll:** #570–#577 monthly drafts, allowance breakdown, approval, accounting readiness, safe posting, liability settlement (mig 114–120); #582 settlement segregation of duties (mig 123); #584/#586 closed-period blocks and safety confirmations.
+- **Salary advances:** #588–#592 foundation and recovery through payroll (mig 124–126).
+- **Financial authority:** #580 bounded delegation; #581 staged authorization policy (mig 122); #590/#592 separation of privileged actors (mig 127); #604 owner-approved policy enforced.
+- **Zakat (G6):** #594 isolated engine; #595/#596 read-only preview; #598/#599 regulatory evidence and trusted approvals (mig 128); #601 approval integrity (mig 129); #602 safe revisions (mig 130). Calculation remains gated; see Open Blockers.
+- **Bonuses (#609–#611):** entitlements, recognition, balances, direct settlement, adjustments, payment schedules, award identity (mig 131–137). Payroll take-home pay preserved; recognized amounts move into payroll payable; partial refunds restore balance; repeat bank use blocked. **Partial owner-confirmed manual UAT (not complete UAT):** creation, calculation, approval, accounting posting, and two-installment bank settlement succeeded. Not confirmed: exact-SHA verification, partial refund and balance restore, repeat bank-use rejection, closed-date posting block, payroll take-home net check.
+- **Navigation/UI:** #560/#561 global page search and deep navigation; #548/#606/#607 responsive banking, trial balance and annual closing; #556–#558, #563 localization and display dates; #605 Arabic filename direction.
 
-## Migration Status (089–103)
-Replit TEST evidence: owner ran read-only queries; rows present in `_schema_migrations` (confirmed 2026-10-30). Other environments (Staging/Production): **UNKNOWN** unless noted.
+## Migration Status (089–137)
+Migrations 096, 097, 099–103 were recorded in `_schema_migrations` on Replit TEST (owner confirmed 2026-10-30). Everything else: **UNKNOWN** unless noted. Server start applies pending migrations, so applying in any environment needs separate Owner approval.
+
 | Mig | Feature | Replit TEST | Other envs |
-|-----|---------|-------------|-----------|
-| 088 | Bank statement reconciliation (G3) | Applied (memory, 2026-10-18) | UNKNOWN |
-| 089 | Personal payments (G1/G2) | UNKNOWN | UNKNOWN |
-| 090 | Accounting profile correction | UNKNOWN | UNKNOWN |
-| 091 | Cutover historical supplements | UNKNOWN | UNKNOWN |
-| 092 | Invoice adjustment numbering | UNKNOWN | UNKNOWN |
-| 093 | Void approved unposted adjustment | UNKNOWN | UNKNOWN |
-| 094 | Invoice account mapping capabilities | UNKNOWN | UNKNOWN |
-| 095 | User display_name | UNKNOWN | UNKNOWN |
-| 096 | Historical records | **Applied (confirmed)** | UNKNOWN |
-| 097 | Opening-balance evidence exceptions | **Applied (confirmed)** | UNKNOWN |
-| 098 | Fiscal-year operating modes | Reserved — NOT authorized, not applied | Not applied |
-| 099 | Government payment details (G5) | **Applied (confirmed)** | UNKNOWN |
-| 100 | Multi-document bank allocations (R9) | **Applied (confirmed)** | UNKNOWN |
-| 101 | Custody controls (Q5) | **Applied (confirmed)** | UNKNOWN |
-| 102 | Monthly close policy | **Applied (confirmed, column present)** | UNKNOWN |
-| 103 | Counterparty labor relationship (G8) | **Applied (confirmed, column present)** | UNKNOWN |
-Note: server start applies pending migrations; applying in any environment needs separate Owner approval.
+|-----|---------|-------------|------------|
+| 088 | Bank statement reconciliation (G3) | Applied (2026-10-18) | UNKNOWN |
+| 089–095 | Personal payments, accounting profile, cutover supplements, invoice numbering/void, invoice mappings, user display_name | UNKNOWN | UNKNOWN |
+| 096–097 | Historical records; opening-balance evidence exceptions | Applied (confirmed) | UNKNOWN |
+| 098 | Fiscal-year operating modes | Reserved, NOT authorized, not applied | Not applied |
+| 099–103 | G5 government details; R9 multi-allocation; Q5 custody; monthly close policy; G8 labor relationship | Applied (confirmed) | UNKNOWN |
+| 104–137 | Draft revisions, Zakat worksheets/approvals, manual bank tx, cash and cash verification, employee cost center, payroll, bank ownership, authorization policy, salary advances, bonuses | UNKNOWN (files present in repo) | UNKNOWN |
 
 ## Deferred / Outstanding (preserved)
-- Operating mode 3 (external accounting, mig 098): **DEFERRED**, not started, not authorized.
+- Operating mode 3 (external accounting, mig 098): **DEFERRED**, not authorized.
 - Extended opening-balance reconciliation: **DEFERRED**.
-- CoA import and unified import navigation: **DEFERRED** optional, not Phase C blockers.
-- G6 zakat calculation from statements: **PARTIAL** (manual base only); needs Owner policy.
+- CoA import as unified import navigation: **DEFERRED** optional.
+- G6 zakat calculation: **PARTIAL**; calculation blocked until accountant decisions on gates B0/B3/B4/B7/B9 (`payable_amount` is null).
 - G7 concurrency/versions: **PARTIAL**; full module inventory not done.
-- R6 documents, R8 role dashboards, R7/R10 backup/restore and env separation, R11/R12 operational acceptance: **UNVERIFIED / not started**.
-- #527 follow-ups: ledger-cutover lock order may deadlock with closeFiscalYear; no per-endpoint real-PG tests for all write paths.
-- Literal-message error mappings (#514) keyed by English text; flaky `OpeningBalanceReview` and `Accounting.chart-edit-mode` tests; WHT mobile table; localization cleanup (needs Owner approval).
+- R6 documents (partly delivered), R7/R10 backup/restore and env separation, R11/R12 operational acceptance: **UNVERIFIED / not started**.
+- Bank ownership (#578, mig 119) is staging only; activation not authorized.
+- Known follow-ups: ledger-cutover lock order (#527 note; partly addressed by #535, re-verify); no per-endpoint real-PG tests for all write paths; literal-message error mappings keyed by English text; flaky tests `OpeningBalanceReview` and `Accounting.chart-edit-mode`; WHT mobile table; localization cleanup.
 
 ## Pending UAT Checklist (functional, not performed)
 1. G1/G2 personal payment → approval → bank reimbursement → zero balance.
@@ -67,17 +61,23 @@ Note: server start applies pending migrations; applying in any environment needs
 3. G5 government reference + period on settlement.
 4. R9 one bank transaction → several documents; remainder blocks close.
 5. Q5 custody controls, document picker, closed-period error.
-6. G8 labor-relationship set/clear/filter on counterparties; aging unaffected.
-7. #528 policy required vs optional; annual close gates still run over the full year.
-8. #527 write in closed FY rejected on documents, bank, VAT, assets, custody.
-9. Phase B: header identity, display name, role switch; company isolation.
-10. Phase C: opening balances, cutover, historical records at the same SHA.
+6. G8 labor-relationship set/clear/filter; aging unaffected.
+7. #528 monthly policy required vs optional; annual close gates still run over the full year.
+8. #527 closed-FY writes rejected on documents, bank, VAT, assets, custody.
+9. Phase B: header identity, display name, role switch; company isolation; authorization policy (#604).
+10. Phase C: opening balances, cash verification, cutover, historical records.
+11. Payroll: draft → approval → posting → settlement, incl. closed-period block (#570–#586).
+12. Salary advances: advance → payroll recovery (#588–#592).
+13. Employee cost center: cost → approval → bank reconciliation → correction (#564–#568).
+14. Bonuses (#609–#611): remaining scenarios pending: exact-SHA verification, partial refund and restored balance, repeat bank-use rejection, closed-date posting block, payroll take-home net check.
+15. Zakat preview and approval flow (#594–#602), without calculation.
 
 ## Open Blockers
-- None confirmed in code. Owner decisions pending: UAT scope/SHA, rollout of migrations 089–095 status, zakat policy, mode 3 (098).
+- No confirmed code blocker in this document.
+- Owner decisions pending: UAT scope and SHA; migration rollout status for 089–137 on each environment; Zakat policy and accountant gate sign-off; mode 3 (098).
 
 ## Next Exact Step
-- Owner reviews this docs PR, then chooses: run the UAT checklist on Replit TEST at main, or start a remaining item.
+- Owner reviews this docs PR. Then choose: UAT on Replit TEST at one SHA (payroll and bonuses first), or the Figma design phase (10 primary navigation pages without dedicated designs, per the owner-provided count; list to be confirmed).
 
 ---
 *Keep under 100 lines.*
