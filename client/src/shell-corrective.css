@@ -181,3 +181,10 @@
 
 .topbar-icon-button--round { position: relative; }
 .topbar-bell-badge { position: absolute; top: -4px; inset-inline-end: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #dc2626; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+
+/* UI Fix Batch A: keep the full fiscal year / period label visible and let the dropdown size to its longest option */
+.topbar-select-wrap { flex-basis: 156px; width: 156px; min-width: 132px; }
+.topbar-select-wrap .topbar-select { padding-inline: 10px 28px; text-overflow: clip; }
+@media (max-width: 1100px) { .topbar-select-wrap { width: 136px; flex-basis: 136px; min-width: 132px; } }
+.topbar-select-dropdown { min-width: 132px; }
+.topbar-select-dropdown [data-combobox-option] { white-space: nowrap; }

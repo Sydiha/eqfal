@@ -164,7 +164,8 @@ export function AppShell({ page, setPage, navigateToDestination = () => undefine
                 clearable={false}
                 size="xs"
                 className="topbar-select-wrap"
-                classNames={{ input: 'topbar-select' }}
+                classNames={{ input: 'topbar-select', dropdown: 'topbar-select-dropdown' }}
+                comboboxProps={{ width: 'max-content', position: 'bottom-start', withinPortal: true }}
               />
             )}
 
@@ -192,7 +193,8 @@ export function AppShell({ page, setPage, navigateToDestination = () => undefine
                 clearable={false}
                 size="xs"
                 className="topbar-select-wrap"
-                classNames={{ input: 'topbar-select' }}
+                classNames={{ input: 'topbar-select', dropdown: 'topbar-select-dropdown' }}
+                comboboxProps={{ width: 'max-content', position: 'bottom-start', withinPortal: true }}
               />
             )}
           </Group>
