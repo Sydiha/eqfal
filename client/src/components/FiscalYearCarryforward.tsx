@@ -61,7 +61,7 @@ export function FiscalYearCarryforward({ year, onClose, onUnauthorized }: { year
   };
 
   return (
-    <Dialog title={t('carryforward.title', { name: year.name })} busy={busy} onClose={onClose}>
+    <Dialog title={t('carryforward.title', { name: year.name })} busy={busy} onClose={onClose} size="wide" className="fy-carryforward">
       <div className="form-grid">
         {done ? <p role="status">{t('carryforward.done')}</p> : <>
           <p>{t('carryforward.intro')}</p>
@@ -78,15 +78,17 @@ export function FiscalYearCarryforward({ year, onClose, onUnauthorized }: { year
             </ul>
           ) : null}
           {preview && account && preview.lines.length > 0 && (
+            <div className="fy-cf-table">
             <table>
-              <thead><tr><th>{t('carryforward.accountCol')}</th><th>{t('carryforward.debit')}</th><th>{t('carryforward.credit')}</th></tr></thead>
+              <thead><tr><th>{t('carryforward.accountCol')}</th><th className="fy-cf-num">{t('carryforward.debit')}</th><th className="fy-cf-num">{t('carryforward.credit')}</th></tr></thead>
               <tbody>
-                {preview.lines.map((l) => <tr key={l.account_id}><td>{l.code} {l.name}</td><td>{l.side === 'debit' ? l.amount : ''}</td><td>{l.side === 'credit' ? l.amount : ''}</td></tr>)}
-                <tr><th>{t('carryforward.total')}</th><th>{preview.total_debit}</th><th>{preview.total_credit}</th></tr>
+                {preview.lines.map((l) => <tr key={l.account_id}><td><bdi dir="ltr" className="fy-cf-code">{l.code}</bdi> <bdi dir="auto">{l.name}</bdi></td><td className="fy-cf-num">{l.side === 'debit' ? <bdi dir="ltr">{l.amount}</bdi> : ''}</td><td className="fy-cf-num">{l.side === 'credit' ? <bdi dir="ltr">{l.amount}</bdi> : ''}</td></tr>)}
+                <tr><th>{t('carryforward.total')}</th><th className="fy-cf-num"><bdi dir="ltr">{preview.total_debit}</bdi></th><th className="fy-cf-num"><bdi dir="ltr">{preview.total_credit}</bdi></th></tr>
               </tbody>
             </table>
+            </div>
           )}
-          {preview && account && <p>{t('carryforward.netResult', { value: preview.net_result })}</p>}
+          {preview && account && <p>{t('carryforward.netResult', { value: `\u2066${preview.net_result}\u2069` })}</p>}
           {error && <p role="alert" className="error">{error}</p>}
         </>}
         <div className="modal-actions">

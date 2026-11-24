@@ -164,3 +164,15 @@
   .bank-recon__toolbar .shared-workspace-toolbar__filters label:first-child{grid-column:1/-1}
   .bank-recon__toolbar input[type=number],.bank-recon__toolbar input[type=date]{width:100%;min-width:0}
 }
+
+/* UI Fix Batch A: desktop column alignment that follows the reading direction for headers and cells alike.
+   Date/amount are dir=ltr (isolated); pin them to the logical start/end edge of their column so they line up with their headers in RTL and LTR. */
+@media(min-width:48.01em){
+  .bank-recon .bank-transaction-date{justify-self:start;text-align:left}
+  .bank-recon .bank-transaction-amount{justify-self:end;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bank-recon .bank-transaction-head span:nth-child(1){text-align:start}
+  .bank-recon .bank-transaction-head span:nth-child(3){text-align:end}
+  .bank-recon .bank-transaction-description p{text-align:left}
+  [dir=rtl] .bank-recon .bank-transaction-description p{text-align:right}
+}
+.bank-recon .bank-transaction-description p bdi,.bank-recon .bank-transaction-mobile-meta{unicode-bidi:isolate}
