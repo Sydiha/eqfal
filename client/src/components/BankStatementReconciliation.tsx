@@ -282,13 +282,13 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     </Stack></Card>
 
     <Card withBorder id="bsr-statements" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
-      {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={640}><Table className="bsr-table">
+      {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={0} className="bsr-statements-scroll"><Table className="bsr-table">
         <colgroup><col className="bsr-col-ref"/><col className="bsr-col-period"/><col className="bsr-col-closing"/><col className="bsr-col-status"/><col className="bsr-col-actions"/></colgroup>
         <Table.Thead><Table.Tr>
         <Table.Th>{s.ref}</Table.Th><Table.Th>{s.period}</Table.Th><Table.Th>{s.closing}</Table.Th><Table.Th>{s.status}</Table.Th><Table.Th>{s.actions}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
-        {bankStatements.map(st => <Table.Tr key={st.id}><Table.Td><bdi dir="auto" className="bsr-text">{st.statement_ref}</bdi>{st.replacement_reason && <Text size="xs" c="dimmed"><bdi dir="auto">{st.replacement_reason}</bdi></Text>}</Table.Td>
-          <Table.Td><bdi dir="ltr" className="bsr-ltr">{formatDisplayDateLtr(st.period_start, i18n.language)} → {formatDisplayDateLtr(st.period_end, i18n.language)}</bdi></Table.Td><Table.Td><bdi dir="ltr" className="bsr-ltr">{formatMoney(st.closing_balance)} {st.currency_code}</bdi></Table.Td><Table.Td>{statusBadge(st.status)}</Table.Td>
-          <Table.Td><Group gap="xs" justify="flex-start">
+        {bankStatements.map(st => <Table.Tr key={st.id}><Table.Td data-label={s.ref}><bdi dir="auto" className="bsr-text">{st.statement_ref}</bdi>{st.replacement_reason && <Text size="xs" c="dimmed"><bdi dir="auto">{st.replacement_reason}</bdi></Text>}</Table.Td>
+          <Table.Td data-label={s.period}><bdi dir="ltr" className="bsr-ltr">{formatDisplayDateLtr(st.period_start, i18n.language)} → {formatDisplayDateLtr(st.period_end, i18n.language)}</bdi></Table.Td><Table.Td data-label={s.closing}><bdi dir="ltr" className="bsr-ltr">{formatMoney(st.closing_balance)} {st.currency_code}</bdi></Table.Td><Table.Td data-label={s.status}>{statusBadge(st.status)}</Table.Td>
+          <Table.Td data-label={s.actions}><Group gap="xs" justify="flex-start">
             {st.status === 'draft' && canConfirmStatements && <Button size="xs" onClick={() => setPending({ kind: 'confirm', st })}>{s.confirm}</Button>}
             {st.status === 'draft' && canManageStatements && <Button size="xs" color="red" variant="subtle" onClick={() => setPending({ kind: 'delete', st })}>{s.remove}</Button>}
             {st.status === 'confirmed' && canConfirmStatements && <Button size="xs" variant="default" onClick={() => setReplacing(st)}>{s.replace}</Button>}

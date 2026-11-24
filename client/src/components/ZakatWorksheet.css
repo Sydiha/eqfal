@@ -77,3 +77,18 @@
   .zw-form--adj .zw-wide{grid-column:auto}
   .zw-actions>button,.zw-form--stack>button,.zw-gate>button{width:100%}
 }
+
+/* Declarations: checkbox beside its text (overrides the generic stacked label). */
+.zw fieldset label.zw-check,.zw label.zw-check,.zw-form label.zw-check{flex-direction:row;justify-content:flex-start;text-align:start}
+.zw-check input[type=checkbox]{height:18px}
+/* Classification table: labelled cards on phones so the classification form is never hidden behind a sideways scroll. */
+@media (max-width:640px){
+  .zw .table-wrap .zw-class-table,.zw .table-wrap .zw-class-table tbody,.zw .table-wrap .zw-class-table tr{display:block;width:100%;min-width:0}
+  .zw .table-wrap .zw-class-table thead{display:none}
+  .zw .table-wrap .zw-class-table tr{padding:10px 0;border-block-end:1px solid var(--ac-border,#e5e7eb)}
+  .zw .table-wrap .zw-class-table td{white-space:normal;min-width:0;display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px;padding:4px 0;border:0}
+  .zw .table-wrap .zw-class-table td[data-label]::before{content:attr(data-label);color:var(--ac-muted,#6b7280);font-size:12px;font-weight:600}
+  .zw .table-wrap .zw-class-table td:last-child{display:block}
+  .zw .table-wrap .zw-class-table td:last-child::before{display:block;margin-block-end:4px}
+  .zw .table-wrap .zw-class-table .zw-class-form{min-width:0;width:100%}
+}

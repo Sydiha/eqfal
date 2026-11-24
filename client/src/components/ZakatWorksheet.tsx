@@ -234,10 +234,10 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <h4>{t('zakatWorksheet.classTitle')}</h4>
         <p className="zw-muted">{t('zakatWorksheet.classHelp')}</p>
         {draft && !p.canEdit && <p className="zw-muted" role="status">{t('zakatWorksheet.readOnly.noEdit')}</p>}
-        <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
+        <div className="table-wrap"><table className="ac-table zw-class-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
           <tbody>{accounts.map((a) => { const c = classByAccount.get(a.account_id); const name = localizedAccountName(a, i18n.language); return (
-            <tr key={`${a.account_id}-${c?.zakat_type ?? 'none'}-${w.version}`}><td><bdi>{a.code}</bdi> {name}</td><td>{t(`zakatWorksheet.categories.${a.statement_category}`)}</td><td className="zw-num"><bdi>{money(a.amount_cents)}</bdi></td>
-              <td>{draft && p.canEdit ? <form className="zw-inline zw-class-form" onSubmit={(e) => void saveClassification(a)(e)}>
+            <tr key={`${a.account_id}-${c?.zakat_type ?? 'none'}-${w.version}`}><td data-label={t('zakatWorksheet.account')}><bdi>{a.code}</bdi> {name}</td><td data-label={t('zakatWorksheet.category')}>{t(`zakatWorksheet.categories.${a.statement_category}`)}</td><td className="zw-num" data-label={t('zakatWorksheet.balance')}><bdi>{money(a.amount_cents)}</bdi></td>
+              <td data-label={t('zakatWorksheet.classification')}>{draft && p.canEdit ? <form className="zw-inline zw-class-form" onSubmit={(e) => void saveClassification(a)(e)}>
                 <select name="zakat_type" defaultValue={c?.zakat_type ?? ''} required aria-label={t('zakatWorksheet.classification')}><option value="">{t('zakatWorksheet.unclassified')}</option>{TYPES.map((x) => <option key={x} value={x}>{t(`zakatWorksheet.types.${x}`)}</option>)}</select>
                 <input name="reg_article" defaultValue={c?.reg_article ?? ''} required maxLength={100} placeholder={t('zakatWorksheet.article')} aria-label={t('zakatWorksheet.article')} />
                 {docSelect('evidence_document_id', false, c?.evidence_document_id ?? '')}

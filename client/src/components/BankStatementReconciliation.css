@@ -42,3 +42,15 @@
   .bank-statement-reconciliation .bsr-form .mantine-Button-root{width:100%}
   .bank-statement-reconciliation .bsr-toolbar>.mantine-Group-root{width:100%}
 }
+
+/* Statements table: labelled cards on phones so closing balance, status and actions are never hidden behind a sideways scroll. */
+@media(max-width:48em){
+  .bank-statement-reconciliation .bsr-table{min-width:0;table-layout:auto}
+  .bank-statement-reconciliation .bsr-table colgroup,.bank-statement-reconciliation .bsr-table thead{display:none}
+  .bank-statement-reconciliation .bsr-table,.bank-statement-reconciliation .bsr-table tbody,.bank-statement-reconciliation .bsr-table tr{display:block;width:100%}
+  .bank-statement-reconciliation .bsr-table tr{padding:10px 0;border-block-end:1px solid var(--border)}
+  .bank-statement-reconciliation .bsr-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:4px 0!important;border:0!important}
+  .bank-statement-reconciliation .bsr-table td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
+}
+.bank-statement-reconciliation .bsr-form .mantine-Checkbox-input{width:20px;height:20px;min-height:0}
+.bank-statement-reconciliation .bsr-form .mantine-Checkbox-root{margin-block:2px}
