@@ -7,6 +7,7 @@ import { EmployeeCostPayments } from '../components/EmployeeCostPayments';
 
 beforeEach(async()=>{await i18n.changeLanguage('en');vi.restoreAllMocks();});
 const onUnauthorized=vi.fn();
+const openTab=(name:string)=>fireEvent.click(screen.getByRole('tab',{name}));
 
 const employee={id:'e1',employee_number:'E1',display_name:'Employee One',employment_start:'2025-01-01',employment_end:null,is_active:true,version:1};
 const fiscalYear={id:'fy1',name:'FY 2026',start_date:'2026-01-01',end_date:'2026-12-31',status:'open'};
@@ -34,21 +35,21 @@ describe('Employee Cost Center',()=>{
   it('requests both overlapping boundary months in each monthly report', async () => {
     mockApi([], null, { ...fiscalYear, start_date: '2031-12-16', end_date: '2032-02-15' });
     render(<EmployeeCostCenter capabilities={['employee.view', 'employee_cost.view', 'employee_cost.payment.view']} onUnauthorized={onUnauthorized}/>);
-    await waitFor(() => {
-      const years = screen.getAllByLabelText('Fiscal year');
-      expect(years).toHaveLength(2);
-      for (const select of years) expect(select).toHaveValue(fiscalYear.id);
-    });
-    const inputs = screen.getAllByLabelText('Allocation month');
-    expect(inputs).toHaveLength(2);
-    for (const month of ['2031-12', '2032-02', '2031-11', '2032-03']) {
-      for (const input of inputs) fireEvent.change(input, { target: { value: month } });
-      for (const report of ['reports', 'reconciliation']) {
+    const checkMonths = async (report: 'reports' | 'reconciliation') => {
+      await waitFor(() => expect(screen.getByLabelText('Fiscal year')).toHaveValue(fiscalYear.id));
+      const input = screen.getByLabelText('Allocation month');
+      for (const month of ['2031-12', '2032-02', '2031-11', '2032-03']) {
+        fireEvent.change(input, { target: { value: month } });
         const url = `/api/employee-costs/${report}/monthly?fiscal_year_id=fy1&month=${month}-01`;
         const requested = vi.mocked(fetch).mock.calls.some(([path]) => path === url);
         expect(requested, url).toBe(month === '2031-12' || month === '2032-02');
       }
-    }
+    };
+    await screen.findByRole('tab', { name: 'Reports' });
+    openTab('Reports');
+    await checkMonths('reports');
+    openTab('Payments and settlements');
+    await checkMonths('reconciliation');
   });
 
   it('ignores an older monthly report response after the user changes the report month',async()=>{
@@ -63,6 +64,7 @@ describe('Employee Cost Center',()=>{
     }));
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view']} onUnauthorized={onUnauthorized}/>);
     await waitFor(()=>expect(pending).toHaveLength(1));
+    openTab('Reports');
     fireEvent.change(screen.getByLabelText('Allocation month'),{target:{value:'2026-12'}});
     await waitFor(()=>expect(pending).toHaveLength(2));
     const row=(category:string,amount:string)=>({employee_id:'e1',employee_number:'E1',display_name:'Employee One',category,nature:'employer_cost',allocation_month:'2026-12-01',currency_code:'SAR',amount});
@@ -77,12 +79,14 @@ describe('Employee Cost Center',()=>{
     mockApi([cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.payment.allocate','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.queryByRole('tab',{name:'Payments and settlements'})).toBeNull();
     expect(screen.queryByRole('heading',{name:'Bank payment reconciliation'})).toBeNull();
   });
 
   it('shows bank payment reconciliation to read-only users without settlement controls',async()=>{
     mockApi([cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.payment.view','employee_cost.salary.view','bank.view']} onUnauthorized={onUnauthorized}/>);
+    fireEvent.click(await screen.findByRole('tab',{name:'Payments and settlements'}));
     expect(await screen.findByRole('heading',{name:'Bank payment reconciliation'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Save payment allocation'})).toBeNull();
     expect(screen.queryByRole('button',{name:'Save reversal'})).toBeNull();
@@ -96,6 +100,7 @@ describe('Employee Cost Center',()=>{
     vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(new Response(JSON.stringify(url.includes('/reports/')?{rows:[{employee_id:'e1',employee_number:'E1',display_name:'Employee One',category:'employer_gosi',nature:'employer_cost',allocation_month:'2026-11-01',currency_code:'SAR',amount:'50.00'}]}:responses[url]),{status:200}))));
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view']} onUnauthorized={onUnauthorized}/>);
     expect(await screen.findByRole('heading',{name:'Employee Cost Center'})).toBeInTheDocument();
+    openTab('Reports');
     expect(await screen.findByText('Employer GOSI')).toBeInTheDocument();
     expect(screen.getAllByText('Approved recorded costs').length).toBeGreaterThan(0);
     expect(screen.getByText('Not verified bank payments')).toBeInTheDocument();
@@ -117,6 +122,7 @@ describe('Employee Cost Center',()=>{
     const writes=mockApi();
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     fireEvent.click(screen.getByRole('button',{name:'Record cost'}));
     const total=await screen.findByLabelText('Total amount');
     expect(total).not.toHaveAttribute('readonly');
@@ -134,6 +140,7 @@ describe('Employee Cost Center',()=>{
     let writes=mockApi();
     const first=render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     fireEvent.click(screen.getByRole('button',{name:'Record cost'}));
     fireEvent.change(await screen.findByLabelText('Total amount'),{target:{value:'100'}});
     fireEvent.change(screen.getByLabelText('Month amount'),{target:{value:'99.99'}});
@@ -147,6 +154,7 @@ describe('Employee Cost Center',()=>{
     writes=mockApi();
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    openTab('التكاليف');
     fireEvent.click(screen.getByRole('button',{name:'تسجيل تكلفة'}));
     fireEvent.change(await screen.findByLabelText('إجمالي المبلغ'),{target:{value:'100'}});
     fireEvent.change(screen.getByLabelText('مبلغ الشهر'),{target:{value:'99.99'}});
@@ -160,6 +168,7 @@ describe('Employee Cost Center',()=>{
     const writes=mockApi([cost('draft-1','draft'),cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.approve','employee_cost.correct','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     const draftRow=screen.getByRole('row',{name:/Draft/});
     fireEvent.click(within(draftRow).getByRole('button',{name:'Edit'}));
     const editDialog=screen.getByRole('dialog');
@@ -183,9 +192,11 @@ describe('Employee Cost Center',()=>{
     const writes=mockApi([cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     expect(screen.getByText(/Current approved costs are listed here/)).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'Correction history'})).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'personalPayments.history'})).not.toBeInTheDocument();
+    openTab('Reports');
     expect(screen.getByLabelText('Fiscal year')).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Show report'})).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Fiscal year'}));
@@ -202,6 +213,7 @@ describe('Employee Cost Center',()=>{
     }));
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    openTab('التكاليف');
     fireEvent.click(screen.getByRole('button',{name:'سجل التصحيحات'}));
     expect(await screen.findByText('تصحيح مستبدل')).toBeInTheDocument();
     expect(screen.getByText('التكلفة المعتمدة الحالية')).toBeInTheDocument();
@@ -212,6 +224,7 @@ describe('Employee Cost Center',()=>{
     mockApi([cost('approved-1','approved')]);
     render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.approve','employee_cost.correct','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     fireEvent.click(screen.getByRole('button',{name:'Correct approved cost'}));
     const dialog=screen.getByRole('dialog');
     for(let i=0;i<3;i++)fireEvent.click(within(dialog).getByRole('button',{name:'Add month'}));
@@ -250,6 +263,7 @@ describe('Employee Cost Center',()=>{
     const englishWrites=mockApi([februaryCost],failure);
     const english=render(<EmployeeCostCenter capabilities={capabilities} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
     fireEvent.click(screen.getByRole('button',{name:'Correct approved cost'}));
     let dialog=screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Total amount'),{target:{value:'110'}});
@@ -266,6 +280,7 @@ describe('Employee Cost Center',()=>{
     const arabicWrites=mockApi([februaryCost],failure);
     render(<EmployeeCostCenter capabilities={capabilities} onUnauthorized={onUnauthorized}/>);
     await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    openTab('التكاليف');
     fireEvent.click(screen.getByRole('button',{name:'تصحيح تكلفة معتمدة'}));
     dialog=screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('إجمالي المبلغ'),{target:{value:'110'}});
@@ -276,5 +291,34 @@ describe('Employee Cost Center',()=>{
     expect(arabicWrites.some(w=>w.url===path&&w.method==='POST')).toBe(true);
     expect(arabicWrites.find(w=>w.url===path)?.body.record).toMatchObject({total_amount:'110.00',allocations:[{allocation_month:'2026-02-01',amount:'110'}]});
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('Employee Cost Center six-section layout',()=>{
+  it('shows only the sections the user is permitted to see',async()=>{
+    mockApi();
+    const full=render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view','employee_cost.payment.view','employee_salary_advance.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Employees','Costs','Bonuses','Payments and settlements','Advances','Reports']);
+    full.unmount();
+    mockApi();
+    render(<EmployeeCostCenter capabilities={['employee.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Employees']);
+  });
+  it('shows the selected employee details and the salary confidentiality note, with Arabic tab names',async()=>{
+    mockApi();
+    render(<EmployeeCostCenter capabilities={['employee.view','employee.manage']} onUnauthorized={onUnauthorized}/>);
+    expect(await screen.findByRole('heading',{name:'Employee One'})).toBeInTheDocument();
+    expect(screen.getByText('Salary and bank details are shown only according to your permissions.')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Add employee'})).toBeInTheDocument();
+  });
+  it('renders Arabic tab labels in RTL',async()=>{
+    await i18n.changeLanguage('ar');
+    mockApi();
+    const {container}=render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'مركز تكاليف الموظفين'});
+    expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['الموظفون','التكاليف','التقارير']);
+    expect(container.querySelector('[dir=rtl]')).toBeInTheDocument();
   });
 });
