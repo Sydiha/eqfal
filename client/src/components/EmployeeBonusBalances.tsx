@@ -1,4 +1,5 @@
 import { EmployeeBonusBankPayment } from './EmployeeBonusBankPayment';
+import { sumMoney } from './bonus-money';
 import { EmployeeBonusDraft } from './EmployeeBonusDraft';
 import { Select } from '@mantine/core';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -22,8 +23,6 @@ type Bonus = {
 type Account = { id: string; code: string; name: string; name_ar?: string | null; account_type: string; is_active: boolean; has_children?: boolean };
 
 type Props = { arabic: boolean; onUnauthorized: () => void; capabilities?: string[]; employees?: { id: string; display_name: string }[] };
-
-const sumMoney = (values: string[]) => { const cents = values.reduce((s, v) => { const m = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(v); if (!m) return s; const c = BigInt(m[2]!) * 100n + BigInt((m[3] ?? '').padEnd(2, '0') || '0'); return m[1] ? s - c : s + c; }, 0n); return `${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`; };
 
 export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [], employees = [] }: Props) {
   const company = useOptionalCompany();
@@ -175,7 +174,7 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
     {loading && <p role="status">{label('جارٍ التحميل', 'Loading')}</p>}
     {failed && <p role="alert">{label('تعذر تحميل أرصدة المكافآت', 'Could not load bonus balances')}</p>}
     {bonuses?.length === 0 && <p>{label('لا توجد مكافآت', 'No bonuses')}</p>}
-    {!!bonuses?.length && <><p className="ecc-muted">{label('إجماليات المكافآت المعروضة أدناه', 'Totals of the bonuses listed below')}</p><div className="ecc-summary ecc-summary-4">{([[label('المبلغ المعتمد','Approved amount'),bonuses.filter(b=>b.approved_at).map(b=>b.amount)],[label('المسوّى','Settled'),bonuses.map(b=>b.settled)],[label('بانتظار صرف الرواتب','Pending payroll payment'),bonuses.map(b=>b.pending_payroll??'0')],[label('المتبقي','Outstanding'),bonuses.map(b=>b.outstanding??'0')]] as [string,string[]][]).map(([name,values])=><div className="ecc-summary-card" key={name}><span>{name}</span><strong><bdi dir="ltr">{sumMoney(values)}</bdi></strong></div>)}</div></>}
+    {!!bonuses?.length && <><p className="ecc-muted">{label('إجماليات المكافآت المعروضة أدناه (ر.س)', 'Totals of the bonuses listed below (SAR)')}</p><div className="ecc-summary ecc-summary-4">{([[label('المبلغ المعتمد','Approved amount'),bonuses.filter(b=>b.approved_at).map(b=>b.amount)],[label('المسوّى','Settled'),bonuses.map(b=>b.settled)],[label('بانتظار صرف الرواتب','Pending payroll payment'),bonuses.map(b=>b.pending_payroll??'0')],[label('المتبقي','Outstanding'),bonuses.map(b=>b.outstanding??'0')]] as [string,string[]][]).map(([name,values])=><div className="ecc-summary-card" key={name}><span>{name}</span><strong><bdi dir="ltr">{sumMoney(values) ?? '—'}</bdi> {sumMoney(values) !== null && <small>SAR</small>}</strong></div>)}</div></>}
     {!!bonuses?.length && <div className="ecc-table-wrap"><table>
       <thead><tr>
         <th scope="col">{label('الموظف', 'Employee')}</th>
