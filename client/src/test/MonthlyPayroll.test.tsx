@@ -10,7 +10,7 @@ beforeEach(()=>sessionStorage.clear());
 describe('Monthly Payroll draft visibility',()=>{
  beforeEach(()=>{vi.stubGlobal('fetch',vi.fn(async()=>response({draft:{id:'d1',period_month:'2026-11-01',currency_code:'SAR',version:1,status:'draft',approved_at:null,approved_by_email:null,gross_earnings:'100.00',employee_deductions:'10.00',employer_contributions:'5.00',net_payable:'90.00'},employees:[{id:'x1',employee_id:'e1',employee_number:'001',display_name:'Ali',version:1,salary:'100.00',allowances:'0.00',legacy_allowances:'0.00',housing_allowance:'0.00',transportation_allowance:'0.00',other_allowance:'0.00',bonus:'0.00',overtime:'0.00',deductions:'10.00',employer_contributions:'5.00',gross_earnings:'100.00',net_payable:'90.00'}],available_employees:[{id:'e1',employee_number:'001',display_name:'Ali',is_active:true}]})));});
  afterEach(()=>vi.unstubAllGlobals());
- it('shows accounting readiness and explains restricted reads for payroll viewers',async()=>{render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);await waitFor(()=>expect(screen.getAllByText(/90\.00/).length).toBeGreaterThan(0));expect(screen.getByText('جاهزية المحاسبة')).toBeInTheDocument();expect(screen.getByText(/عرض ربط الحسابات يتطلب/)).toBeInTheDocument();expect(screen.getByText(/معاينة قيد الرواتب وحالة ترحيله/)).toBeInTheDocument();expect(screen.queryByRole('button',{name:/تعديل|Edit|ترحيل القيد|Post journal/})).toBeNull();});
+ it('shows accounting readiness and explains restricted reads for payroll viewers',async()=>{const {fireEvent}=await import('@testing-library/react');render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);await waitFor(()=>expect(screen.getAllByText(/90\.00/).length).toBeGreaterThan(0));fireEvent.click(screen.getByRole('tab',{name:/Accounting & posting|المحاسبة والترحيل/}));expect(screen.getByText('جاهزية المحاسبة')).toBeInTheDocument();expect(screen.getByText(/عرض ربط الحسابات يتطلب/)).toBeInTheDocument();expect(screen.getByText(/معاينة قيد الرواتب وحالة ترحيله/)).toBeInTheDocument();expect(screen.queryByRole('button',{name:/تعديل|Edit|ترحيل القيد|Post journal/})).toBeNull();});
  it('warns in English and Arabic when the period is ineligible while leaving draft creation available',async()=>{
   const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
   vi.stubGlobal('fetch',vi.fn(async()=>response({draft:null,employees:[],available_employees:[],period_eligibility:{eligible:false}})));
@@ -115,7 +115,7 @@ it('ignores an accounting preview response after switching approved payroll draf
  const newUrl=`/api/payroll/drafts/draft-${second.endsWith('01')?'january':'february'}/accounting-preview`;
  const makePreview=(name:string)=>response({totals:{earnings:'1.00',employee_deductions:'0.00',net_payable:'1.00',employer_contributions:'0.00',debit_total:'1.00',credit_total:'1.00'},mappings:[{mapping_key:'earnings_expense',account_id:name,code:name,name,name_ar:null,account_type:'expense',is_active:true}],lines:[{mapping_key:'earnings_expense',account_id:name,debit:'1.00',credit:'0.00'}],blockers:[],warnings:[],balanced:true,can_preview:true,authority:'informational_only',posting_revalidation_required:true,side_effects:false});
  pending.get(newUrl)!(makePreview('CURRENT-DRAFT-ACCOUNT'));
- await screen.findByText(/CURRENT-DRAFT-ACCOUNT/);
+ fireEvent.click(await screen.findByRole('tab',{name:/Accounting & posting|المحاسبة والترحيل/})); await screen.findByText(/CURRENT-DRAFT-ACCOUNT/);
  pending.get(oldUrl)!(makePreview('STALE-DRAFT-ACCOUNT'));
  await waitFor(()=>expect(screen.queryByText(/STALE-DRAFT-ACCOUNT/)).toBeNull());
  expect(screen.getByText(/CURRENT-DRAFT-ACCOUNT/)).toBeInTheDocument();
@@ -205,15 +205,15 @@ it('shows approval confirmation, then locks the approved payroll in English and 
   fireEvent.click(await screen.findByRole('button',{name:'Approve payroll'}));
   expect(screen.getByRole('dialog')).toHaveTextContent('lock');
   expect(screen.getByRole('dialog')).toHaveTextContent('2026-11');
-  expect(screen.getByRole('dialog')).toHaveTextContent('d1');
+  expect(screen.getByRole('dialog')).not.toHaveTextContent('d1');
   expect(sent).toHaveLength(0);
   fireEvent.click(screen.getByRole('dialog').querySelector('button.primary')!);
-  await screen.findByText(/Approved · Read only/);
+  await screen.findByText('Approved');expect(screen.getByText('Read only')).toBeInTheDocument();
   expect(sent).toEqual([{version:2}]);
   expect(screen.getByText('approver@example.test')).toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Edit'})).toBeNull();
   await i18n.changeLanguage('ar');
-  expect(screen.getByText(/معتمد · للقراءة فقط/)).toBeInTheDocument();
+  expect(screen.getByText('معتمد')).toBeInTheDocument();expect(screen.getByText('للقراءة فقط')).toBeInTheDocument();
  }finally{await i18n.changeLanguage(original);}
 });
 
@@ -233,7 +233,7 @@ it('closes approval confirmation when the selected period changes and does not s
  await waitFor(()=>expect(input).toBeInTheDocument());
  fireEvent.change(input,{target:{value:'2027-01'}});
  fireEvent.click(await screen.findByRole('button',{name:'Approve payroll'}));
- expect(screen.getByRole('dialog')).toHaveTextContent('january-draft');
+ expect(screen.getByRole('dialog')).toHaveTextContent('2027-01');expect(screen.getByRole('dialog')).not.toHaveTextContent('january-draft');
  fireEvent.change(input,{target:{value:'2026-11'}});
  expect(screen.queryByRole('dialog')).toBeNull();
  expect(sent).toHaveLength(0);
@@ -241,13 +241,14 @@ it('closes approval confirmation when the selected period changes and does not s
 });
 
 it('shows read-only mapped preview, blockers and manual-journal warning in English and Arabic with responsive RTL styles',async()=>{
- const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ const {fireEvent}=await import('@testing-library/react');const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
  const draft={id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T12:00:00.000Z',approved_by_email:'approver@example.test',gross_earnings:'101.00',employee_deductions:'0.50',employer_contributions:'0.60',net_payable:'100.50'};
  const mapping={mapping_key:'earnings_expense',account_id:'a1',account_code:'5000',account_name:'Salaries',account_name_ar:'رواتب',account_type:'expense',account_active:true};
  const preview={totals:{earnings:'101.00',employee_deductions:'0.50',net_payable:'100.50',employer_contributions:'0.60',debit_total:'101.60',credit_total:'101.60'},mappings:[{mapping_key:'earnings_expense',account_id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],lines:[{mapping_key:'earnings_expense',account_id:'a1',debit:'101.00',credit:'0.00'}],blockers:[{code:'ecc_overlap',count:1,details:[{employee_number:'001',display_name:'Ali',category:'salary',amount:'100.00'}]}],warnings:[{code:'manual_journal_review',count:1}],balanced:true,can_preview:false,side_effects:false};
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/payroll/account-mappings'?response({mappings:[mapping],accounts:[{id:'a1',code:'5000',name:'Salaries',name_ar:'رواتب',account_type:'expense',is_active:true}],requirements:[]}):url.endsWith('/accounting-preview')?response(preview):url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}],warnings:[{code:'manual_journal_review',count:1}]}):response({draft,employees:[],available_employees:[]})));
  try{
   render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.mapping.manage','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
+  fireEvent.click(await screen.findByRole('tab',{name:/Accounting & posting|المحاسبة والترحيل/}));
   expect(await screen.findByText('Read-only journal preview')).toBeInTheDocument();
   expect(screen.getByText(/Approved Employee Cost Center allocations overlap/)).toBeInTheDocument();
   expect(screen.getAllByText(/Source-less journals exist in this month/)).toHaveLength(2);
@@ -272,18 +273,20 @@ it('confirms posting and shows the existing journal reference',async()=>{
   return response({draft:{id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'},employees:[],available_employees:[]});
  }));
  render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view','payroll.accounting.post']} onUnauthorized={()=>{}}/>);
- const button=await screen.findByRole('button',{name:/ترحيل القيد|Post journal/}); fireEvent.click(button);
+ fireEvent.click(await screen.findByRole('tab',{name:/Accounting & posting|المحاسبة والترحيل/}));const button=await screen.findByRole('button',{name:/ترحيل القيد|Post journal/}); fireEvent.click(button);
  expect(screen.getByRole('dialog')).toBeInTheDocument();
  fireEvent.click(screen.getByRole('dialog').querySelector('button.primary')!);
  expect(await screen.findByText(/PAYROLL 2026-03/)).toBeInTheDocument();
- expect(screen.getByText(/journal-123/)).toBeInTheDocument();
+ expect(screen.queryByText(/journal-123/)).toBeNull();
 });
 
 it('shows posting blockers to preview readers without a posting action',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
  const draft={id:'d1',period_month:'2026-03-01',currency_code:'SAR',version:3,status:'approved',approved_at:'2026-03-31T00:00:00Z',approved_by_email:'approver@example.test',gross_earnings:'100.00',employee_deductions:'0.00',employer_contributions:'0.00',net_payable:'100.00'};
  const fetcher=vi.fn(async(url:string)=>url.endsWith('/accounting-post-status')?response({journal:null,eligible:false,blockers:[{code:'separation_of_duties'}],warnings:[]}):url.endsWith('/accounting-preview')?response({totals:{earnings:'100.00',employee_deductions:'0.00',net_payable:'100.00',employer_contributions:'0.00',debit_total:'100.00',credit_total:'100.00'},mappings:[],lines:[],blockers:[],warnings:[],balanced:true,can_preview:true,side_effects:false}):url==='/api/payroll/account-mappings'?response({mappings:[],accounts:[]}):response({draft,employees:[],available_employees:[]}));
  vi.stubGlobal('fetch',fetcher);
  render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view','payroll.accounting.mapping.view','payroll.accounting.preview']} onUnauthorized={()=>{}}/>);
+ fireEvent.click(await screen.findByRole('tab',{name:/Accounting & posting|المحاسبة والترحيل/}));
  expect(await screen.findByText(/لا يمكن لمُعد المسير أو معتمده ترحيله/)).toBeInTheDocument();
  expect(screen.getByText(/ترحيل القيد يتطلب صلاحية/)).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:/ترحيل القيد|Post journal/})).toBeNull();
@@ -300,4 +303,26 @@ it('shows posted advance balances and saves a linked recovery separately from ge
  await screen.findAllByText('100.00');fireEvent.click(screen.getAllByRole('button',{name:'Edit'})[0]!);expect(await screen.findByText(/Available:/)).toBeInTheDocument();expect(screen.getByText(/Recovered \(posted\):/)).toBeInTheDocument();fireEvent.change(screen.getByLabelText('Recovery amount (partial or full)'),{target:{value:'10.00'}});fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
  await waitFor(()=>expect(requests.some(r=>r.url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries'&&r.method==='PUT')).toBe(true));
  expect(requests.find(r=>r.url==='/api/payroll/drafts/d1/employees/e1/advance-recoveries'&&r.method==='PUT')?.body).toEqual({version:2,recoveries:[{advance_id:'a1',amount:'10.00'}]});expect(requests.find(r=>r.url==='/api/payroll/drafts/d1/employees/e1'&&r.method==='PUT')?.body.deductions).toBe('5.00');
+});
+
+it('shows four payroll sections only for the permissions the user holds and keeps one active tab',async()=>{
+ const {fireEvent}=await import('@testing-library/react');
+ const {default:i18n}=await import('../i18n');const original=i18n.language;await i18n.changeLanguage('en');
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.startsWith('/api/payroll/drafts?')?response({draft:null,employees:[],available_employees:[]}):response({liabilities:[],bank_transactions:[],settlements:[],exceptions:[],recoveries:[],corrections:[],lease_days:30,correction_approval_days:30})));
+ try{
+  const first=render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view']} onUnauthorized={()=>{}}/>);
+  expect(await screen.findAllByRole('tab')).toHaveLength(2);
+  expect(screen.getByRole('tab',{name:'Payroll & employees'})).toHaveAttribute('aria-selected','true');
+  first.unmount();
+  render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view','payroll.settlement.view','payroll.employee_advance_recovery.view']} onUnauthorized={()=>{}}/>);
+  const tabs=await screen.findAllByRole('tab');expect(tabs).toHaveLength(4);
+  expect(document.querySelectorAll('input[type="month"]')).toHaveLength(1);
+  fireEvent.click(screen.getByRole('tab',{name:'Liability settlement'}));
+  expect(document.querySelectorAll('input[type="month"]')).toHaveLength(1);
+  expect(screen.getByRole('tab',{name:'Liability settlement'})).toHaveAttribute('aria-selected','true');
+  await waitFor(()=>expect(screen.getByRole('tabpanel').textContent).not.toBe(''));expect(await screen.findByRole('heading',{name:'Payroll liability settlements'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab',{name:'Advance recovery corrections'}));
+  expect(await screen.findByRole('heading',{name:'Salary advance recovery and corrections'})).toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'Payroll liability settlements'})).toBeNull();
+ }finally{await i18n.changeLanguage(original);}
 });
