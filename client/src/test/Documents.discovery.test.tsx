@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent,  screen, within } from '@testing-library/react';
+import { render } from './documentsRender';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Documents } from '../components/Documents';
 import i18n from '../i18n';

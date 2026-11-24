@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent,  screen, waitFor } from '@testing-library/react';
+import { render } from './documentsRender';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Documents } from '../components/Documents';
 import i18n from '../i18n';

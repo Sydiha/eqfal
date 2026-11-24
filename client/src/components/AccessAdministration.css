@@ -91,13 +91,20 @@
 .acc-risk--critical{border-color:#f87171;background:#fef2f2}
 .acc-risk--full_access{border:2px solid #dc2626;background:#fef2f2}
 .acc-risk-lead{font-weight:700}
-.acc-risk-list{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
-.acc-risk-list li{display:flex;align-items:center;gap:8px}
+.acc-risk-dialog{width:min(100%,560px)}
+.acc-risk-groups{display:flex;flex-direction:column;gap:10px;max-height:min(40dvh,320px);overflow-y:auto;overscroll-behavior:contain;padding:2px;margin-block:2px}
+.acc-risk-group h4{display:flex;align-items:center;gap:6px;margin:0 0 4px;font-size:12px}
+.acc-risk-count{color:#64748b;font-size:12px}
+.acc-risk-list{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.acc-risk-list li{display:flex;flex-direction:column;gap:0;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.7);min-width:0}
+.acc-risk-name{font-weight:600;overflow-wrap:anywhere}
+.acc-risk-list code{font-size:11px;color:#64748b;overflow-wrap:anywhere;word-break:break-all}
 .acc-risk-tag{display:inline-block;min-width:56px;padding:1px 8px;border-radius:8px;font-size:11px;font-weight:700;text-align:center}
 .acc-risk-tag--sensitive{background:#fef3c7;color:#92400e}
 .acc-risk-tag--critical{background:#fee2e2;color:#b91c1c}
 .acc-risk-note{color:#64748b;font-size:12px}
 .acc-risk-ack{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:600}
+.acc-risk-ack input[type=checkbox]{flex:none;width:18px;height:18px;min-height:0;padding:0;margin:0}
 .acc-danger{height:32px;padding:0 14px;border:0;border-radius:8px;background:#dc2626;color:#fff;font-weight:700;cursor:pointer}
 .acc-danger:disabled{opacity:.5;cursor:not-allowed}
 /* Global administration */
