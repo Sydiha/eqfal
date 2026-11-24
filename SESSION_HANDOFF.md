@@ -20,7 +20,7 @@ Bring PROJECT_STATE.md and SESSION_HANDOFF.md in line with main@60351fc (PR #611
 - Zakat calculation stays gated until accountant sign-off.
 
 ## Open Items
-- Functional UAT for all items in PROJECT_STATE "Pending UAT Checklist", with payroll and bonuses first.
+- Functional UAT for all items in PROJECT_STATE "Pending UAT Checklist". Bonuses: partial owner-confirmed manual UAT only (creation, calculation, approval, posting, two-installment bank settlement); remaining scenarios pending.
 - Deferred: mode 3, extended reconciliation, zakat calculation (G6), G7 inventory, R6 remainder, R7/R10/R11/R12.
 - Figma backlog: 10 primary navigation pages without dedicated designs (owner-provided count; list to be confirmed in the design phase).
 - Known follow-ups and flaky tests as listed in PROJECT_STATE.

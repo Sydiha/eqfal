@@ -14,7 +14,7 @@
 | Phase | Status |
 |-------|--------|
 | B Users/Permissions | Implemented (authorization policy #581, #603, #604); Pending UAT |
-| C Company setup & financial import | Implemented in part (CoA import #544, cash opening balances #545–#547, #107–#111); Pending UAT; mode 3 and extended reconciliation Deferred |
+| C Company setup & financial import | Implemented in part (CoA import #544, cash opening balances #545–#547; migrations 107–111); Pending UAT; mode 3 and extended reconciliation Deferred |
 | D Operational cycle | Implemented (G1–G3, G5, G8, R9, Q5, payroll, salary advances, bonuses); Pending UAT |
 | E Reporting/Closing | Partial (Zakat engine and approval flow #594–#602; calculation still gated; G7 concurrency partial) |
 | F Final readiness | Not started |
@@ -24,13 +24,13 @@
 - **Document integrity:** #531 draft overwrite guard (documents, journals, assets); #532/#534 R6 reopen and lifecycle; #533 R8 Action Center.
 - **Banking:** #539/#540 manual bank transaction entry (mig 106); #542 obligation settlements in bank details; #578 bank ownership staging (mig 119, inert); #587 bounded historical bank ledger links.
 - **Accounting:** #541 prefilled settlement drafts; #553 exact-cent reporting and settlements; #554 annual receivables/payables cutoff; #535 cutover lock order and closed-year codes; #585 monthly periods protected after FY close; #608 fiscal-year context.
-- **Opening balances / cash:** #545–#547 cash on hand (mig 107–108); #109–#111 physical cash verification (mig 109–111).
+- **Opening balances / cash:** #545–#547 cash on hand (mig 107–108); physical cash verification (migrations 109–111).
 - **Employee Cost Center:** #564–#568 foundation, bank reconciliation of employee costs, corrections; mig 112.
 - **Payroll:** #570–#577 monthly drafts, allowance breakdown, approval, accounting readiness, safe posting, liability settlement (mig 114–120); #582 settlement segregation of duties (mig 123); #584/#586 closed-period blocks and safety confirmations.
 - **Salary advances:** #588–#592 foundation and recovery through payroll (mig 124–126).
 - **Financial authority:** #580 bounded delegation; #581 staged authorization policy (mig 122); #590/#592 separation of privileged actors (mig 127); #604 owner-approved policy enforced.
 - **Zakat (G6):** #594 isolated engine; #595/#596 read-only preview; #598/#599 regulatory evidence and trusted approvals (mig 128); #601 approval integrity (mig 129); #602 safe revisions (mig 130). Calculation remains gated; see Open Blockers.
-- **Bonuses (#609–#611):** entitlements, recognition, balances, direct settlement, adjustments, payment schedules, award identity (mig 131–137). Payroll take-home pay preserved; recognized amounts move into payroll payable; partial refunds restore balance; repeat bank use blocked. Owner acceptance on the same SHA was requested in PR #609 (outcome not recorded here).
+- **Bonuses (#609–#611):** entitlements, recognition, balances, direct settlement, adjustments, payment schedules, award identity (mig 131–137). Payroll take-home pay preserved; recognized amounts move into payroll payable; partial refunds restore balance; repeat bank use blocked. **Partial owner-confirmed manual UAT (not complete UAT):** creation, calculation, approval, accounting posting, and two-installment bank settlement succeeded. Not confirmed: exact-SHA verification, partial refund and balance restore, repeat bank-use rejection, closed-date posting block, payroll take-home net check.
 - **Navigation/UI:** #560/#561 global page search and deep navigation; #548/#606/#607 responsive banking, trial balance and annual closing; #556–#558, #563 localization and display dates; #605 Arabic filename direction.
 
 ## Migration Status (089–137)
@@ -69,7 +69,7 @@ Migrations 096, 097, 099–103 were recorded in `_schema_migrations` on Replit T
 11. Payroll: draft → approval → posting → settlement, incl. closed-period block (#570–#586).
 12. Salary advances: advance → payroll recovery (#588–#592).
 13. Employee cost center: cost → approval → bank reconciliation → correction (#564–#568).
-14. Bonuses (#609–#611): same-SHA owner acceptance as written in PR #609.
+14. Bonuses (#609–#611): remaining scenarios pending: exact-SHA verification, partial refund and restored balance, repeat bank-use rejection, closed-date posting block, payroll take-home net check.
 15. Zakat preview and approval flow (#594–#602), without calculation.
 
 ## Open Blockers
