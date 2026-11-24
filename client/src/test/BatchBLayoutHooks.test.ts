@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const read = (f: string) => readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8');
+const read = (f: string) => readFileSync(resolve(process.cwd(), 'src/components', f), 'utf8');
 
 /* Batch B: presentation hooks must stay wired between markup and CSS. */
 describe('Batch B layout hooks', () => {
