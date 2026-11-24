@@ -157,6 +157,20 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
     <section className="zw" aria-labelledby="zw-title">
       <h3 id="zw-title">{t('zakatWorksheet.title')}</h3>{toggle}
       {error && <p role="alert" className="zw-error">{error}</p>}
+      <nav className="zw-nav" aria-label={t('zakatWorksheet.title')}>
+        <div className="zw-nav__stats">
+          {w && <span className="ac-badge">{t(`zakatWorksheet.statuses.${w.status}`)}</span>}
+          <span className={`ac-badge ${r.unclassified_account_count > 0 ? 'ac-badge--warn' : 'ac-badge--ok'}`}>{t('zakatWorksheet.unclassified')}: <bdi>{r.unclassified_account_count}</bdi></span>
+          <span className={`ac-badge ${r.gate_blockers.length > 0 ? 'ac-badge--bad' : 'ac-badge--ok'}`}>{t('zakatWorksheet.gatesTitle')}: <bdi>{r.gate_blockers.length}</bdi></span>
+        </div>
+        <div className="zw-nav__links">
+          <a href="#zakat-ownership">{t('zakatWorksheet.ownershipTitle')}</a>
+          <a href="#zakat-worksheet">{t('zakatWorksheet.worksheetTitle')}</a>
+          {w && <a href="#zakat-classification">{t('zakatWorksheet.classTitle')}</a>}
+          {w && <a href="#zakat-adjustments">{t('zakatWorksheet.adjTitle')}</a>}
+          {w && <a href="#zakat-review">{t('zakatWorksheet.reviewTitle')}</a>}
+        </div>
+      </nav>
 
       {data.finalization ? <ZakatRegulatoryReview data={data} ar={ar} busy={busy} reviewed={w?.status === 'reviewed'}
         canSubmit={p.canEdit} canApprove={p.canApprove} canViewDocuments={Boolean(p.canViewDocuments)}
@@ -190,6 +204,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <p className="zw-muted">{t('zakatWorksheet.previewNoPayable')}</p>
       </div>}
 
+      <div className="zw-pair">
       <div className="zw-card" id="zakat-ownership">
         <h4>{t('zakatWorksheet.ownershipTitle')}</h4>
         <p>{t('zakatWorksheet.asOf')}: <bdi>{data.ownership_live.as_of_date}</bdi> · <span className={`ac-badge ${data.ownership_live.qualified ? 'ac-badge--ok' : 'ac-badge--bad'}`}>{data.ownership_live.qualified ? t('zakatWorksheet.qualified') : t('zakatWorksheet.notQualified')}</span></p>
@@ -204,7 +219,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
                 {e.verification_status === 'unconfirmed' && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => void call(`/api/zakat-eligibility/${e.id}`, 'DELETE', { version: e.version })}>{t('zakatWorksheet.remove')}</button>}
                 {e.verification_status === 'confirmed' && !e.effective_to && p.canEditOwnership && <button type="button" className="ac-btn" disabled={busy} onClick={() => { setEndingEligibility(e); setEndDate(data.ownership_live.as_of_date); setEndReason(''); setEndDateError(false); setEndReasonError(false); }}>{t('zakatWorksheet.end')}</button>}
               </td></tr>)}</tbody></table></div>}
-        {p.canCreateOwnership && <form className="zw-form" onSubmit={(e) => void addEligibility(e)}>
+        {p.canCreateOwnership && <details className="zw-disclosure" open={data.eligibility.length === 0}><summary>{t('zakatWorksheet.addEligibility')}</summary><form className="zw-form" onSubmit={(e) => void addEligibility(e)}>
           <label>{t('zakatWorksheet.partner')}<select name="partner_id" required>{data.ownership_live.partners.map((o) => <option key={o.partner_id} value={o.partner_id}>{o.name}</option>)}</select></label>
           <label>{t('zakatWorksheet.ownershipClass')}<select name="ownership_class" value={entityClass} onChange={(e) => setEntityClass(e.target.value)}>{CLASSES.map((c) => <option key={c} value={c}>{t(`zakatWorksheet.classes.${c}`)}</option>)}</select></label>
           <label>{t('zakatWorksheet.effectiveFrom')}<input name="effective_from" type="date" required /></label>
@@ -212,7 +227,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           <label>{t('zakatWorksheet.evidenceDoc')}{docSelect('evidence_document_id', true)}</label>
           {entityClass.endsWith('_entity') && <label>{t('zakatWorksheet.entityNote')}<textarea name="entity_note" required maxLength={2000} /></label>}
           <button className="ac-btn ac-btn--primary" disabled={busy || !p.canViewDocuments}>{t('zakatWorksheet.addEligibility')}</button>
-        </form>}
+        </form></details>}
       </div>
 
       <div className="zw-card" id="zakat-worksheet">
@@ -228,6 +243,8 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           </fieldset>
           {draft && p.canEdit && <button type="button" className="ac-btn" disabled={busy} onClick={() => void ws('/refresh', 'POST', { version: w.version })}>{t('zakatWorksheet.refresh')}</button>}
         </>}
+      </div>
+
       </div>
 
       {w && <div className="zw-card" id="zakat-classification">
@@ -252,7 +269,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.description')}</th><th>{t('zakatWorksheet.direction')}</th><th>{t('zakatWorksheet.amount')}</th><th>{t('zakatWorksheet.article')}</th><th>{t('zakatWorksheet.evidence')}</th><th /></tr></thead>
             <tbody>{data.adjustments.map((a) => <tr key={a.id}><td>{a.description}{a.professional_review_required && <> <span className="ac-badge ac-badge--warn">{t('zakatWorksheet.professionalReviewFlag')}</span></>}</td><td>{t(`zakatWorksheet.directions.${a.direction}`)}</td><td className="zw-num"><bdi>{a.amount}</bdi></td><td><bdi>{a.reg_article}</bdi></td><td>{a.evidence_document_id ? documents.find((d) => d.id === a.evidence_document_id)?.original_filename ?? t('zakatWorksheet.document') : a.evidence_note}</td>
               <td>{draft && p.canDeleteAdjustment && <button type="button" className="ac-btn" disabled={busy} onClick={() => void ws(`/adjustments/${a.id}`, 'DELETE', { version: w.version })}>{t('zakatWorksheet.delete')}</button>}</td></tr>)}</tbody></table></div>}
-        {draft && p.canCreateAdjustment && <form className="zw-form zw-form--adj" onSubmit={(e) => void addAdjustment(e)}>
+        {draft && p.canCreateAdjustment && <details className="zw-disclosure" open={data.adjustments.length === 0}><summary>{t('zakatWorksheet.addAdjustment')}</summary><form className="zw-form zw-form--adj" onSubmit={(e) => void addAdjustment(e)}>
           <label className="zw-wide">{t('zakatWorksheet.description')}<input name="description" required maxLength={500} /></label>
           <label>{t('zakatWorksheet.direction')}<select name="direction"><option value="add">{t('zakatWorksheet.directions.add')}</option><option value="deduct">{t('zakatWorksheet.directions.deduct')}</option></select></label>
           <label>{t('zakatWorksheet.amount')}<input name="amount" required inputMode="decimal" pattern="(?:0|[1-9][0-9]{0,15})\.[0-9]{2}" placeholder="0.00" dir="ltr" /></label>
@@ -261,10 +278,10 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           <label className="zw-wide">{t('zakatWorksheet.evidenceNote')}<input name="evidence_note" maxLength={2000} /></label>
           <label className="zw-check"><input type="checkbox" name="professional_review_required" /> {t('zakatWorksheet.professionalReview')}</label>
           <button className="ac-btn ac-btn--primary" disabled={busy}>{t('zakatWorksheet.addAdjustment')}</button>
-        </form>}
+        </form></details>}
       </div>}
 
-      {w && <div className="zw-card zw-review-card">
+      {w && <div className="zw-card zw-review-card" id="zakat-review">
         <h4>{t('zakatWorksheet.reviewTitle')}</h4>
         {(['in_review', 'reviewed', 'approved'].includes(w.status)) && <label className="zw-reason">{t('zakatWorksheet.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} /></label>}
         <div className="zw-actions">

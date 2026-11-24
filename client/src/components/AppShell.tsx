@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useEffect, useState } from 'react';
+import { CSSProperties, Fragment, ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShell as MantineAppShell, Box, Burger, Button, Divider, Group, NavLink, Stack, Text, UnstyledButton, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -163,7 +163,9 @@ export function AppShell({ page, setPage, navigateToDestination = () => undefine
                 searchable
                 clearable={false}
                 size="xs"
-                className="topbar-select-wrap"
+                className="topbar-select-wrap topbar-select-wrap--fy"
+                title={availableFiscalYears.find(fy => fy.id === selectedFiscalYearId)?.name}
+                style={{ '--fy-label-ch': Math.min(Math.max(...availableFiscalYears.map(fy => fy.name.length), 8), 34) } as CSSProperties}
                 classNames={{ input: 'topbar-select', dropdown: 'topbar-select-dropdown' }}
                 comboboxProps={{ width: 'max-content', position: 'bottom-start', withinPortal: true }}
               />

@@ -157,7 +157,7 @@ describe('Zakat worksheet', () => {
   });
   it('hides write controls without capabilities', async () => {
     mockFetch(); render(<ZakatWorksheet {...props} canEdit={false} canSubmit={false} canCreateOwnership={false} canCreateAdjustment={false} />); fireEvent.click(screen.getByRole('button', { name: 'Show' }));
-    await waitFor(() => expect(screen.getByText('Balances and classification')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Balances and classification' })).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull(); expect(screen.queryByRole('button', { name: 'Add eligibility record' })).toBeNull(); expect(screen.queryByRole('button', { name: 'Add adjustment' })).toBeNull();
   });
 });

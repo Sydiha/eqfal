@@ -93,6 +93,7 @@ export function ZakatRegulatoryReview(p: Props) {
     <p>{label('المراجعون المعيّنون', 'Appointed reviewers')} · {reviewers.length
       ? reviewers.map(({ name }) => name).join(label('، ', ', '))
       : label('يلزم تعيين مراجع مخوّل من مسؤول النظام.', 'A trusted operator must appoint a qualified reviewer.')}</p>
+    <div className="zw-gates">
     {gates.map((gate) => {
       const history = decisions.filter((row) => row.gate === gate);
       const active = history.find((row) => row.status !== 'ended');
@@ -156,5 +157,6 @@ export function ZakatRegulatoryReview(p: Props) {
           </form>)}
       </div>;
     })}
+    </div>
   </section>;
 }

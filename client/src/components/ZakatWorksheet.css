@@ -92,3 +92,19 @@
   .zw .table-wrap .zw-class-table td:last-child::before{display:block;margin-block-end:4px}
   .zw .table-wrap .zw-class-table .zw-class-form{min-width:0;width:100%}
 }
+
+/* Structure: status strip + section nav, paired cards, collapsible entry forms, gate grid. */
+.zw>button[aria-expanded]{justify-self:start;width:auto;min-width:96px}
+.zw-nav{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--ac-border,#e5e7eb);border-radius:12px;background:#fff}
+.zw-nav__stats,.zw-nav__links{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.zw-nav__links a{padding:4px 10px;border-radius:999px;background:#f1f5f9;color:inherit;font-size:.85rem;text-decoration:none}
+.zw-nav__links a:hover,.zw-nav__links a:focus-visible{background:#e2e8f0}
+.zw-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.zw-pair>.zw-card{height:100%}
+.zw-gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}
+.zw-gates>.zw-gate{margin:0}
+.zw-disclosure{border:1px dashed var(--ac-border,#cbd5e1);border-radius:10px;padding:8px 12px}
+.zw-disclosure>summary{cursor:pointer;font-weight:700;padding:4px 0}
+.zw-disclosure[open]>summary{margin-block-end:10px}
+.zw-class-table{max-width:100%}
+@media (max-width:64em){.zw-pair,.zw-gates{grid-template-columns:minmax(0,1fr)}.zw-nav{position:static}}
