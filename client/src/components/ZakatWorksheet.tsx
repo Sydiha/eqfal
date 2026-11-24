@@ -222,9 +222,9 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           {!draft && <p className="zw-muted" role="status">{t(`zakatWorksheet.readOnly.${w.status}`, { defaultValue: t('zakatWorksheet.readOnly.default') })}</p>}
           {draft && !p.canEdit && <p className="zw-muted" role="status">{t('zakatWorksheet.readOnly.noEdit')}</p>}
           {w.snapshot_captured_at && <p className="zw-muted">{t('zakatWorksheet.capturedAt')}: <bdi>{w.snapshot_captured_at}</bdi></p>}
-          <fieldset id="zakat-declarations" disabled={!draft || !p.canEdit || busy}><legend>{t('zakatWorksheet.declarations')}</legend>
-            <label><input type="checkbox" checked={w.non_financing_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: e.target.checked, accounting_records_confirmed: w.accounting_records_confirmed, version: w.version })} /> {t('zakatWorksheet.nonFinancing')}</label>
-            <label><input type="checkbox" checked={w.accounting_records_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: w.non_financing_confirmed, accounting_records_confirmed: e.target.checked, version: w.version })} /> {t('zakatWorksheet.accountingRecords')}</label>
+          <fieldset id="zakat-declarations" className="zw-declarations" disabled={!draft || !p.canEdit || busy}><legend>{t('zakatWorksheet.declarations')}</legend>
+            <label className="zw-check"><input type="checkbox" checked={w.non_financing_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: e.target.checked, accounting_records_confirmed: w.accounting_records_confirmed, version: w.version })} /> {t('zakatWorksheet.nonFinancing')}</label>
+            <label className="zw-check"><input type="checkbox" checked={w.accounting_records_confirmed} onChange={(e) => void ws('/declarations', 'PATCH', { non_financing_confirmed: w.non_financing_confirmed, accounting_records_confirmed: e.target.checked, version: w.version })} /> {t('zakatWorksheet.accountingRecords')}</label>
           </fieldset>
           {draft && p.canEdit && <button type="button" className="ac-btn" disabled={busy} onClick={() => void ws('/refresh', 'POST', { version: w.version })}>{t('zakatWorksheet.refresh')}</button>}
         </>}
@@ -237,7 +237,7 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
         <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.account')}</th><th>{t('zakatWorksheet.category')}</th><th>{t('zakatWorksheet.balance')}</th><th>{t('zakatWorksheet.classification')}</th></tr></thead>
           <tbody>{accounts.map((a) => { const c = classByAccount.get(a.account_id); const name = localizedAccountName(a, i18n.language); return (
             <tr key={`${a.account_id}-${c?.zakat_type ?? 'none'}-${w.version}`}><td><bdi>{a.code}</bdi> {name}</td><td>{t(`zakatWorksheet.categories.${a.statement_category}`)}</td><td className="zw-num"><bdi>{money(a.amount_cents)}</bdi></td>
-              <td>{draft && p.canEdit ? <form className="zw-inline" onSubmit={(e) => void saveClassification(a)(e)}>
+              <td>{draft && p.canEdit ? <form className="zw-inline zw-class-form" onSubmit={(e) => void saveClassification(a)(e)}>
                 <select name="zakat_type" defaultValue={c?.zakat_type ?? ''} required aria-label={t('zakatWorksheet.classification')}><option value="">{t('zakatWorksheet.unclassified')}</option>{TYPES.map((x) => <option key={x} value={x}>{t(`zakatWorksheet.types.${x}`)}</option>)}</select>
                 <input name="reg_article" defaultValue={c?.reg_article ?? ''} required maxLength={100} placeholder={t('zakatWorksheet.article')} aria-label={t('zakatWorksheet.article')} />
                 {docSelect('evidence_document_id', false, c?.evidence_document_id ?? '')}
@@ -252,21 +252,21 @@ export function ZakatWorksheet(p: ZakatWorksheetProps) {
           <div className="table-wrap"><table className="ac-table"><thead><tr><th>{t('zakatWorksheet.description')}</th><th>{t('zakatWorksheet.direction')}</th><th>{t('zakatWorksheet.amount')}</th><th>{t('zakatWorksheet.article')}</th><th>{t('zakatWorksheet.evidence')}</th><th /></tr></thead>
             <tbody>{data.adjustments.map((a) => <tr key={a.id}><td>{a.description}{a.professional_review_required && <> <span className="ac-badge ac-badge--warn">{t('zakatWorksheet.professionalReviewFlag')}</span></>}</td><td>{t(`zakatWorksheet.directions.${a.direction}`)}</td><td className="zw-num"><bdi>{a.amount}</bdi></td><td><bdi>{a.reg_article}</bdi></td><td>{a.evidence_document_id ? documents.find((d) => d.id === a.evidence_document_id)?.original_filename ?? t('zakatWorksheet.document') : a.evidence_note}</td>
               <td>{draft && p.canDeleteAdjustment && <button type="button" className="ac-btn" disabled={busy} onClick={() => void ws(`/adjustments/${a.id}`, 'DELETE', { version: w.version })}>{t('zakatWorksheet.delete')}</button>}</td></tr>)}</tbody></table></div>}
-        {draft && p.canCreateAdjustment && <form className="zw-form" onSubmit={(e) => void addAdjustment(e)}>
-          <label>{t('zakatWorksheet.description')}<input name="description" required maxLength={500} /></label>
+        {draft && p.canCreateAdjustment && <form className="zw-form zw-form--adj" onSubmit={(e) => void addAdjustment(e)}>
+          <label className="zw-wide">{t('zakatWorksheet.description')}<input name="description" required maxLength={500} /></label>
           <label>{t('zakatWorksheet.direction')}<select name="direction"><option value="add">{t('zakatWorksheet.directions.add')}</option><option value="deduct">{t('zakatWorksheet.directions.deduct')}</option></select></label>
           <label>{t('zakatWorksheet.amount')}<input name="amount" required inputMode="decimal" pattern="(?:0|[1-9][0-9]{0,15})\.[0-9]{2}" placeholder="0.00" dir="ltr" /></label>
           <label>{t('zakatWorksheet.article')}<input name="reg_article" required maxLength={100} /></label>
           <label>{t('zakatWorksheet.evidenceDoc')}{docSelect('evidence_document_id')}</label>
-          <label>{t('zakatWorksheet.evidenceNote')}<input name="evidence_note" maxLength={2000} /></label>
+          <label className="zw-wide">{t('zakatWorksheet.evidenceNote')}<input name="evidence_note" maxLength={2000} /></label>
           <label className="zw-check"><input type="checkbox" name="professional_review_required" /> {t('zakatWorksheet.professionalReview')}</label>
           <button className="ac-btn ac-btn--primary" disabled={busy}>{t('zakatWorksheet.addAdjustment')}</button>
         </form>}
       </div>}
 
-      {w && <div className="zw-card">
+      {w && <div className="zw-card zw-review-card">
         <h4>{t('zakatWorksheet.reviewTitle')}</h4>
-        {(['in_review', 'reviewed', 'approved'].includes(w.status)) && <label>{t('zakatWorksheet.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} /></label>}
+        {(['in_review', 'reviewed', 'approved'].includes(w.status)) && <label className="zw-reason">{t('zakatWorksheet.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} /></label>}
         <div className="zw-actions">
           {w.status === 'draft' && p.canSubmit && <button type="button" className="ac-btn ac-btn--primary" disabled={busy || !r.can_submit} onClick={() => void workflow('submit')}>{t('zakatWorksheet.submit')}</button>}
           {w.status === 'in_review' && p.canReview && <button type="button" className="ac-btn ac-btn--primary" disabled={busy || !r.can_submit} onClick={() => void workflow('review')}>{t('zakatWorksheet.review')}</button>}

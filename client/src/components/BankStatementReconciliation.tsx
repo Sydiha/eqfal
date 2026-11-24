@@ -223,7 +223,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
     {error && <Alert color="red" role="alert">{error}</Alert>}
     {!canManageStatements && !canConfirmStatements && !canManageSettings && <Text size="sm" c="dimmed">{s.noPermission}</Text>}
 
-    <Card withBorder><Group align="end" wrap="wrap" justify="space-between">
+    <Card withBorder><Group align="end" wrap="wrap" justify="space-between" className="bsr-toolbar">
       <Group align="end" wrap="wrap">
         <NativeSelect label={s.account} value={bankId} onChange={e => setBankId(e.currentTarget.value)} data={accounts.map(a => ({ value: a.id, label: `${a.display_name} (${a.currency_code})` }))}/>
         <DateTextInput label={s.periodEnd} value={periodEnd} onChange={setPeriodEnd}/>
@@ -269,11 +269,11 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
       </Table.Tbody></Table></Table.ScrollContainer>}
     </Stack></Card>; })()}
 
-    <Card withBorder id="bsr-links" tabIndex={-1}><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
+    <Card withBorder id="bsr-links" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
       {!activeLink && <Text c="dimmed">{s.unlinked}</Text>}
       {links.filter(x => x.bank_account_id === bankId).map(link => <Group key={link.id}><Text><bdi dir="auto">{ledgerName(link.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(link.valid_from, i18n.language)}</span> · {s.validTo} {link.valid_to ? <span dir="ltr">{formatDisplayDateLtr(link.valid_to, i18n.language)}</span> : s.openEnded}</Text>
         {canManageLinks && link.id === activeLink?.id && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group>)}
-      {canManageLinks && <form onSubmit={addLink} noValidate><Group align="end">
+      {canManageLinks && <form onSubmit={addLink} noValidate><Group align="end" className="bsr-form">
         <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
         <DateTextInput label={s.validFrom} value={validFrom} onChange={setValidFrom} error={fieldErrors['validFrom']} required/>
         <Checkbox label={s.openEnded} checked={openEnded} onChange={e => setOpenEnded(e.currentTarget.checked)}/>
@@ -281,7 +281,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
         <Button type="submit">{s.link}</Button></Group></form>}
     </Stack></Card>
 
-    <Card withBorder id="bsr-statements" tabIndex={-1}><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
+    <Card withBorder id="bsr-statements" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
       {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={640}><Table className="bsr-table">
         <colgroup><col className="bsr-col-ref"/><col className="bsr-col-period"/><col className="bsr-col-closing"/><col className="bsr-col-status"/><col className="bsr-col-actions"/></colgroup>
         <Table.Thead><Table.Tr>
@@ -297,7 +297,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
 
       {(canManageStatements || (replacing && canConfirmStatements)) && <form onSubmit={addStatement} noValidate key={replacing?.id ?? 'new'}><Stack gap="xs">
         {replacing && <><Alert color="yellow">{s.replace}: {replacing.statement_ref}</Alert><TextInput label={s.reason} value={reason} onChange={e => setReason(e.currentTarget.value)} error={fieldErrors['reason']} maxLength={500} required/></>}
-        <Group align="end" wrap="wrap">
+        <Group align="end" wrap="wrap" className="bsr-form bsr-form--statement">
           <TextInput name="ref" label={s.ref} defaultValue={replacing?.statement_ref ?? ''} error={fieldErrors['ref']} maxLength={100} required/>
           <DateTextInput name="from" error={fieldErrors['from']} label={s.from} defaultValue={replacing?.period_start ?? ''} required/>
           <DateTextInput name="to" error={fieldErrors['to']} label={s.to} defaultValue={replacing?.period_end ?? periodEnd} required/>
