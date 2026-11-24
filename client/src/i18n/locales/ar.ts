@@ -117,6 +117,7 @@ const ar = {
     warning_manual_journal_review: 'توجد قيود بلا مصدر في هذا الشهر. راجع احتمال تداخلها مع الرواتب؛ لا يستطيع هذا الفحص تحديد محتواها.',
   },
   employeeCostCenter: {
+    summary:{employees:'الموظفون (الكل)',activeEmployees:'الموظفون النشطون',fiscalYear:'السنة المالية المحددة',costRecords:'سجلات التكلفة الحالية (كل السنوات)',drafts:'مسودات',approved:'معتمدة',reportScope:'نطاق التقرير',scopeAnnual:'السنة المالية كاملة',basis:'أساس التقرير',basisValue:'تكاليف مسجلة وليست مدفوعات'}, allocationsTotal:'مجموع التوزيعات', costTotal:'إجمالي التكلفة', allocationsMatch:'متطابق', allocationsMismatchShort:'غير متطابق', currentApprovedRecord:'السجل المعتمد الحالي',
     tabs:{employees:'الموظفون',costs:'التكاليف',bonuses:'المكافآت',payments:'الدفعات والتسويات',advances:'السلف',reports:'التقارير'}, employeeData:'بيانات الموظف', recordVersion:'إصدار السجل', confidentiality:'الراتب والبيانات البنكية يظهران وفق صلاحية المستخدم فقط.',
     title:'مركز تكاليف الموظفين', intro:'تكاليف موظفين مسجلة للتقارير الداخلية. لا تمثل هذه المبالغ مدفوعات بنكية مؤكدة أو مصروفات مرحلة محاسبياً.', loading:'جارٍ تحميل بيانات تكاليف الموظفين…', error:'تعذّر تحميل بيانات تكاليف الموظفين.', noAccess:'لا تملك صلاحية عرض مساحة العمل هذه.',
     recordedLabel:'تكاليف مسجلة ومعتمدة', notPayment:'ليست مدفوعات بنكية مؤكدة', notPosted:'ليست مصروفات مرحلة محاسبياً', salaryHidden:'يتطلب عرض الاستحقاقات والاستقطاعات صلاحية مخصصة لعرض بيانات الرواتب.',

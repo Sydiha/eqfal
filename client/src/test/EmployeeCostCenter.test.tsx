@@ -321,4 +321,30 @@ describe('Employee Cost Center six-section layout',()=>{
     expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['الموظفون','التكاليف','التقارير']);
     expect(container.querySelector('[dir=rtl]')).toBeInTheDocument();
   });
+  it('labels summary metrics by their real scope per tab',async()=>{
+    mockApi([cost('d1','draft'),cost('a1','approved'),cost('a2','approved')]);
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    expect(screen.getByText('Employees (all)').nextSibling).toHaveTextContent('1');
+    openTab('Costs');
+    expect(screen.getByText('Current cost records (all years)').nextSibling).toHaveTextContent('3');
+    expect(screen.getByText('Drafts').nextSibling).toHaveTextContent('1');
+    expect(screen.getByText('Approved',{selector:'.ecc-summary-card span'}).nextSibling).toHaveTextContent('2');
+    openTab('Reports');
+    expect(screen.getByText('Recorded costs, not payments')).toBeInTheDocument();
+    expect(screen.getByText('Report scope')).toBeInTheDocument();
+  });
+  it('shows a live allocation match indicator in the cost dialog',async()=>{
+    mockApi();
+    render(<EmployeeCostCenter capabilities={['employee.view','employee_cost.view','employee_cost.create','employee_cost.salary.view']} onUnauthorized={onUnauthorized}/>);
+    await screen.findByRole('heading',{name:'Employee Cost Center'});
+    openTab('Costs');
+    fireEvent.click(screen.getByRole('button',{name:'Record cost'}));
+    const dialog=await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Total amount'),{target:{value:'100'}});
+    fireEvent.change(within(dialog).getByLabelText('Month amount'),{target:{value:'60'}});
+    expect(within(dialog).getByText(/Does not match/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Month amount'),{target:{value:'100'}});
+    expect(within(dialog).getByText(/Matches/)).toBeInTheDocument();
+  });
 });
