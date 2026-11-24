@@ -22,9 +22,9 @@ type Bonus = {
 };
 type Account = { id: string; code: string; name: string; name_ar?: string | null; account_type: string; is_active: boolean; has_children?: boolean };
 
-type Props = { arabic: boolean; onUnauthorized: () => void; capabilities?: string[]; employees?: { id: string; display_name: string }[] };
+type Props = { arabic: boolean; onUnauthorized: () => void; capabilities?: string[]; employees?: { id: string; display_name: string }[]; createOpen?: boolean; onCreateClose?: () => void };
 
-export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [], employees = [] }: Props) {
+export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [], employees = [], createOpen = false, onCreateClose = () => undefined }: Props) {
   const company = useOptionalCompany();
   const companyKey = company?.activeCompanyId ?? 'active-session';
   const [bonuses, setBonuses] = useState<Bonus[] | null>(null);
@@ -34,6 +34,8 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
   const [accountsFailed, setAccountsFailed] = useState(false);
   const [recognitionSelections, setRecognitionSelections] = useState<Record<string, string>>({});
   const [recognitionError, setRecognitionError] = useState('');
+  const [selectedId, setSelectedId] = useState('');
+  const [notice, setNotice] = useState('');
   const [scheduleFeedback, setScheduleFeedback] = useState<{ bonusId: string; type: 'success' | 'error'; message: string } | null>(null);
   const submitting = useRef(false);
   const scheduleRequests = useRef<Record<string, { signature: string; key: string }>>({});
@@ -80,6 +82,8 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
       setLoading(false);
     }
   }
+  useEffect(() => { void load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyKey]);
   const can = (capability: string) => capabilities.includes(capability);
   async function submit(id: string, action: 'approval' | 'schedule' | 'recognition', payload: object) {
     if (submitting.current) return;
@@ -162,15 +166,16 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
       void submit(id, action, { ...values, request_key: key });
     } else void submit(id, action, values);
   }
+  const selected = bonuses?.find(bonus => bonus.id === selectedId) ?? bonuses?.[0];
+  const statusChip = (bonus: Bonus) => <span className={`ecc-chip ${bonus.approved_at ? 'ecc-chip-approved' : 'ecc-chip-draft'}`}>{bonus.approved_at ? label('معتمدة', 'Approved') : label('مسودة', 'Draft')}</span>;
   return <section className="ecc-card" dir={arabic ? 'rtl' : 'ltr'} aria-labelledby="employee-bonus-title">
     <div className="ecc-card-head">
       <h3 id="employee-bonus-title">{label('أرصدة المكافآت', 'Bonus balances')}</h3>
-      <button type="button" disabled={loading} onClick={() => void load()}>
-        {bonuses ? label('تحديث الأرصدة', 'Refresh balances') : label('عرض الأرصدة', 'Show balances')}
-      </button>
+      <button type="button" disabled={loading} onClick={() => void load()}>{label('تحديث الأرصدة', 'Refresh balances')}</button>
     </div>
-    {can('employee_cost.create') && <EmployeeBonusDraft employees={employees} arabic={arabic}
-      onSaved={() => void load()} onUnauthorized={onUnauthorized} />}
+    {createOpen && can('employee_cost.create') && <EmployeeBonusDraft employees={employees} arabic={arabic}
+      onSaved={() => { setNotice(label('حُفظت المسودات. راجع المبالغ قبل الاعتماد.', 'Drafts saved. Review the amounts before approval.')); void load(); }} onClose={onCreateClose} onUnauthorized={onUnauthorized} />}
+    {notice && <p role="status">{notice}</p>}
     {loading && <p role="status">{label('جارٍ التحميل', 'Loading')}</p>}
     {failed && <p role="alert">{label('تعذر تحميل أرصدة المكافآت', 'Could not load bonus balances')}</p>}
     {bonuses?.length === 0 && <p>{label('لا توجد مكافآت', 'No bonuses')}</p>}
@@ -178,52 +183,56 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
     {!!bonuses?.length && <div className="ecc-table-wrap"><table>
       <thead><tr>
         <th scope="col">{label('الموظف', 'Employee')}</th>
-        <th scope="col">{label('الفترة', 'Period')}</th>
-        <th scope="col">{label('المبلغ المعتمد (ر.س)', 'Approved amount (SAR)')}</th>
-        <th scope="col">{label('تاريخ الاعتراف', 'Recognition date')}</th>
-        <th scope="col">{label('المسوّى (ر.س)', 'Settled (SAR)')}</th>
-        <th scope="col">{label('بانتظار صرف الرواتب (ر.س)', 'Pending payroll payment (SAR)')}</th>
-        <th scope="col">{label('المتبقي (ر.س)', 'Outstanding (SAR)')}</th>
-        <th scope="col">{label('الجدول والإجراءات', 'Schedule and actions')}</th>
+        <th scope="col">{label('المكافأة (ر.س)', 'Bonus (SAR)')}</th>
+        <th scope="col">{label('الحالة', 'Status')}</th>
+        <th scope="col">{label('المحاسبة', 'Accounting')}</th>
+        <th scope="col">{label('الإجراء', 'Action')}</th>
       </tr></thead>
-      <tbody>{bonuses.map(bonus => <tr key={bonus.id}>
-        <td>{bonus.display_name}{bonus.award_code && <> · <bdi>{bonus.award_code}</bdi></>} <span className={`ecc-chip ${bonus.approved_at?'ecc-chip-approved':'ecc-chip-draft'}`}>{bonus.approved_at?label('معتمدة','Approved'):label('مسودة','Draft')}</span></td>
-        <td><bdi>{bonus.period_start} – {bonus.period_end}</bdi></td>
-        <td><bdi>{bonus.approved_at ? bonus.amount : '—'}</bdi></td>
-        <td><bdi>{bonus.accounting_date ?? '—'}</bdi></td>
-        <td><bdi>{bonus.settled}</bdi></td>
-        <td><bdi>{bonus.pending_payroll ?? '0.00'}</bdi></td>
-        <td><bdi>{bonus.outstanding ?? '—'}</bdi></td>
-        <td>
-          {bonus.liability_line_id && Number(bonus.outstanding)>Number(bonus.pending_payroll ?? 0) &&
+      <tbody>{bonuses.map(bonus => <tr key={bonus.id} className={bonus.id === selected?.id ? 'ecc-row-selected' : undefined} aria-selected={bonus.id === selected?.id}>
+        <td>{bonus.display_name}{bonus.award_code && <> · <bdi dir="ltr">{bonus.award_code}</bdi></>}</td>
+        <td><bdi dir="ltr">{bonus.approved_at ? bonus.amount : '—'}</bdi></td>
+        <td>{statusChip(bonus)}</td>
+        <td>{bonus.accounting_date ? <>{label('مرحل', 'Posted')} · <bdi dir="ltr">{bonus.accounting_date}</bdi></> : label('غير مرحل', 'Not posted')}</td>
+        <td><button type="button" onClick={() => setSelectedId(bonus.id)}>{label('عرض التفاصيل', 'View details')}</button></td>
+      </tr>)}</tbody>
+    </table></div>}
+    {selected && <section className="ecc-detail ecc-bonus-detail" aria-label={label('المكافأة المحددة', 'Selected bonus')}>
+      <h4>{selected.display_name}{selected.award_code && <> · <bdi dir="ltr">{selected.award_code}</bdi></>} {statusChip(selected)}</h4>
+      <dl className="ecc-detail-grid">
+        <div><dt>{label('الفترة', 'Period')}</dt><dd><bdi dir="ltr">{selected.period_start} – {selected.period_end}</bdi></dd></div>
+        <div><dt>{label('المسوّى (ر.س)', 'Settled (SAR)')}</dt><dd><bdi dir="ltr">{selected.settled}</bdi></dd></div>
+        <div><dt>{label('بانتظار صرف الرواتب (ر.س)', 'Pending payroll payment (SAR)')}</dt><dd><bdi dir="ltr">{selected.pending_payroll ?? '0.00'}</bdi></dd></div>
+        <div><dt>{label('المتبقي (ر.س)', 'Outstanding (SAR)')}</dt><dd><bdi dir="ltr">{selected.outstanding ?? '—'}</bdi></dd></div>
+      </dl>
+      {!!selected.schedule?.length && <div className="ecc-table-wrap"><table><thead><tr><th scope="col">{label('موعد الدفعة', 'Due date')}</th><th scope="col">{label('المبلغ', 'Amount')}</th><th scope="col">{label('مسار الصرف', 'Channel')}</th></tr></thead>
+        <tbody>{selected.schedule.map(item => <tr key={item.id}><td><bdi dir="ltr">{item.due_on}</bdi></td><td><bdi dir="ltr">{item.amount}</bdi></td><td>{item.channel === 'payroll' ? label('رواتب', 'Payroll') : label('بنك', 'Bank')}</td></tr>)}</tbody></table></div>}
+      <div className="ecc-bonus-actions">
+          {selected.liability_line_id && Number(selected.outstanding)>Number(selected.pending_payroll ?? 0) &&
             ['payroll.view','payroll.settlement.view','payroll.settlement.create','bank.view','bank.reconcile'].every(can) &&
-            <EmployeeBonusBankPayment liabilityLine={bonus.liability_line_id} arabic={arabic}
+            <EmployeeBonusBankPayment key={selected.id} liabilityLine={selected.liability_line_id} arabic={arabic}
               onSaved={() => void load()} onUnauthorized={onUnauthorized} />}
-          {!!bonus.schedule?.length && <ul>{bonus.schedule.map(item => <li key={item.id}>
-            <bdi>{item.due_on} · {item.amount}</bdi> {item.channel === 'payroll' ? label('رواتب', 'Payroll') : label('بنك', 'Bank')}
-          </li>)}</ul>}
-          {!bonus.approved_at && can('employee_cost.approve') && <p>
-            {label('المبلغ المحسوب للمراجعة', 'Calculated amount for review')}: <bdi>{bonus.amount}</bdi>
+          {!selected.approved_at && can('employee_cost.approve') && <p>
+            {label('المبلغ المحسوب للمراجعة', 'Calculated amount for review')}: <bdi>{selected.amount}</bdi>
           </p>}
-          {!bonus.approved_at && can('employee_cost.approve') && <button type="button" disabled={loading}
-            onClick={() => void submit(bonus.id, 'approval', {})}>{label('اعتماد', 'Approve')}</button>}
-          {bonus.approved_at && !bonus.accounting_date && Number(bonus.amount) > 0 &&
+          {!selected.approved_at && can('employee_cost.approve') && <button type="button" disabled={loading}
+            onClick={() => void submit(selected.id, 'approval', {})}>{label('اعتماد', 'Approve')}</button>}
+          {selected.approved_at && !selected.accounting_date && Number(selected.amount) > 0 &&
             can('employee_cost.approve') && can('accounting.journal.post') && <details>
             <summary>{label('إثبات الاستحقاق والترحيل', 'Evidence and recognition')}</summary>
-            <form onSubmit={event => submitForm(event, bonus.id, 'recognition')}>
+            <form onSubmit={event => submitForm(event, selected.id, 'recognition')}>
               <label>{label('تاريخ تحقق الشرط', 'Fulfillment date')} <input name="fulfilled_on" type="date" required /></label>
               <label>{label('تاريخ الاعتراف', 'Accounting date')} <input name="accounting_date" type="date" required /></label>
               <label>{label('دليل الاستحقاق', 'Supporting evidence')} <textarea name="evidence" required maxLength={4000} /></label>
               <label>{label('سبب اختلاف التاريخ', 'Reason for date difference')} <input name="date_reason" maxLength={1000} /></label>
               <label>{label('حساب المصروف', 'Expense account')}
-                <Select name="expense_account_id" aria-label={label('حساب المصروف', 'Expense account')} data={accountOptions(expenseAccounts)} value={recognitionSelections[`${bonus.id}:expense`] || null}
-                  onChange={value => selectRecognitionAccount(`${bonus.id}:expense`, value)} searchable required disabled={accounts === null || accountsFailed}
+                <Select name="expense_account_id" aria-label={label('حساب المصروف', 'Expense account')} data={accountOptions(expenseAccounts)} value={recognitionSelections[`${selected.id}:expense`] || null}
+                  onChange={value => selectRecognitionAccount(`${selected.id}:expense`, value)} searchable required disabled={accounts === null || accountsFailed}
                   placeholder={accounts === null ? label('جارٍ تحميل الحسابات', 'Loading accounts') : expenseAccounts.length ? label('اختر حساب المصروف', 'Select an expense account') : label('لا توجد حسابات مصروف مؤهلة', 'No eligible expense accounts')}
                   nothingFoundMessage={label('لا توجد نتائج مطابقة', 'No matching accounts')} />
               </label>
               <label>{label('حساب الالتزام', 'Liability account')}
-                <Select name="liability_account_id" aria-label={label('حساب الالتزام', 'Liability account')} data={accountOptions(liabilityAccounts)} value={recognitionSelections[`${bonus.id}:liability`] || null}
-                  onChange={value => selectRecognitionAccount(`${bonus.id}:liability`, value)} searchable required disabled={accounts === null || accountsFailed}
+                <Select name="liability_account_id" aria-label={label('حساب الالتزام', 'Liability account')} data={accountOptions(liabilityAccounts)} value={recognitionSelections[`${selected.id}:liability`] || null}
+                  onChange={value => selectRecognitionAccount(`${selected.id}:liability`, value)} searchable required disabled={accounts === null || accountsFailed}
                   placeholder={accounts === null ? label('جارٍ تحميل الحسابات', 'Loading accounts') : liabilityAccounts.length ? label('اختر حساب الالتزام', 'Select a liability account') : label('لا توجد حسابات التزام مؤهلة', 'No eligible liability accounts')}
                   nothingFoundMessage={label('لا توجد نتائج مطابقة', 'No matching accounts')} />
               </label>
@@ -235,21 +244,20 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
               <button disabled={loading || accounts === null || accountsFailed || !expenseAccounts.length || !liabilityAccounts.length}>{label('ترحيل الاعتراف', 'Post recognition')}</button>
             </form>
           </details>}
-          {bonus.approved_at && Number(bonus.amount) > 0 && can('employee_cost.payment.allocate') && <details>
+          {selected.approved_at && Number(selected.amount) > 0 && can('employee_cost.payment.allocate') && <details>
             <summary>{label('جدولة دفعة', 'Schedule payment')}</summary>
-            <form onSubmit={event => submitForm(event, bonus.id, 'schedule')}>
+            <form onSubmit={event => submitForm(event, selected.id, 'schedule')}>
               <label>{label('موعد الدفع', 'Due date')} <input name="due_on" type="date" required /></label>
               <label>{label('المبلغ', 'Amount')} <input name="amount" inputMode="decimal" required /></label>
               <label>{label('مسار الصرف', 'Payment channel')} <select name="channel">
                 <option value="bank">{label('بنك', 'Bank')}</option>
                 <option value="payroll">{label('رواتب', 'Payroll')}</option>
               </select></label>
-              {scheduleFeedback?.bonusId === bonus.id && <p role={scheduleFeedback.type === 'error' ? 'alert' : 'status'}>{scheduleFeedback.message}</p>}
+              {scheduleFeedback?.bonusId === selected.id && <p role={scheduleFeedback.type === 'error' ? 'alert' : 'status'}>{scheduleFeedback.message}</p>}
               <button disabled={loading}>{label('حفظ الموعد', 'Save schedule')}</button>
             </form>
           </details>}
-        </td>
-      </tr>)}</tbody>
-    </table></div>}
+      </div>
+    </section>}
   </section>;
 }
