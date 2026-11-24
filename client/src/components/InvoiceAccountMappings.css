@@ -50,3 +50,14 @@
 [dir=rtl] .invoice-mappings-dialog .modal-actions{flex-direction:row-reverse}
 .invoice-mappings-dialog .invoice-mappings-dialog__current{font-weight:700}
 @media(max-width:48em){.invoice-mappings-dialog .modal-actions,[dir=rtl] .invoice-mappings-dialog .modal-actions{display:flex;flex-direction:column-reverse}}
+/* Figma fidelity corrections: section hierarchy, column proportions, density, wrapping */
+.invoice-mappings .invoice-mappings__section-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.invoice-mappings .invoice-mappings__section-head h3{margin:0}
+.invoice-mappings .invoice-mappings__section-meta{color:var(--muted);font-size:.8rem;margin-inline-end:auto}
+.invoice-mappings .invoice-mappings__row{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) minmax(0,1.5fr);gap:12px 18px;padding:12px 14px}
+.invoice-mappings .invoice-mappings__rows{gap:8px}
+.invoice-mappings .invoice-mappings__role-name,.invoice-mappings .invoice-mappings__reason,.invoice-mappings .invoice-mappings__note{overflow-wrap:anywhere;text-wrap:balance}
+.invoice-mappings .invoice-mappings__buttons .invoice-mappings__save{flex:1 1 120px}
+
+@media(max-width:64em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr 1fr}}
+@media(max-width:48em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__section-meta{margin-inline-end:0;order:3;flex-basis:100%}}
