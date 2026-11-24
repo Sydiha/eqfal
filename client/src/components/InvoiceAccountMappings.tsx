@@ -104,10 +104,10 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
         <div><span className="invoice-mappings__compare-label">{t('invoiceMappings.to')}</span>{accountLabel(selected)}{!row.account && <small>{t('invoiceMappings.firstTime')}</small>}</div>
       </div>}
       <div className="invoice-mappings__buttons">
-        {options.length > 0 && <button type="button" className="primary invoice-mappings__save" aria-label={t('invoiceMappings.saveFor', { name })} disabled={!selected || locked} aria-describedby={options.length > 0 && !selected && !locked ? hintId : undefined} onClick={() => void send(row, 'PUT')}>
-          {rowBusy && busy.method === 'PUT' ? <><span className="invoice-mappings__spinner" aria-hidden="true" />{t('invoiceMappings.saving')}</> : t('invoiceMappings.save')}</button>}
         {row.account && <button type="button" className="invoice-mappings__clear" aria-label={t('invoiceMappings.clearFor', { name })} disabled={locked} onClick={() => setConfirmClear(row)}>
           {rowBusy && busy.method === 'DELETE' ? <><span className="invoice-mappings__spinner" aria-hidden="true" />{t('invoiceMappings.clearing')}</> : t('invoiceMappings.clear')}</button>}
+        {options.length > 0 && <button type="button" className="primary invoice-mappings__save" aria-label={t('invoiceMappings.saveFor', { name })} disabled={!selected || locked} aria-describedby={options.length > 0 && !selected && !locked ? hintId : undefined} onClick={() => void send(row, 'PUT')}>
+          {rowBusy && busy.method === 'PUT' ? <><span className="invoice-mappings__spinner" aria-hidden="true" />{t('invoiceMappings.saving')}</> : t('invoiceMappings.save')}</button>}
         {options.length > 0 && !selected && !locked && <small id={hintId} className="invoice-mappings__save-hint">{t('invoiceMappings.saveDisabledHint')}</small>}
       </div>
     </div>;
@@ -118,8 +118,8 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
     {loadError && <WorkspaceState tone="error" action={<button type="button" onClick={() => void load()}>{t('invoiceMappings.retry')}</button>}>{t('invoiceMappings.error')}</WorkspaceState>}
     {!loadError && rows === null && <WorkspaceState>{t('invoiceMappings.loading')}</WorkspaceState>}
     {rows && (incomplete > 0
-      ? <div role="status" className="invoice-mappings__summary is-warning" data-testid="mapping-incomplete"><strong>{t('invoiceMappings.incomplete', { count: incomplete })}</strong>
-        {missing && <span>{t('invoiceMappings.missingKeys', { keys: missing })}</span>}{invalid && <span>{t('invoiceMappings.invalidKeys', { keys: invalid })}</span>}</div>
+      ? <div role="status" className="invoice-mappings__summary is-warning" data-testid="mapping-incomplete"><strong className="invoice-mappings__summary-title">{t('invoiceMappings.incomplete', { count: incomplete })}</strong>
+        {missing && <p className="invoice-mappings__summary-line">{t('invoiceMappings.missingKeys', { keys: missing })}</p>}{invalid && <p className="invoice-mappings__summary-line">{t('invoiceMappings.invalidKeys', { keys: invalid })}</p>}</div>
       : <div role="status" className="invoice-mappings__summary" data-testid="mapping-complete">{t('invoiceMappings.allConfigured')}</div>)}
     {rows && !canManage && <p className="invoice-mappings__summary" data-testid="mapping-readonly">{t('invoiceMappings.readOnly')}</p>}
     {busy && <p role="status" className="invoice-mappings__summary" data-testid="mapping-busy">{t(busy.method === 'PUT' ? 'invoiceMappings.savingNotice' : 'invoiceMappings.clearingNotice')}</p>}
@@ -131,8 +131,8 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
           const why = reason(row);
           return <li key={row.key} className={`invoice-mappings__row is-${row.status}${canManage && selectedFor(row) ? ' is-modified' : ''}`} data-testid={`mapping-${row.key}`} aria-busy={busy?.key === row.key || undefined}>
             <div className="invoice-mappings__role">
-              <strong>{keyName(row.key)}</strong>
-              <span className="invoice-mappings__muted">{t('invoiceMappings.requiredType')}: {typeName(row.required_account_type)}</span>
+              <strong className="invoice-mappings__role-name">{keyName(row.key)}</strong>
+              <span className="invoice-mappings__muted invoice-mappings__role-type">{t('invoiceMappings.requiredType')}: {typeName(row.required_account_type)}</span>
               <StatusBadge status={STATUS_BADGE[row.status]}>{t(`invoiceMappings.statuses.${row.status}`)}</StatusBadge>
             </div>
             <div className="invoice-mappings__current">
@@ -151,9 +151,9 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
         })}
       </ul>
     </SectionCard>)}
-    {confirmClear && <Dialog title={t('invoiceMappings.confirmClearTitle')} busy={busy !== null} onClose={() => setConfirmClear(null)}>
+    {confirmClear && <Dialog className="invoice-mappings-dialog" title={t('invoiceMappings.confirmClearTitle')} busy={busy !== null} onClose={() => setConfirmClear(null)}>
       <p>{t('invoiceMappings.confirmClearBody', { name: keyName(confirmClear.key) })}</p>
-      {confirmClear.account && <p>{t('invoiceMappings.current')}: {accountLabel(confirmClear.account)}</p>}
+      {confirmClear.account && <p className="invoice-mappings-dialog__current">{t('invoiceMappings.current')}: {accountLabel(confirmClear.account)}</p>}
       <div className="modal-actions"><button type="button" onClick={() => setConfirmClear(null)} disabled={busy !== null}>{t('common.cancel')}</button>
         <button type="button" className="primary" onClick={() => void send(confirmClear, 'DELETE')} disabled={busy !== null}>{t('invoiceMappings.confirmClear')}</button></div>
     </Dialog>}
