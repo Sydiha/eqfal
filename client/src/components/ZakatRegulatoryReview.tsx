@@ -81,7 +81,7 @@ export function ZakatRegulatoryReview(p: Props) {
     })) setFormGate(null);
   };
 
-  return <section className="zw-card" id="zakat-regulatory-review" dir={p.ar ? 'rtl' : 'ltr'} aria-labelledby="zakat-regulatory-title">
+  return <section className="zw-card zw-review" id="zakat-regulatory-review" dir={p.ar ? 'rtl' : 'ltr'} aria-labelledby="zakat-regulatory-title">
     <h4 id="zakat-regulatory-title">{label('المراجعة النظامية واعتماد الزكاة', 'Regulatory review and Zakat approval')}</h4>
     <div role="status">
       {finalization.status === 'READY' && finalization.payable_amount_halalas !== null
@@ -100,7 +100,7 @@ export function ZakatRegulatoryReview(p: Props) {
         : active?.status === 'pending' ? label('بانتظار مراجعة مستقلة', 'Awaiting independent review')
           : active?.status === 'stale' ? label('الأدلة أو بيانات المصدر تغيّرت. ألغِ القرار وقدّم الأدلة مجددًا.', 'Evidence or source changed. End this decision and resubmit evidence.')
             : label('أرفق الأدلة المطلوبة بعد إقفال الفترة ومراجعة الورقة.', 'Submit the required evidence after closing the period and reviewing the worksheet.');
-      return <div key={gate} className="zw-card">
+      return <div key={gate} className="zw-card zw-gate">
         <h5><bdi>{gate}</bdi> · {status}</h5>
         <p>{requirements[gate][p.ar ? 0 : 1]}</p>
         {gate === 'B9' && p.data.regulatory_binding && <p dir="ltr">
@@ -115,7 +115,7 @@ export function ZakatRegulatoryReview(p: Props) {
         </details>}
         {active?.can_approve && p.canApprove && p.canViewDocuments && <button className="ac-btn" type="button" disabled={p.busy} onClick={() => void p.write(`/regulatory-decisions/${active.id}/approve`, 'POST', {})}>{label('اعتماد الأدلة بعد التحقق', 'Approve after verifying evidence')}</button>}
         {active?.can_end && <button className="ac-btn" type="button" disabled={p.busy} onClick={() => setEnding(active.id)}>{label('إنهاء القرار', 'End decision')}</button>}
-        {active && ending === active.id && <form onSubmit={async (event) => {
+        {active && ending === active.id && <form className="zw-form zw-form--stack" onSubmit={async (event) => {
           event.preventDefault();
           const reason = new FormData(event.currentTarget).get('reason');
           if (await p.write(`/regulatory-decisions/${active.id}/end`, 'POST', { reason })) setEnding(null);
@@ -130,7 +130,7 @@ export function ZakatRegulatoryReview(p: Props) {
         </details>}
         {!active && p.reviewed && p.canSubmit && p.canViewDocuments && (formGate !== gate
           ? <button className="ac-btn" type="button" disabled={p.busy} onClick={() => { setFormGate(gate); setInvalid(false); }}>{label('تقديم الأدلة للمراجعة', 'Submit evidence for review')}</button>
-          : <form onSubmit={(event) => void submit(event, gate)}>
+          : <form className="zw-form zw-form--stack" onSubmit={(event) => void submit(event, gate)}>
             <label>{label('مستند إثبات معتمد', 'Approved evidence document')} <select name="document" required defaultValue="">
               <option value="">{label('اختر المستند', 'Select document')}</option>
               {p.documents.filter((d) => d.status === 'approved').map((d) => <option value={d.id} key={d.id}>{d.original_filename}</option>)}

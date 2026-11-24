@@ -20,3 +20,37 @@
   .bank-statement-reconciliation .bsr-items td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
 }
 @media(max-width:48em){.bank-statement-reconciliation .bsr-items td{flex-wrap:wrap}.bank-statement-reconciliation .bsr-items .mantine-Badge-root{max-width:100%;height:auto;white-space:normal}.bank-statement-reconciliation .bsr-items .mantine-Badge-label{white-space:normal;overflow:visible}}
+
+/* Batch B: clearer sections, form hierarchy and balance block. Presentation only. */
+.bank-statement-reconciliation .bsr-toolbar{padding:2px 0}
+.bank-statement-reconciliation .bsr-section>.mantine-Stack-root>h3{padding-block-end:8px;border-block-end:1px solid var(--border)}
+.bank-statement-reconciliation .bsr-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px 14px;align-items:end;padding:12px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-soft,rgba(248,250,252,.7))}
+.bank-statement-reconciliation .bsr-form>*{min-width:0}
+.bank-statement-reconciliation .bsr-form--statement>:nth-last-child(-n+2){align-self:end}
+.bank-statement-reconciliation .bsr-form .mantine-Checkbox-root{align-self:center;padding-block:6px}
+.bank-statement-reconciliation .bsr-result{padding:12px 14px;border-radius:12px;background:var(--surface-soft,rgba(248,250,252,.7));border:1px solid var(--border)}
+.bank-statement-reconciliation .bsr-result__status{padding-block-end:6px}
+.bank-statement-reconciliation .fin-summary{max-width:none}
+.bank-statement-reconciliation .bsr-items-scroll{border:1px solid var(--border);border-radius:10px}
+.bank-statement-reconciliation .bsr-items th{font-size:.78rem;color:var(--muted)}
+.bank-statement-reconciliation .bsr-items td,.bank-statement-reconciliation .bsr-items th{padding:8px 12px}
+.bank-statement-reconciliation .bsr-items__amount .fin-amount{font-variant-numeric:tabular-nums;unicode-bidi:isolate;direction:ltr;display:inline-block}
+.bank-statement-reconciliation .mantine-Alert-root{border-radius:10px}
+@media(max-width:48em){
+  .bank-statement-reconciliation .bsr-result{grid-template-columns:minmax(0,1fr);padding:10px}
+  .bank-statement-reconciliation .bsr-form{grid-template-columns:minmax(0,1fr);padding:10px}
+  .bank-statement-reconciliation .bsr-form .mantine-Button-root{width:100%}
+  .bank-statement-reconciliation .bsr-toolbar>.mantine-Group-root{width:100%}
+}
+
+/* Statements table: labelled cards on phones so closing balance, status and actions are never hidden behind a sideways scroll. */
+@media(max-width:48em){
+  .bank-statement-reconciliation .bsr-table{min-width:0;table-layout:auto}
+  .bank-statement-reconciliation .bsr-table colgroup,.bank-statement-reconciliation .bsr-table thead{display:none}
+  .bank-statement-reconciliation .bsr-table,.bank-statement-reconciliation .bsr-table tbody,.bank-statement-reconciliation .bsr-table tr{display:block;width:100%}
+  .bank-statement-reconciliation .bsr-table tr{padding:10px 0;border-block-end:1px solid var(--border)}
+  .bank-statement-reconciliation .bsr-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:4px 0!important;border:0!important}
+  .bank-statement-reconciliation .bsr-table td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:.78rem;font-weight:600}
+}
+.bank-statement-reconciliation .bsr-form .mantine-Checkbox-input{width:20px;height:20px;min-height:0}
+.bank-statement-reconciliation .bsr-form .mantine-Checkbox-root{margin-block:2px}
