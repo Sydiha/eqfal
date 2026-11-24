@@ -24,15 +24,25 @@ export function GrantConfirmDialog({ pending, busy, onCancel }: { pending: Pendi
   const { impact } = pending;
   const explicit = needsExplicitConfirmation(impact.risk);
   const params = { subject: pending.subject, company: pending.companyName };
-  return <Dialog title={t(`accessRisk.title.${impact.risk}`)} busy={busy} onClose={onCancel}>
+  return <Dialog title={t(`accessRisk.title.${impact.risk}`)} busy={busy} onClose={onCancel} className="acc-risk-dialog">
     <div className={`acc-risk acc-risk--${impact.risk}`} role={explicit ? 'alert' : 'status'}>
       <p className="acc-risk-lead">{t(pending.subjectKind === 'user' ? 'accessRisk.leadUser' : 'accessRisk.leadRole', params)}</p>
       <p>{t(`accessRisk.consequence.${impact.risk}`, params)}</p>
-      {impact.flagged.length > 0 && <ul className="acc-risk-list" aria-label={t('accessRisk.newAuthority')}>
-        {impact.flagged.map((item) => <li key={item.id} title={item.id}>
-          <span className={`acc-risk-tag acc-risk-tag--${item.level}`}>{t(`accessRisk.level.${item.level}`)}</span>{capabilityLabel(item.id, lang)} <code>{item.id}</code>
-        </li>)}
-      </ul>}
+      {impact.flagged.length > 0 && <div className="acc-risk-groups" role="group" aria-label={t('accessRisk.newAuthority')}>
+        {(['critical', 'sensitive'] as const).map((level) => {
+          const items = impact.flagged.filter((item) => item.level === level);
+          if (items.length === 0) return null;
+          return <section key={level} className="acc-risk-group">
+            <h4><span className={`acc-risk-tag acc-risk-tag--${level}`}>{t(`accessRisk.level.${level}`)}</span><span className="acc-risk-count">{items.length}</span></h4>
+            <ul className="acc-risk-list">
+              {items.map((item) => <li key={item.id} title={item.id}>
+                <span className="acc-risk-name">{capabilityLabel(item.id, lang)}</span>
+                <bdi dir="ltr"><code>{item.id}</code></bdi>
+              </li>)}
+            </ul>
+          </section>;
+        })}
+      </div>}
       <p className="acc-risk-note">{t('accessRisk.serverNote')}</p>
     </div>
     {explicit && <label className="acc-risk-ack"><input type="checkbox" checked={understood} onChange={(event) => setUnderstood(event.target.checked)} />{t('accessRisk.understand')}</label>}
