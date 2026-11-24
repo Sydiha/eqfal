@@ -1,3 +1,4 @@
+import { EmployeeBonusAdjustment } from './EmployeeBonusAdjustment';
 import { EmployeeBonusBankPayment } from './EmployeeBonusBankPayment';
 import { sumMoney } from './bonus-money';
 import { EmployeeBonusDraft } from './EmployeeBonusDraft';
@@ -244,6 +245,11 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
               <button disabled={loading || accounts === null || accountsFailed || !expenseAccounts.length || !liabilityAccounts.length}>{label('ترحيل الاعتراف', 'Post recognition')}</button>
             </form>
           </details>}
+          {selected.approved_at && selected.accounting_date && selected.outstanding !== null && Number(selected.amount) > 0 &&
+            ['employee.view','employee_cost.salary.view','employee_cost.correct','employee_cost.approve','accounting.journal.post'].every(can) &&
+            <EmployeeBonusAdjustment key={selected.id} bonusId={selected.id} recognizedAmount={selected.amount} settled={selected.settled}
+              outstanding={selected.outstanding} recognitionDate={selected.accounting_date} arabic={arabic}
+              onSaved={() => load()} onUnauthorized={onUnauthorized} />}
           {selected.approved_at && Number(selected.amount) > 0 && can('employee_cost.payment.allocate') && <details>
             <summary>{label('جدولة دفعة', 'Schedule payment')}</summary>
             <form onSubmit={event => submitForm(event, selected.id, 'schedule')}>
