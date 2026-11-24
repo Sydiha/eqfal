@@ -1,4 +1,5 @@
 import { EmployeeBonusBankPayment } from './EmployeeBonusBankPayment';
+import { sumMoney } from './bonus-money';
 import { EmployeeBonusDraft } from './EmployeeBonusDraft';
 import { Select } from '@mantine/core';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -173,6 +174,7 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
     {loading && <p role="status">{label('جارٍ التحميل', 'Loading')}</p>}
     {failed && <p role="alert">{label('تعذر تحميل أرصدة المكافآت', 'Could not load bonus balances')}</p>}
     {bonuses?.length === 0 && <p>{label('لا توجد مكافآت', 'No bonuses')}</p>}
+    {!!bonuses?.length && <><p className="ecc-muted">{label('إجماليات المكافآت المعروضة أدناه (ر.س)', 'Totals of the bonuses listed below (SAR)')}</p><div className="ecc-summary ecc-summary-4">{([[label('المبلغ المعتمد','Approved amount'),bonuses.filter(b=>b.approved_at).map(b=>b.amount)],[label('المسوّى','Settled'),bonuses.map(b=>b.settled)],[label('بانتظار صرف الرواتب','Pending payroll payment'),bonuses.map(b=>b.pending_payroll??'0')],[label('المتبقي','Outstanding'),bonuses.map(b=>b.outstanding??'0')]] as [string,string[]][]).map(([name,values])=><div className="ecc-summary-card" key={name}><span>{name}</span><strong><bdi dir="ltr">{sumMoney(values) ?? '—'}</bdi> {sumMoney(values) !== null && <small>SAR</small>}</strong></div>)}</div></>}
     {!!bonuses?.length && <div className="ecc-table-wrap"><table>
       <thead><tr>
         <th scope="col">{label('الموظف', 'Employee')}</th>
@@ -185,7 +187,7 @@ export function EmployeeBonusBalances({ arabic, onUnauthorized, capabilities = [
         <th scope="col">{label('الجدول والإجراءات', 'Schedule and actions')}</th>
       </tr></thead>
       <tbody>{bonuses.map(bonus => <tr key={bonus.id}>
-        <td>{bonus.display_name}{bonus.award_code && <> · <bdi>{bonus.award_code}</bdi></>}</td>
+        <td>{bonus.display_name}{bonus.award_code && <> · <bdi>{bonus.award_code}</bdi></>} <span className={`ecc-chip ${bonus.approved_at?'ecc-chip-approved':'ecc-chip-draft'}`}>{bonus.approved_at?label('معتمدة','Approved'):label('مسودة','Draft')}</span></td>
         <td><bdi>{bonus.period_start} – {bonus.period_end}</bdi></td>
         <td><bdi>{bonus.approved_at ? bonus.amount : '—'}</bdi></td>
         <td><bdi>{bonus.accounting_date ?? '—'}</bdi></td>

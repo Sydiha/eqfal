@@ -117,6 +117,8 @@ const en = {
     warning_manual_journal_review: 'Source-less journals exist in this month. Review them for possible payroll overlap; this check cannot determine their content.',
   },
   employeeCostCenter: {
+    summary:{employees:'Employees (all)',activeEmployees:'Active employees',fiscalYear:'Selected fiscal year',costRecords:'Current cost records (all years)',drafts:'Drafts',approved:'Approved',reportScope:'Report scope',scopeAnnual:'Full fiscal year',basis:'Report basis',basisValue:'Recorded costs, not payments'}, allocationsTotal:'Allocations total', costTotal:'Cost total', allocationsMatch:'Matches', allocationsMismatchShort:'Does not match', currentApprovedRecord:'Current approved record',
+    tabs:{employees:'Employees',costs:'Costs',bonuses:'Bonuses',payments:'Payments and settlements',advances:'Advances',reports:'Reports'}, employeeData:'Employee details', recordVersion:'Record version', confidentiality:'Salary and bank details are shown only according to your permissions.',
     title:'Employee Cost Center', intro:'Employee costs recorded for internal reporting. These are not verified bank payments or posted accounting expenses.', loading:'Loading employee cost data…', error:'Unable to load employee cost data.', noAccess:'You do not have permission to view this workspace.',
     recordedLabel:'Approved recorded costs', notPayment:'Not verified bank payments', notPosted:'Not posted accounting expenses', salaryHidden:'Earnings and deductions require the dedicated salary visibility permission.',
     employees:'Employees', employeeNumber:'Employee number', name:'Name', active:'Active', inactive:'Inactive', employmentStart:'Employment start', employmentEnd:'Employment end', addEmployee:'Add employee', saveEmployee:'Save employee',
