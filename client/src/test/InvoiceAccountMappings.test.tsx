@@ -102,6 +102,43 @@ describe('InvoiceAccountMappings', () => {
     expect(configured).toHaveTextContent('Active');
   });
 
+  it('summary lists missing and invalid roles on separate lines under the incomplete count', async () => {
+    mockApi();
+    render(<InvoiceAccountMappings canView canManage onUnauthorized={vi.fn()} />);
+    const summary = await screen.findByTestId('mapping-incomplete');
+    const lines = Array.from(summary.querySelectorAll('.invoice-mappings__summary-line')).map((n) => n.textContent);
+    expect(summary.querySelector('.invoice-mappings__summary-title')).toHaveTextContent('4');
+    expect(lines).toEqual(['Missing: Sales revenue, Purchase expense.', 'Invalid: Accounts payable, Input VAT.']);
+  });
+  it('permitted state: Clear precedes Save in each row, and a missing row has Save but no Clear', async () => {
+    mockApi();
+    render(<InvoiceAccountMappings canView canManage onUnauthorized={vi.fn()} />);
+    const configured = await screen.findByTestId('mapping-receivable');
+    const labels = Array.from(configured.querySelectorAll('.invoice-mappings__buttons button')).map((b) => b.getAttribute('aria-label'));
+    expect(labels).toEqual(['Clear Accounts receivable', 'Save Accounts receivable']);
+    const missing = screen.getByTestId('mapping-sales_revenue');
+    expect(within(missing).queryByRole('button', { name: /^Clear/ })).toBeNull();
+    expect(within(missing).getByRole('button', { name: 'Save Sales revenue' })).toBeDisabled();
+    expect(within(missing).getByText('Missing')).toBeInTheDocument();
+  });
+  it('read-only state hides selectors, Save and Clear on every row but still shows statuses and reasons', async () => {
+    mockApi();
+    render(<InvoiceAccountMappings canView canManage={false} onUnauthorized={vi.fn()} />);
+    await screen.findByTestId('mapping-receivable');
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByTestId('mapping-payable')).toHaveTextContent('Invalid');
+    expect(screen.getByTestId('mapping-readonly')).toBeInTheDocument();
+  });
+  it('clear dialog is scoped for the approved layout and cancel stays first in focus order', async () => {
+    mockApi();
+    render(<InvoiceAccountMappings canView canManage onUnauthorized={vi.fn()} />);
+    fireEvent.click(within(await screen.findByTestId('mapping-receivable')).getByRole('button', { name: 'Clear Accounts receivable' }));
+    const dialog = screen.getByRole('dialog', { name: 'Clear this mapping?' });
+    expect(dialog.closest('.invoice-mappings-dialog') ?? dialog.querySelector('.invoice-mappings-dialog') ?? document.querySelector('.invoice-mappings-dialog')).not.toBeNull();
+    const buttons = within(dialog).getAllByRole('button').map((b) => b.textContent);
+    expect(buttons).toEqual(['Cancel', 'Clear mapping']);
+  });
   it('shows the all-configured state when nothing is missing or invalid', async () => {
     mockApi(undefined, allConfigured);
     render(<InvoiceAccountMappings canView canManage={false} onUnauthorized={vi.fn()} />);

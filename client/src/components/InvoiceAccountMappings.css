@@ -1,16 +1,16 @@
-/* Invoice account mappings (P2-C2). Scoped to .invoice-mappings; uses the shared tokens from App.css. */
-.invoice-mappings .invoice-mappings__summary{display:grid;gap:4px;margin:0;padding:.85rem 1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);line-height:1.6}
+/* Invoice account mappings (P2-C2; layout per approved Figma Task 03). Scoped to .invoice-mappings; uses the shared tokens from App.css. */
+.invoice-mappings .invoice-mappings__summary{display:grid;gap:4px;margin:0;padding:13px 16px;font-size:.85rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);line-height:1.6}
 .invoice-mappings .invoice-mappings__summary.is-warning{border-color:#f0dca8;background:#fff8e6;color:#6f4a00}
 .invoice-mappings .invoice-mappings__summary.is-error{border-color:#efcaca;background:#fff6f6;color:#8b1e1e}
 .invoice-mappings .invoice-mappings__summary.is-success{border-color:#bfe3da;background:var(--primary-soft);color:#0a5a4b}
-.invoice-mappings .invoice-mappings__section h3{margin:0 0 12px}
+.invoice-mappings .invoice-mappings__summary-line{margin:0}.invoice-mappings .invoice-mappings__section h3{margin:0 0 12px;font-size:1.05rem;line-height:1.6}
 .invoice-mappings .invoice-mappings__rows{display:grid;gap:10px;margin:0;padding:0;list-style:none}
-.invoice-mappings .invoice-mappings__row{display:grid;grid-template-columns:minmax(160px,1fr) minmax(220px,1.5fr) minmax(260px,1.8fr);gap:14px;align-items:start;padding:14px;border:1px solid var(--border);border-inline-start:4px solid #5fbf9f;border-radius:var(--radius);background:var(--surface)}
+.invoice-mappings .invoice-mappings__row{display:grid;grid-template-columns:minmax(170px,210px) minmax(220px,330px) minmax(0,1fr);gap:14px;align-items:start;padding:14px;border:1px solid var(--border);border-inline-start:4px solid #5fbf9f;border-radius:var(--radius);background:var(--surface)}
 .invoice-mappings .invoice-mappings__row.is-missing{border-inline-start-color:#d9a21b;background:#fffdf6}
-.invoice-mappings .invoice-mappings__row.is-invalid{border-inline-start-color:var(--danger);background:#fffafa}
+.invoice-mappings .invoice-mappings__row.is-invalid{border-inline-start-color:#c0392b;background:#fffafa}
 .invoice-mappings .invoice-mappings__role,.invoice-mappings .invoice-mappings__current,.invoice-mappings .invoice-mappings__actions{display:grid;gap:6px;align-content:start;min-width:0}
 .invoice-mappings .invoice-mappings__role .badge{justify-self:start}
-.invoice-mappings .invoice-mappings__muted{color:var(--muted);font-size:.82rem}
+.invoice-mappings .invoice-mappings__muted{color:var(--muted);font-size:.78rem}.invoice-mappings .invoice-mappings__role-name{font-size:.92rem;line-height:1.5}
 .invoice-mappings .invoice-mappings__account-label{font-weight:700;overflow-wrap:anywhere}
 .invoice-mappings .invoice-mappings__code{font-variant-numeric:tabular-nums}
 .invoice-mappings .invoice-mappings__facts{display:flex;flex-wrap:wrap;gap:6px}
@@ -18,7 +18,7 @@
 .invoice-mappings .is-missing .invoice-mappings__reason{color:var(--warning)}
 .invoice-mappings .invoice-mappings__note{margin:0;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:#f7f9fa;color:var(--muted);font-size:.84rem;line-height:1.6}
 .invoice-mappings .invoice-mappings__note.is-warning{border-color:#f0dca8;background:#fff8e6;color:#6f4a00}
-.invoice-mappings .invoice-mappings__select{width:100%;min-height:var(--control)}
+.invoice-mappings .invoice-mappings__select{width:100%;min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:.85rem}.invoice-mappings .invoice-mappings__buttons button{min-height:40px;border-radius:8px;font-size:.85rem}.invoice-mappings .invoice-mappings__save{min-width:96px}.invoice-mappings .invoice-mappings__clear{min-width:80px;border-color:#cbd5e1}
 .invoice-mappings .invoice-mappings__compare{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:8px 10px;border:1px dashed #b8c7cc;border-radius:var(--radius-sm);background:var(--primary-soft);font-size:.84rem}
 .invoice-mappings .invoice-mappings__compare:not(:has(.invoice-mappings__arrow)){grid-template-columns:1fr}
 .invoice-mappings .invoice-mappings__compare small{display:block;color:var(--muted)}
@@ -30,10 +30,23 @@
 .invoice-mappings button.invoice-mappings__save:disabled{border-color:#d5dde0;background:#eef2f3;color:#5b6873;opacity:1;cursor:not-allowed}
 .invoice-mappings button.invoice-mappings__clear:disabled{opacity:.6;cursor:not-allowed}
 .invoice-mappings .invoice-mappings__unsaved{justify-self:start;color:var(--warning);background:#fff1cf}
-.invoice-mappings .invoice-mappings__row.is-modified{box-shadow:0 0 0 2px #e8c766}
+.invoice-mappings .invoice-mappings__row.is-modified{border-color:#e8c766;border-width:2px 2px 2px 4px;background:#fffdf6}[dir=rtl] .invoice-mappings .invoice-mappings__row.is-modified{border-width:2px 4px 2px 2px}
 .invoice-mappings .invoice-mappings__save-hint{flex-basis:100%;color:var(--muted);font-size:.78rem;line-height:1.5}
 .invoice-mappings .invoice-mappings__spinner{display:inline-block;width:14px;height:14px;margin-inline-end:6px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;vertical-align:-2px;animation:invoice-mappings-spin .8s linear infinite}
 @keyframes invoice-mappings-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.invoice-mappings .invoice-mappings__spinner{animation:none}}
 @media(max-width:64em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr 1fr}.invoice-mappings .invoice-mappings__actions{grid-column:1/-1}}
-@media(max-width:48em){.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__compare{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__arrow{justify-self:center;transform:rotate(90deg)!important}.invoice-mappings .invoice-mappings__buttons button{flex:1}}
+@media(max-width:48em){
+.invoice-mappings .invoice-mappings__row{grid-template-columns:1fr;gap:12px}
+/* Role: name and status badge share the first line, required type sits below. */
+.invoice-mappings .invoice-mappings__role{grid-template-columns:1fr auto;column-gap:10px;align-items:center}
+.invoice-mappings .invoice-mappings__role-name{grid-column:1}.invoice-mappings .invoice-mappings__role-type{grid-column:1/-1;grid-row:2}.invoice-mappings .invoice-mappings__role .badge{grid-column:2;grid-row:1;justify-self:end}
+.invoice-mappings .invoice-mappings__current{padding:10px 12px;border-radius:8px;background:#f4f7f9}
+.invoice-mappings .invoice-mappings__compare{grid-template-columns:1fr}.invoice-mappings .invoice-mappings__arrow{justify-self:center;transform:rotate(90deg)!important}
+.invoice-mappings .invoice-mappings__buttons button{flex:1}
+}
+/* Clear-confirmation dialog: confirm sits at the inline-start edge in RTL, cancel next to it; stacked with confirm first on mobile. */
+.invoice-mappings-dialog .modal-actions{gap:8px}
+[dir=rtl] .invoice-mappings-dialog .modal-actions{flex-direction:row-reverse}
+.invoice-mappings-dialog .invoice-mappings-dialog__current{font-weight:700}
+@media(max-width:48em){.invoice-mappings-dialog .modal-actions,[dir=rtl] .invoice-mappings-dialog .modal-actions{display:flex;flex-direction:column-reverse}}
