@@ -316,7 +316,9 @@ it('shows four payroll sections only for the permissions the user holds and keep
   first.unmount();
   render(<MonthlyPayroll companyId="company-1" capabilities={['payroll.view','payroll.settlement.view','payroll.employee_advance_recovery.view']} onUnauthorized={()=>{}}/>);
   const tabs=await screen.findAllByRole('tab');expect(tabs).toHaveLength(4);
+  expect(document.querySelectorAll('input[type="month"]')).toHaveLength(1);
   fireEvent.click(screen.getByRole('tab',{name:'Liability settlement'}));
+  expect(document.querySelectorAll('input[type="month"]')).toHaveLength(1);
   expect(screen.getByRole('tab',{name:'Liability settlement'})).toHaveAttribute('aria-selected','true');
   await waitFor(()=>expect(screen.getByRole('tabpanel').textContent).not.toBe(''));expect(await screen.findByRole('heading',{name:'Payroll liability settlements'})).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab',{name:'Advance recovery corrections'}));

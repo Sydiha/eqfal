@@ -21,7 +21,7 @@
 .payroll-tabs button:hover{background:#f4f6f7;border-color:transparent}
 .payroll-tabs button.is-active,.payroll-tabs button[aria-selected=true]{background:var(--primary-soft);color:var(--primary);font-weight:700}
 .payroll-panel{display:grid;gap:16px;min-width:0}
-.payroll-context-row{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:16px;align-items:stretch}
+.payroll-context-row{display:grid;gap:16px}.payroll-shared-month{max-width:220px}
 .payroll-month{display:grid;gap:6px;font-weight:600;font-size:.85rem;align-content:start}.payroll-month input{width:100%}
 .payroll-context-row .payroll-period-context{flex-direction:column;align-items:flex-start;background:var(--surface)}
 .payroll-period-context .is-ok{color:var(--success)}.payroll-period-context .is-warn{color:var(--warning)}
