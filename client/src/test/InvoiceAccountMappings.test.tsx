@@ -33,6 +33,16 @@ const ok = () => new Response(JSON.stringify({ mappings: base() }), { status: 20
 beforeEach(async () => { await i18n.changeLanguage('en'); vi.restoreAllMocks(); });
 
 describe('InvoiceAccountMappings', () => {
+  it('summarizes each section with a row count and how many mappings need attention', async () => {
+    mockApi();
+    render(<InvoiceAccountMappings canView canManage onUnauthorized={() => {}} />);
+    expect(await screen.findByTestId('mapping-section-meta-sales')).toHaveTextContent('3 mappings');
+    expect(screen.getByTestId('mapping-section-meta-purchases')).toHaveTextContent('3 mappings');
+    const head = (id: string) => screen.getByTestId(`mapping-section-meta-${id}`).parentElement!;
+    expect(head('sales')).toHaveTextContent('1 need attention');
+    expect(head('purchases')).toHaveTextContent('3 need attention');
+  });
+
   it('localizes configured and eligible accounts in Arabic and English, with legacy-name fallback', async () => {
     const data = () => [
       mk('receivable', 'sales', 'asset', 'configured', { ...asset[0], is_active: true, account_type: 'asset' }, [...asset, acct('a3', '1190', 'Legacy cash', null)]),

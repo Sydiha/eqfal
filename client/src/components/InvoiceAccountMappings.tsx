@@ -125,7 +125,10 @@ export function InvoiceAccountMappings({ canView, canManage, onUnauthorized }: {
     {busy && <p role="status" className="invoice-mappings__summary" data-testid="mapping-busy">{t(busy.method === 'PUT' ? 'invoiceMappings.savingNotice' : 'invoiceMappings.clearingNotice')}</p>}
     {notice && <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`invoice-mappings__summary ${notice.tone === 'error' ? 'is-error' : 'is-success'}`} data-testid="mapping-notice">{notice.text}</p>}
     {rows && SECTIONS.map((section) => <SectionCard key={section} className="invoice-mappings__section">
-      <h3 id={`invoice-mappings-${section}`}>{t(`invoiceMappings.sections.${section}`)}</h3>
+      {(() => { const sectionRows = rows.filter((r) => r.section === section); const open = sectionRows.filter((r) => r.status !== 'configured').length;
+          return <div className="invoice-mappings__section-head"><h3 id={`invoice-mappings-${section}`}>{t(`invoiceMappings.sections.${section}`)}</h3>
+            <span className="invoice-mappings__section-meta" data-testid={`mapping-section-meta-${section}`}>{t('invoiceMappings.sectionCount', { count: sectionRows.length })}</span>
+            <StatusBadge status={open > 0 ? 'incomplete' : 'approved'}>{open > 0 ? t('invoiceMappings.sectionIncomplete', { count: open }) : t('invoiceMappings.sectionComplete')}</StatusBadge></div>; })()}
       <ul className="invoice-mappings__rows" aria-labelledby={`invoice-mappings-${section}`}>
         {rows.filter((r) => r.section === section).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).map((row) => {
           const why = reason(row);

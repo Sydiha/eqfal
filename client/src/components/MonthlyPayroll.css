@@ -57,3 +57,20 @@
 .payroll-recovery-corrections form.payroll-settlement-form{grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}.payroll-recovery-corrections form.payroll-settlement-form>p,.payroll-recovery-corrections form.payroll-settlement-form>label:has(textarea){grid-column:1/-1}
 .payroll-settlement section[aria-label]{display:grid;gap:10px}
 @media(max-width:48em){.payroll-table-wrap:not(.payroll-employees-table) table{min-width:560px}}
+/* Figma fidelity corrections: fiscal-year context, settlement and recovery forms, technical identifiers */
+.payroll-context-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 20px;margin:0;width:100%}
+.payroll-context-facts>div{display:grid;gap:2px;min-width:0}.payroll-context-facts dt{color:var(--muted);font-size:.78rem}.payroll-context-facts dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.payroll-notice.is-info{background:#eaf3fb;color:#1d4f7a;width:100%;box-sizing:border-box}
+.payroll-account-unavailable{color:var(--warning);font-size:.85rem}
+.payroll-technical-id{color:var(--muted);font-size:.78rem;font-weight:400;font-variant-numeric:tabular-nums}
+.payroll-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;align-items:end}
+.payroll-form-grid label{display:grid;gap:6px;min-width:0}.payroll-form-grid select,.payroll-form-grid input{width:100%;box-sizing:border-box;min-width:0}
+.payroll-form-actions{display:flex;gap:8px;justify-content:flex-start}
+.payroll-recovery-summary{margin:0;padding:10px 12px;border-radius:var(--radius-sm);background:#f4f7f8;font-size:.85rem;line-height:1.8;overflow-wrap:anywhere}
+.payroll-settlement-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.payroll-settlement-pair .payroll-settlement-form{display:grid;gap:10px}
+.payroll-recovery-settings summary{cursor:pointer;font-weight:700}
+@media(max-width:64em){.payroll-form-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:48em){.payroll-form-grid,.payroll-settlement-pair{grid-template-columns:1fr}.payroll-form-actions button{width:100%}.payroll-context-facts{grid-template-columns:1fr}}
+.payroll-settlement-form:has(>.payroll-form-grid),.payroll-recovery-corrections form.payroll-settlement-form:has(>.payroll-form-grid){grid-template-columns:minmax(0,1fr)}
+.payroll-recovery-corrections div.payroll-settlement-form{grid-template-columns:minmax(0,1fr)}.payroll-recovery-corrections div.payroll-settlement-form textarea{width:100%;box-sizing:border-box;min-height:64px}
