@@ -241,6 +241,15 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
       return <Card withBorder><Stack gap="md">
       <div className="bsr-result__status"><Title order={3} size="h4">{s.calc}</Title>
         {result.reconciled ? <Badge color="green">{s.ok}</Badge> : <Badge color={severity}>{problemKind}</Badge>}</div>
+      {result.problems.length > 0 && <Alert color={severity} title={problemKind}><ul className="fin-notice-list">{result.problems.map(p => <li key={p}>{s.problemLabels[p] ?? p}</li>)}</ul>
+        {(result.problems.includes('unmapped') || result.problems.includes('statement_missing')) && <Group gap="xs" mt="sm">
+          {result.problems.includes('unmapped') && <Button size="xs" variant="default" onClick={() => goTo('bsr-links')}>{s.goLink}</Button>}
+          {result.problems.includes('statement_missing') && <Button size="xs" variant="default" onClick={() => goTo('bsr-statements')}>{s.goStatement}</Button>}
+        </Group>}</Alert>}
+      {result.warnings.length > 0 && <Alert color="yellow" title={s.warning}><ul className="fin-notice-list">{result.warnings.map(w => <li key={w}>{s.warningLabels[w] ?? w}{w === 'bank_only_items' ? ` (${result.bank_only_count}) · ${s.bankOnly}` : ''}</li>)}</ul></Alert>}
+      {result.rejected_evidence.length > 0 && <Alert color="orange">{s.rejected}: {result.rejected_evidence.length}</Alert>}
+      <div className="bsr-body">
+        <div className="bsr-body__main">
       <div className="bsr-result">
         <dl className="fin-headline"><dt className="fin-headline__label">{s.diff}</dt><dd className={`fin-headline__value ${tone}`}>{known ? formatMoney(result.difference) : s.unknownDiff}</dd>
           <dd className="fin-headline__hint">{!known ? s.unknownHint : problem ? s.problemHint : s.reconciledHint}</dd></dl>
@@ -254,32 +263,17 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
         </dl>
       </div>
       <Text size="xs" c="dimmed">{s.zero}</Text>
-      {result.problems.length > 0 && <Alert color={severity} title={problemKind}><ul className="fin-notice-list">{result.problems.map(p => <li key={p}>{s.problemLabels[p] ?? p}</li>)}</ul>
-        {(result.problems.includes('unmapped') || result.problems.includes('statement_missing')) && <Group gap="xs" mt="sm">
-          {result.problems.includes('unmapped') && <Button size="xs" variant="default" onClick={() => goTo('bsr-links')}>{s.goLink}</Button>}
-          {result.problems.includes('statement_missing') && <Button size="xs" variant="default" onClick={() => goTo('bsr-statements')}>{s.goStatement}</Button>}
-        </Group>}</Alert>}
-      {result.warnings.length > 0 && <Alert color="yellow" title={s.warning}><ul className="fin-notice-list">{result.warnings.map(w => <li key={w}>{s.warningLabels[w] ?? w}{w === 'bank_only_items' ? ` (${result.bank_only_count}) · ${s.bankOnly}` : ''}</li>)}</ul></Alert>}
-      {result.rejected_evidence.length > 0 && <Alert color="orange">{s.rejected}: {result.rejected_evidence.length}</Alert>}
+        </div>
+        <div className="bsr-body__side">
       <Title order={4} size="h5">{s.items}</Title>
       {result.outstanding_items.length === 0 ? <Text c="dimmed">{s.none}</Text> : <Table.ScrollContainer minWidth={0} className="bsr-items-scroll"><Table className="bsr-items">
         <Table.Thead><Table.Tr><Table.Th>{s.kind}</Table.Th><Table.Th>{s.glDate}</Table.Th><Table.Th>{s.bankDate}</Table.Th><Table.Th className="bsr-items__amount">{s.amount}</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
         {result.outstanding_items.map(i => <Table.Tr key={i.journal_entry_id}><Table.Td data-label={s.kind}>{s[i.kind]}</Table.Td><Table.Td data-label={s.glDate}><span dir="ltr">{formatDisplayDateLtr(i.accounting_date, i18n.language)}</span></Table.Td>
           <Table.Td data-label={s.bankDate}><span dir="ltr">{formatDisplayDateLtr(i.bank_transaction_date, i18n.language)}</span>{i.aged && <Badge ms="xs" color="yellow">{s.aged}</Badge>}</Table.Td><Table.Td className="bsr-items__amount" data-label={s.amount}><span className="fin-amount">{formatMoney(i.amount)}</span></Table.Td></Table.Tr>)}
       </Table.Tbody></Table></Table.ScrollContainer>}
+        </div>
+      </div>
     </Stack></Card>; })()}
-
-    <Card withBorder id="bsr-links" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
-      {!activeLink && <Text c="dimmed">{s.unlinked}</Text>}
-      {links.filter(x => x.bank_account_id === bankId).map(link => <Group key={link.id}><Text><bdi dir="auto">{ledgerName(link.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(link.valid_from, i18n.language)}</span> · {s.validTo} {link.valid_to ? <span dir="ltr">{formatDisplayDateLtr(link.valid_to, i18n.language)}</span> : s.openEnded}</Text>
-        {canManageLinks && link.id === activeLink?.id && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group>)}
-      {canManageLinks && <form onSubmit={addLink} noValidate><Group align="end" className="bsr-form">
-        <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
-        <DateTextInput label={s.validFrom} value={validFrom} onChange={setValidFrom} error={fieldErrors['validFrom']} required/>
-        <Checkbox label={s.openEnded} checked={openEnded} onChange={e => setOpenEnded(e.currentTarget.checked)}/>
-        {!openEnded && <DateTextInput label={s.validTo} value={validTo} onChange={setValidTo} error={fieldErrors['validTo']} required/>}
-        <Button type="submit">{s.link}</Button></Group></form>}
-    </Stack></Card>
 
     <Card withBorder id="bsr-statements" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.statements}</Title>
       {bankStatements.length === 0 ? <Text c="dimmed">{s.empty}</Text> : <Table.ScrollContainer minWidth={0} className="bsr-statements-scroll"><Table className="bsr-table">
@@ -295,7 +289,7 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
           </Group></Table.Td></Table.Tr>)}
       </Table.Tbody></Table></Table.ScrollContainer>}
 
-      {(canManageStatements || (replacing && canConfirmStatements)) && <form onSubmit={addStatement} noValidate key={replacing?.id ?? 'new'}><Stack gap="xs">
+      {(canManageStatements || (replacing && canConfirmStatements)) && <details className="bsr-disclosure" key={replacing?.id ?? 'new'} open={replacing !== null || bankStatements.length === 0}><summary>{replacing ? s.replace : s.add}</summary><form onSubmit={addStatement} noValidate><Stack gap="xs">
         {replacing && <><Alert color="yellow">{s.replace}: {replacing.statement_ref}</Alert><TextInput label={s.reason} value={reason} onChange={e => setReason(e.currentTarget.value)} error={fieldErrors['reason']} maxLength={500} required/></>}
         <Group align="end" wrap="wrap" className="bsr-form bsr-form--statement">
           <TextInput name="ref" label={s.ref} defaultValue={replacing?.statement_ref ?? ''} error={fieldErrors['ref']} maxLength={100} required/>
@@ -306,16 +300,29 @@ export function BankStatementReconciliation({ canView, canManageStatements, canC
           <TextInput name="note" label={s.note} maxLength={500}/>
           <Button type="submit" disabled={!bankId}>{replacing ? s.replace : s.add}</Button>
           {replacing && <Button variant="default" onClick={() => { setReplacing(null); setReason(''); }}>×</Button>}
-        </Group></Stack></form>}
+        </Group></Stack></form></details>}
     </Stack></Card>
 
-    <Card withBorder><Group justify="space-between" align="end" wrap="wrap">
-      <div><Title order={3} size="h4">{s.settingsTitle}</Title><Badge color={settings.mode === 'enforce' ? 'red' : settings.mode === 'warn' ? 'yellow' : 'gray'}>{s.modes[settings.mode]}</Badge>
-        {settings.enforce_from && <Text size="sm" c="dimmed"> {s.effective}: <span dir="ltr">{formatDisplayDateLtr(settings.enforce_from, i18n.language)}</span></Text>}</div>
-      {canManageSettings && <form onSubmit={saveSettings} noValidate><Group align="end">
+    <div className="bsr-config">
+    <Card withBorder id="bsr-links" tabIndex={-1} className="bsr-section"><Stack gap="sm"><Title order={3} size="h4">{s.links}</Title>
+      {!activeLink && <Text c="dimmed">{s.unlinked}</Text>}
+      {links.filter(x => x.bank_account_id === bankId).map(link => <Group key={link.id}><Text><bdi dir="auto">{ledgerName(link.account_id)}</bdi> · {s.validFrom} <span dir="ltr">{formatDisplayDateLtr(link.valid_from, i18n.language)}</span> · {s.validTo} {link.valid_to ? <span dir="ltr">{formatDisplayDateLtr(link.valid_to, i18n.language)}</span> : s.openEnded}</Text>
+        {canManageLinks && link.id === activeLink?.id && <Button size="xs" variant="default" onClick={() => setPending({ kind: 'endLink', link })}>{s.endLink} (<span dir="ltr">{formatDisplayDateLtr(periodEnd, i18n.language)}</span>)</Button>}</Group>)}
+      {canManageLinks && <details className="bsr-disclosure" open={!activeLink}><summary>{s.link}</summary><form onSubmit={addLink} noValidate><Group align="end" className="bsr-form">
+        <NativeSelect label={s.ledger} value={ledgerId} onChange={e => setLedgerId(e.currentTarget.value)} error={fieldErrors['ledgerId']} data={[{ value: '', label: '—' }, ...ledger.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))]} required/>
+        <DateTextInput label={s.validFrom} value={validFrom} onChange={setValidFrom} error={fieldErrors['validFrom']} required/>
+        <Checkbox label={s.openEnded} checked={openEnded} onChange={e => setOpenEnded(e.currentTarget.checked)}/>
+        {!openEnded && <DateTextInput label={s.validTo} value={validTo} onChange={setValidTo} error={fieldErrors['validTo']} required/>}
+        <Button type="submit">{s.link}</Button></Group></form></details>}
+    </Stack></Card>
+
+    <Card withBorder className="bsr-section"><Stack gap="sm">
+      <div><Title order={3} size="h4">{s.settingsTitle}</Title></div>
+      {canManageSettings && <form onSubmit={saveSettings} noValidate><Group align="end" className="bsr-form">
         <NativeSelect label={s.mode} value={mode} onChange={e => setMode(e.currentTarget.value as Mode)} data={(['off', 'warn', 'enforce'] as Mode[]).map(m => ({ value: m, label: s.modes[m] }))}/>
         {mode === 'enforce' && <DateTextInput label={s.effective} value={enforceFrom} onChange={setEnforceFrom} error={fieldErrors['enforceFrom']} required/>}
         <Button type="submit">{s.save}</Button></Group></form>}
-    </Group></Card>
+    </Stack></Card>
+    </div>
   </Stack>;
 }

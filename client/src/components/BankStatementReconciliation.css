@@ -54,3 +54,14 @@
 }
 .bank-statement-reconciliation .bsr-form .mantine-Checkbox-input{width:20px;height:20px;min-height:0}
 .bank-statement-reconciliation .bsr-form .mantine-Checkbox-root{margin-block:2px}
+
+/* Structure: alerts first, summary and outstanding items side by side, configuration grouped last. */
+.bank-statement-reconciliation .bsr-body{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:20px;align-items:start}
+.bank-statement-reconciliation .bsr-body__main,.bank-statement-reconciliation .bsr-body__side{display:flex;flex-direction:column;gap:10px;min-width:0}
+.bank-statement-reconciliation .bsr-config{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.bank-statement-reconciliation .bsr-disclosure{border:1px dashed var(--border);border-radius:12px;padding:8px 12px}
+.bank-statement-reconciliation .bsr-disclosure>summary{cursor:pointer;font-weight:700;padding:4px 0}
+.bank-statement-reconciliation .bsr-disclosure[open]>summary{margin-block-end:8px}
+@media(max-width:64em){
+  .bank-statement-reconciliation .bsr-body,.bank-statement-reconciliation .bsr-config{grid-template-columns:minmax(0,1fr)}
+}
