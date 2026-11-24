@@ -57,3 +57,6 @@
 .ecc-advance-mapping{grid-template-columns:minmax(0,1fr) auto;align-items:end}
 @media(max-width:900px){.ecc-detail-grid-5{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.ecc-advance-mapping{grid-template-columns:1fr}.ecc-dialog-wide{width:100%}}
+.ecc-modal .ecc-dialog-body{padding:0 0 .5rem}.ecc-modal .ecc-dialog-actions{display:flex;justify-content:flex-end;gap:.55rem;flex-direction:row}.ecc-modal .ecc-dialog-actions button{width:auto}
+@media(max-width:700px){.ecc-modal .ecc-dialog-actions{flex-direction:column-reverse}.ecc-modal .ecc-dialog-actions button{width:100%}}
+.ecc-modal button{min-height:2.35rem;border:1px solid var(--border);border-radius:.5rem;background:var(--surface);padding:.45rem .75rem;color:inherit;font:inherit;cursor:pointer}.ecc-modal .ecc-primary{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:650}.ecc-modal button:disabled{opacity:.55;cursor:not-allowed}

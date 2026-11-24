@@ -1,16 +1,15 @@
-import { useEffect, useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { Dialog } from './Dialog';
 
-type Props = { title: string; onClose: () => void; children: ReactNode; actions?: ReactNode; wide?: boolean };
+type Props = { title: string; onClose: () => void; children: ReactNode; actions?: ReactNode; wide?: boolean; busy?: boolean };
 
-/** Modal used by Employee Cost Center creation and operational forms. */
-export function EccDialog({ title, onClose, children, actions, wide }: Props) {
-  const titleId = useId();
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return <div className="ecc-dialog-backdrop"><section className={`ecc-dialog${wide ? ' ecc-dialog-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-    <div className="ecc-dialog-form"><h3 id={titleId}>{title}</h3><div className="ecc-dialog-body">{children}</div>{actions && <div className="ecc-dialog-actions">{actions}</div>}</div>
-  </section></div>;
+/**
+ * Employee Cost Center modal. Delegates to the shared accessible Dialog (portal, initial focus, Tab containment,
+ * Escape, scroll lock and focus restoration); `busy` blocks Escape and backdrop dismissal while a save is in flight.
+ */
+export function EccDialog({ title, onClose, children, actions, wide, busy = false }: Props) {
+  return <Dialog title={title} onClose={onClose} busy={busy} size={wide ? 'wide' : undefined} className="ecc-modal">
+    <div className="ecc-dialog-body">{children}</div>
+    {actions && <div className="modal-actions ecc-dialog-actions">{actions}</div>}
+  </Dialog>;
 }

@@ -51,7 +51,7 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized,
     } finally { setBusy(false); }
   }
 
-  return <EccDialog wide title={label('إنشاء مكافأة', 'Create bonus')} onClose={onClose} actions={<>
+  return <EccDialog wide busy={busy} title={label('إنشاء مكافأة', 'Create bonus')} onClose={onClose} actions={<>
     <button type="button" onClick={onClose} disabled={busy}>{label('إلغاء', 'Cancel')}</button>
     <button className="ecc-primary" form="ecc-bonus-draft-form" disabled={busy || !selected.length}>{label('حفظ للمراجعة', 'Save for review')}</button>
   </>}>
