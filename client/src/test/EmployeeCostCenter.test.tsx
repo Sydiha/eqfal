@@ -311,7 +311,18 @@ describe('Employee Cost Center six-section layout',()=>{
     render(<EmployeeCostCenter capabilities={['employee.view','employee.manage']} onUnauthorized={onUnauthorized}/>);
     expect(await screen.findByRole('heading',{name:'Employee One'})).toBeInTheDocument();
     expect(screen.getByText('Salary and bank details are shown only according to your permissions.')).toBeInTheDocument();
-    expect(screen.getByRole('button',{name:'Add employee'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Create employee'})).toBeInTheDocument();
+    expect(screen.queryByLabelText('Employee number')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader').map(h=>h.textContent)).toEqual(['Name','Reference','Latest approved cost','Status','Actions']);
+  });
+  it('opens employee creation in a dialog from the header action',async()=>{
+    mockApi();
+    render(<EmployeeCostCenter capabilities={['employee.view','employee.manage']} onUnauthorized={onUnauthorized}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Create employee'}));
+    const dialog=screen.getByRole('dialog',{name:'Create employee'});
+    expect(within(dialog).getByLabelText('Employee number')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
   it('renders Arabic tab labels in RTL',async()=>{
     await i18n.changeLanguage('ar');

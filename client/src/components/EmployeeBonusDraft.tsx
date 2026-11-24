@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { EccDialog } from './EccDialog';
 
 type Employee = { id: string; display_name: string };
-type Props = { employees: Employee[]; arabic: boolean; onSaved: () => void; onUnauthorized: () => void };
+type Props = { employees: Employee[]; arabic: boolean; onSaved: () => void; onUnauthorized: () => void; onClose: () => void };
 
-export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized }: Props) {
+export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized, onClose }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [method, setMethod] = useState('fixed');
   const [busy, setBusy] = useState(false);
@@ -44,18 +45,22 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized 
       setRequestKey(crypto.randomUUID());
       setMessage(label('حُفظت المسودات. راجع المبالغ قبل الاعتماد.', 'Drafts saved. Review the amounts before approval.'));
       onSaved();
+      onClose();
     } catch {
       setMessage(label('تعذر الاتصال. حدّث الأرصدة للتحقق من الحفظ قبل المحاولة مجددًا.', 'Connection failed. Refresh balances to check whether the drafts were saved before retrying.'));
     } finally { setBusy(false); }
   }
 
-  return <details>
-    <summary>{label('إعداد مكافأة', 'Prepare bonus')}</summary>
-    <form onSubmit={event => void save(event)}>
-      <fieldset disabled={busy}>
+  return <EccDialog wide busy={busy} title={label('إنشاء مكافأة', 'Create bonus')} onClose={onClose} actions={<>
+    <button type="button" onClick={onClose} disabled={busy}>{label('إلغاء', 'Cancel')}</button>
+    <button className="ecc-primary" form="ecc-bonus-draft-form" disabled={busy || !selected.length}>{label('حفظ للمراجعة', 'Save for review')}</button>
+  </>}>
+    <form id="ecc-bonus-draft-form" className="ecc-bonus-form" onSubmit={event => void save(event)}>
+      <fieldset disabled={busy} className="ecc-form">
         <legend>{label('الفترة وشروط الاستحقاق', 'Period and entitlement conditions')}</legend>
-        <label>{label('رمز المكافأة', 'Award code')} <input name="award_code" defaultValue="standard"
-          pattern="[a-z0-9][a-z0-9_\-]{0,49}" maxLength={50} required /></label>
+        <label>{label('رمز المكافأة', 'Award code')} <input name="award_code" defaultValue="standard" dir="ltr"
+          pattern="[a-z0-9][a-z0-9_\-]{0,49}" maxLength={50} required />
+          <small className="ecc-muted">{label('رمز تقني بحروف إنجليزية صغيرة وأرقام؛ يُحفظ كما هو.', 'Technical code: lowercase letters and digits; stored as entered.')}</small></label>
         <label>{label('الدورية', 'Frequency')} <select name="frequency">
           <option value="monthly">{label('شهرية', 'Monthly')}</option>
           <option value="quarterly">{label('ربع سنوية', 'Quarterly')}</option>
@@ -76,9 +81,9 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized 
           <option value="basic">{label('الأساسي', 'Basic')}</option>
           <option value="total">{label('الإجمالي', 'Total')}</option>
         </select></label>}
-        {employees.map(employee => <fieldset key={employee.id}>
+        {employees.map(employee => <fieldset key={employee.id} className="ecc-wide ecc-bonus-employee">
           <legend>{employee.display_name}</legend>
-          <label><input type="checkbox" checked={selected.includes(employee.id)} onChange={event => {
+          <label className="ecc-check"><input type="checkbox" checked={selected.includes(employee.id)} onChange={event => {
             const checked = event.target.checked;
             setSelected(previous => checked ? [...previous, employee.id] : previous.filter(id => id !== employee.id));
           }} /> {label('تخصيص مكافأة', 'Allocate bonus')}</label>
@@ -90,9 +95,8 @@ export function EmployeeBonusDraft({ employees, arabic, onSaved, onUnauthorized 
             </>}
           </>}
         </fieldset>)}
-        <button disabled={!selected.length}>{label('حفظ للمراجعة', 'Save for review')}</button>
       </fieldset>
       {message && <p role="status">{message}</p>}
     </form>
-  </details>;
+  </EccDialog>;
 }
